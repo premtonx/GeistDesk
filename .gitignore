@@ -1,0 +1,12 @@
+node_modules/
+build/
+dist/
+coverage/
+.DS_Store
+*.log
+.env*
+!.env.example
+
+# Defunct local file-DB fallback (removed; never commit any stray copy)
+geistdesk_local_db.json
+tsc-out.txt

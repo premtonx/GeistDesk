@@ -1,0 +1,532 @@
+// Production PostgreSQL Generic Document Engine.
+// PostgreSQL is the singular source of truth. There is intentionally no
+// local-file fallback: if the database is unavailable the application must
+// fail rather than silently diverge onto volatile local storage.
+
+import pg from 'pg';
+import { randomUUID } from 'crypto';
+
+const { Pool } = pg;
+
+// Connection string can come from standard custom env variables
+const DATABASE_URL = process.env.DATABASE_URL || process.env.PG_DATABASE_URL;
+
+let pgPool: pg.Pool | null = null;
+let isPostgres = false;
+
+// Safe JSON Parsing Helper
+function safeParseJson(data: any): any {
+  if (data === null || data === undefined) {
+    return {};
+  }
+  if (typeof data === 'string') {
+    try {
+      return JSON.parse(data);
+    } catch (e) {
+      console.error("[DB Engine] JSONB safe payload parsing failed:", e);
+      return {};
+    }
+  }
+  if (typeof data === 'object') {
+    return data;
+  }
+  return {};
+}
+
+// Initialize Connection. PostgreSQL is mandatory.
+export async function initDb() {
+  if (!DATABASE_URL) {
+    throw new Error(
+      "[DB Engine] DATABASE_URL (or PG_DATABASE_URL) is required. PostgreSQL is the singular source of truth; there is no local-file fallback."
+    );
+  }
+
+  console.log("[DB Engine] Connecting to PostgreSQL...");
+
+  // TLS policy: only disable TLS for explicitly-local connections. For all
+  // remote connections we require a verified certificate chain (set
+  // PGSSLROOTCERT / standard libpq env vars to supply a CA when needed).
+  const isLocal =
+    DATABASE_URL.includes('localhost') ||
+    DATABASE_URL.includes('127.0.0.1') ||
+    DATABASE_URL.includes('sslmode=disable');
+  const allowInsecureTls = process.env.DATABASE_SSL_INSECURE === 'true';
+
+  pgPool = new Pool({
+    connectionString: DATABASE_URL,
+    ssl: isLocal ? false : { rejectUnauthorized: !allowInsecureTls }
+  });
+
+  // Ping check — surface failures instead of falling back.
+  await pgPool.query('SELECT NOW()');
+  isPostgres = true;
+  console.log("[DB Engine] PostgreSQL Connection Successful!");
+
+  // DDL: document-oriented store plus indexes for JSONB lookups.
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS geistdesk_documents (
+      collection VARCHAR(255) NOT NULL,
+      id VARCHAR(255) NOT NULL,
+      data JSONB NOT NULL,
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY (collection, id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_geistdesk_documents_collection ON geistdesk_documents(collection);
+    CREATE INDEX IF NOT EXISTS idx_geistdesk_documents_data_gin ON geistdesk_documents USING GIN (data);
+  `);
+  console.log("[DB Engine] PostgreSQL Tables Verified.");
+}
+
+/** Guard that returns a live pool or throws — never silently no-ops. */
+function requirePool(): pg.Pool {
+  if (!isPostgres || !pgPool) {
+    throw new Error("[DB Engine] PostgreSQL pool is not initialized. Call initDb() before issuing queries.");
+  }
+  return pgPool;
+}
+
+// -----------------------------------------------------------------------------
+// CORE DB DATA ACCESORS
+// -----------------------------------------------------------------------------
+
+async function readAllDocs(collectionName: string): Promise<any[]> {
+  const pool = requirePool();
+  const res = await pool.query(
+    'SELECT id, data FROM geistdesk_documents WHERE collection = $1',
+    [collectionName]
+  );
+  return res.rows.map(row => {
+    const parsed = safeParseJson(row.data);
+    return {
+      id: row.id,
+      ...parsed
+    };
+  });
+}
+
+// -----------------------------------------------------------------------------
+// QUERY INTERPRETER / CONSTRAINTS PARSER
+// -----------------------------------------------------------------------------
+
+function applyQueryConstraints(docs: any[], constraints: any[]): any[] {
+  let result = [...docs];
+  
+  for (const c of constraints) {
+    if (!c) continue;
+
+    if (c.type === 'where') {
+      result = result.filter(doc => {
+        const val = doc[c.field];
+        const checkVal = c.value;
+
+        if (c.op === '==' || c.op === '===') {
+          return val === checkVal;
+        }
+        if (c.op === '!=') {
+          return val !== checkVal;
+        }
+        if (c.op === '>') {
+          return val > checkVal;
+        }
+        if (c.op === '>=') {
+          return val >= checkVal;
+        }
+        if (c.op === '<') {
+          return val < checkVal;
+        }
+        if (c.op === '<=') {
+          return val <= checkVal;
+        }
+        if (c.op === 'array-contains') {
+          return Array.isArray(val) && val.includes(checkVal);
+        }
+        return true;
+      });
+    } else if (c.type === 'orderBy') {
+      result.sort((a, b) => {
+        let valA = a[c.field];
+        let valB = b[c.field];
+
+        if (valA && typeof valA === 'object' && valA._seconds) {
+          valA = valA._seconds * 1000;
+        }
+        if (valB && typeof valB === 'object' && valB._seconds) {
+          valB = valB._seconds * 1000;
+        }
+
+        if (valA === undefined || valA === null) return 1;
+        if (valB === undefined || valB === null) return -1;
+
+        if (valA < valB) return c.direction === 'desc' ? 1 : -1;
+        if (valA > valB) return c.direction === 'desc' ? -1 : 1;
+        return 0;
+      });
+    } else if (c.type === 'limit') {
+      result = result.slice(0, c.count);
+    }
+  }
+
+  return result;
+}
+
+// Deep process dynamic insert object (replacing Firestore types with native formats)
+function processValueMutations(obj: any, existingDocData: any = {}): any {
+  if (!obj || typeof obj !== 'object') {
+    return obj;
+  }
+
+  const result: any = Array.isArray(obj) ? [] : {};
+
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+
+    if (val && typeof val === 'object') {
+      if (val._type === 'serverTimestamp') {
+        result[key] = new Date().toISOString();
+      } else if (val._type === 'arrayUnion') {
+        const existingArray = Array.isArray(existingDocData[key]) ? existingDocData[key] : [];
+        result[key] = Array.from(new Set([...existingArray, ...val.values]));
+      } else if (val._type === 'increment') {
+        const existingNum = typeof existingDocData[key] === 'number' ? existingDocData[key] : 0;
+        result[key] = existingNum + (val.value || 0);
+      } else if (val._type === 'deleteField') {
+        // Handled by skipping writing this property in result
+        continue;
+      } else {
+        result[key] = processValueMutations(val, existingDocData[key]);
+      }
+    } else {
+      result[key] = val;
+    }
+  }
+
+  return result;
+}
+
+// -----------------------------------------------------------------------------
+// PUBLIC DIRECT ACCESORS (USED BY CLIENT ENDPOINT HOOKS)
+// -----------------------------------------------------------------------------
+
+export async function getDocDirect(collectionName: string, id: string): Promise<any | null> {
+  const pool = requirePool();
+  const res = await pool.query(
+    'SELECT data FROM geistdesk_documents WHERE collection = $1 AND id = $2',
+    [collectionName, id]
+  );
+  if (res.rowCount && res.rows[0]) {
+    const parsed = safeParseJson(res.rows[0].data);
+    return { id, ...parsed };
+  }
+  return null;
+}
+
+export async function getDocsDirect(collectionName: string, constraints: any[]): Promise<any[]> {
+  const pool = requirePool();
+  {
+    try {
+      let queryStr = `SELECT id, data FROM geistdesk_documents WHERE collection = $1`;
+      const queryParams: any[] = [collectionName];
+
+      // Safe JSONB constraint compilation to guarantee alignment of unassigned accounts
+      for (const c of constraints) {
+        if (!c || c.type !== 'where') continue;
+
+        const field = c.field;
+        const op = c.op;
+        const value = c.value;
+
+        // 1. Unified Unassigned Check mapping both agentId / assignedTo / non-existent / empty keys
+        if (field === 'agentId' || field === 'assignedTo') {
+          if (value === null || value === undefined || value === '' || value === 'unassigned') {
+            if (op === '==' || op === '===') {
+              queryStr += ` AND (
+                data->>'agentId' IS NULL 
+                OR data->>'agentId' = '' 
+                OR data->>'agentId' = 'unassigned'
+                OR data->>'assignedTo' IS NULL 
+                OR data->>'assignedTo' = ''
+                OR data->>'assignedTo' = 'unassigned'
+              )`;
+            } else if (op === '!=') {
+              queryStr += ` AND (
+                data->>'agentId' IS NOT NULL 
+                AND data->>'agentId' != '' 
+                AND data->>'agentId' != 'unassigned'
+                AND data->>'assignedTo' IS NOT NULL 
+                AND data->>'assignedTo' != ''
+                AND data->>'assignedTo' != 'unassigned'
+              )`;
+            }
+            continue;
+          }
+        }
+
+        // 2. Harmonized Casing on 'Nicht zugewiesen' / 'unassigned' / 'nicht-zugewiesen' for statuses
+        if (field === 'status') {
+          const valStr = String(value).toLowerCase().trim();
+          if (valStr === 'unassigned' || valStr === 'nicht-zugewiesen' || valStr === 'nicht zugewiesen' || valStr === 'nicht_zugewiesen') {
+            if (op === '==' || op === '===') {
+              queryStr += ` AND (
+                LOWER(data->>'status') = 'unassigned' 
+                OR LOWER(data->>'status') = 'nicht-zugewiesen' 
+                OR LOWER(data->>'status') = 'nicht zugewiesen'
+                OR LOWER(data->>'status') = 'nicht_zugewiesen'
+                OR data->>'status' IS NULL
+              )`;
+            } else if (op === '!=') {
+              queryStr += ` AND (
+                LOWER(data->>'status') != 'unassigned' 
+                AND LOWER(data->>'status') != 'nicht-zugewiesen' 
+                AND LOWER(data->>'status') != 'nicht zugewiesen'
+                AND LOWER(data->>'status') != 'nicht_zugewiesen'
+                AND data->>'status' IS NOT NULL
+              )`;
+            }
+            continue;
+          }
+        }
+
+        // 3. Generic constraint fallback with direct values
+        const paramIndex = queryParams.length + 1;
+        if (op === '==' || op === '===') {
+          queryStr += ` AND data->>$${paramIndex} = $${paramIndex + 1}`;
+          queryParams.push(field, String(value));
+        } else if (op === '!=') {
+          queryStr += ` AND data->>$${paramIndex} != $${paramIndex + 1}`;
+          queryParams.push(field, String(value));
+        } else if (op === '>') {
+          queryStr += ` AND (data->>$${paramIndex})::text > $${paramIndex + 1}`;
+          queryParams.push(field, String(value));
+        } else if (op === '>=') {
+          queryStr += ` AND (data->>$${paramIndex})::text >= $${paramIndex + 1}`;
+          queryParams.push(field, String(value));
+        } else if (op === '<') {
+          queryStr += ` AND (data->>$${paramIndex})::text < $${paramIndex + 1}`;
+          queryParams.push(field, String(value));
+        } else if (op === '<=') {
+          queryStr += ` AND (data->>$${paramIndex})::text <= $${paramIndex + 1}`;
+          queryParams.push(field, String(value));
+        }
+      }
+
+      const res = await pool.query(queryStr, queryParams);
+      const docs = res.rows.map(row => {
+        const parsed = safeParseJson(row.data);
+        return {
+          id: row.id,
+          ...parsed
+        };
+      });
+
+      // Post-process with sorting/limits using existing in-memory constraints
+      return applyQueryConstraints(docs, constraints.filter(c => c && c.type !== 'where'));
+    } catch (error) {
+      console.error(`[DB Error] Native SQL constraint query failed for ${collectionName}:`, error);
+      throw error;
+    }
+  }
+}
+
+// Cryptographically strong document identifier.
+function generateDocId(): string {
+  return randomUUID();
+}
+
+export async function addDocDirect(collectionName: string, data: any): Promise<any> {
+  const pool = requirePool();
+  const generatedId = generateDocId();
+  const processed = processValueMutations(data);
+  processed.id = generatedId;
+
+  await pool.query(
+    `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, $3)
+     ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+    [collectionName, generatedId, processed]
+  );
+
+  return { id: generatedId, data: processed };
+}
+
+export async function updateDocDirect(collectionName: string, id: string, data: any): Promise<void> {
+  const pool = requirePool();
+  const existing = await getDocDirect(collectionName, id) || {};
+  const processed = { ...existing, ...processValueMutations(data, existing) };
+  delete processed.id; // Primary ID is handled in row columns
+
+  await pool.query(
+    `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, $3)
+     ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+    [collectionName, id, processed]
+  );
+}
+
+export async function setDocDirect(collectionName: string, id: string, data: any): Promise<void> {
+  const pool = requirePool();
+  const processed = processValueMutations(data);
+  delete processed.id;
+
+  await pool.query(
+    `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, $3)
+     ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+    [collectionName, id, processed]
+  );
+}
+
+export async function deleteDocDirect(collectionName: string, id: string): Promise<void> {
+  const pool = requirePool();
+  await pool.query(
+    'DELETE FROM geistdesk_documents WHERE collection = $1 AND id = $2',
+    [collectionName, id]
+  );
+}
+
+// -----------------------------------------------------------------------------
+// SERVER-SIDE AGGREGATIONS (computed in SQL, not in the client)
+// -----------------------------------------------------------------------------
+
+export interface TicketStats {
+  total: number;
+  open: number;
+  pending: number;
+  resolved: number;
+  closed: number;
+  unassigned: number;
+  urgent: number;
+}
+
+/**
+ * Compute ticket dashboard counts directly in PostgreSQL so every client
+ * (sandbox or production) sees identical, authoritative figures.
+ */
+export async function getTicketStats(): Promise<TicketStats> {
+  const pool = requirePool();
+  const res = await pool.query(`
+    SELECT
+      COUNT(*)::int AS total,
+      COUNT(*) FILTER (WHERE LOWER(data->>'status') = 'open')::int AS open,
+      COUNT(*) FILTER (WHERE LOWER(data->>'status') = 'pending')::int AS pending,
+      COUNT(*) FILTER (WHERE LOWER(data->>'status') = 'resolved')::int AS resolved,
+      COUNT(*) FILTER (WHERE LOWER(data->>'status') = 'closed')::int AS closed,
+      COUNT(*) FILTER (WHERE COALESCE(data->>'agentId', '') = '')::int AS unassigned,
+      COUNT(*) FILTER (WHERE LOWER(data->>'priority') = 'urgent')::int AS urgent
+    FROM geistdesk_documents
+    WHERE collection = 'tickets'
+  `);
+  const row = res.rows[0] || {};
+  return {
+    total: row.total || 0,
+    open: row.open || 0,
+    pending: row.pending || 0,
+    resolved: row.resolved || 0,
+    closed: row.closed || 0,
+    unassigned: row.unassigned || 0,
+    urgent: row.urgent || 0
+  };
+}
+
+// -----------------------------------------------------------------------------
+// FIRESTORE COMPATIBILITY LAYER / SDK MOCKER FOR SERVER-SIDE DB INTEGRATION
+// -----------------------------------------------------------------------------
+
+export class ServerCollectionRef {
+  constructor(private collectionName: string) {}
+
+  where(field: string, op: string, value: any) {
+    return new ServerCollectionQuery(this.collectionName, [{ type: 'where', field, op, value }]);
+  }
+
+  orderBy(field: string, direction: 'asc' | 'desc' = 'asc') {
+    return new ServerCollectionQuery(this.collectionName, [{ type: 'orderBy', field, direction }]);
+  }
+
+  limit(count: number) {
+    return new ServerCollectionQuery(this.collectionName, [{ type: 'limit', count }]);
+  }
+
+  async get() {
+    const docs = await getDocsDirect(this.collectionName, []);
+    return new ServerQuerySnapshot(docs);
+  }
+
+  async add(data: any) {
+    const res = await addDocDirect(this.collectionName, data);
+    return new ServerDocRef(this.collectionName, res.id);
+  }
+
+  doc(id: string) {
+    return new ServerDocRef(this.collectionName, id);
+  }
+}
+
+class ServerCollectionQuery {
+  constructor(private collectionName: string, private constraints: any[]) {}
+
+  where(field: string, op: string, value: any) {
+    return new ServerCollectionQuery(this.collectionName, [...this.constraints, { type: 'where', field, op, value }]);
+  }
+
+  orderBy(field: string, direction: 'asc' | 'desc' = 'asc') {
+    return new ServerCollectionQuery(this.collectionName, [...this.constraints, { type: 'orderBy', field, direction }]);
+  }
+
+  limit(count: number) {
+    return new ServerCollectionQuery(this.collectionName, [...this.constraints, { type: 'limit', count }]);
+  }
+
+  async get() {
+    const docs = await getDocsDirect(this.collectionName, this.constraints);
+    return new ServerQuerySnapshot(docs);
+  }
+}
+
+class ServerQuerySnapshot {
+  constructor(private rawDocs: any[]) {}
+  get empty() {
+    return this.rawDocs.length === 0;
+  }
+  get docs() {
+    return this.rawDocs.map(d => new ServerDocSnapshot(d.id || d.customId, d));
+  }
+}
+
+class ServerDocSnapshot {
+  constructor(public id: string, private rawData: any) {}
+  get exists() {
+    return !!this.rawData;
+  }
+  data() {
+    return this.rawData;
+  }
+  get ref() {
+    return new ServerDocRef('tickets', this.id);
+  }
+}
+
+export class ServerDocRef {
+  constructor(private collectionName: string, public id: string) {}
+
+  collection(subCollectionName: string) {
+    return new ServerCollectionRef(`${this.collectionName}/${this.id}/${subCollectionName}`);
+  }
+
+  async get() {
+    const data = await getDocDirect(this.collectionName, this.id);
+    return new ServerDocSnapshot(this.id, data);
+  }
+
+  async update(data: any) {
+    await updateDocDirect(this.collectionName, this.id, data);
+  }
+
+  async set(data: any) {
+    await setDocDirect(this.collectionName, this.id, data);
+  }
+}
+
+// Emulated Database Wrapper Instance
+export function getDb() {
+  return {
+    collection: (name: string) => new ServerCollectionRef(name)
+  };
+}

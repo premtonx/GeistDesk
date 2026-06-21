@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # The Core App / Gateway
+  geistdesk-gateway:
+    build: .
+    container_name: geistdesk-sovereign-gate
+    depends_on:
+      - geistdesk-db
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      
+      # Database Connection
+      - DATABASE_URL=postgresql://geist_user:geist_password@geistdesk-db:5432/geistdesk_prod?sslmode=disable
+      
+      # Base environment configs (SSO)
+      - VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY}
+      - VITE_FIREBASE_AUTH_DOMAIN=${VITE_FIREBASE_AUTH_DOMAIN}
+      - VITE_FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID}
+      - VITE_AI_PROVIDER=${VITE_AI_PROVIDER:-azure}
+      
+      # Downstream Sovereign PII and Azure API credentials
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT}
+      - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME}
+      
+      # Teams Bot / Adapter credentials
+      - MicrosoftAppId=${MicrosoftAppId}
+      - MicrosoftAppPassword=${MicrosoftAppPassword}
+      - MicrosoftAppType=${MicrosoftAppType}
+      - MicrosoftAppTenantId=${MicrosoftAppTenantId}
+    restart: always
+    networks:
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.geistdesk-sso.rule=Host(`app.premtonx.cloud`)"
+      - "traefik.http.routers.geistdesk-sso.entrypoints=websecure"
+      # 👇 CHANGED THIS LINE TO MATCH GLOBAL TRAEFIK
+      - "traefik.http.routers.geistdesk-sso.tls.certresolver=myresolver"
+      - "traefik.http.services.geistdesk-sso.loadbalancer.server.port=3000"
+
+  # The Local Database
+  geistdesk-db:
+    image: postgres:15-alpine
+    container_name: geistdesk-db-container
+    environment:
+      - POSTGRES_USER=geist_user
+      - POSTGRES_PASSWORD=geist_password
+      - POSTGRES_DB=geistdesk_prod
+    volumes:
+      - geistdesk_db_data:/var/lib/postgresql/data
+    restart: always
+    networks:
+      - traefik-public
+
+volumes:
+  geistdesk_db_data:
+
+networks:
+  traefik-public:
+    external: true

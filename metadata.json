@@ -1,0 +1,14 @@
+{
+  "name": "Remix: GeistDesk",
+  "description": "An AI-native ticketing system with detachable AI engines, RAG-powered knowledge base, and PII protection.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API",
+    "AI Ticketing",
+    "RAG Knowledge Base",
+    "PII Redaction"
+  ]
+}

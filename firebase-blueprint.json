@@ -1,0 +1,334 @@
+{
+  "entities": {
+    "AuditLog": {
+      "title": "Audit Log",
+      "description": "Compliance records for system-wide actions.",
+      "type": "object",
+      "properties": {
+        "actorId": { "type": "string" },
+        "actorEmail": { "type": "string" },
+        "module": { "type": "string", "enum": ["vault", "credentials", "insights", "tickets", "groups", "workforce"] },
+        "action": { "type": "string" },
+        "details": { "type": "object" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["actorId", "module", "action", "timestamp"]
+    },
+    "User": {
+      "title": "User Profile",
+      "description": "System user or agent profile.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "role": { "type": "string", "enum": ["admin", "agent", "team_lead", "customer"] },
+        "avatar": { "type": "string" },
+        "signature": { "type": "string" },
+        "visibilityScope": { "type": "string", "enum": ["all", "group", "assigned"] },
+        "groups": { "type": "array", "items": { "type": "string" } },
+        "isDeactivated": { "type": "boolean" },
+        "agentType": { "type": "string", "enum": ["full-time", "occasional"] },
+        "lastActiveAt": { "type": "string", "format": "date-time" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "role", "createdAt"]
+    },
+    "UserRole": {
+      "title": "User Role",
+      "description": "Custom role distribution for RBAC",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "permissions": { "type": "object" },
+        "specialPermissions": { "type": "object" },
+        "isSystem": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "permissions", "specialPermissions"]
+    },
+    "Group": {
+      "title": "Functional Team",
+      "description": "A group of agents for ticket routing.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "businessHoursId": { "type": "string" },
+        "isDefault": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "createdAt"]
+    },
+    "GroupMember": {
+      "title": "Group Membership",
+      "description": "Links a user to a functional team.",
+      "type": "object",
+      "properties": {
+        "groupId": { "type": "string" },
+        "userId": { "type": "string" },
+        "joinedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["groupId", "userId", "joinedAt"]
+    },
+    "Vault": {
+      "title": "Credential Vault",
+      "description": "A container for encrypted credentials.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "type": { "type": "string", "enum": ["personal", "shared"] },
+        "createdBy": { "type": "string" },
+        "sharedWith": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "type", "createdBy", "createdAt"]
+    },
+    "VaultItem": {
+      "title": "Shared Credential",
+      "description": "An individual encrypted credential within a shared vault.",
+      "type": "object",
+      "properties": {
+        "vaultId": { "type": "string" },
+        "type": { "type": "string" },
+        "label": { "type": "string" },
+        "username": { "type": "string" },
+        "encryptedPassword": { "type": "string" },
+        "host": { "type": "string" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "lastModifiedBy": { "type": "string" }
+      },
+      "required": ["vaultId", "type", "label", "username", "encryptedPassword", "updatedAt"]
+    },
+    "Ticket": {
+      "title": "Support Ticket",
+      "description": "A customer support request.",
+      "type": "object",
+      "properties": {
+        "subject": { "type": "string" },
+        "description": { "type": "string" },
+        "status": { "type": "string", "enum": ["open", "pending", "resolved", "closed", "merged", "trash"] },
+        "priority": { "type": "string", "enum": ["low", "medium", "high", "urgent"] },
+        "team": { "type": "string", "enum": ["support", "engineering", "legal"] },
+        "customerId": { "type": "string" },
+        "customerName": { "type": "string" },
+        "contactId": { "type": "string" },
+        "companyId": { "type": "string" },
+        "agentId": { "type": "string" },
+        "agentName": { "type": "string" },
+        "isHelpRequested": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "linkedTicketIds": { "type": "array", "items": { "type": "string" } },
+        "masterTicketId": { "type": "string" },
+        "isMasterTicket": { "type": "boolean" },
+        "mergedIntoId": { "type": "string" },
+        "originalLanguage": { "type": "string" }
+      },
+      "required": ["subject", "status", "priority", "contactId", "companyId", "createdAt"]
+    },
+    "Company": {
+      "title": "Company",
+      "description": "A B2B company entity.",
+      "type": "object",
+      "properties": {
+        "logoUrl": { "type": "string" },
+        "name": { "type": "string" },
+        "website": { "type": "string" },
+        "domain": { "type": "string" },
+        "branche": { "type": "string", "enum": ["Tech", "Finance", "Healthcare", "Manufacturing", "Retail", "Services", "Other"] },
+        "wartungsvertragStatus": { "type": "string", "enum": ["Active", "Expired", "None"] },
+        "phoneNumbers": { "type": "array", "items": { "type": "string" } },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "domain", "wartungsvertragStatus", "createdAt"]
+    },
+    "Contact": {
+      "title": "Contact",
+      "description": "An individual working at a company.",
+      "type": "object",
+      "properties": {
+        "companyId": { "type": "string" },
+        "title": { "type": "string" },
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "phoneWork": { "type": "string" },
+        "phoneMobile": { "type": "string" },
+        "socialHandles": { "type": "object" },
+        "address": { "type": "string" },
+        "metadata": { "type": "object", "description": "Dynamic custom fields." },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["companyId", "name", "email", "createdAt"]
+    },
+    "Message": {
+      "title": "Ticket Message",
+      "description": "A message within a support ticket thread.",
+      "type": "object",
+      "properties": {
+        "ticketId": { "type": "string" },
+        "senderId": { "type": "string" },
+        "senderType": { "type": "string", "enum": ["customer", "agent", "ai"] },
+        "senderName": { "type": "string" },
+        "content": { "type": "string" },
+        "redactedContent": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ticketId", "senderId", "senderType", "content", "createdAt"]
+    },
+    "KBArticle": {
+      "title": "Knowledge Base Article",
+      "description": "Help documentation or verified solutions.",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "content": { "type": "string" },
+        "tags": { "type": "array", "items": { "type": "string" } },
+        "category": { "type": "string" },
+        "visibility": { "type": "string", "enum": ["Public", "Private"] },
+        "authorId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["title", "content", "category", "visibility", "authorId", "createdAt"]
+    },
+    "Tag": {
+      "title": "Knowledge Base Tag",
+      "description": "A metadata label for categorizing articles.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "count": { "type": "integer" }
+      },
+      "required": ["name", "count"]
+    },
+    "Customer": {
+      "title": "Customer Profile",
+      "description": "Detailed customer and company information.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "company": { "type": "string" },
+        "role": { "type": "string" },
+        "tier": { "type": "string", "enum": ["Free", "Pro", "Enterprise"] },
+        "location": { "type": "string" },
+        "status": { "type": "string", "enum": ["active", "inactive"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["name", "email", "company", "tier", "status", "createdAt"]
+    },
+    "LegalViolation": {
+      "title": "Compliance Log",
+      "description": "Record of legal or policy guardrail violations.",
+      "type": "object",
+      "properties": {
+        "agentId": { "type": "string" },
+        "agentEmail": { "type": "string" },
+        "ticketId": { "type": "string" },
+        "forbiddenText": { "type": "string" },
+        "violatedRule": { "type": "string" },
+        "draftContent": { "type": "string" },
+        "timestamp": { "type": "string", "format": "date-time" }
+      },
+      "required": ["agentId", "forbiddenText", "violatedRule", "timestamp"]
+    },
+    "Notification": {
+      "title": "System Notification",
+      "description": "In-app alerts for tickets, security, and system events.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "category": { "type": "string", "enum": ["ticket", "security", "system"] },
+        "read": { "type": "boolean" },
+        "link": { "type": "string" },
+        "priority": { "type": "string", "enum": ["low", "medium", "high"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["userId", "title", "message", "category", "read", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/notifications/{notificationId}": {
+      "schema": "Notification",
+      "description": "User-specific notifications."
+    },
+    "/audit_logs/{logId}": {
+      "schema": "AuditLog",
+      "description": "System-wide immutable audit trail."
+    },
+    "/compliance_logs/{logId}": {
+      "schema": "LegalViolation",
+      "description": "Log of policy guardrail violations."
+    },
+    "/vaults/{vaultId}": {
+      "schema": "Vault",
+      "description": "Collection of credential vaults."
+    },
+    "/vaults/{vaultId}/items/{itemId}": {
+      "schema": "VaultItem",
+      "description": "Individual items within a specific vault."
+    },
+    "/tickets/{ticketId}": {
+      "schema": "Ticket",
+      "description": "Collection of support tickets."
+    },
+    "/tickets/{ticketId}/messages/{messageId}": {
+      "schema": "Message",
+      "description": "Messages within a ticket thread."
+    },
+    "/kb_articles/{articleId}": {
+      "schema": "KBArticle",
+      "description": "Knowledge base documentation."
+    },
+    "/tags/{tagId}": {
+      "schema": "Tag",
+      "description": "Article categorization tags."
+    },
+    "/companies/{companyId}": {
+      "schema": "Company",
+      "description": "B2B Companies."
+    },
+    "/contacts/{contactId}": {
+      "schema": "Contact",
+      "description": "B2B Contacts."
+    },
+    "/customers/{customerId}": {
+      "schema": "Customer",
+      "description": "Customer directory."
+    },
+    "/users/{userId}": {
+      "schema": "User",
+      "description": "User profiles and agent data."
+    },
+    "/groups/{groupId}": {
+      "schema": "Group",
+      "description": "Functional teams."
+    },
+    "/groups/{groupId}/members/{memberId}": {
+      "schema": "GroupMember",
+      "description": "Members of a specific team."
+    },
+    "/roles/{roleId}": {
+      "schema": "UserRole",
+      "description": "RBAC role definitions"
+    },
+    "/settings/company_schema": {
+      "schema": "object",
+      "description": "Global custom fields for companies."
+    },
+    "/settings/contact_schema": {
+      "schema": "object",
+      "description": "Global custom fields for individual contacts."
+    }
+  }
+}
