@@ -106,6 +106,23 @@ export const vaultService = {
     }
   },
 
+  /**
+   * Permanently destroy a vault item. Secret material lives in a separate
+   * server collection; burning it cryptographically erases the payload, which
+   * is the strongest "delete" semantics the hardened pipeline exposes.
+   */
+  deleteItem: async (id: string) => {
+    try {
+      await fetch(`/api/vault/secrets/${encodeURIComponent(id)}/burn`, {
+        method: 'POST',
+        headers: authHeaders()
+      });
+      await logAudit({ module: 'vault', action: 'VAULT_ITEM_BURNED', severity: 'high', details: { itemId: id, trigger: 'Delete' } });
+    } catch (error) {
+      console.error('[vaultService.deleteItem]', error);
+    }
+  },
+
   /** Upload encrypted content to a dropzone-style request item. */
   updateItem: async (id: string, updates: Partial<VaultItem>) => {
     const res = await fetch(`/api/vault/secrets/${encodeURIComponent(id)}/content`, {

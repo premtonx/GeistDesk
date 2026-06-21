@@ -118,7 +118,15 @@ export function usePermissions() {
     }, 1200);
 
     const unsub = userService.subscribeToUsers((users) => {
-      const profile = users.find(u => u.email && authUser.email && u.email.toLowerCase().trim() === authUser.email.toLowerCase().trim());
+      const emailMatches = users.filter(u => u.email && authUser.email && u.email.toLowerCase().trim() === authUser.email.toLowerCase().trim());
+      // Resolve the canonical profile defensively. Prefer the record whose id
+      // matches the authenticated uid, then any record that carries admin
+      // rights, so a stale non-admin duplicate can never shadow the real
+      // account and lock an admin out of the Admin Hub.
+      const profile =
+        emailMatches.find(u => u.id === authUser.uid) ||
+        emailMatches.find(u => (u as any).is_admin === true || u.role === 'admin') ||
+        emailMatches[0];
 
       if (isGodMode) {
         clearTimeout(safetyTimeout);

@@ -71,6 +71,29 @@ async function batchUpsert(client: pg.PoolClient, collection: string, rows: any[
   return rows.length;
 }
 
+/**
+ * Remove legacy/duplicate user rows that share a seeded email but live under a
+ * different id. The persistent DB volume survives every redeploy, so stale
+ * pre-hardening records (without a passwordHash, or with a downgraded role) can
+ * otherwise shadow the canonical seeded account at login and in the UI.
+ */
+async function purgeStaleDuplicateUsers(client: pg.PoolClient, users: any[]): Promise<number> {
+  let removed = 0;
+  for (const u of users) {
+    const email = String(u.email || "").toLowerCase().trim();
+    if (!email || !u.id) continue;
+    const result = await client.query(
+      `DELETE FROM geistdesk_documents
+        WHERE collection = 'users'
+          AND id <> $1
+          AND lower(trim(data->>'email')) = $2`,
+      [u.id, email]
+    );
+    removed += result.rowCount || 0;
+  }
+  return removed;
+}
+
 async function main() {
   const dataset: SeedDataset = seedDatasetJson as SeedDataset;
 
@@ -108,10 +131,14 @@ async function main() {
     }));
 
     await client.query("BEGIN");
+    const purged = await purgeStaleDuplicateUsers(client, users);
     const u = await batchUpsert(client, "users", users);
     const k = await batchUpsert(client, "tickets", tickets);
     await client.query("COMMIT");
 
+    if (purged > 0) {
+      console.log(`[seed] Purged ${purged} stale duplicate user row(s) sharing a seeded email.`);
+    }
     console.log(`[seed] Upserted ${u} users and ${k} tickets into geistdesk_documents.`);
     console.log("[seed] Done. Default seeded credentials are dev-only — rotate them immediately.");
   } catch (err) {

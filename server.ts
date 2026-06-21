@@ -139,12 +139,22 @@ async function startServer() {
     const cleanEmail = String(email).toLowerCase().trim();
     try {
       const matches = await getDocsDirect("users", [{ type: "where", field: "email", op: "==", value: cleanEmail }]);
-      const userDoc = matches && matches.length > 0 ? matches[0] : null;
 
-      // Always run a verification to reduce account-enumeration timing signals.
-      const storedHash = userDoc?.passwordHash || "";
-      const ok = await verifyPassword(password, storedHash);
-      if (!userDoc || !ok) {
+      // The persistent DB volume can retain legacy/duplicate records for the
+      // same email (e.g. pre-hardening rows with no passwordHash). Verify the
+      // supplied password against EVERY candidate and accept the first that
+      // matches, so a stale record can never shadow the real account.
+      let userDoc: any = null;
+      for (const candidate of matches || []) {
+        if (candidate?.passwordHash && (await verifyPassword(password, candidate.passwordHash))) {
+          userDoc = candidate;
+          break;
+        }
+      }
+
+      if (!userDoc) {
+        // Burn a verification cycle to dampen account-enumeration timing signals.
+        await verifyPassword(password, matches?.[0]?.passwordHash || "");
         return res.status(401).json({ error: "Invalid credentials." });
       }
       if (userDoc.isDeactivated) {
