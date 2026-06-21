@@ -471,7 +471,7 @@ export default function VaultPage() {
   return (
     <div className="flex-1 overflow-hidden bg-[#F8F9FA] flex flex-col h-full">
       {/* Sub Header Navigation inside page */}
-      <div className="h-14 border-b bg-white flex items-center px-6 justify-between shrink-0">
+      <div className="min-h-14 border-b bg-white flex flex-wrap items-center gap-y-2 px-4 sm:px-6 py-2 justify-between shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-3">
             <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center text-white">

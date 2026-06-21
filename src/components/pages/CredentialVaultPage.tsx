@@ -912,7 +912,7 @@ export default function CredentialVaultPage() {
 
         <div className="flex flex-wrap items-center gap-3">
           {/* Modular connections tabs */}
-          <div className="bg-[#E8FEEA]/20 p-1 rounded-xl border border-[#DADCE0] flex items-center gap-1 shadow-3xs">
+          <div className="bg-[#E8FEEA]/20 p-1 rounded-xl border border-[#DADCE0] flex items-center gap-1 shadow-3xs overflow-x-auto max-w-full no-scrollbar">
             <button 
               type="button"
               onClick={() => setVaultViewMode('vault')}
@@ -1368,7 +1368,7 @@ export default function CredentialVaultPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Category Type</label>
                     <Select 
@@ -1402,7 +1402,7 @@ export default function CredentialVaultPage() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-1">
                     <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Username / ID</label>
                     <Input 
@@ -1467,10 +1467,10 @@ export default function CredentialVaultPage() {
           <form onSubmit={handleCreateEntry} className="flex flex-col h-full w-full">
             
             {/* Modal Body: Sidebar + Main Content Grid */}
-            <div className="flex-1 flex overflow-hidden min-h-0">
+            <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden min-h-0">
               
-              {/* 1. Left Sidebar Navigation & Status (width: 320px) */}
-              <div className="w-[320px] bg-white border-r border-[#E5E7EB] flex flex-col p-6 overflow-y-auto shrink-0 space-y-6">
+              {/* 1. Left Sidebar Navigation & Status (width: 320px on md+) */}
+              <div className="w-full md:w-[320px] bg-white border-b md:border-b-0 md:border-r border-[#E5E7EB] flex flex-col p-6 overflow-y-auto md:shrink-0 space-y-6">
                 <div>
                   <h3 className="text-lg font-black text-slate-900 tracking-tight leading-none">Create New Vault Entry</h3>
                   <p className="text-[11px] text-slate-500 font-medium mt-1.5 leading-relaxed">
@@ -2170,7 +2170,7 @@ export default function CredentialVaultPage() {
                             value={tagInput}
                             onChange={(e) => setTagInput(e.target.value)}
                             onKeyDown={handleAddNewTag}
-                            className="bg-transparent border-none outline-none text-xs min-w-[200px] text-slate-800 placeholder-slate-400 font-medium"
+                            className="bg-transparent border-none outline-none text-xs min-w-0 flex-1 text-slate-800 placeholder-slate-400 font-medium"
                           />
                         </div>
                         <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-400 select-none">

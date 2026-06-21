@@ -170,7 +170,7 @@ export default function DashboardPage() {
         onClose={() => setIsNewTicketOpen(false)} 
       />
 
-      <div className="p-8 space-y-6 max-w-7xl mx-auto pb-20">
+      <div className="p-4 sm:p-8 space-y-6 max-w-7xl mx-auto pb-20">
         
         {/* Dashboard Title Header & Filter Row */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -183,7 +183,7 @@ export default function DashboardPage() {
             </p>
           </div>
           
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button 
               variant="outline" 
               className="bg-white border-gray-200 text-gray-700 h-10 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all"

@@ -135,7 +135,7 @@ export default function AuditLogPage() {
                 </div>
                 <div className="flex flex-col">
                    <span className="text-[10px] font-black tracking-[0.2em] text-slate-400 uppercase leading-none">{t('protocols.alpha', 'GeistDesk Protocol Alpha')}</span>
-                   <h1 className="text-4xl font-black text-black tracking-tight uppercase leading-none mt-1 italic">{t('audit.sovereignty', 'Audit Sovereignty')}</h1>
+                   <h1 className="text-2xl sm:text-4xl font-black text-black tracking-tight uppercase leading-none mt-1 italic">{t('audit.sovereignty', 'Audit Sovereignty')}</h1>
                 </div>
              </div>
              <p className="text-sm text-slate-500 max-w-xl leading-relaxed">
@@ -178,13 +178,13 @@ export default function AuditLogPage() {
               <TabsList className="bg-slate-100 p-1 h-12 rounded-lg w-full md:w-fit">
                  <TabsTrigger 
                    value="system" 
-                   className="rounded-md px-10 data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm font-black text-[10px] uppercase tracking-widest h-10 transition-all"
+                   className="rounded-md px-4 sm:px-10 data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm font-black text-[10px] uppercase tracking-widest h-10 transition-all"
                  >
                    {t('audit.atomicLogs', 'Atomic Logs')}
                  </TabsTrigger>
                  <TabsTrigger 
                    value="compliance" 
-                   className="rounded-md px-10 data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm font-black text-[10px] uppercase tracking-widest h-10 transition-all text-red-600/60 data-[state=active]:text-red-600"
+                   className="rounded-md px-4 sm:px-10 data-[state=active]:bg-white data-[state=active]:text-black data-[state=active]:shadow-sm font-black text-[10px] uppercase tracking-widest h-10 transition-all text-red-600/60 data-[state=active]:text-red-600"
                  >
                    {t('audit.legalIntercepts', 'Legal Intercepts')}
                  </TabsTrigger>

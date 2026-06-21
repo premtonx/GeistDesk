@@ -118,7 +118,7 @@ export default function CompanyOverviewTab({
             </div>
 
             {/* Minor Health Grid */}
-            <div className="grid grid-cols-4 gap-2 pt-3 border-t border-muted text-center">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-3 border-t border-muted text-center">
               <div>
                 <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider">{t('companies.sentiment', 'Sentiment')}</p>
                 <p className="text-xs text-emerald-500 font-extrabold mt-1">Positive ↑</p>

@@ -67,7 +67,7 @@ export function VaultOverview({
           <p className="text-[11px] text-slate-400 mt-0.5 font-medium">{t('vault.tagline', 'Secure. Sync. Simplify.')}</p>
         </div>
 
-        <div className="grid grid-cols-4 gap-2.5 mt-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
           {/* Total entries */}
           <div className="bg-[#F8F9FA] rounded-xl border border-[#DADCE0]/60 p-2.5 text-center flex flex-col items-center justify-center">
             <div className="h-7 w-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center mb-1">
@@ -107,9 +107,9 @@ export function VaultOverview({
       </Card>
 
       {/* CARD 2: Vault Security Score */}
-      <Card className="lg:col-span-4 border border-[#DADCE0] rounded-2.5xl bg-white p-5 shadow-sm grid grid-cols-12 gap-4 items-center">
+      <Card className="lg:col-span-4 border border-[#DADCE0] rounded-2.5xl bg-white p-5 shadow-sm grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
         {/* Progress Circle visualizer */}
-        <div className="col-span-5 flex flex-col items-center justify-center border-r border-[#F1F3F4] pr-2">
+        <div className="sm:col-span-5 flex flex-col items-center justify-center sm:border-r border-[#F1F3F4] pb-3 sm:pb-0 sm:pr-2">
           <div className={`h-16 w-16 rounded-full border-4 ${status.ring} flex flex-col items-center justify-center bg-[#F8F9FA] shadow-inner`}>
             <span className="text-base font-black text-slate-800">{score}</span>
           </div>

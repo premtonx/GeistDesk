@@ -368,7 +368,7 @@ export function CredentialDrawer({
           {/* Linked Core Objects */}
           <div className="space-y-3">
             <h4 className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest">Enterprise Linkages</h4>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="bg-[#F8F9FA] rounded-xl border border-[#DADCE0] p-3 text-center flex flex-col items-center justify-center gap-1 shadow-2xs">
                 <Ticket className="w-4 h-4 text-[#1A73E8]" />
                 <span className="text-[9px] font-bold text-slate-400 uppercase">Linked Ticket</span>

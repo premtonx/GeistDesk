@@ -284,7 +284,7 @@ export default function SettingsPage() {
              <CardDescription>{t('settings.interfaceLanguageDesc', 'Choose your preferred display language for the GeistDesk interface.')}</CardDescription>
            </CardHeader>
            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                  <button
                    onClick={() => {
                      i18n.changeLanguage('de');
@@ -421,7 +421,7 @@ export default function SettingsPage() {
             <CardDescription>{t('settings.personioConnectDesc', 'Integrate time-tracking with Personio Attendance API.')}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-[10px] uppercase font-black text-slate-500">{t('settings.personioClientId', 'Personio Client ID')}</Label>
                 <Input 
@@ -502,7 +502,7 @@ export default function SettingsPage() {
 
             {(config.ssoEnabled) && (
               <div className="space-y-4 animate-in fade-in duration-200">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label className="text-[10px] uppercase font-black text-slate-500">{t('settings.appClientId', 'Application (Client) ID')}</Label>
                     <Input 

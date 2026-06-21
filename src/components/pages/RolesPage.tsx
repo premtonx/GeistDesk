@@ -305,12 +305,12 @@ export default function RolesPage() {
 
                    {/* Permission Grid */}
                    <section className="space-y-6">
-                      <div className="flex items-center justify-between">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                          <div className="flex items-center gap-3">
                             <div className="w-1.5 h-5 bg-indigo-600 rounded-full" />
                             <h3 className="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Permission Matrix</h3>
                          </div>
-                         <div className="flex gap-4">
+                         <div className="hidden sm:flex gap-4">
                             {ACTIONS.map(action => (
                               <div key={action.id} className="flex items-center gap-2">
                                 <action.icon className="w-3 h-3 text-slate-400" />
@@ -322,12 +322,12 @@ export default function RolesPage() {
 
                       <div className="rounded-[2.5rem] border border-slate-100 bg-slate-50/50 overflow-hidden divide-y divide-slate-100">
                          {MODULES.map(module => (
-                           <div key={module.id} className="flex items-center p-8 hover:bg-white transition-colors group/row">
-                              <div className="flex-1">
+                           <div key={module.id} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 sm:p-8 hover:bg-white transition-colors group/row">
+                              <div className="flex-1 min-w-0">
                                  <h4 className="font-black text-slate-900 uppercase tracking-tighter text-lg">{module.name}</h4>
                                  <p className="text-xs text-slate-500 font-medium italic">"{module.description}"</p>
                               </div>
-                              <div className="flex gap-6">
+                              <div className="flex flex-wrap gap-3 sm:gap-6">
                                  {ACTIONS.map(action => {
                                    const isGranted = editingRole?.permissions?.[module.id]?.[action.id as keyof typeof editingRole.permissions[string]] || false;
                                    return (
@@ -401,12 +401,12 @@ export default function RolesPage() {
                    </section>
                 </div>
 
-                <DialogFooter className="p-10 pt-0 bg-white border-t border-slate-50">
-                   <div className="flex w-full gap-4">
+                <DialogFooter className="p-4 sm:p-10 pt-0 bg-white border-t border-slate-50">
+                   <div className="flex flex-col sm:flex-row w-full gap-3 sm:gap-4">
                       {editingRole?.id && !editingRole.isSystem && (
                         <Button 
                           variant="ghost" 
-                          className="h-16 rounded-2xl px-8 font-black text-rose-600 bg-rose-50 hover:bg-rose-100"
+                          className="h-14 sm:h-16 rounded-2xl px-8 font-black text-rose-600 bg-rose-50 hover:bg-rose-100"
                           onClick={() => {
                             if (confirm('Are you sure you want to delete this blueprint? This action is irreversible.')) {
                               rbacService.deleteRole(editingRole.id!);
@@ -417,18 +417,18 @@ export default function RolesPage() {
                           <Trash2 className="w-5 h-5 mr-2" /> Decommission
                         </Button>
                       )}
-                      <div className="flex-1" />
+                      <div className="hidden sm:block flex-1" />
                       <Button 
                         variant="ghost" 
                         onClick={() => setIsRoleDialogOpen(false)}
-                        className="h-16 rounded-2xl px-10 font-bold text-slate-500"
+                        className="h-14 sm:h-16 rounded-2xl px-10 font-bold text-slate-500"
                       >
                         Cancel
                       </Button>
                       <Button 
                         onClick={handleSaveRole}
                         disabled={editingRole?.isSystem}
-                        className="h-16 rounded-2xl px-12 bg-indigo-600 text-white font-black text-xl shadow-2xl shadow-indigo-600/30 min-w-[200px]"
+                        className="h-14 sm:h-16 rounded-2xl px-12 bg-indigo-600 text-white font-black text-lg sm:text-xl shadow-2xl shadow-indigo-600/30 w-full sm:w-auto sm:min-w-[200px]"
                       >
                         <Save className="w-6 h-6 mr-3" /> Save Architecture
                       </Button>

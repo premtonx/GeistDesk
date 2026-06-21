@@ -26,7 +26,8 @@ import {
   Lock,
   Building,
   ArrowRight,
-  Globe
+  Globe,
+  ChevronLeft
 } from 'lucide-react';
 import { Button } from '../../components/ui/button';
 import { cn } from '../../lib/utils';
@@ -710,10 +711,21 @@ export default function CustomersPage() {
       />
 
       {/* Main View: Customer 360 Workspace Container */}
-      <div className="flex-1 bg-muted/15 overflow-hidden flex flex-col min-h-0">
+      <div className={cn(
+        "flex-1 bg-muted/15 overflow-hidden flex-col min-h-0",
+        // Mobile master-detail: hidden until a company is selected, then full width.
+        selectedCompanyId ? "flex" : "hidden lg:flex"
+      )}>
         {hydratedCompany ? (
           <div className="flex-1 overflow-y-auto">
-            <div className="p-6 max-w-7xl mx-auto space-y-6">
+            <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-6">
+              {/* Mobile-only back affordance to return to the company list. */}
+              <button
+                onClick={() => setSelectedCompanyId(null)}
+                className="lg:hidden flex items-center gap-1 text-sm font-bold text-muted-foreground hover:text-foreground -mb-2"
+              >
+                <ChevronLeft className="w-4 h-4" /> {t('nav.companies', 'Companies')}
+              </button>
               
               {/* Header and Support Contract block */}
               <CompanyHeader 
@@ -731,7 +743,7 @@ export default function CustomersPage() {
               {/* Navigation Tabs */}
               <div className="border-b border-muted">
                 <Tabs value={activeSubTab} onValueChange={setActiveSubTab} className="w-full">
-                  <TabsList className="bg-transparent border-none p-0 h-auto flex gap-6 select-none">
+                  <TabsList className="bg-transparent border-none p-0 h-auto flex gap-4 sm:gap-6 select-none w-full max-w-full overflow-x-auto flex-nowrap whitespace-nowrap no-scrollbar">
                     {[
                       { value: 'overview', label: t('nav.overview', 'Overview') },
                       { value: 'contacts', label: t('companies.contacts', 'Contacts'), count: employees.length },
@@ -842,10 +854,10 @@ export default function CustomersPage() {
 
           <form onSubmit={(e) => handleCreateCompany(e, false)} className="flex-1 flex flex-col overflow-hidden">
             {/* Split Column Panel */}
-            <div className="flex-1 flex overflow-hidden min-h-0 bg-[#F8F9FA]">
+            <div className="flex-1 flex flex-col lg:flex-row overflow-y-auto lg:overflow-hidden min-h-0 bg-[#F8F9FA]">
               
               {/* Left Column: Logo Drag-and-Drop & Enrichment Sidebar */}
-              <div className="w-[250px] border-r border-slate-200/60 bg-white p-5 flex flex-col gap-5 shrink-0 overflow-y-auto">
+              <div className="w-full lg:w-[250px] border-b lg:border-b-0 lg:border-r border-slate-200/60 bg-white p-5 flex flex-col gap-5 lg:shrink-0 overflow-y-auto">
                 <div>
                   <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Company Profile</h3>
                   <div 
@@ -938,7 +950,7 @@ export default function CustomersPage() {
                     <h4 className="text-xs font-bold uppercase tracking-wider">Company Information</h4>
                   </div>
                   
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5 col-span-2">
                       <Label htmlFor="name" className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                         Company Name <span className="text-red-500">*</span>
@@ -1049,7 +1061,7 @@ export default function CustomersPage() {
                     <h4 className="text-xs font-bold uppercase tracking-wider">Contact Information</h4>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label htmlFor="contactName" className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Primary Contact Name</Label>
                       <Input
@@ -1108,7 +1120,7 @@ export default function CustomersPage() {
                     <h4 className="text-xs font-bold uppercase tracking-wider">Business Details</h4>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5">
                       <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Country</Label>
                       <Select
@@ -1164,7 +1176,7 @@ export default function CustomersPage() {
                     <h4 className="text-xs font-bold uppercase tracking-wider">Internal Information</h4>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div className="space-y-1.5 col-span-2">
                       <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Assigned Account Manager</Label>
                       <Select
@@ -1199,7 +1211,7 @@ export default function CustomersPage() {
               </div>
 
               {/* Right Column: Live Company Preview */}
-              <div className="w-[330px] border-l border-slate-200/60 bg-white p-5 flex flex-col gap-4 shrink-0 overflow-y-auto">
+              <div className="w-full lg:w-[330px] border-t lg:border-t-0 lg:border-l border-slate-200/60 bg-white p-5 flex flex-col gap-4 lg:shrink-0 overflow-y-auto">
                 <div className="flex items-center justify-between border-b border-slate-100 pb-2">
                   <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Company Preview</span>
                   <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 border border-emerald-200 px-2.5 py-0.5 rounded-full flex items-center gap-1.5 select-none animate-pulse">
@@ -1396,7 +1408,7 @@ export default function CustomersPage() {
           </DialogHeader>
 
           <form onSubmit={handleEditCompanySubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3.5 text-xs text-foreground font-semibold">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs text-foreground font-semibold">
               <div className="space-y-1.5 col-span-2">
                 <Label htmlFor="edit-name" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Company Name</Label>
                 <Input 
@@ -1570,7 +1582,7 @@ export default function CustomersPage() {
           </DialogHeader>
 
           <form onSubmit={handleCreateContact} className="space-y-4">
-            <div className="grid grid-cols-2 gap-3.5 text-xs text-foreground font-semibold">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 text-xs text-foreground font-semibold">
               <div className="space-y-1.5 col-span-2">
                 <Label htmlFor="contact-name" className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Full Name</Label>
                 <Input 

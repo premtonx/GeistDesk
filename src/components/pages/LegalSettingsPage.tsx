@@ -103,7 +103,7 @@ export default function LegalSettingsPage() {
                   </p>
                 </div>
                 
-                <div className="flex gap-4 pt-4 border-t border-slate-50">
+                <div className="flex flex-col md:flex-row gap-4 pt-4 border-t border-slate-50">
                   <div className="flex-1 p-4 rounded-2xl bg-blue-50/50 border border-blue-100">
                     <span className="text-[10px] font-bold text-blue-700 uppercase flex items-center gap-2 mb-2">
                        <BookOpen className="w-3 h-3" /> Best Practice

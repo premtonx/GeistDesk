@@ -406,7 +406,7 @@ export default function EmailChannelsPage() {
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
                 <div className="lg:col-span-2 space-y-8">
                   <Tabs defaultValue="identity" className="w-full">
-                    <TabsList className="bg-transparent border-b border-slate-200 w-full justify-start rounded-none h-12 p-0 mb-8">
+                    <TabsList className="bg-transparent border-b border-slate-200 w-full justify-start rounded-none h-12 p-0 mb-8 overflow-x-auto flex-nowrap no-scrollbar">
                       <TabsTrigger value="identity" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary px-8 h-12 font-bold text-xs uppercase tracking-widest text-slate-500 data-[state=active]:text-primary mb-[-2px]">1. Identity & Routing</TabsTrigger>
                       <TabsTrigger value="processing" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary px-8 h-12 font-bold text-xs uppercase tracking-widest text-slate-500 data-[state=active]:text-primary mb-[-2px]">2. Mail Processor</TabsTrigger>
                       <TabsTrigger value="signature" className="rounded-none border-b-2 border-transparent data-[state=active]:border-primary px-8 h-12 font-bold text-xs uppercase tracking-widest text-slate-500 data-[state=active]:text-primary mb-[-2px]">3. Custom Signature</TabsTrigger>
@@ -502,7 +502,7 @@ export default function EmailChannelsPage() {
                                </div>
                              ) : (
                                <div className="space-y-6">
-                                  <div className="grid grid-cols-2 gap-6">
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                      <div className="space-y-2">
                                         <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">IMAP Server</Label>
                                         <Input 
@@ -579,7 +579,7 @@ export default function EmailChannelsPage() {
                                </div>
                              ) : (
                                <div className="space-y-6">
-                                  <div className="grid grid-cols-3 gap-6">
+                                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
                                      <div className="col-span-2 space-y-2">
                                         <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">SMTP Host</Label>
                                         <Input 

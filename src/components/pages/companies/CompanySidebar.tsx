@@ -17,6 +17,7 @@ import { Company, Ticket } from '../../../types';
 import { hydrateCompany } from './utils';
 import { motion } from 'framer-motion';
 import { useTranslation } from '../../../lib/context/I18nContext';
+import { cn } from '../../../lib/utils';
 
 interface CompanySidebarProps {
   companies: Company[];
@@ -103,7 +104,12 @@ export default function CompanySidebar({
   }, [hydratedCompanies, favorites]);
 
   return (
-    <div className="w-[360px] border-r flex flex-col bg-background min-h-0 select-none">
+    <div className={cn(
+      "w-full lg:w-[360px] shrink-0 border-r flex-col bg-background min-h-0 select-none",
+      // Master-detail on mobile: the list takes the full screen until a company
+      // is picked, then it yields to the detail view (still side-by-side on lg+).
+      selectedCompanyId ? "hidden lg:flex" : "flex"
+    )}>
       {/* Search and Action Row */}
       <div className="p-4 border-b space-y-3">
         <div className="flex items-center justify-between">
