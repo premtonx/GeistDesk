@@ -1,0 +1,26 @@
+name: Secure Production Deployment
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Baseline
+        uses: actions/checkout@v4
+
+      - name: Execute Remote SSH Deployment Loop
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: sovereign
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          script: |
+            cd ~/GeistDesk
+            git fetch origin main
+            git reset --hard origin/main
+            docker compose up -d --build
