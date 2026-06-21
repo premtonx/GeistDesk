@@ -92,6 +92,7 @@ import { toast } from 'sonner';
 import { kbService } from '../../services/kbService';
 import { useAuth } from '../../lib/hooks';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { ModuleCreateButton } from '../ui/ModuleCreateButton';
 import { RichTextEditor } from '../RichTextEditor';
 import { KBAutopilotDashboard } from '../KBAutopilotDashboard';
 import { KBArticle } from '../../types';
@@ -642,6 +643,25 @@ export default function KBPage() {
         toast.error("Category node already configured in workspace.");
       }
     }
+  };
+
+  const openCreateArticle = (category = selectedCategory || 'Getting Started') => {
+    setNewArticle({
+      title: '',
+      content: '',
+      category,
+      subCategory: 'Workspace Setup',
+      visibility: 'Public',
+      tags: [],
+      owner: 'Sarah James',
+      reviewer: 'Mike Chen',
+      lastEditor: 'Sarah James',
+      status: 'Published',
+      avgReadTime: '3m 00s',
+    });
+    setTagInput('');
+    setEditingArticleId(null);
+    setIsAddingArticle(true);
   };
 
   const handleSaveArticle = async () => {
@@ -1427,32 +1447,6 @@ export default function KBPage() {
       {/* COLUMN 1: LEFT SIDEBAR - KNOWLEDGE STRUCTURE            */}
       {/* ======================================================== */}
       <aside className="w-full lg:w-[320px] bg-white border-r border-slate-200/80 p-5 flex flex-col shrink-0 overflow-y-auto custom-scroll space-y-6">
-        
-        {/* Primary Create Article CTA Button */}
-        <Button 
-          onClick={() => {
-            setNewArticle({
-              title: '',
-              content: '',
-              category: selectedCategory || 'Getting Started',
-              subCategory: 'Workspace Setup',
-              visibility: 'Public',
-              tags: [],
-              owner: 'Sarah James',
-              reviewer: 'Mike Chen',
-              lastEditor: 'Sarah James',
-              status: 'Published',
-              avgReadTime: '3m 00s'
-            });
-            setTagInput('');
-            setEditingArticleId(null);
-            setIsAddingArticle(true);
-          }}
-          className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs h-10.5 rounded-xl shadow-md shadow-blue-600/10 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01] active:scale-95 shrink-0"
-        >
-          <Plus className="w-4 h-4 text-white" />
-          <span>{t('actions.createKBArticle', 'Create Article')}</span>
-        </Button>
 
         {/* AI Knowledge Coverage Map CTA */}
         <div className="bg-slate-50 border border-slate-200/60 p-3.5 rounded-[1.25rem] space-y-2">
@@ -2102,7 +2096,14 @@ export default function KBPage() {
             {/* Category Banner with Owner & Summary */}
             <div className="bg-white border-b border-slate-200/80 px-8 py-6 space-y-6 sticky top-0 z-10 shadow-xs">
               <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                 <div>
+                 <div className="flex items-start gap-3 min-w-0 w-full sm:w-auto">
+                   <ModuleCreateButton
+                     ariaLabelKey="actions.createKBArticle"
+                     ariaLabelDefault="Create GeistKB Article"
+                     onClick={() => openCreateArticle()}
+                     className="mt-0.5"
+                   />
+                 <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-7">
                        <h1 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-2">
                          {t(`kb.categories.${selectedCategory.replace(/\s+/g, '_').toLowerCase()}.name`, selectedCategory)}
@@ -2122,8 +2123,9 @@ export default function KBPage() {
                        <span>{t('kb.lastUpdated', 'Last Updated')}: {categories.find(c => c.name === selectedCategory)?.updated || 'Today'}</span>
                     </div>
                  </div>
+                 </div>
 
-                 <div className="flex items-center gap-2">
+                 <div className="flex items-center gap-2 shrink-0">
                    {/* Layout format switcher */}
                    <div className="bg-slate-100 p-1 rounded-xl flex border gap-1">
                       <button 
@@ -2149,30 +2151,6 @@ export default function KBPage() {
                       </button>
                    </div>
 
-                   <Button 
-                     onClick={() => {
-                       setNewArticle({
-                         title: '',
-                         content: '',
-                         category: selectedCategory,
-                         subCategory: 'Workspace Setup',
-                         visibility: 'Public',
-                         tags: [],
-                         owner: 'Sarah James',
-                         reviewer: 'Mike Chen',
-                         lastEditor: 'Sarah James',
-                         status: 'Published',
-                         avgReadTime: '3m 00s'
-                       });
-                       setTagInput('');
-                       setEditingArticleId(null);
-                       setIsAddingArticle(true);
-                     }}
-                     className="bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs h-9.5 px-4.5 rounded-xl shadow-xs flex items-center gap-1.5"
-                   >
-                     <Plus className="w-4 h-4" />
-                     <span>{t('kb.newArticle', 'New Article')}</span>
-                   </Button>
                  </div>
               </div>
 

@@ -26,7 +26,9 @@
     "createTicket": "Create Ticket",
     "createKBArticle": "Create GeistKB Article",
     "createVaultEntry": "Create GeistVault Entry",
-    "createCompany": "Create Company"
+    "createCompany": "Create Company",
+    "createShort": "New",
+    "createExchange": "New Exchange"
   },
   "common": {
     "loading": "Loading...",
@@ -503,7 +505,9 @@
     "excellent": "Excellent",
     "good": "Good",
     "needsAttention": "Needs Attention",
-    "criticalRisk": "Critical Risk"
+    "criticalRisk": "Critical Risk",
+    "createSecretLink": "Create Secret Link",
+    "createDropzone": "Create Secure Dropzone"
   },
   "companies": {
     "title": "Company Profiles",

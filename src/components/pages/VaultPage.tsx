@@ -48,6 +48,7 @@ import {
 } from '../../components/ui/dropdown-menu';
 import { vaultService } from '../../services/vaultService';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { ModuleCreateButton } from '../ui/ModuleCreateButton';
 import { ticketService } from '../../services/ticketService';
 import { customerService } from '../../services/customerService';
 import { VaultItem, Ticket as TicketType, Company } from '../../types';
@@ -472,12 +473,31 @@ export default function VaultPage() {
     <div className="flex-1 overflow-hidden bg-[#F8F9FA] flex flex-col h-full">
       {/* Sub Header Navigation inside page */}
       <div className="min-h-14 border-b bg-white flex flex-wrap items-center gap-y-2 px-4 sm:px-6 py-2 justify-between shrink-0">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center text-white">
+        <div className="flex items-center gap-3 min-w-0">
+          <ModuleCreateButton
+            ariaLabelKey="actions.createExchange"
+            ariaLabelDefault="Create Secure Exchange"
+            shortLabelKey="actions.createShort"
+            menuItems={[
+              {
+                labelKey: 'vault.createSecretLink',
+                labelDefault: 'Create Secret Link',
+                onClick: () => setActiveTab('secrets'),
+                icon: <Send className="w-4 h-4 text-[#1A73E8]" />,
+              },
+              {
+                labelKey: 'vault.createDropzone',
+                labelDefault: 'Create Secure Dropzone',
+                onClick: () => setActiveTab('dropzones'),
+                icon: <Upload className="w-4 h-4 text-[#1A73E8]" />,
+              },
+            ]}
+          />
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="h-8 w-8 bg-slate-900 rounded-lg flex items-center justify-center text-white shrink-0">
               <Lock className="w-4 h-4" />
             </div>
-            <div>
+            <div className="min-w-0">
               <span className="font-bold text-sm text-[#202124]">{t('vault.workspaceTitle', 'GeistExchange Workspace')}</span>
               <span className="text-[10px] text-[#34A853] ml-2 font-mono font-bold bg-[#E6F4EA] px-2 py-0.5 rounded-full">{t('vault.quantumSecure', 'QUANTUM SECURE')}</span>
             </div>
@@ -495,27 +515,6 @@ export default function VaultPage() {
         {/* Left Side Sub-Navigation Drawer / Column */}
         <aside className="w-64 border-r bg-white flex flex-col justify-between shrink-0 hidden md:flex">
           <div className="p-4 space-y-6">
-            <div className="px-1">
-              <DropdownMenu>
-                <DropdownMenuTrigger render={
-                  <Button className="w-full bg-[#1A73E8] hover:bg-blue-700 text-white font-extrabold text-xs h-10 rounded-xl shadow-md shadow-blue-600/10 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01] active:scale-95 shrink-0">
-                    <Plus className="w-4 h-4 text-white" />
-                    <span>{t('actions.create', 'Create Secure Exchange')}</span>
-                  </Button>
-                } />
-                <DropdownMenuContent align="start" className="w-56 bg-white border border-slate-200 shadow-xl rounded-xl p-1 z-[100]">
-                  <DropdownMenuItem onClick={() => setActiveTab('secrets')} className="flex items-center gap-2.5 text-xs font-bold text-slate-700 p-2.5 hover:bg-slate-50 rounded-lg cursor-pointer">
-                    <Send className="w-4 h-4 text-[#1A73E8]" />
-                    <span>{t('actions.createVaultEntry', 'Create Secret Link')}</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => setActiveTab('dropzones')} className="flex items-center gap-2.5 text-xs font-bold text-slate-700 p-2.5 hover:bg-slate-50 rounded-lg cursor-pointer">
-                    <Upload className="w-4 h-4 text-[#1A73E8]" />
-                    <span>{t('actions.createVaultEntry', 'Create Secure Dropzone')}</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-
             <div className="space-y-1">
               <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider px-3 mb-2">{t('vault.workspaceNavigation', 'Workspace Navigation')}</p>
               

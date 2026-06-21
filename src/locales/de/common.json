@@ -26,7 +26,9 @@
     "createTicket": "Ticket erstellen",
     "createKBArticle": "GeistKB-Artikel erstellen",
     "createVaultEntry": "GeistVault-Eintrag erstellen",
-    "createCompany": "Unternehmen erstellen"
+    "createCompany": "Unternehmen erstellen",
+    "createShort": "Erstellen",
+    "createExchange": "Austausch erstellen"
   },
   "common": {
     "loading": "Laden...",
@@ -681,7 +683,9 @@
     "importSample": "Import Sample Dataset",
     "good": "Good",
     "needsAttention": "Needs Attention",
-    "criticalRisk": "Critical Risk"
+    "criticalRisk": "Critical Risk",
+    "createSecretLink": "Geheimen Link erstellen",
+    "createDropzone": "Sichere Dropzone erstellen"
   },
   "companies": {
     "title": "Unternehmensprofile",

@@ -1,6 +1,5 @@
 import React from 'react';
 import { 
-  Plus, 
   FolderPlus, 
   Share2, 
   ShieldCheck, 
@@ -17,7 +16,6 @@ interface VaultOverviewProps {
   weakCount: number;
   expiringCount: number;
   sharedCount: number;
-  onNewEntry: () => void;
   onNewFolder: () => void;
   onShareVault: () => void;
   onImportDummyData: () => void;
@@ -28,7 +26,6 @@ export function VaultOverview({
   weakCount,
   expiringCount,
   sharedCount,
-  onNewEntry,
   onNewFolder,
   onShareVault,
   onImportDummyData
@@ -143,14 +140,6 @@ export function VaultOverview({
         </div>
 
         <div className="space-y-2 mt-4">
-          <Button 
-            onClick={onNewEntry}
-            className="w-full bg-[#1A73E8] hover:bg-[#155fc0] text-white text-xs font-semibold h-8 rounded-lg shadow-xs flex items-center justify-center gap-1.5"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            {t('vault.createNewEntry', 'Create New Entry')}
-          </Button>
-
           <div className="grid grid-cols-2 gap-2">
             <Button 
               onClick={onNewFolder}

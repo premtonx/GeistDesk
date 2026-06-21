@@ -70,6 +70,7 @@ import {
 
 import { useAuth, useAdmin } from '../../lib/hooks';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { ModuleCreateButton } from '../ui/ModuleCreateButton';
 import { logAudit } from '../../services/auditService';
 import { 
   collection, 
@@ -896,7 +897,16 @@ export default function CredentialVaultPage() {
       
       {/* Top Header bar with Navigation modes */}
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#E8F0FE] pb-5 select-none">
-        <div className="flex flex-col gap-3">
+        <div className="flex items-start gap-3 min-w-0 w-full sm:w-auto">
+          {vaultViewMode === 'vault' && (
+            <ModuleCreateButton
+              ariaLabelKey="vault.createCredential"
+              ariaLabelDefault="Create Credential"
+              onClick={() => setShowAddModal(true)}
+              className="mt-1 shrink-0"
+            />
+          )}
+        <div className="flex flex-col gap-3 min-w-0 flex-1">
           <div>
             <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
               GeistVault Enterprise
@@ -909,8 +919,9 @@ export default function CredentialVaultPage() {
             </p>
           </div>
         </div>
+        </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3 shrink-0">
           {/* Modular connections tabs */}
           <div className="bg-[#E8FEEA]/20 p-1 rounded-xl border border-[#DADCE0] flex items-center gap-1 shadow-3xs overflow-x-auto max-w-full no-scrollbar">
             <button 
@@ -955,13 +966,6 @@ export default function CredentialVaultPage() {
           
           {/* Left Navigation Sidebar */}
           <div className="col-span-1 lg:col-span-3 space-y-4">
-            <Button 
-              onClick={() => setShowAddModal(true)}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs h-10 px-5 rounded-2xl shadow-md shadow-blue-600/10 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01] active:scale-95 shrink-0"
-            >
-              <Plus className="w-4 h-4 text-white" />
-              <span>{t('vault.createCredential', 'Create Credential')}</span>
-            </Button>
             
             {/* Storage center structure matching exactly the screenshot specifications */}
             <div className="bg-white border border-[#DADCE0] rounded-2.5xl p-4 shadow-sm space-y-5">
@@ -1146,14 +1150,6 @@ export default function CredentialVaultPage() {
                 <nav className="space-y-0.5">
                   <button 
                     type="button"
-                    onClick={() => setShowAddModal(true)}
-                    className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px] text-slate-600 font-bold hover:bg-neutral-50"
-                  >
-                     <Plus className="w-3.5 h-3.5 text-slate-400 mr-0.5" />
-                     {t('vault.sovereignKeyEntry', 'Sovereign Key Entry')}
-                  </button>
-                  <button 
-                    type="button"
                     onClick={() => setVaultViewMode('security')}
                     className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] text-slate-600 font-bold hover:bg-neutral-50"
                   >
@@ -1206,7 +1202,6 @@ export default function CredentialVaultPage() {
               weakCount={weakCount}
               expiringCount={expiringCount}
               sharedCount={sharedCount}
-              onNewEntry={() => setShowAddModal(true)}
               onNewFolder={() => toast.success("Folder directories schema created.")}
               onShareVault={() => toast.success("Secure sharing protocols authorized.")}
               onImportDummyData={handleImportDummyData}

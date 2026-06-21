@@ -168,6 +168,7 @@ import { AssetsTabContent } from '../ticket-details/AssetsTabContent';
 import { RelatedTicketsTabContent } from '../ticket-details/RelatedTicketsTabContent';
 import { RedesignedSidebar } from '../ticket-details/RedesignedSidebar';
 import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
+import { ModuleCreateButton } from '../ui/ModuleCreateButton';
 
 const matchStatus = (status: string | undefined, target: string): boolean => {
   if (!status) return false;
@@ -1738,21 +1739,6 @@ export default function TicketsPage() {
         effectiveCollapsed ? "md:w-20 overflow-hidden" : "md:w-64",
         selectedTicketId ? "hidden md:flex" : ""
       )}>
-         {/* Create Ticket CTA at the very top of Left Navigation */}
-         <div className={cn("px-2 mb-3 transition-all duration-200", effectiveCollapsed ? "px-1" : "px-4")}>
-           <Button 
-             onClick={() => setIsCreateTicketOpen(true)}
-             className={cn(
-               "w-full bg-blue-600 hover:bg-blue-700 text-white font-extrabold text-xs h-10 rounded-xl shadow-md shadow-blue-600/10 flex items-center justify-center gap-2 cursor-pointer transition-all hover:scale-[1.01] active:scale-95 shrink-0",
-               effectiveCollapsed ? "h-11 w-11 rounded-full p-0 mx-auto bg-blue-600 flex items-center justify-center" : "px-4"
-             )}
-             title={effectiveCollapsed ? t('actions.createTicket', 'Create Ticket') : undefined}
-           >
-             <Plus className="w-4 h-4 text-white" />
-             {!effectiveCollapsed && <span>{t('actions.createTicket', 'Create Ticket')}</span>}
-           </Button>
-         </div>
-
          <div className={cn("px-4 mb-4 transition-opacity duration-200", effectiveCollapsed ? "opacity-0 invisible h-0" : "opacity-100 visible")}>
             <div className="flex items-center gap-2 pl-2">
               <Sparkles className="w-4 h-4 text-primary animate-pulse" />
@@ -3745,31 +3731,30 @@ export default function TicketsPage() {
             {/* List Header */}
             <div className="px-4 md:px-6 py-4 border-b bg-card flex flex-col gap-3 justify-center shadow-sm">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full max-w-[1200px] mx-auto">
-                <div className="flex flex-wrap items-center gap-3">
+                <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
                   {/* Mobile Back Button Toggle to Sidebar */}
                   <Button
                     variant="outline"
                     size="sm"
                     onClick={() => setIsMobileSidebarOpen(true)}
-                    className="flex md:hidden h-8 items-center gap-1 px-2.5 bg-muted hover:bg-card border border-border rounded-full text-xs font-black text-slate-700 dark:text-slate-300 shrink-0"
+                    className="flex md:hidden h-9 w-9 p-0 items-center justify-center bg-muted hover:bg-card border border-border rounded-full text-xs font-black text-slate-700 dark:text-slate-300 shrink-0"
+                    aria-label={t('tickets.detail.mobileMenu', 'Menu')}
                   >
-                    <span>◀ Menü</span>
+                    <ChevronLeft className="w-4 h-4" />
                   </Button>
 
-                  <h2 className="font-extrabold text-2xl tracking-tight text-foreground capitalize">
+                  <ModuleCreateButton
+                    ariaLabelKey="actions.createTicket"
+                    ariaLabelDefault="Create Ticket"
+                    onClick={() => setIsCreateTicketOpen(true)}
+                  />
+
+                  <h2 className="font-extrabold text-xl sm:text-2xl tracking-tight text-foreground capitalize min-w-0">
                      {t(`tickets.items.${activeView}`, activeView.replace('_', ' '))}
                   </h2>
-                  <Badge variant="secondary" className="bg-primary/15 text-primary font-black border-none px-3 py-1 rounded-full text-xs">
+                  <Badge variant="secondary" className="bg-primary/15 text-primary font-black border-none px-3 py-1 rounded-full text-xs shrink-0">
                     {t('tickets.ticketCount', '{{count}} tickets').replace('{{count}}', String(tickets.length))}
                   </Badge>
-                  
-                  <Button 
-                    onClick={() => setIsCreateTicketOpen(true)}
-                    className="h-9 gap-1.5 bg-blue-600 hover:bg-blue-700 text-white px-4.5 rounded-full font-bold text-[11px] shadow-sm shadow-blue-600/15 cursor-pointer transition-all hover:scale-[1.02] active:scale-95 shrink-0"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    <span>{t('actions.createTicket', 'Create Ticket')}</span>
-                  </Button>
                 </div>
                 
                 <div className="flex flex-wrap items-center gap-2 md:gap-3 w-full md:w-auto">
@@ -4526,7 +4511,7 @@ export default function TicketsPage() {
                         onClick={() => setIsCreateTicketOpen(true)}
                       >
                         <PlusCircle className="w-5 h-5 mr-2" />
-                        {t('actions.createTicket', 'Create Ticket')}
+                        {t('actions.createShort', 'New')}
                       </Button>
                     </div>
                   </div>
