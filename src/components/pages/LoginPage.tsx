@@ -44,6 +44,7 @@ import { getModuleConfig } from '../../lib/module-config';
 import { GeistDeskLogo } from '../ui/GeistDeskLogo';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { cn } from '../../lib/utils';
+import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
 
 const LOCAL_TEXTS = {
   de: {
@@ -525,7 +526,7 @@ export default function LoginPage() {
               )}
               title="Deutsch (DE)"
             >
-              🇩🇪
+              <FlagIcon code="de" className="w-5 h-3.5" />
             </button>
             <button
               type="button"
@@ -538,7 +539,7 @@ export default function LoginPage() {
               )}
               title="English (EN)"
             >
-              🇺🇸
+              <FlagIcon code="en" className="w-5 h-3.5" />
             </button>
           </div>
 

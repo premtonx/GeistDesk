@@ -63,6 +63,7 @@ import { Ticket as TicketType, Customer } from '../../types';
 
 import { useTranslation } from '../../lib/context/I18nContext';
 import { GeistDeskLogo } from '../ui/GeistDeskLogo';
+import { FlagIcon } from '../ui/FlagIcon';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', key: 'dashboard' },
@@ -271,7 +272,7 @@ export default function MainLayout() {
             <DropdownMenu>
               <DropdownMenuTrigger render={
                 <button 
-                  title={language === 'en' ? 'Data Sovereign: DE' : 'Daten-Souveränität: DE'}
+                  title={t('header.dataSovereignDe', 'Data Sovereign: DE')}
                   className="flex items-center justify-center h-9 w-9 bg-[#EBF5FF] text-[#1E40AF] hover:bg-[#DBEAFE] rounded-full border border-[#BFDBFE]/80 transition-all shrink-0 cursor-pointer shadow-xs select-none relative"
                 >
                   <Globe className="w-4.5 h-4.5" />
@@ -285,10 +286,10 @@ export default function MainLayout() {
                   </div>
                   <div>
                     <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">
-                      {language === 'en' ? 'Sovereign Cloud Status' : 'Souveräner Cloud-Status'}
+                      {t('header.sovereignCloudStatus', 'Sovereign Cloud Status')}
                     </h4>
                     <p className="text-[9px] text-slate-500 font-mono">
-                      {language === 'en' ? 'Germany Local Node' : 'Lokaler DE-Knoten'}
+                      {t('header.germanyLocalNode', 'Germany Local Node')}
                     </p>
                   </div>
                 </div>
@@ -297,42 +298,41 @@ export default function MainLayout() {
                   <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 space-y-3">
                     <div className="flex flex-col gap-1 text-[11px] pb-2 border-b border-slate-200/50">
                       <span className="text-slate-400 font-medium">
-                        {language === 'en' ? 'Local DE Node: Data Residency' : 'Lokaler DE-Knoten: Datenresidenz'}
+                        {t('header.localDeNodeResidency', 'Local DE Node: Data Residency')}
                       </span>
                       <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                        🇩🇪 Germany (DE)
+                        <FlagIcon code="de" className="w-4 h-3" />
+                        {t('header.germanyDe', 'Germany (DE)')}
                       </span>
                     </div>
                     <div className="flex flex-col gap-1 text-[11px] py-2 border-b border-slate-200/50">
                       <span className="text-slate-400 font-medium">
-                        {language === 'en' ? 'Deployment Type' : 'Bereitstellungstyp'}
+                        {t('header.deploymentType', 'Deployment Type')}
                       </span>
                       <span className="font-bold text-slate-800 flex items-center gap-1 text-[#059669]">
-                        ✓ {language === 'en' ? 'Self-Hosted (VPC)' : 'Selbstgehostet (VPC)'}
+                        ✓ {t('header.selfHostedVpc', 'Self-Hosted (VPC)')}
                       </span>
                     </div>
                     <div className="flex flex-col gap-1 text-[11px] py-2 border-b border-slate-200/50">
                       <span className="text-slate-400 font-medium">
-                        {language === 'en' ? 'Processing Route' : 'Verarbeitungsweg'}
+                        {t('header.processingRoute', 'Processing Route')}
                       </span>
                       <span className="font-bold text-slate-800 flex items-center gap-1 text-[#059669]">
-                        ✓ {language === 'en' ? 'No External AI Leaks' : 'Keine externen KI-Datenabflüsse'}
+                        ✓ {t('header.noExternalAiLeaks', 'No External AI Leaks')}
                       </span>
                     </div>
                     <div className="flex flex-col gap-1 text-[11px] pt-1">
                       <span className="text-slate-400 font-medium">
-                        {language === 'en' ? 'SLA Audit Log' : 'SLA-Audit-Protokoll'}
+                        {t('header.slaAuditLog', 'SLA Audit Log')}
                       </span>
                       <span className="font-bold text-slate-800 flex items-center gap-1 text-[#059669]">
-                        ✓ {language === 'en' ? 'Immutable & Active' : 'Unveränderlich & Aktiv'}
+                        ✓ {t('header.immutableActive', 'Immutable & Active')}
                       </span>
                     </div>
                   </div>
 
                   <div className="text-[9.5px] leading-relaxed text-slate-500 bg-[#EBF5FF]/40 p-2.5 rounded-xl border border-[#BFDBFE]/40">
-                    {language === 'en' 
-                      ? 'Your enterprise deployment secures all context windows and telemetry safely here inside Germany.' 
-                      : 'Ihre Enterprise-Bereitstellung sichert alle Kontextfenster und Telemetriedaten sicher in Deutschland.'}
+                    {t('header.sovereigntyDesc', 'Your enterprise deployment secures all context windows and telemetry safely here inside Germany.')}
                   </div>
 
                   <div className="border-t border-slate-100 pt-2.5 text-center flex justify-center">
@@ -340,7 +340,7 @@ export default function MainLayout() {
                       to="/admin/sovereignty"
                       className="text-[9.5px] font-black text-[#1A73E8] hover:underline uppercase tracking-wider font-mono cursor-pointer block py-1 w-full text-center"
                     >
-                      {language === 'en' ? 'Sovereignty Center →' : 'Souveränitäts-Center →'}
+                      {t('header.sovereigntyCenterLink', 'Sovereignty Center →')}
                     </Link>
                   </div>
                 </div>
@@ -353,7 +353,7 @@ export default function MainLayout() {
             <DropdownMenu>
               <DropdownMenuTrigger render={
                 <button 
-                  title={language === 'en' ? 'PII Shield Active' : 'PII-Schutz Aktiv'}
+                  title={t('header.piiShieldActive', 'PII Shield Active')}
                   className="flex items-center justify-center h-9 w-9 bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70 rounded-full border border-emerald-100/80 transition-all shrink-0 cursor-pointer shadow-xs select-none relative"
                 >
                   <ShieldCheck className="w-4.5 h-4.5" />
@@ -367,10 +367,10 @@ export default function MainLayout() {
                   </div>
                   <div>
                     <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">
-                      {language === 'en' ? 'Sovereign PII Shield' : 'Souveräner PII-Schutzschild'}
+                      {t('header.sovereignPiiShield', 'Sovereign PII Shield')}
                     </h4>
                     <p className="text-[9px] text-slate-500 font-mono">
-                      {language === 'en' ? 'Real-time Anonymization' : 'Echtzeit-Anonymisierung'}
+                      {t('header.realtimeAnonymization', 'Real-time Anonymization')}
                     </p>
                   </div>
                 </div>
@@ -378,10 +378,10 @@ export default function MainLayout() {
                 <div className="space-y-3">
                   <div className="bg-slate-50 border border-slate-100 rounded-xl p-2 flex items-center justify-between">
                     <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      Status
+                      {t('header.status', 'Status')}
                     </span>
                     <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">
-                      {language === 'en' ? '🟢 Shielded' : '🟢 Geschützt'}
+                      🟢 {t('header.shielded', 'Shielded')}
                     </span>
                   </div>
 
@@ -389,25 +389,25 @@ export default function MainLayout() {
                     <div className="grid grid-cols-2 gap-2">
                       <div className="bg-slate-50/60 hover:bg-slate-50 border border-slate-100/60 rounded-xl p-2.5 transition-colors flex flex-col">
                         <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                          {language === 'en' ? 'Emails' : 'E-Mails'}
+                          {t('header.emails', 'Emails')}
                         </p>
                         <p className="text-base font-black text-slate-800 font-mono">421</p>
                       </div>
                       <div className="bg-slate-50/60 hover:bg-slate-50 border border-slate-100/60 rounded-xl p-2.5 transition-colors flex flex-col">
                         <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                          {language === 'en' ? 'Passwords' : 'Passwörter'}
+                          {t('header.passwords', 'Passwords')}
                         </p>
                         <p className="text-base font-black text-slate-800 font-mono">82</p>
                       </div>
                       <div className="bg-slate-50/60 hover:bg-slate-50 border border-slate-100/60 rounded-xl p-2.5 transition-colors flex flex-col">
                         <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                          {language === 'en' ? 'API Keys' : 'API-Schlüssel'}
+                          {t('header.apiKeys', 'API Keys')}
                         </p>
                         <p className="text-base font-black text-slate-800 font-mono">41</p>
                       </div>
                       <div className="bg-slate-50/60 hover:bg-slate-50 border border-slate-100/60 rounded-xl p-2.5 transition-colors flex flex-col">
                         <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                          {language === 'en' ? 'IP Addresses' : 'IP-Adressen'}
+                          {t('header.ipAddresses', 'IP Addresses')}
                         </p>
                         <p className="text-base font-black text-slate-800 font-mono">129</p>
                       </div>
@@ -419,7 +419,7 @@ export default function MainLayout() {
                       to="/admin/pii"
                       className="text-[9.5px] font-black text-[#1A73E8] hover:underline uppercase tracking-wider font-mono cursor-pointer block py-1 w-full text-center"
                     >
-                      {language === 'en' ? 'Configure Guardrails →' : 'Schutzeinstellungen verwalten →'}
+                      {t('header.configureGuardrails', 'Configure Guardrails →')}
                     </Link>
                   </div>
                 </div>
@@ -432,7 +432,7 @@ export default function MainLayout() {
             <DropdownMenu>
               <DropdownMenuTrigger render={
                 <button 
-                  title={language === 'en' ? 'AI Orchestrator Status' : 'KI-Orchestrator-Status'}
+                  title={t('header.aiOrchestratorStatus', 'AI Orchestrator Status')}
                   className={cn(
                     "flex items-center justify-center h-9 w-9 rounded-full border transition-all shrink-0 cursor-pointer shadow-xs select-none relative",
                     aiStatus === 'online' ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100/70 border-indigo-100/80" :
@@ -456,10 +456,10 @@ export default function MainLayout() {
                   </div>
                   <div>
                     <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">
-                      {language === 'en' ? 'AI Orchestrator' : 'KI-Orchestrator'}
+                      {t('header.aiOrchestrator', 'AI Orchestrator')}
                     </h4>
                     <p className="text-[9px] text-slate-500 font-mono">
-                      {language === 'en' ? 'Core Gateway Router' : 'Zentraler Gateway-Router'}
+                      {t('header.coreGatewayRouter', 'Core Gateway Router')}
                     </p>
                   </div>
                 </div>
@@ -474,15 +474,15 @@ export default function MainLayout() {
                       aiStatus === 'online' ? "text-emerald-600" :
                       aiStatus === 'offline' ? "text-red-700" : "text-amber-500"
                     )}>
-                      {aiStatus === 'online' ? (language === 'en' ? '🟢 Online' : '🟢 Online') :
-                       aiStatus === 'offline' ? (language === 'en' ? '🔴 Offline' : '🔴 Offline') :
-                       (language === 'en' ? '🟡 Checking...' : '🟡 Prüfe...')}
+                      {aiStatus === 'online' ? `🟢 ${t('header.online', 'Online')}` :
+                       aiStatus === 'offline' ? `🔴 ${t('header.offline', 'Offline')}` :
+                       `🟡 ${t('header.checking', 'Checking...')}`}
                     </span>
                   </div>
 
                   <div className="bg-slate-50/60 border border-slate-100/60 rounded-xl p-2.5 flex flex-col gap-1.5">
                     <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                      {language === 'en' ? 'Active Connected Model' : 'Aktives verbundenes Modell'}
+                      {t('header.activeConnectedModel', 'Active Connected Model')}
                     </p>
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
@@ -490,16 +490,14 @@ export default function MainLayout() {
                         {aiStatus === 'online' ? (
                           activeModel === 'gemini-pro' ? 'Gemini 3.5 Pro' :
                           activeModel === 'gemini-flash' ? 'Gemini 2.5 Flash' : activeModel
-                        ) : (aiStatus === 'offline' ? (language === 'en' ? 'None (Offline)' : 'Keines (Offline)') : '...')}
+                        ) : (aiStatus === 'offline' ? t('header.noneOffline', 'None (Offline)') : '...')}
                       </span>
                     </div>
                   </div>
 
                   {aiStatus === 'offline' && (
                     <div className="bg-red-50/50 border border-red-100 rounded-xl p-2 text-[10px] text-red-700 leading-tight">
-                      {language === 'en' 
-                        ? 'Gateway Connection Failed. Check your API keys and local gateway configurations.' 
-                        : 'Verbindung fehlgeschlagen: Bitte prüfen Sie Ihre API-Keys und lokalen Gateway-Endpunkte.'}
+                      {t('header.gatewayConnectionFailed', 'Gateway Connection Failed. Check your API keys and local gateway configurations.')}
                     </div>
                   )}
 
@@ -509,7 +507,7 @@ export default function MainLayout() {
                         to="/admin/ai"
                         className="text-[9.5px] font-black text-[#1A73E8] hover:underline uppercase tracking-wider font-mono cursor-pointer block py-1 w-full text-center"
                       >
-                        {language === 'en' ? 'AI Dashboard Configuration →' : 'KI-Dashboard Konfiguration →'}
+                        {t('header.aiDashboardConfig', 'AI Dashboard Configuration →')}
                       </Link>
                     </div>
                   )}
@@ -531,11 +529,9 @@ export default function MainLayout() {
                   variant="ghost"
                   size="sm"
                   className="h-9 w-9 p-0 rounded-full text-xs font-bold border border-slate-200 hover:bg-slate-50 flex items-center justify-center shrink-0 select-none cursor-pointer text-slate-700 bg-white shadow-sm"
-                  title={language === 'de' ? 'Sprache wechseln' : 'Change language'}
+                  title={language === 'de' ? t('header.changeLanguageDe', 'Sprache wechseln') : t('header.changeLanguage', 'Change language')}
                 >
-                  <span className="text-sm leading-none">
-                    {language === 'de' ? '🇩🇪' : '🇺🇸'}
-                  </span>
+                  <FlagIcon code={language === 'de' ? 'de' : 'en'} className="w-5 h-3.5" />
                 </Button>
               } />
               <DropdownMenuContent align="end" className="w-32 bg-white border border-slate-200 shadow-xl rounded-xl p-1 z-50">
@@ -546,8 +542,8 @@ export default function MainLayout() {
                     language === 'de' ? "text-[#1A73E8] bg-blue-50/50" : "text-slate-700"
                   )}
                 >
-                  <span>🇩🇪</span>
-                  <span>Deutsch</span>
+                  <FlagIcon code="de" className="w-5 h-3.5" />
+                  <span>{t('languages.de', 'Deutsch')}</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem 
                   onClick={() => i18n.changeLanguage('en')} 
@@ -556,8 +552,8 @@ export default function MainLayout() {
                     language === 'en' ? "text-[#1A73E8] bg-blue-50/50" : "text-slate-700"
                   )}
                 >
-                  <span>🇺🇸</span>
-                  <span>English</span>
+                  <FlagIcon code="en" className="w-5 h-3.5" />
+                  <span>{t('languages.en', 'English')}</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -587,15 +583,15 @@ export default function MainLayout() {
 
                 <div className="border-t border-slate-100 my-1" />
 
-                <div className="px-2.5 py-1 text-[9px] uppercase font-bold text-slate-400 select-none">Sovereignty</div>
+                <div className="px-2.5 py-1 text-[9px] uppercase font-bold text-slate-400 select-none">{t('header.sovereignCloudStatus', 'Sovereign Cloud Status')}</div>
                 <div className="flex items-center gap-2 px-2.5 py-2 text-xs text-emerald-700 font-extrabold">
                   <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Sovereign Storage Live</span>
+                  <span>{t('header.shielded', 'Shielded')}</span>
                 </div>
 
                 <div className="border-t border-slate-100 my-1" />
 
-                <div className="px-2.5 py-1 text-[9px] uppercase font-bold text-slate-400 select-none">Language / Sprache</div>
+                <div className="px-2.5 py-1 text-[9px] uppercase font-bold text-slate-400 select-none">{t('settings.interfaceLanguage', 'Interface Language')}</div>
                 <DropdownMenuItem 
                   onClick={() => i18n.changeLanguage('en')}
                   className={cn(
@@ -603,8 +599,8 @@ export default function MainLayout() {
                     language === 'en' ? "text-[#1A73E8] bg-blue-50/50" : "text-slate-700"
                   )}
                 >
-                  <span>🇺🇸</span>
-                  <span>English (EN)</span>
+                  <FlagIcon code="en" className="w-5 h-3.5" />
+                  <span>{t('languages.en', 'English')} (EN)</span>
                 </DropdownMenuItem>
                 <DropdownMenuItem 
                   onClick={() => i18n.changeLanguage('de')}
@@ -613,8 +609,8 @@ export default function MainLayout() {
                     language === 'de' ? "text-[#1A73E8] bg-blue-50/45" : "text-slate-700"
                   )}
                 >
-                  <span>🇩🇪</span>
-                  <span>Deutsch (DE)</span>
+                  <FlagIcon code="de" className="w-5 h-3.5" />
+                  <span>{t('languages.de', 'Deutsch')} (DE)</span>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

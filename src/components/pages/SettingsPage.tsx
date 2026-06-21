@@ -36,6 +36,7 @@ import firebaseConfig from '../../../firebase-applet-config.json';
 import { AdminBreadcrumbs } from '../../components/AdminBreadcrumbs';
 import { userService } from '../../services/userService';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
 
 export default function SettingsPage() {
   const { isAdmin } = useAdmin();
@@ -288,7 +289,7 @@ export default function SettingsPage() {
                  <button
                    onClick={() => {
                      i18n.changeLanguage('de');
-                     toast.success("Sprache auf Deutsch geändert!");
+                     toast.success(t('settings.languageChangedDe', 'Language changed to German!'));
                    }}
                    className={cn(
                      "flex items-center justify-between p-4 rounded-2xl border transition-all text-left",
@@ -296,9 +297,9 @@ export default function SettingsPage() {
                    )}
                  >
                    <div className="flex items-center gap-3">
-                     <span className="text-2xl">🇩🇪</span>
+                     <FlagIcon code="de" className="w-8 h-5" />
                      <div className="flex flex-col">
-                       <span className="text-sm font-black">Deutsch</span>
+                       <span className="text-sm font-black">{t('languages.de', 'Deutsch')}</span>
                        <span className={cn("text-[9px] uppercase font-black tracking-wider leading-none mt-1", language === 'de' ? "text-slate-300" : "text-slate-400")}>{t('settings.activeLanguage', 'Active')}</span>
                      </div>
                    </div>
@@ -308,7 +309,7 @@ export default function SettingsPage() {
                  <button
                    onClick={() => {
                      i18n.changeLanguage('en');
-                     toast.success("Language changed to English!");
+                     toast.success(t('settings.languageChangedEn', 'Language changed to English!'));
                    }}
                    className={cn(
                      "flex items-center justify-between p-4 rounded-2xl border transition-all text-left",
@@ -316,9 +317,9 @@ export default function SettingsPage() {
                    )}
                  >
                    <div className="flex items-center gap-3">
-                     <span className="text-2xl">🇺🇸</span>
+                     <FlagIcon code="en" className="w-8 h-5" />
                      <div className="flex flex-col">
-                       <span className="text-sm font-black">English</span>
+                       <span className="text-sm font-black">{t('languages.en', 'English')}</span>
                        <span className={cn("text-[9px] uppercase font-black tracking-wider leading-none mt-1", language === 'en' ? "text-slate-300" : "text-slate-400")}>{t('settings.activeLanguage', 'Active')}</span>
                      </div>
                    </div>
@@ -574,7 +575,7 @@ export default function SettingsPage() {
                       )}
                     >
                       <div className="flex items-center gap-2">
-                        <span className="text-lg">{lang.flag}</span>
+                        <FlagIcon code={languageToFlagCode(lang.lang)} className="w-6 h-4" />
                         <span className="text-xs font-medium">{lang.lang}</span>
                       </div>
                       <Switch 

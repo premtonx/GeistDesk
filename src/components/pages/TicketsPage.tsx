@@ -167,6 +167,7 @@ import { AiInsightsTabContent } from '../ticket-details/AiInsightsTabContent';
 import { AssetsTabContent } from '../ticket-details/AssetsTabContent';
 import { RelatedTicketsTabContent } from '../ticket-details/RelatedTicketsTabContent';
 import { RedesignedSidebar } from '../ticket-details/RedesignedSidebar';
+import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
 
 const matchStatus = (status: string | undefined, target: string): boolean => {
   if (!status) return false;
@@ -188,7 +189,7 @@ const staticCategories = [
     id: 'inbox',
     label: 'Inbox',
     items: [
-      { id: 'agent_seeking_help', label: 'Agenten Helfen', icon: HelpCircle, indicator: { label: 'HILFE', color: 'bg-red-500 text-white font-black animate-pulse shadow shadow-red-500/50' } },
+      { id: 'agent_seeking_help', label: 'Agenten Helfen', icon: HelpCircle, indicator: { label: 'help', color: 'bg-red-500 text-white font-black animate-pulse shadow shadow-red-500/50' } },
       { id: 'unassigned', label: 'Unassigned', icon: UserPlus },
       { id: 'new_tickets', label: 'New Tickets', icon: PlusCircle, indicator: { label: 'New', color: 'bg-rose-500 text-white font-bold' } },
       { id: 'awaiting_triage', label: 'Awaiting Triage', icon: Layout },
@@ -1951,7 +1952,7 @@ export default function TicketsPage() {
                        }}
                        className="w-full text-center text-[10px] font-black text-rose-500 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-350 transition-colors pt-1.5 border-t border-border/45 block"
                      >
-                       Auswahl zurücksetzen
+                       {t('tickets.resetSelection', 'Reset selection')}
                      </button>
                    </div>
                  )}
@@ -1976,9 +1977,9 @@ export default function TicketsPage() {
                           "h-8 w-8 rounded-full border border-transparent hover:bg-card flex items-center justify-center text-sm shadow-none transition-all shrink-0",
                           agentLanguage === f.lang && "border-primary bg-card shadow-sm scale-110"
                        )}
-                       title={`Switch Native UI to ${f.lang}`}
+                       title={t('settings.polyglotBridge', 'Polyglot Bridge') + `: ${f.lang}`}
                     >
-                       {f.flag}
+                       <FlagIcon code={f.flagCode || languageToFlagCode(f.lang)} className="w-5 h-3.5" />
                     </button>
                  ))}
               </div>
@@ -2003,7 +2004,7 @@ export default function TicketsPage() {
                     onClick={() => setSelectedTicketId(null)}
                     className="flex items-center gap-1 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-extrabold text-xs cursor-pointer mb-2 transition-colors select-none group"
                   >
-                    <ChevronLeft className="w-3.5 h-3.5 text-slate-450 group-hover:text-slate-650 transition-colors" /> Back to ticket
+                    <ChevronLeft className="w-3.5 h-3.5 text-slate-450 group-hover:text-slate-650 transition-colors" /> {t('tickets.detail.backToList', 'Back to tickets')}
                   </button>
                   <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                     <div className="flex items-center gap-2 md:gap-3 overflow-hidden min-w-0 flex-1">
@@ -2030,7 +2031,7 @@ export default function TicketsPage() {
                         }}
                         className="h-9 px-3 rounded-lg border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all"
                       >
-                        Internal Note
+                        {t('tickets.noteBtn', 'Internal Note')}
                       </Button>
                       <Button 
                         onClick={async () => {
@@ -2051,7 +2052,7 @@ export default function TicketsPage() {
                         ) : (
                           <Sparkles className="w-3.5 h-3.5" />
                         )}
-                        <span>AI Sync</span>
+                        <span>{t('tickets.detail.aiSync', 'AI Sync')}</span>
                       </Button>
 
                       <Button 
@@ -2061,7 +2062,7 @@ export default function TicketsPage() {
                         className="xl:hidden h-9 px-3 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
                       >
                         <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
-                        <span>{isMobilePropertiesOpen ? "Close Props" : "Properties"}</span>
+                        <span>{isMobilePropertiesOpen ? t('tickets.detail.closeProps', 'Close properties') : t('tickets.detail.properties', 'Properties')}</span>
                       </Button>
                     </div>
                   </div>
@@ -2074,14 +2075,14 @@ export default function TicketsPage() {
                 <div className="px-6 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shrink-0 flex items-center justify-between h-[48px] select-none">
                   <div className="flex items-center gap-1 h-full overflow-x-auto custom-scrollbar">
                     {([
-                      { id: 'conversation', label: 'Overview' },
-                      { id: 'customer', label: 'Customer' },
-                      { id: 'timeline', label: 'Timeline' },
-                      { id: 'ai_insights', label: 'AI Insights' },
-                      { id: 'assets', label: 'Assets' },
-                      { id: 'related_tickets', label: 'Neural Links' },
-                      { id: 'tasks', label: 'Tasks' }
-                    ]).map(tab => (
+                      { id: 'conversation', labelKey: 'overview' },
+                      { id: 'customer', labelKey: 'customer' },
+                      { id: 'timeline', labelKey: 'timeline' },
+                      { id: 'ai_insights', labelKey: 'aiInsights' },
+                      { id: 'assets', labelKey: 'assets' },
+                      { id: 'related_tickets', labelKey: 'neuralLinks' },
+                      { id: 'tasks', labelKey: 'tasks' }
+                    ] as const).map(tab => (
                       <button
                         key={tab.id}
                         className={cn(
@@ -2094,7 +2095,7 @@ export default function TicketsPage() {
                           setActiveDetailTab(tab.id);
                         }}
                       >
-                        {tab.label}
+                        {t(`tickets.tabs.${tab.labelKey}`, tab.labelKey)}
                       </button>
                     ))}
                   </div>
@@ -4449,15 +4450,15 @@ export default function TicketsPage() {
                         onClick={async () => {
                           const promise = handleBulkUpdate({ status: 'resolved' });
                           toast.promise(promise, {
-                            loading: `Massenauflösung für ${selectedTicketIds.length} Tickets aktiv...`,
-                            success: `${selectedTicketIds.length} Tickets erfolgreich KI-gelöst!`,
-                            error: "Fehler bei der Massenauflösung."
+                            loading: t('tickets.bulk.massResolveLoading', 'Mass resolving {{count}} tickets...').replace('{{count}}', String(selectedTicketIds.length)),
+                            success: t('tickets.bulk.massResolveSuccess', '{{count}} tickets successfully AI-resolved!').replace('{{count}}', String(selectedTicketIds.length)),
+                            error: t('tickets.bulk.massResolveError', 'Mass resolve failed.')
                           });
                         }}
                         className="h-8 px-3.5 rounded-full text-[10px] font-black border-indigo-200 dark:border-slate-800 bg-indigo-50/50 hover:bg-indigo-100/50 text-indigo-700 dark:text-indigo-300 gap-1.5 shadow-xs cursor-pointer uppercase tracking-tight"
                       >
                         <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
-                        AI Mass-Resolve
+                        {t('tickets.bulk.aiMassResolve', 'AI Mass-Resolve')}
                       </Button>
                     </div>
 
@@ -4466,7 +4467,7 @@ export default function TicketsPage() {
                       onClick={() => setSelectedTicketIds([])}
                       className="text-[11px] font-bold text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 flex items-center gap-1 cursor-pointer select-none"
                     >
-                      Auswahl aufheben <X className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 transition-colors" />
+                      {t('tickets.bulk.clearSelection', 'Clear selection')} <X className="w-3.5 h-3.5 text-slate-400 hover:text-slate-600 transition-colors" />
                     </button>
                   </div>
                 </motion.div>
@@ -4492,12 +4493,12 @@ export default function TicketsPage() {
                    <div className="w-[50px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider flex items-center gap-1 justify-center" title="KI / AI Stimmung">
                      <Smile className="w-4 h-4 text-muted-foreground/60" />
                    </div>
-                   <div className="w-[150px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">KUNDE</div>
-                   <div className="flex-1 min-w-[240px] font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">BETREFF & VORSCHAU</div>
-                   <div className="w-[110px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">STATUS</div>
-                   <div className="w-[110px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">PRIORITÄT</div>
-                   <div className="w-[150px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">ZUSTÄNDIGER</div>
-                   <div className="w-[120px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">ZULETZT AKTUALISIERT</div>
+                   <div className="w-[150px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.customer', 'Customer').toUpperCase()}</div>
+                   <div className="flex-1 min-w-[240px] font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.subjectPreview', 'Subject & Preview').toUpperCase()}</div>
+                   <div className="w-[110px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.status', 'Status').toUpperCase()}</div>
+                   <div className="w-[110px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.priority', 'Priority').toUpperCase()}</div>
+                   <div className="w-[150px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.assignee', 'Assignee').toUpperCase()}</div>
+                   <div className="w-[120px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.lastUpdate', 'Last Update').toUpperCase()}</div>
                    <div className="w-[50px] shrink-0 flex items-center justify-center font-extrabold text-[11px] text-muted-foreground"></div>
                 </div>
 
@@ -4534,12 +4535,12 @@ export default function TicketsPage() {
                     {paginatedTickets.map(ticket => {
                       const tier = (() => {
                         if (ticket.priority === 'urgent' || ticket.tags?.includes('VIP') || ticket.customerName?.toLowerCase().includes('sarah')) {
-                          return { label: 'VIP', style: 'bg-amber-500/10 text-amber-600 border-amber-500/20 font-bold' };
+                          return { label: t('tickets.tiers.vip', 'VIP'), style: 'bg-amber-500/10 text-amber-600 border-amber-500/20 font-bold' };
                         }
                         if (ticket.company?.toLowerCase().includes('advanced') || ticket.company?.toLowerCase().includes('global') || ticket.tags?.includes('Enterprise')) {
-                          return { label: 'Enterprise', style: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20 font-bold' };
+                          return { label: t('tickets.tiers.enterprise', 'Enterprise'), style: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20 font-bold' };
                         }
-                        return { label: 'Standard', style: 'bg-slate-100 text-slate-500 border-slate-200' };
+                        return { label: t('tickets.tiers.standard', 'Standard'), style: 'bg-slate-100 text-slate-500 border-slate-200' };
                       })();
 
                       const sla = (() => {
@@ -4574,20 +4575,20 @@ export default function TicketsPage() {
                         const s = (ticket.sentiment || 'neutral').toLowerCase();
                         if (s === 'calm' || s === 'positive' || s === 'neutral' && ticket.id.charCodeAt(0) % 2 === 0) {
                           return {
-                            label: 'CALM',
+                            label: t('tickets.sentimentLabels.calm', 'CALM'),
                             classes: 'bg-emerald-50 text-emerald-700 border-emerald-100/80 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-950/50',
                             icon: <Smile className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
                           };
                         }
                         if (s === 'frustrated' || s === 'angry' || s === 'negative') {
                           return {
-                            label: 'FRUSTRATED',
+                            label: t('tickets.sentimentLabels.frustrated', 'FRUSTRATED'),
                             classes: 'bg-rose-50 text-rose-700 border-rose-100/80 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-955/50',
                             icon: <Frown className="w-3.5 h-3.5 text-rose-500 shrink-0 animate-pulse" />
                           };
                         }
                         return {
-                          label: 'ESCALATING',
+                          label: t('tickets.sentimentLabels.escalating', 'ESCALATING'),
                           classes: 'bg-amber-50 text-amber-700 border-amber-100/80 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-955/50',
                           icon: <Meh className="w-3.5 h-3.5 text-amber-500 shrink-0" />
                         };
@@ -5013,15 +5014,19 @@ export default function TicketsPage() {
             <div className="h-14 border-t border-border bg-card px-6 flex items-center justify-between shrink-0 select-none">
               {/* Left Side: Status display */}
               <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
-                Zeige <span className="font-extrabold text-slate-800 dark:text-slate-100">{totalTicketsCount === 0 ? 0 : startIdx + 1}</span> bis{" "}
-                <span className="font-extrabold text-slate-800 dark:text-slate-100">{Math.min(endIdx, totalTicketsCount)}</span> von{" "}
-                <span className="font-extrabold text-slate-800 dark:text-slate-100">{totalTicketsCount}</span> {totalTicketsCount === 1 ? 'Ticket' : 'Tickets'}
+                {t('tickets.pagination.showing', 'Showing')}{' '}
+                <span className="font-extrabold text-slate-800 dark:text-slate-100">{totalTicketsCount === 0 ? 0 : startIdx + 1}</span>{' '}
+                {t('tickets.pagination.to', 'to')}{' '}
+                <span className="font-extrabold text-slate-800 dark:text-slate-100">{Math.min(endIdx, totalTicketsCount)}</span>{' '}
+                {t('tickets.pagination.of', 'of')}{' '}
+                <span className="font-extrabold text-slate-800 dark:text-slate-100">{totalTicketsCount}</span>{' '}
+                {totalTicketsCount === 1 ? t('tickets.pagination.ticketSingular', 'ticket') : t('tickets.pagination.ticketPlural', 'tickets')}
               </div>
 
               {/* Right Side: Zeilen pro Seite selector & Navigation buttons list */}
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">Zeilen pro Seite:</span>
+                  <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400">{t('tickets.pagination.rowsPerPage', 'Rows per page:')}</span>
                   <Select
                     value={String(pageSize)}
                     onValueChange={(val) => {

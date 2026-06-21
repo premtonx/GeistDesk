@@ -1,7 +1,8 @@
+import { languageToFlagCode, type FlagCode } from '../components/ui/FlagIcon';
 
 export interface PolyglotLanguage {
   lang: string;
-  flag: string;
+  flagCode: FlagCode;
   enabled: boolean;
 }
 
@@ -50,11 +51,11 @@ export interface ModuleConfig {
 const DEFAULT_CONFIG: ModuleConfig = {
   polyglotEnabled: true,
   languages: [
-    { lang: 'English', flag: '🇺🇸', enabled: true },
-    { lang: 'Spanish', flag: '🇪🇸', enabled: true },
-    { lang: 'Japanese', flag: '🇯🇵', enabled: true },
-    { lang: 'Korean', flag: '🇰🇷', enabled: true },
-    { lang: 'German', flag: '🇩🇪', enabled: true }
+    { lang: 'English', flagCode: 'en', enabled: true },
+    { lang: 'Spanish', flagCode: 'es', enabled: true },
+    { lang: 'Japanese', flagCode: 'jp', enabled: true },
+    { lang: 'Korean', flagCode: 'kr', enabled: true },
+    { lang: 'German', flagCode: 'de', enabled: true }
   ],
   debugAdminMode: false,
   personioEnabled: true,
@@ -110,7 +111,12 @@ export const getModuleConfig = (): ModuleConfig => {
       email: {
         ...DEFAULT_CONFIG.email,
         ...(parsed.email || {})
-      }
+      },
+      languages: (parsed.languages || DEFAULT_CONFIG.languages).map((lang: any) => ({
+        lang: lang.lang,
+        enabled: lang.enabled ?? true,
+        flagCode: lang.flagCode || languageToFlagCode(lang.lang),
+      })),
     };
   } catch {
     return DEFAULT_CONFIG;

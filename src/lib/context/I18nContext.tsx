@@ -63,22 +63,14 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
-  // Translate function with fallback logic
+  // Translate function — strict locale: never cross-fallback to the other language,
+  // which caused mixed EN/DE UI when keys were missing or mis-nested in locale files.
   const t = (keyPath: string, defaultValue?: string): string => {
-    // 1. Try active language
     const activeText = getNestedValue(translations[language], keyPath);
     if (activeText !== undefined) return activeText;
 
-    // 2. Try German fallback
-    const deText = getNestedValue(translations['de'], keyPath);
-    if (deText !== undefined) return deText;
-
-    // 3. Try English
-    const enText = getNestedValue(translations['en'], keyPath);
-    if (enText !== undefined) return enText;
-
-    // 4. Fallback to default value or the keyPath itself
-    return defaultValue !== undefined ? defaultValue : keyPath;
+    if (defaultValue !== undefined) return defaultValue;
+    return keyPath;
   };
 
   const languages = Object.keys(translations);

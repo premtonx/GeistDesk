@@ -198,7 +198,8 @@
     "indicators": {
       "new": "New",
       "urgent": "Urgent",
-      "pending": "Pending"
+      "pending": "Pending",
+      "help": "Help"
     },
     "responseSla": "Response SLA",
     "replyBtn": "Reply",
@@ -266,7 +267,53 @@
       "clickReplyDesc": "Click reply on any message or details header to write a message to the client.",
       "expandResponseForm": "Expand Response Form",
       "collapseResponseEditor": "Collapse Response Editor"
-    }
+    },
+    "detail": {
+      "backToList": "Back to tickets",
+      "aiSync": "AI Sync",
+      "properties": "Properties",
+      "closeProps": "Close properties",
+      "ticketProperties": "Ticket Properties",
+      "timelineSla": "Timeline & SLA",
+      "internalNotes": "Internal Notes",
+      "mobileMenu": "Menu"
+    },
+    "tabs": {
+      "overview": "Overview",
+      "customer": "Customer",
+      "timeline": "Timeline",
+      "aiInsights": "AI Insights",
+      "assets": "Assets",
+      "neuralLinks": "Neural Links",
+      "tasks": "Tasks"
+    },
+    "pagination": {
+      "showing": "Showing",
+      "to": "to",
+      "of": "of",
+      "ticketSingular": "ticket",
+      "ticketPlural": "tickets",
+      "rowsPerPage": "Rows per page:"
+    },
+    "bulk": {
+      "clearSelection": "Clear selection",
+      "aiMassResolve": "AI Mass-Resolve",
+      "massResolveLoading": "Mass resolving {{count}} tickets...",
+      "massResolveSuccess": "{{count}} tickets successfully AI-resolved!",
+      "massResolveError": "Mass resolve failed."
+    },
+    "sentimentLabels": {
+      "calm": "CALM",
+      "frustrated": "FRUSTRATED",
+      "escalating": "ESCALATING"
+    },
+    "tiers": {
+      "vip": "VIP",
+      "enterprise": "Enterprise",
+      "standard": "Standard"
+    },
+    "customizeMenu": "Customize menu",
+    "resetSelection": "Reset selection"
   },
   "kb": {
     "title": "GeistKB Knowledge Base",
@@ -367,12 +414,12 @@
       }
     },
     "audit": {
-       "sarah_updated": "Sarah James updated \"Getting Started Docs\"",
-       "sarah_meta": "2 hours ago • Verified SOC2 Audit logs",
-       "anna_rotated": "Anna Bell rotated Bearer Token specifications",
-       "anna_meta": "Yesterday • API Authentication",
-       "will_submitted": "Will Coyote submitted \"MFA playbooks\" for review",
-       "will_meta": "In Draft pool queue • MFA Debugging"
+      "sarah_updated": "Sarah James updated \"Getting Started Docs\"",
+      "sarah_meta": "2 hours ago • Verified SOC2 Audit logs",
+      "anna_rotated": "Anna Bell rotated Bearer Token specifications",
+      "anna_meta": "Yesterday • API Authentication",
+      "will_submitted": "Will Coyote submitted \"MFA playbooks\" for review",
+      "will_meta": "In Draft pool queue • MFA Debugging"
     }
   },
   "vault": {
@@ -752,6 +799,50 @@
     "vectorDatabaseDesc": "Status and health of the knowledge base embeddings.",
     "healthy": "Healthy",
     "index": "Index:",
-    "totalVectors": "Total Vectors"
+    "totalVectors": "Total Vectors",
+    "languageChangedDe": "Language changed to German!",
+    "languageChangedEn": "Language changed to English!"
+  },
+  "header": {
+    "dataSovereignDe": "Data Sovereign: DE",
+    "sovereignCloudStatus": "Sovereign Cloud Status",
+    "germanyLocalNode": "Germany Local Node",
+    "localDeNodeResidency": "Local DE Node: Data Residency",
+    "germanyDe": "Germany (DE)",
+    "deploymentType": "Deployment Type",
+    "selfHostedVpc": "Self-Hosted (VPC)",
+    "processingRoute": "Processing Route",
+    "noExternalAiLeaks": "No External AI Leaks",
+    "slaAuditLog": "SLA Audit Log",
+    "immutableActive": "Immutable & Active",
+    "sovereigntyDesc": "Your enterprise deployment secures all context windows and telemetry safely here inside Germany.",
+    "sovereigntyCenterLink": "Sovereignty Center →",
+    "piiShieldActive": "PII Shield Active",
+    "sovereignPiiShield": "Sovereign PII Shield",
+    "realtimeAnonymization": "Real-time Anonymization",
+    "status": "Status",
+    "shielded": "Shielded",
+    "emails": "Emails",
+    "passwords": "Passwords",
+    "apiKeys": "API Keys",
+    "ipAddresses": "IP Addresses",
+    "configureGuardrails": "Configure Guardrails →",
+    "aiOrchestratorStatus": "AI Orchestrator Status",
+    "aiOrchestrator": "AI Orchestrator",
+    "coreGatewayRouter": "Core Gateway Router",
+    "online": "Online",
+    "offline": "Offline",
+    "checking": "Checking...",
+    "activeConnectedModel": "Active Connected Model",
+    "noneOffline": "None (Offline)",
+    "gatewayConnectionFailed": "Gateway Connection Failed. Check your API keys and local gateway configurations.",
+    "aiDashboardConfig": "AI Dashboard Configuration →",
+    "changeLanguage": "Change language",
+    "changeLanguageDe": "Sprache wechseln",
+    "moreTools": "More tools"
+  },
+  "languages": {
+    "de": "Deutsch",
+    "en": "English"
   }
 }
