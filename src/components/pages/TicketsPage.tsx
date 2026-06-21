@@ -280,7 +280,11 @@ export default function TicketsPage() {
   const navigate = useNavigate();
   
   const [isCreateTicketOpen, setIsCreateTicketOpen] = useState(false);
-  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(true);
+  // Default to closed so mobile lands on the ticket list (not the pipeline
+  // navigator). When true on small screens the list is `hidden`, which made
+  // mobile users see zero tickets. Desktop shows the sidebar via `md:flex`
+  // regardless of this flag, so false is correct for both.
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
@@ -1994,15 +1998,15 @@ export default function TicketsPage() {
               <div className="flex-1 flex flex-row min-h-0 min-w-0">
                 <div className="flex-1 flex flex-col min-h-0 min-w-0">
                   {/* 1. Header component */}
-                <div className="px-6 pt-5 pb-3 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shrink-0">
+                <div className="px-4 md:px-6 pt-4 md:pt-5 pb-3 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shrink-0">
                   <button 
                     onClick={() => setSelectedTicketId(null)}
                     className="flex items-center gap-1 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-extrabold text-xs cursor-pointer mb-2 transition-colors select-none group"
                   >
                     <ChevronLeft className="w-3.5 h-3.5 text-slate-450 group-hover:text-slate-650 transition-colors" /> Back to ticket
                   </button>
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 overflow-hidden">
+                  <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                    <div className="flex items-center gap-2 md:gap-3 overflow-hidden min-w-0 flex-1">
                       <h2 className="text-xl font-extrabold text-slate-950 dark:text-slate-50 truncate tracking-tight">{selectedTicket.subject}</h2>
                       <span className="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300 px-3 py-1 rounded-md text-[11px] font-extrabold select-none shrink-0 capitalize">
                         {selectedTicket.status || 'New'}
@@ -3002,12 +3006,23 @@ export default function TicketsPage() {
               )}
               </ScrollArea>
             </div> {/* End of message column */}
+            {/* Mobile drawer backdrop (tap to dismiss); never shown on desktop. */}
+            {isMobilePropertiesOpen && (
+              <div
+                onClick={() => setIsMobilePropertiesOpen(false)}
+                className="xl:hidden absolute inset-0 z-20 bg-black/40 backdrop-blur-[1px]"
+                aria-hidden="true"
+              />
+            )}
             {/* Right Context Pane: Sticky properties column */}
             <aside className={cn(
-              "w-[325px] shrink-0 border-l border-border sticky top-6 h-[calc(100vh-5rem)] overflow-y-auto custom-scrollbar z-30 transition-all",
-              isMobilePropertiesOpen 
-                ? "flex absolute inset-y-0 right-0 shadow-2xl bg-white dark:bg-slate-900 border-l xl:relative xl:shadow-none xl:bg-muted" 
-                : "hidden xl:flex bg-muted"
+              "shrink-0 border-l border-border overflow-y-auto custom-scrollbar z-30 transition-all",
+              // Desktop (xl+): a sticky in-flow properties column.
+              "xl:flex xl:relative xl:sticky xl:top-6 xl:h-[calc(100vh-5rem)] xl:w-[325px] xl:shadow-none xl:bg-muted",
+              isMobilePropertiesOpen
+                // Mobile/tablet: a full-height drawer that never exceeds the viewport.
+                ? "flex absolute inset-y-0 right-0 h-full w-[min(22rem,92vw)] shadow-2xl bg-white dark:bg-slate-900"
+                : "hidden bg-muted"
             )}>
                {true ? (
                  <RedesignedSidebar 
@@ -4460,8 +4475,11 @@ export default function TicketsPage() {
 
             {/* List Content: Horizontal Table Layout (Desktop) & Responsive Cards (Mobile) */}
             <ScrollArea className="flex-1 bg-background min-h-0">
-              {/* Desktop Table Layout (lg and up) */}
-              <div className="hidden lg:block w-full min-w-[1000px] border-collapse bg-card">
+              {/* Desktop Table Layout (lg and up). The horizontal-scroll wrapper
+                  contains the table's min-width so narrow desktop viewports scroll
+                  the columns instead of clipping them off-screen. */}
+              <div className="hidden lg:block w-full overflow-x-auto">
+                <div className="min-w-[1000px] border-collapse bg-card">
                 {/* Table Header */}
                 <div className="flex items-center px-8 h-12 bg-muted border-b border-border sticky top-0 z-10">
                    <div className="w-[36px] flex items-center justify-center shrink-0">
@@ -4829,6 +4847,7 @@ export default function TicketsPage() {
                     })}
                   </div>
                 )}
+                </div>
               </div>
 
               {/* Mobile Card Stack View (below lg) */}
