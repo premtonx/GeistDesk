@@ -60,7 +60,7 @@ export function ConversationTimeline({
   isTranslating,
   translatedTicket
 }: ConversationTimelineProps) {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
 
   // We compile all chronological timeline items, beginning with the opening post.
@@ -220,17 +220,17 @@ export function ConversationTimeline({
               {hoveredMessageId === item.id && (
                 <div className="absolute right-4 top-4 bg-white dark:bg-slate-800 border border-slate-150 dark:border-slate-700 rounded-xl shadow-lg p-1 flex items-center gap-1 z-10 animate-fade-in select-none">
                   <Button variant="ghost" size="sm" className="h-7 text-slate-500 hover:text-blue-600 hover:bg-slate-50 rounded-lg text-xs font-semibold px-2" onClick={onReplyClick}>
-                    Reply
+                    {t('tickets.conversation.reply', 'Reply')}
                   </Button>
                   <Button variant="ghost" size="sm" className="h-7 text-slate-500 hover:text-purple-600 hover:bg-purple-50 rounded-lg text-xs font-semibold px-2" onClick={() => onQuoteClick(item.content)}>
-                    Quote
+                    {t('tickets.conversation.quote', 'Quote')}
                   </Button>
                   <Button variant="ghost" size="sm" className="h-7 text-slate-500 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg text-sm font-semibold px-2 flex items-center gap-1" onClick={() => {
                     navigator.clipboard.writeText(item.content);
-                    toast.success(language === 'de' ? "Nachricht kopiert!" : "Message copied!");
+                    toast.success(t('tickets.conversation.messageCopied', 'Message copied!'));
                   }}>
                     <Copy className="w-3.5 h-3.5" />
-                    <span>Copy</span>
+                    <span>{t('tickets.conversation.copy', 'Copy')}</span>
                   </Button>
                 </div>
               )}

@@ -40,6 +40,9 @@ import { Separator } from '../ui/separator';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { text } from 'd3';
 import { SuggestedLink } from '../../services/neuralLinkService';
+import { useTranslation } from '../../lib/context/I18nContext';
+
+const STATUS_KEYS = ['open', 'pending', 'resolved', 'closed', 'qs', 'merged', 'trash'] as const;
 
 interface RedesignedSidebarProps {
   ticket: TicketType;
@@ -82,6 +85,13 @@ export function RedesignedSidebar({
   onInitiateHandoff,
   onCloseMobile
 }: RedesignedSidebarProps) {
+  const { t } = useTranslation();
+  const statusLabel = (st: string) => t(`tickets.statusLabels.${st}`, st);
+  const sentimentLabel = (sentiment?: string) => {
+    if (sentiment === 'angry') return t('tickets.context.sentimentAngry', 'Angry');
+    if (sentiment === 'positive') return t('tickets.context.sentimentPositive', 'Positive');
+    return t('tickets.context.sentimentNeutral', 'Neutral');
+  };
   // Collapsing Section States
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
     copilot: false,
@@ -113,7 +123,7 @@ export function RedesignedSidebar({
       <div className="p-4 border-b flex items-center justify-between bg-card shrink-0 h-[56px]">
         <span className="font-bold text-sm text-foreground tracking-tight flex items-center gap-2">
           <Settings2 className="w-4 h-4 text-muted-foreground" />
-          <span>Eigenschaften Dispatch-Desk</span>
+          <span>{t('tickets.sidebar.title', 'Dispatch desk properties')}</span>
         </span>
         <div className="flex items-center gap-2">
           {onCloseMobile && (
@@ -127,7 +137,7 @@ export function RedesignedSidebar({
             </Button>
           )}
           <Badge variant="secondary" className="bg-muted text-muted-foreground text-[8px] font-black uppercase">
-            Dynamic RAG
+            {t('tickets.sidebar.dynamicRag', 'Dynamic RAG')}
           </Badge>
         </div>
       </div>
@@ -139,15 +149,15 @@ export function RedesignedSidebar({
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
               <UserCheck className="w-3.5 h-3.5 text-primary" />
-              <span>Agenten-Zuweisung</span>
+              <span>{t('tickets.sidebar.agentAssignment', 'Agent assignment')}</span>
             </span>
             {ticket.agentName ? (
               <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[8.5px] font-bold py-0.5 px-2">
-                Aktiv zugewiesen
+                {t('tickets.sidebar.activelyAssigned', 'Actively assigned')}
               </Badge>
             ) : (
               <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border-amber-200 text-[8.5px] font-bold py-0.5 px-2">
-                Nicht zugewiesen
+                {t('tickets.sidebar.unassignedBadge', 'Unassigned')}
               </Badge>
             )}
           </div>
@@ -163,16 +173,18 @@ export function RedesignedSidebar({
             
             <div className="flex-1 min-w-0">
               <div className="text-[12px] font-extrabold text-foreground truncate">
-                {ticket.agentName || "Nicht zugewiesen"}
+                {ticket.agentName || t('tickets.unassigned', 'Unassigned')}
               </div>
               <div className="text-[10px] text-muted-foreground truncate">
-                {ticket.agentName ? "Verantwortlicher Bearbeiter" : "Klicken Sie unten, um das Ticket zuzuweisen"}
+                {ticket.agentName
+                  ? t('tickets.sidebar.responsibleAgent', 'Responsible agent')
+                  : t('tickets.sidebar.clickToAssign', 'Click below to assign this ticket')}
               </div>
             </div>
           </div>
 
           <div className="space-y-1">
-            <label className="text-[9.5px] font-black text-muted-foreground uppercase block">Dispatch-Agenten auswählen</label>
+            <label className="text-[9.5px] font-black text-muted-foreground uppercase block">{t('tickets.sidebar.selectDispatchAgent', 'Select dispatch agent')}</label>
             <select 
               id="dispatch-agent-select"
               className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer text-slate-700 dark:text-slate-200"
@@ -188,7 +200,7 @@ export function RedesignedSidebar({
                 }
               }}
             >
-              <option value="">Nicht zugewiesen</option>
+              <option value="">{t('tickets.unassigned', 'Unassigned')}</option>
               {['Sarah Agent', 'Mike Lead', 'Dev Team'].map(a => (
                 <option key={a} value={a}>{a}</option>
               ))}
@@ -196,7 +208,7 @@ export function RedesignedSidebar({
           </div>
 
           <div className="space-y-1 pt-1">
-            <label className="text-[9.5px] font-black text-muted-foreground uppercase block">Dispatch-Fallstatus</label>
+            <label className="text-[9.5px] font-black text-muted-foreground uppercase block">{t('tickets.sidebar.dispatchCaseStatus', 'Dispatch case status')}</label>
             <select 
               id="dispatch-status-select"
               className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer text-slate-700 dark:text-slate-200 capitalize"
@@ -205,27 +217,16 @@ export function RedesignedSidebar({
                 onUpdateTicketField({ status: e.target.value as any });
               }}
             >
-              {['open', 'pending', 'resolved', 'closed', 'qs', 'merged', 'trash'].map(st => {
-                let label = st;
-                if (st === 'open') label = 'offen';
-                else if (st === 'pending') label = 'wartend';
-                else if (st === 'resolved') label = 'gelöst';
-                else if (st === 'closed') label = 'geschlossen';
-                else if (st === 'qs') label = 'Qualitätssicherung';
-                else if (st === 'merged') label = 'zusammengeschlossen';
-                else if (st === 'trash') label = 'gelöscht';
-                return (
-                  <option key={st} value={st}>
-                    {label}
-                  </option>
-                );
-              })}
+              {STATUS_KEYS.map(st => (
+                <option key={st} value={st}>
+                  {statusLabel(st)}
+                </option>
+              ))}
             </select>
           </div>
 
-          {/* SLA Help Escalation (Hilfe anfordern) */}
           <div className="space-y-1 pt-2">
-            <label className="text-[9.5px] font-black text-muted-foreground uppercase block">SLA-Hilfeeskalation</label>
+            <label className="text-[9.5px] font-black text-muted-foreground uppercase block">{t('tickets.sidebar.slaHelpEscalation', 'SLA help escalation')}</label>
             <Button
               variant={ticket.isHelpRequested ? "destructive" : "outline"}
               size="sm"
@@ -237,7 +238,9 @@ export function RedesignedSidebar({
               onClick={() => onUpdateTicketField({ isHelpRequested: !ticket.isHelpRequested })}
             >
               <HelpCircle className="w-3.5 h-3.5" />
-              {ticket.isHelpRequested ? "Hilfeanforderung abbrechen" : "Hilfe anfordern"}
+              {ticket.isHelpRequested
+                ? t('tickets.detail.cancelHelpRequest', 'Cancel help request')
+                : t('tickets.seekHelp', 'Seek help')}
             </Button>
           </div>
         </div>
@@ -250,7 +253,7 @@ export function RedesignedSidebar({
           >
             <span className="flex items-center gap-1.5 text-indigo-700">
               <Sparkles className="w-4 h-4 text-indigo-500 animate-pulse" />
-              <span>KI-Copilot SmartHub</span>
+              <span>{t('tickets.sidebar.aiCopilotHub', 'AI Copilot SmartHub')}</span>
             </span>
             {collapsed.copilot ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
@@ -258,39 +261,39 @@ export function RedesignedSidebar({
           {!collapsed.copilot && (
             <div className="space-y-3 bg-gradient-to-br from-indigo-50/40 to-sky-50/20 dark:from-indigo-950/10 dark:to-sky-950/5 border border-indigo-150 rounded-2xl p-3.5 shadow-sm space-y-4">
               <div className="space-y-1">
-                <h5 className="text-[10px] font-black text-indigo-900 uppercase">Vorgeschlagene KI-Strategie</h5>
+                <h5 className="text-[10px] font-black text-indigo-900 uppercase">{t('tickets.sidebar.suggestedAiStrategy', 'Suggested AI strategy')}</h5>
                 <p className="text-[11px] text-indigo-950 font-semibold italic border-l-2 border-indigo-300 pl-2 leading-tight">
-                  "Microsoft Entra-Konfigurationsparität bestätigen. Einen höflichen Entwurf zur Bestätigung der Sicherheitsüberprüfung erstellen."
+                  &quot;{t('tickets.sidebar.aiStrategySample', 'Confirm Microsoft Entra configuration parity. Draft a polite message to confirm the security review.')}&quot;
                 </p>
               </div>
 
-              {/* Action grid shortcuts */}
               <div className="space-y-2">
-                <span className="text-[9px] font-black text-indigo-850 uppercase block">KI-Befehle mit einem Klick</span>
+                <span className="text-[9px] font-black text-indigo-850 uppercase block">{t('tickets.sidebar.oneClickAiCommands', 'One-click AI commands')}</span>
                 <div className="grid grid-cols-2 gap-1.5">
                   <Button 
                     className="bg-white hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-black h-8 rounded-lg shadow-sm"
                     onClick={onDraftWithAI}
                     disabled={isAiDrafting || !isAiReady}
                   >
-                    Antwort entwerfen
+                    {t('tickets.sidebar.draftReply', 'Draft reply')}
                   </Button>
                   <Button 
                     className="bg-white hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-[10px] font-black h-8 rounded-lg shadow-sm"
                     onClick={onConvertToKB}
                     disabled={!isAiReady}
                   >
-                    KB-Extraktion
+                    {t('tickets.sidebar.kbExtraction', 'KB extraction')}
                   </Button>
                 </div>
               </div>
 
-              {/* Verified Sources references */}
               <div className="space-y-1.5">
-                <span className="text-[9px] font-black text-indigo-850 uppercase block">Verifizierte KB-Zitate</span>
+                <span className="text-[9px] font-black text-indigo-850 uppercase block">{t('tickets.sidebar.verifiedKbCitations', 'Verified KB citations')}</span>
                 <div className="p-2 bg-white/70 rounded-xl border border-indigo-100/50 flex items-center justify-between gap-2">
-                  <span className="text-[10px] font-semibold text-slate-800 truncate pr-1">Microsoft Entra SSO Paritätsregel</span>
-                  <Badge className="bg-indigo-50 text-indigo-700 hover:bg-indigo-50/90 text-[8px] h-4 font-bold shrink-0">94% Konfidenz</Badge>
+                  <span className="text-[10px] font-semibold text-slate-800 truncate pr-1">{t('tickets.sidebar.sampleKbRule', 'Microsoft Entra SSO parity rule')}</span>
+                  <Badge className="bg-indigo-50 text-indigo-700 hover:bg-indigo-50/90 text-[8px] h-4 font-bold shrink-0">
+                    {t('tickets.sidebar.confidence', '{{percent}}% confidence').replace('{{percent}}', '94')}
+                  </Badge>
                 </div>
               </div>
             </div>
@@ -305,7 +308,7 @@ export function RedesignedSidebar({
           >
             <span className="flex items-center gap-1.5">
               <FolderOpen className="w-4 h-4 text-blue-500" />
-              <span>Standard-Eigenschaften</span>
+              <span>{t('tickets.sidebar.standardProperties', 'Standard properties')}</span>
             </span>
             {collapsed.properties ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
@@ -314,51 +317,39 @@ export function RedesignedSidebar({
             <div className="grid grid-cols-1 gap-3 pt-1">
               {/* Type selector */}
               <div className="space-y-1">
-                <label className="text-[9.5px] font-black text-muted-foreground uppercase">Ticket-Kategorie</label>
+                <label className="text-[9.5px] font-black text-muted-foreground uppercase">{t('tickets.sidebar.ticketCategory', 'Ticket category')}</label>
                 <select 
                   className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
                   value={ticket.type || 'incident'}
                   onChange={(e) => onUpdateTicketField({ type: e.target.value as any })}
                 >
-                  <option value="incident">Vorfall (Incident)</option>
-                  <option value="question">Frage (Question)</option>
-                  <option value="problem">Problem</option>
-                  <option value="feature_request">Feature-Anfrage</option>
+                  <option value="incident">{t('tickets.typeLabels.incident', 'Incident')}</option>
+                  <option value="question">{t('tickets.typeLabels.question', 'Question')}</option>
+                  <option value="problem">{t('tickets.typeLabels.problem', 'Problem')}</option>
+                  <option value="feature_request">{t('tickets.typeLabels.feature_request', 'Feature request')}</option>
                 </select>
               </div>
 
-              {/* Status Selector */}
               <div className="space-y-1">
-                <label className="text-[9.5px] font-black text-muted-foreground uppercase">Lebenszyklus-Status</label>
+                <label className="text-[9.5px] font-black text-muted-foreground uppercase">{t('tickets.sidebar.lifecycleStatus', 'Lifecycle status')}</label>
                 <select 
                   className="w-full bg-card border border-border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary capitalize"
                   value={ticket.status}
                   onChange={(e) => onUpdateTicketField({ status: e.target.value as any })}
                 >
-                  {['open', 'pending', 'resolved', 'closed', 'qs', 'merged', 'trash'].map(st => {
-                    let label = st;
-                    if (st === 'open') label = 'offen';
-                    else if (st === 'pending') label = 'wartend';
-                    else if (st === 'resolved') label = 'gelöst';
-                    else if (st === 'closed') label = 'geschlossen';
-                    else if (st === 'qs') label = 'Qualitätssicherung';
-                    else if (st === 'merged') label = 'zusammengeschlossen';
-                    else if (st === 'trash') label = 'gelöscht';
-                    return (
-                      <option key={st} value={st}>
-                        {label}
-                      </option>
-                    );
-                  })}
+                  {STATUS_KEYS.map(st => (
+                    <option key={st} value={st}>
+                      {statusLabel(st)}
+                    </option>
+                  ))}
                 </select>
               </div>
 
-              {/* Focus Sentiment Display */}
               <div className="space-y-1">
-                <label className="text-[9.5px] font-black text-muted-foreground uppercase">Dynamische Stimmung</label>
+                <label className="text-[9.5px] font-black text-muted-foreground uppercase">{t('tickets.sidebar.dynamicSentiment', 'Dynamic sentiment')}</label>
                 <div className="p-2.5 bg-card border border-border rounded-xl flex items-center justify-between">
                   <span className="capitalize text-xs font-bold text-foreground">
-                    {ticket.sentiment === 'angry' ? 'Wütend' : ticket.sentiment === 'positive' ? 'Positiv' : 'Neutral'}
+                    {sentimentLabel(ticket.sentiment)}
                   </span>
                   {sentimentIcon}
                 </div>
@@ -375,7 +366,7 @@ export function RedesignedSidebar({
           >
             <span className="flex items-center gap-1.5">
               <User className="w-4 h-4 text-teal-500" />
-              <span>Kundenkontext</span>
+              <span>{t('tickets.sidebar.customerContext', 'Customer context')}</span>
             </span>
             {collapsed.customer ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
@@ -405,7 +396,7 @@ export function RedesignedSidebar({
           >
             <span className="flex items-center gap-1.5">
               <Tag className="w-4 h-4 text-purple-500" />
-              <span>Metadaten-Tags</span>
+              <span>{t('tickets.sidebar.metadataTags', 'Metadata tags')}</span>
             </span>
             {collapsed.tags ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
@@ -425,14 +416,14 @@ export function RedesignedSidebar({
                     </Badge>
                   ))
                 ) : (
-                  <span className="text-[10px] text-muted-foreground italic">Keine manuellen Tags definiert.</span>
+                  <span className="text-[10px] text-muted-foreground italic">{t('tickets.sidebar.noTagsDefined', 'No manual tags defined.')}</span>
                 )}
               </div>
 
               {/* Add tags */}
               <div className="relative">
                 <Input 
-                  placeholder="Tag eingeben..." 
+                  placeholder={t('tickets.sidebar.tagPlaceholder', 'Enter tag...')} 
                   className="h-8 text-xs rounded-xl focus:ring-purple-400 focus:border-purple-400 pr-8"
                   value={tagsInput}
                   onChange={(e) => onChangeTagsInput(e.target.value)}
@@ -456,7 +447,7 @@ export function RedesignedSidebar({
               {suggestedTags && suggestedTags.length > 0 && (
                 <div className="p-3 bg-purple-50/30 border border-purple-150 rounded-xl space-y-1.5">
                   <span className="text-[9px] font-black text-purple-800 uppercase flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> KI-Label-Vorschläge
+                    <Sparkles className="w-3 h-3" /> {t('tickets.sidebar.aiTagSuggestions', 'AI tag suggestions')}
                   </span>
                   <div className="flex flex-wrap gap-1 pt-1">
                     {suggestedTags.filter(st => !ticket.tags.includes(st)).map(st => (
@@ -483,7 +474,7 @@ export function RedesignedSidebar({
           >
             <span className="flex items-center gap-1.5">
               <Link2 className="w-4 h-4 text-[#1A73E8]" />
-              <span>Verbundene Tickets ({ticket.linkedTicketIds?.length || 0})</span>
+              <span>{t('tickets.sidebar.linkedTickets', 'Linked tickets ({{count}})').replace('{{count}}', String(ticket.linkedTicketIds?.length || 0))}</span>
             </span>
             {collapsed.related ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
           </button>
@@ -496,7 +487,9 @@ export function RedesignedSidebar({
                     key={id} 
                     className="p-2.0 bg-card border border-border rounded-xl flex items-center justify-between text-[11px] hover:border-indigo-150"
                   >
-                    <span className="truncate pr-1 text-foreground">Inc: #{id.slice(-5).toUpperCase()}</span>
+                    <span className="truncate pr-1 text-foreground">
+                      {t('tickets.sidebar.incReference', 'Inc: #{{id}}').replace('{{id}}', id.slice(-5).toUpperCase())}
+                    </span>
                     <button 
                       className="text-muted-foreground hover:text-red-500 p-0.5 rounded"
                       onClick={() => onUnlinkTicket(id)}
@@ -506,7 +499,7 @@ export function RedesignedSidebar({
                   </div>
                 ))
               ) : (
-                <span className="text-[10px] text-muted-foreground italic px-2 block">Keine aktiven Verknüpfungen.</span>
+                <span className="text-[10px] text-muted-foreground italic px-2 block">{t('tickets.sidebar.noActiveLinks', 'No active linkages.')}</span>
               )}
             </div>
           )}

@@ -19,6 +19,7 @@ import { Ticket as TicketType } from '../../types';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
+import { useTranslation } from '../../lib/context/I18nContext';
 
 interface AiInsightsTabContentProps {
   ticket: TicketType;
@@ -33,6 +34,7 @@ export function AiInsightsTabContent({
   aiSources,
   isAiReady
 }: AiInsightsTabContentProps) {
+  const { t } = useTranslation();
   return (
     <div id="ai-insights-tab-view" className="space-y-6">
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -78,7 +80,7 @@ export function AiInsightsTabContent({
                   ))
                 ) : (
                   <div className="p-6 rounded-xl border border-dashed text-center py-10 text-xs text-muted-foreground italic">
-                    AI Citations are currently empty. Click "Draft with AI" or trigger a prompt to query the knowledge database.
+                    {t('tickets.aiInsightsTab.emptyCitations', 'AI citations are currently empty. Click "Draft with AI" or trigger a prompt to query the knowledge database.')}
                   </div>
                 )}
               </div>

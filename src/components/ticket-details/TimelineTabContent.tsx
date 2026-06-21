@@ -1,14 +1,7 @@
 import React from 'react';
 import { 
-  Building2, 
-  User, 
-  MapPin, 
-  Clock, 
-  Globe, 
   BadgeCheck,
-  ShieldCheck,
   History,
-  GitFork,
   CheckCircle,
   PlusCircle,
   FolderSync
@@ -16,6 +9,7 @@ import {
 import { Ticket as TicketType, Message, AgentComment } from '../../types';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
+import { useTranslation } from '../../lib/context/I18nContext';
 
 interface TimelineTabContentProps {
   ticket: TicketType;
@@ -23,55 +17,67 @@ interface TimelineTabContentProps {
   agentComments: AgentComment[];
 }
 
+function fmt(template: string, vars: Record<string, string>) {
+  return Object.entries(vars).reduce(
+    (s, [k, v]) => s.replace(new RegExp(`\\{\\{${k}\\}\\}`, 'g'), v),
+    template
+  );
+}
+
 export function TimelineTabContent({
   ticket,
   messages,
   agentComments
 }: TimelineTabContentProps) {
-  // Merge messages, internal comments, and creation event into a chronological array
+  const { t } = useTranslation();
+
   const timelineEvents = React.useMemo(() => {
     const events: { id: string; type: string; title: string; desc: string; time: Date; actor: string }[] = [];
 
-    // Base ticket creation
     const createdTime = ticket.createdAt?.toDate ? ticket.createdAt.toDate() : new Date(ticket.createdAt);
     events.push({
       id: 'event-creation',
       type: 'creation',
-      title: 'Ticket Received',
-      desc: `Support case launched via ${ticket.channel || 'portal'} channel.`,
+      title: t('tickets.timelineTab.ticketReceived', 'Ticket received'),
+      desc: fmt(t('tickets.timelineTab.ticketReceivedDesc', 'Support case launched via {{channel}} channel.'), {
+        channel: ticket.channel || t('tickets.timelineTab.portal', 'portal'),
+      }),
       time: createdTime,
       actor: ticket.customerName
     });
 
-    // Communication messages
     messages.forEach(m => {
       const msgTime = m.createdAt?.toDate ? m.createdAt.toDate() : new Date(m.createdAt);
+      let title = t('tickets.timelineTab.agentReplyDispatched', 'Agent reply dispatched');
+      if (m.senderType === 'customer') {
+        title = t('tickets.timelineTab.customerResponse', 'Customer response');
+      } else if (m.senderType === 'ai') {
+        title = t('tickets.timelineTab.aiResponseDrafted', 'AI response drafted');
+      }
       events.push({
         id: `event-msg-${m.id}`,
         type: m.senderType === 'customer' ? 'incoming' : 'reply',
-        title: m.senderType === 'customer' ? 'Customer Response' : m.senderType === 'ai' ? 'AI Response Drafted' : 'Agent reply dispatched',
+        title,
         desc: m.content.substring(0, 100) + (m.content.length > 100 ? '...' : ''),
         time: msgTime,
-        actor: m.senderName || 'Anonymous'
+        actor: m.senderName || t('tickets.timelineTab.anonymous', 'Anonymous')
       });
     });
 
-    // Agent internal notes
     agentComments.forEach(c => {
       const comTime = c.createdAt?.toDate ? c.createdAt.toDate() : new Date(c.createdAt);
       events.push({
         id: `event-com-${c.id}`,
         type: 'note',
-        title: 'Internal Agent Note Recorded',
+        title: t('tickets.timelineTab.internalNoteRecorded', 'Internal agent note recorded'),
         desc: c.content,
         time: comTime,
         actor: c.agentName
       });
     });
 
-    // Sort chronologically (latest first or earliest first, let's do latest first for chronological logging)
     return events.sort((a, b) => b.time.getTime() - a.time.getTime());
-  }, [ticket, messages, agentComments]);
+  }, [ticket, messages, agentComments, t]);
 
   return (
     <div id="chronological-timeline-log" className="space-y-6">
@@ -80,15 +86,18 @@ export function TimelineTabContent({
           <div className="flex items-center gap-2 mb-6 border-b pb-4">
             <History className="w-5 h-5 text-indigo-500" />
             <div>
-              <h3 className="text-sm font-bold text-foreground">Chronological Ticket Audit Timeline</h3>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">GoBD Compliance Logs</p>
+              <h3 className="text-sm font-bold text-foreground">
+                {t('tickets.timelineTab.title', 'Chronological ticket audit timeline')}
+              </h3>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-widest mt-0.5">
+                {t('tickets.timelineTab.subtitle', 'GoBD compliance logs')}
+              </p>
             </div>
           </div>
 
           <div className="relative border-l border-border pl-6 ml-3 space-y-6">
-            {timelineEvents.map((ev, index) => (
+            {timelineEvents.map((ev) => (
               <div key={ev.id} className="relative">
-                {/* Visual Circle Node Indicator */}
                 <span className="absolute -left-9.5 top-0.5 w-6 h-6 rounded-full bg-card border-2 flex items-center justify-center shadow-sm">
                   {ev.type === 'creation' && <PlusCircle className="w-3.5 h-3.5 text-primary" />}
                   {ev.type === 'incoming' && <FolderSync className="w-3.5 h-3.5 text-blue-500 animate-pulse" />}

@@ -2013,7 +2013,7 @@ export default function TicketsPage() {
                             const noteEl = document.getElementById('quick-internal-note-input') || document.getElementById('email-reply-composer');
                             if (noteEl) noteEl.scrollIntoView({ behavior: 'smooth' });
                           }, 100);
-                          toast.info("Switched to conversation notes composer.");
+                          toast.info(t('tickets.detail.switchedToComposer', 'Switched to conversation notes composer.'));
                         }}
                         className="h-9 px-3 rounded-lg border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all"
                       >
@@ -2257,7 +2257,7 @@ export default function TicketsPage() {
                                 <input 
                                   id="quick-internal-note-input"
                                   type="text" 
-                                  placeholder="Type an internal note to notify workforce, share state..." 
+                                  placeholder={t('tickets.notes.typeNotePlaceholder', 'Type an internal note to notify workforce, share state...')} 
                                   className="flex-1 bg-transparent border-none text-[11px] text-slate-850 dark:text-slate-200 focus:outline-none focus:ring-0 placeholder:text-slate-400"
                                   value={newAgentComment}
                                   onChange={(e) => setNewAgentComment(e.target.value)}
@@ -2412,7 +2412,7 @@ export default function TicketsPage() {
                                 className="text-xs text-muted-foreground font-semibold hover:text-foreground h-8"
                                 onClick={() => setIsComposerExpanded(false)}
                               >
-                                Collapse Response Editor
+                                {t('tickets.composer.collapseResponseEditor', 'Collapse Response Editor')}
                               </Button>
                             </div>
                           </div>
@@ -2423,8 +2423,8 @@ export default function TicketsPage() {
                                 <Mail className="w-4 h-4" />
                               </div>
                               <div className="flex flex-col">
-                                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">No active response draft</span>
-                                <span className="text-[10px] text-muted-foreground">Click reply on any message or details header to write a message to the client.</span>
+                                <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{t('tickets.composer.noActiveDraft', 'No active response draft')}</span>
+                                <span className="text-[10px] text-muted-foreground">{t('tickets.composer.clickReplyDesc', 'Click reply on any message or details header to write a message to the client.')}</span>
                               </div>
                             </div>
                             <Button 
@@ -2432,7 +2432,7 @@ export default function TicketsPage() {
                               className="bg-primary hover:bg-primary/95 text-primary-foreground font-bold text-xs h-8 px-3 rounded-lg shadow-sm"
                               onClick={() => setIsComposerExpanded(true)}
                             >
-                              Expand Response Form
+                              {t('tickets.composer.expandResponseForm', 'Expand Response Form')}
                             </Button>
                           </div>
                         )}
@@ -2617,7 +2617,7 @@ export default function TicketsPage() {
                                  </div>
                                ))
                              ) : (
-                               <p className="text-sm text-muted-foreground italic animate-pulse">The AI is currently digesting the thread context...</p>
+                               <p className="text-sm text-muted-foreground italic animate-pulse">{t('tickets.detail.digestingThread', 'The AI is currently digesting the thread context...')}</p>
                              )}
                           </div>
                         </div>
@@ -3461,7 +3461,7 @@ export default function TicketsPage() {
                             </div>
                           ))
                         ) : !selectedTicket.masterTicketId && (
-                          <div className="text-[10px] text-muted-foreground italic px-2">No active neural links.</div>
+                          <div className="text-[10px] text-muted-foreground italic px-2">{t('tickets.detail.noNeuralLinks', 'No active neural links.')}</div>
                         )}
 
                         {selectedTicket.masterTicketId && (

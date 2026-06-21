@@ -23,6 +23,7 @@ import { LegalValidationResult } from '../../services/legalService';
 import { Ticket as TicketType } from '../../types';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
+import { useTranslation } from '../../lib/context/I18nContext';
 
 interface EmailComposerProps {
   ticket: TicketType;
@@ -61,13 +62,14 @@ export function EmailComposer({
   legalViolation,
   isValidatingLegal
 }: EmailComposerProps) {
+  const { t } = useTranslation();
   const [suggestionApplied, setSuggestionApplied] = useState(false);
   const suggestionText = "Hi there, I have investigated this issue and found similar cases where we resolved... Let me walk you through the troubleshooting.";
 
   const applySuggestion = () => {
     onChange(value ? `${value}<p>${suggestionText}</p>` : `<p>${suggestionText}</p>`);
     setSuggestionApplied(true);
-    toast.success("AI strategic opening applied to composer.");
+    toast.success(t('tickets.emailComposer.suggestionApplied', 'AI strategic opening applied to composer.'));
   };
 
   return (
@@ -75,17 +77,17 @@ export function EmailComposer({
       {/* Email-style Header rows */}
       <div className="bg-muted/15 p-4 border-b border-border space-y-2.5 text-xs text-muted-foreground/80">
         <div className="flex items-center gap-2">
-          <span className="w-12 font-bold text-foreground">From:</span>
+          <span className="w-12 font-bold text-foreground">{t('tickets.emailComposer.from', 'From:')}</span>
           <span className="font-mono bg-muted/60 px-2 py-0.5 rounded text-foreground border border-border/40">
             support@geistdesk.support
           </span>
-          <span className="text-[10px] text-muted-foreground">(Corporate Guardrails Enabled)</span>
+          <span className="text-[10px] text-muted-foreground">{t('tickets.emailComposer.guardrails', '(Corporate guardrails enabled)')}</span>
         </div>
         
         <Separator className="bg-border/40" />
         
         <div className="flex items-center gap-2">
-          <span className="w-12 font-bold text-foreground">To:</span>
+          <span className="w-12 font-bold text-foreground">{t('tickets.emailComposer.to', 'To:')}</span>
           <span className="font-mono bg-muted/60 px-2 py-0.5 rounded text-foreground border border-border/40">
             {ticket.customerName} &lt;{ticket.customerId}@client.com&gt;
           </span>
@@ -94,7 +96,7 @@ export function EmailComposer({
         <Separator className="bg-border/40" />
 
         <div className="flex items-center gap-2">
-          <span className="w-12 font-bold text-foreground">Subject:</span>
+          <span className="w-12 font-bold text-foreground">{t('tickets.emailComposer.subject', 'Subject:')}</span>
           <span className="font-semibold text-foreground">
             Re: {ticket.subject} [Ref: #{ticket.id.slice(-5).toUpperCase()}]
           </span>
@@ -108,7 +110,7 @@ export function EmailComposer({
             <div className="flex items-center gap-2 text-indigo-900 font-medium">
               <Sparkles className="w-4 h-4 text-indigo-500 shrink-0" />
               <span>
-                <span className="font-black text-indigo-600">AI Suggested Strategy:</span> "Hi there, I have investigated this issue..."
+                <span className="font-black text-indigo-600">{t('tickets.emailComposer.aiSuggestedStrategy', 'AI suggested strategy:')}</span> &quot;{t('tickets.emailComposer.suggestionPreview', 'Hi there, I have investigated this issue...')}&quot;
               </span>
             </div>
             <Button 
@@ -117,7 +119,7 @@ export function EmailComposer({
               className="bg-white hover:bg-indigo-100/50 text-indigo-600 border-indigo-200 h-7 text-[10px] font-bold rounded-lg shrink-0" 
               onClick={applySuggestion}
             >
-              Apply Opening
+              {t('tickets.emailComposer.applyOpening', 'Apply opening')}
             </Button>
           </div>
         </div>
@@ -128,7 +130,7 @@ export function EmailComposer({
         <RichTextEditor 
           value={value}
           onChange={onChange}
-          placeholder="Type your professional response here... To activate AI drafting assistance, use the AI actions toolbar below."
+          placeholder={t('tickets.emailComposer.placeholder', 'Type your professional response here... To activate AI drafting assistance, use the AI actions toolbar below.')}
         />
       </div>
 
@@ -137,9 +139,9 @@ export function EmailComposer({
         <div className="mx-4 p-3 bg-red-50 border border-red-200 rounded-xl flex items-start gap-2.5 animate-bounce-short">
           <ShieldAlert className="w-5 h-5 text-red-600 shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <h5 className="text-xs font-black text-red-800 uppercase tracking-tight">Safeguard Violate Violation Warning</h5>
+            <h5 className="text-xs font-black text-red-800 uppercase tracking-tight">{t('tickets.emailComposer.legalWarningTitle', 'Safeguard violation warning')}</h5>
             <p className="text-[11px] text-red-700 leading-normal">
-              {legalViolation.violationDetail || "The response draft possesses unauthorized language strings or unverified contractual commitments."}
+              {legalViolation.violationDetail || t('tickets.emailComposer.legalWarningDefault', 'The response draft contains unauthorized language or unverified contractual commitments.')}
             </p>
           </div>
         </div>
@@ -157,7 +159,7 @@ export function EmailComposer({
             disabled={!isAiReady || isAiDrafting}
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>AI Assist Draft</span>
+            <span>{t('tickets.emailComposer.aiAssistDraft', 'AI assist draft')}</span>
           </Button>
           <Button 
             variant="ghost" 
@@ -167,7 +169,7 @@ export function EmailComposer({
             disabled={!isAiReady}
           >
             <Smile className="w-3.5 h-3.5" />
-            <span>Tone Polish</span>
+            <span>{t('tickets.emailComposer.tonePolish', 'Tone polish')}</span>
           </Button>
           <Button 
             variant="ghost" 
@@ -177,7 +179,7 @@ export function EmailComposer({
             disabled={!isAiReady}
           >
             <Languages className="w-3.5 h-3.5" />
-            <span>Translate</span>
+            <span>{t('tickets.emailComposer.translate', 'Translate')}</span>
           </Button>
           <Button 
             variant="ghost" 
@@ -187,7 +189,7 @@ export function EmailComposer({
             disabled={!isAiReady}
           >
             <FileText className="w-3.5 h-3.5" />
-            <span>Thread Digest</span>
+            <span>{t('tickets.emailComposer.threadDigest', 'Thread digest')}</span>
           </Button>
         </div>
 
@@ -199,7 +201,7 @@ export function EmailComposer({
             className="text-[11px] font-bold text-muted-foreground hover:text-red-500 rounded-lg h-9" 
             onClick={onDiscard}
           >
-            Discard
+            {t('tickets.emailComposer.discard', 'Discard')}
           </Button>
           <Button 
             className="h-9 font-bold text-xs rounded-xl shadow-md min-w-[90px] bg-primary hover:bg-primary/95 text-primary-foreground gap-1.5"
@@ -207,11 +209,11 @@ export function EmailComposer({
             disabled={isValidatingLegal}
           >
             {isValidatingLegal ? (
-              <span>Auditing...</span>
+              <span>{t('tickets.emailComposer.auditing', 'Auditing...')}</span>
             ) : (
               <>
                 <Send className="w-3.5 h-3.5" />
-                <span>Send Reply</span>
+                <span>{t('tickets.emailComposer.sendReply', 'Send reply')}</span>
               </>
             )}
           </Button>

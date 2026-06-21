@@ -61,9 +61,8 @@ export function DetailsHeader({
   onInternalNoteClick,
   onSeekHelp
 }: DetailsHeaderProps) {
-  const { t, language } = useTranslation();
-  // SLA Live Countdown calculation
-  const [timeLeftStr, setTimeLeftStr] = useState(language === 'de' ? 'Fällig in--' : 'Due in--');
+  const { t } = useTranslation();
+  const [timeLeftStr, setTimeLeftStr] = useState(() => t('tickets.detail.slaDuePending', 'Due in —'));
   const [slaPercent, setSlaPercent] = useState(65);
   const [slaStatus, setSlaStatus] = useState<'healthy' | 'warning' | 'breached'>('warning');
 
@@ -88,9 +87,10 @@ export function DetailsHeader({
       const hours = Math.floor(remaining / (3600 * 1000));
       const mins = Math.floor((remaining % (3600 * 1000)) / (60 * 1000));
       
-      const dueStr = language === 'de' 
-        ? `Fällig in ${hours} Std. ${mins} Min.` 
-        : `Due in ${hours}h ${mins}m`;
+      const dueTemplate = t('tickets.detail.slaDueIn', 'Due in {{hours}}h {{mins}}m');
+      const dueStr = dueTemplate
+        .replace('{{hours}}', String(hours))
+        .replace('{{mins}}', String(mins));
       setTimeLeftStr(dueStr);
       const elapsedPercent = Math.max(0, Math.min(100, (remaining / totalDuration) * 100));
       setSlaPercent(100 - elapsedPercent);
@@ -107,7 +107,7 @@ export function DetailsHeader({
     calculateSLA();
     const interval = setInterval(calculateSLA, 60000);
     return () => clearInterval(interval);
-  }, [ticket]);
+  }, [ticket, t]);
 
   return (
     <div id="ticket-header-command-center" className="sticky top-0 z-40 bg-card border-b border-border shadow-sm">
@@ -121,15 +121,13 @@ export function DetailsHeader({
             onClick={onBack}
           >
             <ChevronDown className="w-3.5 h-3.5 rotate-90" />
-            <span>
-              {language === 'de' ? 'Zurück zu Tickets' : 'Back to tickets'}
-            </span>
+            <span>{t('tickets.detail.backToList', 'Back to tickets')}</span>
           </Button>
         </div>
         <div className="flex items-center gap-3">
           <span className="font-mono text-[10.5px]">
-            {language === 'de' ? 'Erstellt: ' : 'Created: '}
-            {ticket.createdAt?.toDate ? ticket.createdAt.toDate().toLocaleDateString() : 'Today'}
+            {t('tickets.detail.created', 'Created:')}
+            {ticket.createdAt?.toDate ? ticket.createdAt.toDate().toLocaleDateString() : t('tickets.customerTab.today', 'Today')}
           </span>
         </div>
       </div>
@@ -158,14 +156,14 @@ export function DetailsHeader({
               <Clock className="w-3 h-3 animate-pulse" />
               <span>
                 {slaStatus === 'breached' 
-                  ? (language === 'de' ? 'SLA Verletzung' : 'SLA Breaching') 
-                  : (language === 'de' ? `SLA Fällig` : `SLA Breaching`)}
+                  ? t('tickets.detail.slaViolated', 'SLA Violated') 
+                  : t('tickets.detail.slaDue', 'SLA Due')}
               </span>
             </span>
 
             {/* Company Badge */}
             <span className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 text-[10.5px] font-bold h-5.5 px-3 rounded-md flex items-center justify-center">
-              {ticket.company || 'Enterprise Corp'}
+              {ticket.company || t('tickets.detail.defaultCompany', 'Enterprise Corp')}
             </span>
 
             {/* Priority Badge */}
@@ -176,12 +174,12 @@ export function DetailsHeader({
                 : "bg-blue-50 text-blue-700 border-blue-200"
             )}>
               {ticket.priority === 'urgent' 
-                ? 'P1 - Critical' 
+                ? t('tickets.detail.priorityCritical', 'P1 — Critical') 
                 : ticket.priority === 'high' 
-                ? 'High Priority' 
+                ? t('tickets.detail.priorityHigh', 'High Priority') 
                 : ticket.priority === 'medium' 
-                ? 'Medium' 
-                : 'Low'}
+                ? t('tickets.detail.priorityMedium', 'Medium') 
+                : t('tickets.detail.priorityLow', 'Low')}
             </span>
           </div>
         </div>
@@ -196,7 +194,7 @@ export function DetailsHeader({
             onClick={onReplyClick}
           >
             <Clock className="w-4 h-4 text-slate-500" />
-            <span>{language === 'de' ? 'Antworten' : 'Answer'}</span>
+            <span>{t('tickets.replyBtn', 'Reply')}</span>
           </Button>
 
           {/* Internal Note Action Button */}
@@ -207,32 +205,32 @@ export function DetailsHeader({
             onClick={onInternalNoteClick}
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>{language === 'de' ? 'Interne Notiz' : 'Internal Note'}</span>
+            <span>{t('tickets.noteBtn', 'Internal Note')}</span>
           </Button>
 
           {/* More Actions Dropdown */}
           <DropdownMenu>
             <DropdownMenuTrigger render={
               <Button variant="outline" size="sm" className="rounded-xl h-9.5 text-xs font-bold border-border bg-white text-slate-800 hover:bg-muted group gap-1 shadow-sm">
-                <span>{language === 'de' ? 'Mehr' : 'More'}</span>
+                <span>{t('tickets.detail.more', 'More')}</span>
                 <ChevronDown className="w-3.5 h-3.5 text-muted-foreground group-hover:translate-y-0.5 transition-transform" />
               </Button>
             } />
             <DropdownMenuContent align="end" className="w-56 rounded-xl p-2 shadow-lg border border-border bg-popover text-popover-foreground">
               <div className="px-2 py-1 text-[9px] font-black text-muted-foreground uppercase tracking-widest border-b mb-1">
-                {language === 'de' ? 'Zusätzliche Aktionen' : 'More Actions'}
+                {t('tickets.detail.moreActions', 'More Actions')}
               </div>
 
               {/* Status change submenu */}
               <DropdownMenuItem className="rounded-lg text-xs font-semibold py-2 cursor-pointer">
                 <span className="flex-1" onClick={() => onStatusChange(ticket.status === 'open' ? 'pending' : 'open')}>
-                  {language === 'de' ? 'Status umschalten' : 'Toggle Status'}
+                  {t('tickets.detail.toggleStatus', 'Toggle Status')}
                 </span>
               </DropdownMenuItem>
 
               {/* Assignee item */}
               <DropdownMenuItem className="rounded-lg text-xs font-semibold py-2 cursor-pointer" onClick={onTakeOwnership}>
-                <span>{language === 'de' ? 'Eigentum übernehmen' : 'Take Ownership'}</span>
+                <span>{t('tickets.takeOwnership', 'Take Ownership')}</span>
               </DropdownMenuItem>
 
               {/* Convert to KB item */}
@@ -242,7 +240,7 @@ export function DetailsHeader({
                 disabled={isKbDrafting || !isAiReady}
               >
                 <BookOpen className="w-3.5 h-3.5 mr-2 text-[#1A73E8]" />
-                {isKbDrafting ? 'Extracting...' : (language === 'de' ? 'In KB-Eintrag umwandeln' : 'Convert to KB')}
+                {isKbDrafting ? t('tickets.detail.extracting', 'Extracting...') : t('tickets.detail.convertToKb', 'Convert to KB')}
               </DropdownMenuItem>
 
               {/* Seek Help item */}
@@ -250,8 +248,8 @@ export function DetailsHeader({
                 <DropdownMenuItem className="rounded-lg text-xs font-semibold py-2 cursor-pointer" onClick={onSeekHelp}>
                   <HelpCircle className="w-3.5 h-3.5 mr-2 text-rose-500" />
                   {ticket.isHelpRequested 
-                    ? (language === 'de' ? 'Hilfeanforderung abbrechen' : 'Cancel Help Request')
-                    : (language === 'de' ? 'SLA-Team hinzuziehen' : 'Seek SLA Help')}
+                    ? t('tickets.detail.cancelHelpRequest', 'Cancel Help Request')
+                    : t('tickets.detail.seekSlaHelp', 'Seek SLA Help')}
                 </DropdownMenuItem>
               )}
             </DropdownMenuContent>
@@ -264,7 +262,7 @@ export function DetailsHeader({
             disabled={isAiDrafting || !isAiReady}
           >
             <Sparkles className="w-4 h-4 animate-pulse text-indigo-200" />
-            <span>AI Copilot</span>
+            <span>{t('tickets.aiCopilot', 'AI Copilot')}</span>
           </Button>
         </div>
       </div>

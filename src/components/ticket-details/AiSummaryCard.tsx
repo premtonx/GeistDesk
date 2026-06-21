@@ -37,7 +37,7 @@ export function AiSummaryCard({
   onRefreshSummary,
   isAiDrafting
 }: AiSummaryCardProps) {
-  const { t, language } = useTranslation();
+  const { t } = useTranslation();
   
   // CRITICAL UI STATE requested:
   const [isAiSummaryExpanded, setIsAiSummaryExpanded] = useState(true);
@@ -114,14 +114,14 @@ export function AiSummaryCard({
           <div>
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-xs font-black text-indigo-950 dark:text-indigo-200 uppercase tracking-tight font-sans">
-                KI-Orchestrator Deep-Dive Zusammenfassung
+                {t('tickets.aiSummaryCard.title', 'AI Orchestrator Deep-Dive Summary')}
               </h3>
               <Badge className="bg-[#E6F4EA] hover:bg-[#E6F4EA]/80 text-[#137333] dark:bg-emerald-950/50 dark:text-emerald-400 border-none font-bold text-[9px] tracking-wider px-2 py-0.5 rounded-full shadow-none">
-                VERIFIZIERTE FAKTEN
+                {t('tickets.aiSummaryCard.verifiedFacts', 'Verified Facts')}
               </Badge>
             </div>
             <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-              Automatisierte Diagnose und vorgeschlagene Lösungsmetriken
+              {t('tickets.aiSummaryCard.subtitle', 'Automated diagnostic and suggested resolution metrics')}
             </p>
           </div>
         </div>
@@ -134,14 +134,14 @@ export function AiSummaryCard({
             onClick={onRefreshSummary}
             disabled={isAiDrafting || !isAiReady}
           >
-            {isAiDrafting ? 'Analysiere...' : 'Full Analysis'}
+            {isAiDrafting ? t('tickets.aiSummaryCard.analyzing', 'Analyzing...') : t('tickets.aiSummaryCard.fullAnalysis', 'Full Analysis')}
           </Button>
           <Button 
             variant="ghost" 
             size="icon" 
             className="h-7 w-7 text-slate-500 hover:bg-indigo-50/50 rounded-lg shrink-0"
             onClick={() => setIsAiSummaryExpanded(!isAiSummaryExpanded)}
-            aria-label="Toggle Summary"
+            aria-label={t('tickets.aiSummaryCard.toggleSummary', 'Toggle summary')}
           >
             {isAiSummaryExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
           </Button>
@@ -165,7 +165,7 @@ export function AiSummaryCard({
                     <div className="flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
                       <h4 className="text-[10px] uppercase font-bold tracking-wider text-indigo-950 dark:text-indigo-300">
-                        WICHTIGSTE ERKENNTNISSE
+                        {t('tickets.aiSummaryCard.keyTakeaways', 'Key Takeaways')}
                       </h4>
                     </div>
                     <div className="grid grid-cols-1 gap-2 pt-1">
@@ -187,12 +187,12 @@ export function AiSummaryCard({
                     <div className="flex items-center gap-1.5">
                       <ShieldAlert className="w-4 h-4 text-indigo-500" />
                       <h4 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500">
-                        DIAGNOSTIZIERTE FEHLERURSACHE
+                        {t('tickets.aiSummaryCard.diagnosticRootCause', 'Diagnostic Root Cause')}
                       </h4>
                     </div>
                     <div className="pl-3 border-l-[3px] border-indigo-500 dark:border-indigo-800 py-1 bg-indigo-50/5 dark:bg-indigo-950/5">
                       <p className="text-xs italic font-bold text-slate-700 dark:text-slate-200 leading-relaxed">
-                        &quot;{ticket.aiRootCause || "Configuration parameter mismatch inside client database profile or stripe status."}&quot;
+                        &quot;{ticket.aiRootCause || t('tickets.aiSummaryCard.defaultRootCause', 'Configuration parameter mismatch inside client database profile or stripe status.')}&quot;
                       </p>
                     </div>
                   </div>
@@ -205,7 +205,7 @@ export function AiSummaryCard({
                     <div className="flex items-center gap-1.5">
                       <Lightbulb className="w-4 h-4 text-amber-500" />
                       <h4 className="text-[10px] uppercase font-bold tracking-wider text-indigo-950 dark:text-indigo-300">
-                        AKTIONSPLAN-CHECKLISTE
+                        {t('tickets.aiSummaryCard.actionPlan', 'Action Plan Checklist')}
                       </h4>
                     </div>
                     <div className="space-y-2 pt-1 font-sans">
@@ -231,7 +231,7 @@ export function AiSummaryCard({
                     {/* Live Stimmung Card */}
                     <div className="bg-white/65 dark:bg-slate-900 border border-indigo-50/10 dark:border-slate-850 rounded-xl p-3 flex flex-col justify-between h-[64px] shadow-[0_1px_2px_rgba(0,0,0,0.01)]">
                       <span className="text-[9px] text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-widest block leading-none">
-                        LIVE-STIMMUNG
+                        {t('tickets.aiSummaryCard.liveSentiment', 'Live Sentiment')}
                       </span>
                       <div className="flex items-center gap-2">
                         <span className="text-orange-500 text-lg">😐</span>
@@ -244,14 +244,18 @@ export function AiSummaryCard({
                     {/* Prioritātsvorschlag Card */}
                     <div className="bg-white/65 dark:bg-slate-900 border border-indigo-50/10 dark:border-slate-850 rounded-xl p-3 flex flex-col justify-between h-[64px] shadow-[0_1px_2px_rgba(0,0,0,0.01)]">
                       <span className="text-[9px] text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-widest block leading-none">
-                        PRIORITÄTSVORSCHLAG
+                        {t('tickets.aiSummaryCard.prioritySuggestion', 'Priority Suggestion')}
                       </span>
                       <div>
                         <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-tight block leading-none">
-                          {ticket.priority === 'urgent' ? 'P1 - SOFORT BEHANDELN' : ticket.priority === 'high' ? 'P2 - HOHE PRIORITÄT' : 'INNERHALB DER SLA-STUNDEN'}
+                          {ticket.priority === 'urgent'
+                            ? t('tickets.aiSummaryCard.p1Immediate', 'P1 — HANDLE IMMEDIATELY')
+                            : ticket.priority === 'high'
+                              ? t('tickets.aiSummaryCard.p2High', 'P2 — HIGH PRIORITY')
+                              : t('tickets.aiSummaryCard.withinSlaHours', 'Within SLA hours')}
                         </span>
                         <span className="text-[8px] text-slate-450 dark:text-slate-500 font-bold block leading-none mt-1">
-                          Stabiler Status
+                          {t('tickets.aiSummaryCard.stableStatus', 'Stable status')}
                         </span>
                       </div>
                     </div>
