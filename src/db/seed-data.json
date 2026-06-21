@@ -13,6 +13,18 @@
       "can_view_knowledgebase": true
     },
     {
+      "id": "user-demo-admin",
+      "name": "Demo Administrator",
+      "email": "demo@geistdesk.com",
+      "role": "admin",
+      "is_admin": true,
+      "authMethod": "password",
+      "password": "GeistDeskDemo2026",
+      "isDeactivated": false,
+      "can_create_tickets": true,
+      "can_view_knowledgebase": true
+    },
+    {
       "id": "user-agent-mara",
       "name": "Mara Voss",
       "email": "mara.voss@geistdesk.local",

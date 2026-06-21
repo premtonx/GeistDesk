@@ -24,3 +24,7 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
             docker compose up -d --build
+            # Give Postgres + the gateway a moment to become ready, then seed.
+            # Idempotent upsert: safe to run on every deploy.
+            sleep 15
+            docker compose exec -T geistdesk-gateway node dist/seed.cjs

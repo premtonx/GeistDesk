@@ -275,10 +275,23 @@ export default function LoginPage() {
     });
   };
 
-  const handleAutofill = () => {
-    setEmail('premtonxh@gmail.com');
-    setPassword('password');
-    toast.success(texts.toasts.prefilled);
+  // One-click public demo access: signs in as the shared read/write demo admin
+  // so visitors can explore GeistDesk with full administrative rights.
+  const DEMO_EMAIL = 'demo@geistdesk.com';
+  const DEMO_PASSWORD = 'GeistDeskDemo2026';
+  const handleAutofill = async () => {
+    setEmail(DEMO_EMAIL);
+    setPassword(DEMO_PASSWORD);
+    setLoading(true);
+    try {
+      await signInWithEmailAndPassword(auth, DEMO_EMAIL, DEMO_PASSWORD);
+      toast.success(texts.toasts.credentialsVerified);
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error.message || texts.toasts.authFailed);
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

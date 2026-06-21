@@ -24,6 +24,7 @@
     "date-fns": "*",
     "dexie": "*",
     "dexie-react-hooks": "*",
+    "dotenv": "^17.4.2",
     "express": "^5.0.1",
     "firebase": "*",
     "firebase-admin": "^12.0.0",
@@ -62,9 +63,10 @@
   },
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild src/db/seed.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/seed.cjs",
     "start": "node dist/server.cjs",
     "seed": "tsx src/db/seed.ts",
+    "seed:prod": "node dist/seed.cjs",
     "lint": "tsc --noEmit"
   }
 }

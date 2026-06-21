@@ -10,11 +10,12 @@
 //
 // This script is idempotent: re-running upserts the same rows by (collection, id).
 
-import { readFileSync } from "fs";
-import { fileURLToPath } from "url";
-import path from "path";
+import "dotenv/config";
 import pg from "pg";
 import { hashPassword } from "../lib/crypto.js";
+// Bundled directly into dist/seed.cjs at build time so the production image
+// (which ships no source files) can still run the seeder.
+import seedDatasetJson from "./seed-data.json";
 
 const { Pool } = pg;
 
@@ -23,8 +24,6 @@ if (!DATABASE_URL) {
   console.error("[seed] DATABASE_URL is required.");
   process.exit(1);
 }
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 interface SeedDataset {
   users: any[];
@@ -73,8 +72,7 @@ async function batchUpsert(client: pg.PoolClient, collection: string, rows: any[
 }
 
 async function main() {
-  const datasetPath = path.join(__dirname, "seed-data.json");
-  const dataset: SeedDataset = JSON.parse(readFileSync(datasetPath, "utf-8"));
+  const dataset: SeedDataset = seedDatasetJson as SeedDataset;
 
   const isLocal =
     DATABASE_URL!.includes("localhost") ||
