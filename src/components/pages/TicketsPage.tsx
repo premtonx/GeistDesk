@@ -169,6 +169,12 @@ import { RelatedTicketsTabContent } from '../ticket-details/RelatedTicketsTabCon
 import { RedesignedSidebar } from '../ticket-details/RedesignedSidebar';
 import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
+import {
+  ModulePageHeader,
+  ModulePageTabs,
+  ModuleKpiGrid,
+  ModuleToolbar,
+} from '../ui/module-page';
 
 const matchStatus = (status: string | undefined, target: string): boolean => {
   if (!status) return false;
@@ -3727,128 +3733,56 @@ export default function TicketsPage() {
       </div>
     ) : (
       /* List View: Expanded Full Width */
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-background">
-            {/* List Header */}
-            <div className="px-4 md:px-6 py-4 border-b bg-card flex flex-col gap-3 justify-center shadow-sm">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 w-full max-w-[1200px] mx-auto">
-                <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
-                  {/* Mobile Back Button Toggle to Sidebar */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsMobileSidebarOpen(true)}
-                    className="flex md:hidden h-9 w-9 p-0 items-center justify-center bg-muted hover:bg-card border border-border rounded-full text-xs font-black text-slate-700 dark:text-slate-300 shrink-0"
-                    aria-label={t('tickets.detail.mobileMenu', 'Menu')}
-                  >
-                    <ChevronLeft className="w-4 h-4" />
-                  </Button>
-
-                  <ModuleCreateButton
-                    ariaLabelKey="actions.createTicket"
-                    ariaLabelDefault="Create Ticket"
-                    onClick={() => setIsCreateTicketOpen(true)}
-                  />
-
-                  <h2 className="font-extrabold text-xl sm:text-2xl tracking-tight text-foreground capitalize min-w-0">
-                     {t(`tickets.items.${activeView}`, activeView.replace('_', ' '))}
-                  </h2>
-                  <Badge variant="secondary" className="bg-primary/15 text-primary font-black border-none px-3 py-1 rounded-full text-xs shrink-0">
-                    {t('tickets.ticketCount', '{{count}} tickets').replace('{{count}}', String(tickets.length))}
-                  </Badge>
-                </div>
-                
-                <div className="flex flex-wrap items-center gap-2 md:gap-3 w-full md:w-auto">
-                  {/* View Density Toggles */}
-                  <div className="hidden sm:flex items-center bg-muted rounded-full p-1 border border-border">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => setViewDensity('comfortable')}
-                      className={cn(
-                        "h-8 w-8 rounded-full transition-all",
-                        viewDensity === 'comfortable' ? "bg-card shadow-sm text-primary" : "text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      <Layout className="w-4 h-4" />
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      onClick={() => setViewDensity('compact')}
-                      className={cn(
-                        "h-8 w-8 rounded-full transition-all",
-                        viewDensity === 'compact' ? "bg-card shadow-sm text-primary" : "text-muted-foreground hover:text-foreground"
-                      )}
-                    >
-                      <List className="w-4 h-4" />
-                    </Button>
-                  </div>
-
-                  {/* Theme Toggle */}
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={toggleTheme}
-                    className="h-9 w-9 md:h-10 md:w-10 rounded-full border-border bg-muted hover:bg-card text-muted-foreground shrink-0"
-                  >
-                    {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-                  </Button>
-
-                  <div className="relative flex-1 md:flex-initial md:w-64 group min-w-[140px]">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                    <Input 
-                      placeholder={t('tickets.searchPlaceholder', 'Search...')} 
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      className="pl-10 h-9 md:h-10 rounded-full bg-muted border-border focus:bg-card transition-all shadow-sm focus:ring-1 focus:ring-primary w-full text-xs md:text-sm" 
-                    />
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    onClick={() => setIsFilterDrawerOpen(true)}
-                    className={cn(
-                      "h-9 md:h-10 gap-1.5 md:gap-2 text-muted-foreground px-3 md:px-4 rounded-full border border-transparent shadow-sm shrink-0", 
-                      isFilterDrawerOpen ? "bg-accent text-primary border-primary" : "bg-card border-border hover:bg-muted"
-                    )}
-                  >
-                    <Filter className="w-3.5 h-3.5 md:w-4 md:h-4" />
-                    <span className="text-xs md:text-sm font-medium">{t('actions.filter', 'Filter')}</span>
-                  </Button>
-                </div>
-              </div>
-
-              {/* Quick Filters Chips Row */}
-              <div className="flex items-center gap-2 w-full max-w-[1200px] mx-auto overflow-x-auto no-scrollbar py-0.5">
-                {[
-                  { label: t('tickets.allTickets', 'All'), count: baseSidebarTickets.filter(t => matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam')).length, isActive: topStatusFilter === 'all', onClick: () => { setTopStatusFilter('all'); } },
-                  { label: t('tickets.open', 'Open'), count: baseSidebarTickets.filter(t => matchStatus(t.status, 'open')).length, isActive: topStatusFilter === 'open', onClick: () => { setTopStatusFilter('open'); } },
-                  { label: t('tickets.pending', 'Pending'), count: baseSidebarTickets.filter(t => matchStatus(t.status, 'pending')).length, isActive: topStatusFilter === 'pending', onClick: () => { setTopStatusFilter('pending'); } },
-                  { label: t('tickets.awaitingTriage', 'Awaiting Triage'), count: baseSidebarTickets.filter(t => matchStatus((t as any).status, 'awaiting_triage') || ((!t.tags || t.tags.length === 0) && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam'))).length, isActive: topStatusFilter === 'awaiting_triage', onClick: () => { setTopStatusFilter('awaiting_triage'); } },
-                ].map((chip, index) => (
-                  <button
-                    key={index}
-                    onClick={chip.onClick}
-                    className={cn(
-                      "h-8 px-4 rounded-full text-xs font-semibold flex items-center gap-2 border transition-all cursor-pointer shadow-sm shrink-0",
-                      chip.isActive
-                        ? "bg-primary text-primary-foreground border-primary shadow-primary/10 font-bold"
-                        : "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-border hover:bg-muted hover:text-foreground"
-                    )}
-                  >
-                    <span>{chip.label}</span>
-                    <span className={cn(
-                      "text-[10px] px-1.5 py-0.5 rounded-full font-black",
-                      chip.isActive
-                        ? "bg-primary-foreground/20 text-primary-foreground"
-                        : "bg-muted text-muted-foreground text-slate-800 dark:text-slate-100"
-                    )}>
-                      {chip.count}
-                    </span>
-                  </button>
-                ))}
-              </div>
-            </div>
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#FAFBFC]">
+            <ModulePageHeader
+              title={t('tickets.title', 'Sovereign Tickets')}
+              description={t('tickets.moduleDescription', 'Manage support pipeline, SLA tracking, and AI-assisted resolution.')}
+              trailing={
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => setIsMobileSidebarOpen(true)}
+                  className="flex md:hidden h-9 w-9 rounded-lg shrink-0"
+                  aria-label={t('tickets.detail.mobileMenu', 'Menu')}
+                >
+                  <ChevronLeft className="w-4 h-4" />
+                </Button>
+              }
+            />
+            <ModulePageTabs
+              tabs={[
+                { id: 'all', label: t('tickets.allTickets', 'All'), count: baseSidebarTickets.filter(tk => matchStatusNot(tk.status, 'trash') && matchStatusNot(tk.status, 'spam')).length },
+                { id: 'open', label: t('tickets.open', 'Open'), count: baseSidebarTickets.filter(tk => matchStatus(tk.status, 'open')).length },
+                { id: 'pending', label: t('tickets.pending', 'Pending'), count: baseSidebarTickets.filter(tk => matchStatus(tk.status, 'pending')).length },
+                { id: 'awaiting_triage', label: t('tickets.awaitingTriage', 'Awaiting Triage'), count: baseSidebarTickets.filter(tk => matchStatus((tk as any).status, 'awaiting_triage') || ((!tk.tags || tk.tags.length === 0) && matchStatusNot(tk.status, 'resolved') && matchStatusNot(tk.status, 'closed') && matchStatusNot(tk.status, 'trash') && matchStatusNot(tk.status, 'spam'))).length },
+              ]}
+              activeId={topStatusFilter}
+              onChange={(id) => setTopStatusFilter(id as typeof topStatusFilter)}
+            />
+            <ModuleKpiGrid
+              items={[
+                { id: 'queue', label: t(`tickets.items.${activeView}`, activeView.replace('_', ' ')), value: tickets.length },
+                { id: 'open', label: t('tickets.open', 'Open'), value: baseSidebarTickets.filter(tk => matchStatus(tk.status, 'open')).length },
+                { id: 'pending', label: t('tickets.pending', 'Pending'), value: baseSidebarTickets.filter(tk => matchStatus(tk.status, 'pending')).length },
+                { id: 'urgent', label: t('tickets.priorityUrgent', 'Urgent'), value: baseSidebarTickets.filter(tk => tk.priority === 'urgent' || tk.priority === 'high').length },
+                { id: 'unassigned', label: t('tickets.unassigned', 'Unassigned'), value: baseSidebarTickets.filter(tk => !tk.agentName).length },
+                { id: 'view', label: t('tickets.allTickets', 'All'), value: baseSidebarTickets.length },
+              ]}
+            />
+            <ModuleToolbar
+              searchPlaceholder={t('tickets.searchPlaceholder', 'Search tickets, customers, companies...')}
+              searchValue={searchQuery}
+              onSearchChange={setSearchQuery}
+              onFilterClick={() => setIsFilterDrawerOpen(true)}
+              filterActive={isFilterDrawerOpen}
+              createAction={
+                <ModuleCreateButton
+                  ariaLabelKey="actions.createTicket"
+                  ariaLabelDefault="Create Ticket"
+                  onClick={() => setIsCreateTicketOpen(true)}
+                />
+              }
+            />
 
             {/* Filter Drawer Implementation using Sheet */}
             <Sheet open={isFilterDrawerOpen} onOpenChange={setIsFilterDrawerOpen}>
@@ -4506,13 +4440,12 @@ export default function TicketsPage() {
                       >
                         {t('tickets.resetAllFilters', 'Reset All Filters')}
                       </Button>
-                      <Button 
-                        className="bg-primary hover:bg-primary/90 text-primary-foreground px-10 rounded-full h-12 font-bold shadow-lg shadow-primary/20 transition-all hover:-translate-y-0.5 active:translate-y-0"
+                      <ModuleCreateButton
+                        ariaLabelKey="actions.createTicket"
+                        ariaLabelDefault="Create Ticket"
                         onClick={() => setIsCreateTicketOpen(true)}
-                      >
-                        <PlusCircle className="w-5 h-5 mr-2" />
-                        {t('actions.createShort', 'New')}
-                      </Button>
+                        className="h-12 sm:h-12 sm:px-5"
+                      />
                     </div>
                   </div>
                 ) : (

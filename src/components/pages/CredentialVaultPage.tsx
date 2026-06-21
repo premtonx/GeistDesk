@@ -71,6 +71,15 @@ import {
 import { useAuth, useAdmin } from '../../lib/hooks';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
+import {
+  ModulePageShell,
+  ModulePageHeader,
+  ModulePageTabs,
+  ModuleKpiGrid,
+  ModuleToolbar,
+  ModulePageScrollRegion,
+  type ModuleTabItem,
+} from '../ui/module-page';
 import { logAudit } from '../../services/auditService';
 import { 
   collection, 
@@ -891,67 +900,55 @@ export default function CredentialVaultPage() {
     );
   }
 
+  const vaultModeTabs: ModuleTabItem[] = [
+    { id: 'vault', label: t('vault.sovereignVault', 'Sovereign Vault') },
+    { id: 'security', label: t('vault.securityChecks', 'AI Security Checks') },
+    { id: 'emergency', label: t('vault.breakGlass', 'Break Glass Emergency') },
+  ];
+
+  const vaultKpiItems = [
+    { id: 'total', label: t('vault.total', 'Total entries'), value: totalEntries },
+    { id: 'shared', label: t('vault.sharedWithMe', 'Shared with me'), value: sharedCount },
+    { id: 'weak', label: t('vault.weakPasswords', 'Weak passwords'), value: weakCount },
+    { id: 'expiring', label: t('vault.expiringSoon', 'Expiring soon'), value: expiringCount },
+    { id: 'favorites', label: t('vault.pinnedFavorites', 'Pinned favorites'), value: nonDeletedItems.filter(c => c.favorite).length },
+    { id: 'trash', label: t('vault.trashFolder', 'Trash'), value: trashItems.length },
+  ];
+
   return (
-    <div id="geistvault-scroller" className="flex-1 overflow-y-auto min-h-0 bg-[#F8F9FA] custom-scrollbar">
-      <div className="p-6 md:p-8 space-y-8 select-none">
-      
-      {/* Top Header bar with Navigation modes */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 border-b border-[#E8F0FE] pb-5 select-none">
-        <div className="flex items-start gap-3 min-w-0 w-full sm:w-auto">
-          {vaultViewMode === 'vault' && (
+    <ModulePageShell scrollable={false} className="bg-[#FAFBFC]">
+      <ModulePageHeader
+        title={t('vault.title', 'GeistVault Enterprise')}
+        description={t('vault.subtitle', 'Centralized infrastructure access, passwords, and compliance vaults.')}
+      />
+      <ModulePageTabs
+        tabs={vaultModeTabs}
+        activeId={vaultViewMode}
+        onChange={(id) => setVaultViewMode(id as typeof vaultViewMode)}
+      />
+      {vaultViewMode === 'vault' ? <ModuleKpiGrid items={vaultKpiItems} /> : null}
+      {vaultViewMode === 'vault' ? (
+        <ModuleToolbar
+          searchPlaceholder={t('vault.searchPlaceholderAdvanced', 'Search assets, usernames, hosts...')}
+          searchValue={searchQuery}
+          onSearchChange={setSearchQuery}
+          filtersSlot={
+            <span className="text-[11px] font-medium text-slate-500 uppercase hidden sm:inline">
+              {t(`vault.${selectedView}Filter`, selectedView)}
+            </span>
+          }
+          createAction={
             <ModuleCreateButton
               ariaLabelKey="vault.createCredential"
               ariaLabelDefault="Create Credential"
               onClick={() => setShowAddModal(true)}
-              className="mt-1 shrink-0"
             />
-          )}
-        <div className="flex flex-col gap-3 min-w-0 flex-1">
-          <div>
-            <h1 className="text-2xl font-black text-slate-800 tracking-tight flex items-center gap-2">
-              GeistVault Enterprise
-              <Badge className="bg-blue-100 border-none text-[#1A73E8] text-[9.5px] font-bold px-2 py-0.5 tracking-wide uppercase select-none">
-                {t('vault.redesignActive', 'Redesign Active')}
-              </Badge>
-            </h1>
-            <p className="text-xs text-slate-500 font-semibold select-none mt-1">
-              {t('vault.subtitle', 'Centralized infrastructure access, passwords, cryptographic secret link drops & compliance vaults.')}
-            </p>
-          </div>
-        </div>
-        </div>
+          }
+        />
+      ) : null}
 
-        <div className="flex flex-wrap items-center gap-3 shrink-0">
-          {/* Modular connections tabs */}
-          <div className="bg-[#E8FEEA]/20 p-1 rounded-xl border border-[#DADCE0] flex items-center gap-1 shadow-3xs overflow-x-auto max-w-full no-scrollbar">
-            <button 
-              type="button"
-              onClick={() => setVaultViewMode('vault')}
-              className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-all select-none", 
-                vaultViewMode === 'vault' ? "bg-white text-slate-800 shadow-xs border border-[#DADCE0]/50" : "text-slate-400 hover:text-slate-600")}
-            >
-              {t('vault.sovereignVault', 'Sovereign Vault')}
-            </button>
-            <button 
-              type="button"
-              onClick={() => setVaultViewMode('security')}
-              className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-all select-none", 
-                vaultViewMode === 'security' ? "bg-white text-slate-800 shadow-xs border border-[#DADCE0]/50" : "text-slate-400 hover:text-slate-600")}
-            >
-              {t('vault.securityChecks', 'AI Insight Checks')}
-            </button>
-            <button 
-              type="button"
-              onClick={() => setVaultViewMode('emergency')}
-              className={cn("px-3 py-1.5 rounded-lg text-xs font-bold transition-all select-none font-bold", 
-                vaultViewMode === 'emergency' ? "bg-red-50 text-red-600 shadow-xs border border-red-100" : "text-slate-400 hover:text-slate-600")}
-            >
-              {t('vault.breakGlass', 'Break Glass Emergency')}
-            </button>
-          </div>
-        </div>
-      </div>
-
+      <ModulePageScrollRegion>
+      <div className="px-6 py-4 space-y-8 select-none">
       {vaultViewMode === 'security' && (
         <GeistVaultAIAssistant credentialsList={nonDeletedItems as any} />
       )}
@@ -1198,47 +1195,14 @@ export default function CredentialVaultPage() {
             
             {/* 1. Statistics Cards widget row */}
             <VaultOverview 
-              totalEntries={totalEntries}
               weakCount={weakCount}
               expiringCount={expiringCount}
-              sharedCount={sharedCount}
               onNewFolder={() => toast.success("Folder directories schema created.")}
               onShareVault={() => toast.success("Secure sharing protocols authorized.")}
               onImportDummyData={handleImportDummyData}
             />
 
-            {/* 2. Filters & Searches Input Actions Row */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-white border border-[#DADCE0] rounded-2xl px-5 py-3 shadow-xs select-none">
-              
-              {/* Left filter options group */}
-              <div className="flex items-center gap-2 w-full sm:w-auto">
-                <div className="relative w-full sm:w-64">
-                  <Input 
-                    placeholder={t('vault.searchPlaceholderAdvanced', 'Search assets, usernames, hosts...')}
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="bg-white border-[#DADCE0] text-xs h-8 pl-8 pr-6 rounded-lg focus-visible:ring-1 focus-visible:ring-[#1a73e8]"
-                  />
-                  <Search className="absolute left-2.5 top-2.5 w-3.5 h-3.5 text-slate-400" />
-                </div>
-
-                <Badge variant="outline" className="text-[10px] font-bold h-8 px-2.5 border-[#DADCE0] text-slate-500 rounded-lg select-none bg-neutral-50 shrink-0 uppercase border">
-                  {t(`vault.${selectedView}Filter`, `${selectedView.toUpperCase()} FILTER`)}
-                </Badge>
-              </div>
-
-              {/* Right sorting group */}
-              <div className="flex items-center gap-2 select-none w-full sm:w-auto justify-end">
-                <span className="text-[10px] font-bold text-slate-400 uppercase">{t('vault.sortLabel', 'Sort:')}</span>
-                <select className="bg-white border text-xs text-slate-700 font-bold rounded-lg px-2 h-8 select-none border-[#DADCE0] focus:ring-1 focus:ring-blue-400 outline-none">
-                  <option>{t('vault.recentlyUpdated', 'Recently Updated')} ∨</option>
-                  <option>{t('vault.nameAlphabetical', 'Name Alphabetical')} ∨</option>
-                  <option>{t('vault.categoryGroup', 'Category Group')} ∨</option>
-                </select>
-              </div>
-            </div>
-
-            {/* 3. Credential Inventory Table */}
+            {/* Credential Inventory Table */}
             <CredentialTable 
               credentials={currentList}
               onRowClick={(cred) => setSelectedCredential(cred)}
@@ -2626,7 +2590,8 @@ export default function CredentialVaultPage() {
           </form>
         </DialogContent>
       </Dialog>
-    </div>
-  </div>
+      </div>
+      </ModulePageScrollRegion>
+    </ModulePageShell>
   );
 }

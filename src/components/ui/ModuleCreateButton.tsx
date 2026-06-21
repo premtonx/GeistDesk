@@ -38,7 +38,7 @@ export function ModuleCreateButton({
   ariaLabelKey,
   ariaLabelDefault,
   shortLabelKey = 'actions.createShort',
-  shortLabelDefault = 'New',
+  shortLabelDefault = 'Create',
   onClick,
   menuItems,
   className,
@@ -56,13 +56,13 @@ export function ModuleCreateButton({
       title={fullLabel}
       aria-label={fullLabel}
       className={cn(
-        'shrink-0 h-10 w-10 sm:h-9 sm:w-auto sm:min-w-[4.5rem]',
-        'rounded-full sm:rounded-full',
+        'shrink-0 h-10 w-10 sm:h-9 sm:w-auto sm:min-w-[5rem]',
+        'rounded-full',
         'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white',
-        'font-bold shadow-sm shadow-blue-600/15',
+        'font-semibold shadow-none ring-1 ring-blue-600/10',
         'flex items-center justify-center gap-0 sm:gap-1.5',
         'px-0 sm:px-3.5',
-        'transition-all hover:scale-[1.02] active:scale-95',
+        'transition-colors',
         className,
       )}
     >

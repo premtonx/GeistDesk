@@ -27,7 +27,7 @@
     "createKBArticle": "Create GeistKB Article",
     "createVaultEntry": "Create GeistVault Entry",
     "createCompany": "Create Company",
-    "createShort": "New",
+    "createShort": "Create",
     "createExchange": "New Exchange"
   },
   "common": {
@@ -43,6 +43,9 @@
     "active": "Active",
     "emergency": "Emergency",
     "quantumSecure": "QUANTUM SECURE"
+  },
+  "modulePage": {
+    "sort": "Sort"
   },
   "dashboard": {
     "title": "Enterprise Dashboard",
@@ -94,6 +97,7 @@
   },
   "tickets": {
     "title": "Sovereign Tickets",
+    "moduleDescription": "Manage support pipeline, SLA tracking, and AI-assisted resolution.",
     "searchPlaceholder": "Search tickets, customers, companies...",
     "allTickets": "All",
     "open": "Open",

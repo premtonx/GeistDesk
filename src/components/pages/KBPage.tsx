@@ -93,6 +93,13 @@ import { kbService } from '../../services/kbService';
 import { useAuth } from '../../lib/hooks';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
+import {
+  ModulePageHeader,
+  ModulePageTabs,
+  ModuleKpiGrid,
+  ModuleToolbar,
+  type ModuleTabItem,
+} from '../ui/module-page';
 import { RichTextEditor } from '../RichTextEditor';
 import { KBAutopilotDashboard } from '../KBAutopilotDashboard';
 import { KBArticle } from '../../types';
@@ -2093,254 +2100,75 @@ export default function KBPage() {
           </div>
         ) : (
           <>
-            {/* Category Banner with Owner & Summary */}
-            <div className="bg-white border-b border-slate-200/80 px-8 py-6 space-y-6 sticky top-0 z-10 shadow-xs">
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                 <div className="flex items-start gap-3 min-w-0 w-full sm:w-auto">
-                   <ModuleCreateButton
-                     ariaLabelKey="actions.createKBArticle"
-                     ariaLabelDefault="Create GeistKB Article"
-                     onClick={() => openCreateArticle()}
-                     className="mt-0.5"
-                   />
-                 <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-7">
-                       <h1 className="text-xl font-black text-slate-800 tracking-tight uppercase flex items-center gap-2">
-                         {t(`kb.categories.${selectedCategory.replace(/\s+/g, '_').toLowerCase()}.name`, selectedCategory)}
-                       </h1>
-                       <Badge className="bg-indigo-100 text-indigo-700 hover:bg-indigo-100 uppercase tracking-widest text-[9px] font-black h-5.5 px-2.5 border-none">
-                         {t('kb.activeNodeRegistry', 'Active Node Registry')}
-                       </Badge>
-                    </div>
-                    <p className="text-xs text-slate-400 font-semibold mt-1">
-                      {t(`kb.categories.${selectedCategory.replace(/\s+/g, '_').toLowerCase()}.desc`, categories.find(c => c.name === selectedCategory)?.desc || 'Manage technical articles, FAQs, and sovereign operating procedure playbooks.')}
-                    </p>
-                    <div className="flex items-center gap-4 text-[10.5px] text-slate-400 mt-2.5 font-bold">
-                       <span className="flex items-center gap-1.5 text-slate-600">
-                         <User className="w-3.5 h-3.5 text-indigo-500" /> {t('kb.owner', 'Owner')}: <strong>{categories.find(c => c.name === selectedCategory)?.owner || 'Sarah James'}</strong>
-                       </span>
-                       <span>&bull;</span>
-                       <span>{t('kb.lastUpdated', 'Last Updated')}: {categories.find(c => c.name === selectedCategory)?.updated || 'Today'}</span>
-                    </div>
-                 </div>
-                 </div>
-
-                 <div className="flex items-center gap-2 shrink-0">
-                   {/* Layout format switcher */}
-                   <div className="bg-slate-100 p-1 rounded-xl flex border gap-1">
-                      <button 
-                        onClick={() => setViewLayout('table')}
-                        className={cn("p-1.5 rounded-lg transition-all", viewLayout === 'table' ? "bg-white text-indigo-600 shadow-xs" : "text-slate-400 hover:text-slate-600")}
-                        title="Display in Enterprise Table Grid"
-                      >
-                         <LayoutGrid className="w-4 h-4" />
-                      </button>
-                      <button 
-                        onClick={() => setViewLayout('card')}
-                        className={cn("p-1.5 rounded-lg transition-all", viewLayout === 'card' ? "bg-white text-indigo-600 shadow-xs" : "text-slate-400 hover:text-slate-600")}
-                        title="Display in Cards Grid"
-                      >
-                         <LayoutGrid className="w-4 h-4 rotate-90" />
-                      </button>
-                      <button 
-                        onClick={() => setViewLayout('tree')}
-                        className={cn("p-1.5 rounded-lg transition-all", viewLayout === 'tree' ? "bg-white text-indigo-600 shadow-xs" : "text-slate-400 hover:text-slate-600")}
-                        title="Display as Hierarchical Category tree"
-                      >
-                         <GitBranch className="w-4 h-4" />
-                      </button>
-                   </div>
-
-                 </div>
-              </div>
-
-              {/* KPI metrics block responsive to Selected Category */}
-              <div className="grid grid-cols-2 md:grid-cols-6 gap-3 pt-1 text-slate-700">
-                <div className="bg-slate-50/50 border border-slate-200/60 p-3 rounded-xl flex flex-col justify-between">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('kb.articlesNode', 'Articles Node')}</span>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-lg font-black text-indigo-950">{totalArticlesInCategory}</span>
-                    <span className="text-[10px] text-slate-400 font-bold">{t('kb.filesLabel', 'Files').toLowerCase()}</span>
-                  </div>
+            <ModulePageHeader
+              title={t('kb.title', 'GeistKB Knowledge Base')}
+              description={t(`kb.categories.${selectedCategory.replace(/\s+/g, '_').toLowerCase()}.desc`, categories.find(c => c.name === selectedCategory)?.desc || t('kb.structure', 'Manage technical articles, FAQs, and operating procedure playbooks.'))}
+              trailing={
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/60">
+                  <button type="button" onClick={() => setViewLayout('table')} className={cn('p-1.5 rounded-md transition-colors', viewLayout === 'table' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400')} aria-label="Table view">
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <button type="button" onClick={() => setViewLayout('card')} className={cn('p-1.5 rounded-md transition-colors', viewLayout === 'card' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400')} aria-label="Card view">
+                    <LayoutGrid className="w-4 h-4 rotate-90" />
+                  </button>
+                  <button type="button" onClick={() => setViewLayout('tree')} className={cn('p-1.5 rounded-md transition-colors', viewLayout === 'tree' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400')} aria-label="Tree view">
+                    <GitBranch className="w-4 h-4" />
+                  </button>
                 </div>
-
-                <div className="bg-slate-50/50 border border-slate-200/60 p-3 rounded-xl flex flex-col justify-between">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('kb.totalViews', 'Total Views')}</span>
-                  <div className="flex items-baseline justify-between mt-1 w-full">
-                    <span className="text-lg font-black text-indigo-950">{totalViewsInCategory}</span>
-                    <Badge className="bg-emerald-500/10 text-emerald-600 border-none px-1 text-[8px] font-extrabold h-4.5">+18%</Badge>
-                  </div>
+              }
+            />
+            <ModulePageTabs
+              tabs={[
+                { id: 'All', label: t('common.statusAll', 'All') },
+                { id: 'Published', label: t('kb.published', 'Published') },
+                { id: 'Drafts', label: t('kb.drafts', 'Drafts') },
+                { id: 'Needs Review', label: t('kb.needsReview', 'Needs Review') },
+                { id: 'Outdated', label: t('kb.outdated', 'Outdated') },
+                { id: 'Internal Only', label: t('kb.internalOnly', 'Internal Only') },
+              ]}
+              activeId={activeSubTab}
+              onChange={setActiveSubTab}
+            />
+            <ModuleKpiGrid
+              items={[
+                { id: 'articles', label: t('kb.articlesNode', 'Articles'), value: totalArticlesInCategory },
+                { id: 'views', label: t('kb.totalViews', 'Total views'), value: totalViewsInCategory, hint: '+18%' },
+                { id: 'helpful', label: t('kb.helpfulScore', 'Helpful score'), value: `${helpRatingInCategory}%` },
+                { id: 'read', label: t('kb.avgReadTime', 'Avg read time'), value: '3m 24s' },
+                { id: 'searches', label: t('kb.relatedSearches', 'Related searches'), value: totalArticlesInCategory > 0 ? 134 : 0 },
+                { id: 'gaps', label: t('kb.unansweredGaps', 'Unanswered gaps'), value: totalArticlesInCategory > 3 ? 3 : 1 },
+              ]}
+            />
+            <ModuleToolbar
+              searchPlaceholder={t('kb.searchPlaceholderAdvanced', 'Search articles, tags, topics...')}
+              searchValue={searchQuery}
+              onSearchChange={setSearchQuery}
+              filtersSlot={
+                <div className="hidden lg:flex flex-wrap items-center gap-2 text-xs text-slate-600">
+                  <select value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)} className="h-9 text-xs border border-slate-200/80 rounded-lg px-2 bg-slate-50/80">
+                    <option value="All">{t('kb.allOwners', 'All owners')}</option>
+                    {Array.from(new Set(articles.map(a => a.owner).filter(Boolean))).map((ownerName: string, idx) => (
+                      <option key={idx} value={ownerName}>{ownerName}</option>
+                    ))}
+                  </select>
+                  <select value={filterVisibility} onChange={(e) => setFilterVisibility(e.target.value)} className="h-9 text-xs border border-slate-200/80 rounded-lg px-2 bg-slate-50/80">
+                    <option value="All">{t('kb.allAccess', 'All access')}</option>
+                    <option value="Public">{t('kb.publicPortal', 'Public')}</option>
+                    <option value="Private">{t('kb.internalSopsOnly', 'Internal')}</option>
+                  </select>
                 </div>
+              }
+              createAction={
+                <ModuleCreateButton
+                  ariaLabelKey="actions.createKBArticle"
+                  ariaLabelDefault="Create GeistKB Article"
+                  onClick={() => openCreateArticle()}
+                />
+              }
+            />
 
-                <div className="bg-slate-50/50 border border-slate-200/60 p-3 rounded-xl flex flex-col justify-between">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('kb.helpfulScore', 'Helpful score')}</span>
-                  <div className="flex items-baseline justify-between mt-1 w-full">
-                    <span className="text-lg font-black text-indigo-950">{helpRatingInCategory}%</span>
-                    <Badge className="bg-emerald-500/10 text-emerald-600 border-none px-1 text-[8px] font-extrabold h-4.5">&uarr; 3%</Badge>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50/50 border border-slate-200/60 p-3 rounded-xl flex flex-col justify-between">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('kb.avgReadTime', 'Avg Read Time')}</span>
-                  <div className="flex items-baseline mt-1 gap-1">
-                    <span className="text-md font-black text-indigo-950">3m 24s</span>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50/50 border border-slate-200/60 p-3 rounded-xl flex flex-col justify-between">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('kb.relatedSearches', 'Related Searches')}</span>
-                  <div className="flex items-baseline mt-1 justify-between w-full">
-                    <span className="text-lg font-black text-indigo-950">{totalArticlesInCategory > 0 ? 134 : 0}</span>
-                    <Badge className="bg-indigo-50 text-indigo-600 border-none px-1 text-[8px] font-extrabold h-4.5">+22%</Badge>
-                  </div>
-                </div>
-
-                <div className="bg-slate-50/50 border border-slate-200/60 p-3 rounded-xl flex flex-col justify-between">
-                  <span className="text-[10px] uppercase font-bold text-slate-400">{t('kb.unansweredGaps', 'Unanswered Gaps')}</span>
-                  <div className="flex items-baseline gap-2 mt-1">
-                    <span className="text-lg font-black text-red-600">{totalArticlesInCategory > 3 ? 3 : 1}</span>
-                    <span className="text-[8px] font-bold text-red-400 bg-red-50 px-1 rounded-sm">{t('kb.issuesLabel', 'issues')}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Upgraded Search Input Experience & ADVANCED FILTRATIONS */}
-              <div className="space-y-3">
-                <div className="relative group">
-                  <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4.5 h-4.5 text-slate-400 group-focus-within:text-indigo-500 transition-colors" />
-                  <Input 
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    placeholder={t('kb.searchPlaceholderAdvanced', 'Search articles, tags, topics, errors, integrations, configurations or authors...')}
-                    className="h-11 w-full pl-11 pr-10 bg-slate-50 border-slate-200 focus:border-slate-350 focus:bg-white focus:ring-2 focus:ring-indigo-100 rounded-xl text-xs font-semibold placeholder:text-slate-400 transition-all shadow-xs"
-                  />
-                  {searchQuery && (
-                    <button 
-                      onClick={() => setSearchQuery('')}
-                      className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  )}
-                </div>
-
-                {/* Multiselect Badged dropdown filtering panel */}
-                <div className="flex flex-wrap items-center justify-between gap-3 bg-slate-50 p-2.5 rounded-xl border">
-                  
-                  <div className="flex flex-wrap items-center gap-3 text-[11px] font-medium text-slate-500">
-                    
-                    {/* Owner criteria selector */}
-                    <div className="flex items-center gap-1">
-                      <span className="text-slate-400 uppercase tracking-tight text-[10px] font-bold">{t('kb.owner', 'Owner')}:</span>
-                      <select 
-                        value={filterOwner}
-                        onChange={(e) => setFilterOwner(e.target.value)}
-                        className="bg-white border text-slate-700 rounded-md py-0.5 px-1.5 focus:outline-none"
-                      >
-                         <option value="All">{t('kb.allOwners', 'All Owners')}</option>
-                         {Array.from(new Set(articles.map(a => a.owner).filter(Boolean))).map((ownerName: any, idx) => (
-                           <option key={idx} value={ownerName}>{ownerName}</option>
-                         ))}
-                      </select>
-                    </div>
-
-                    {/* Visibility check selector */}
-                    <div className="flex items-center gap-1">
-                      <span className="text-slate-400 uppercase tracking-tight text-[10px] font-bold">{t('common.visibility', 'Visibility')}:</span>
-                      <select 
-                        value={filterVisibility}
-                        onChange={(e) => setFilterVisibility(e.target.value)}
-                        className="bg-white border text-slate-700 rounded-md py-0.5 px-1.5 focus:outline-none"
-                      >
-                         <option value="All">{t('kb.allAccess', 'All Access')}</option>
-                         <option value="Public">{t('kb.publicPortal', 'Public Portal')}</option>
-                         <option value="Private">{t('kb.internalSopsOnly', 'Internal SOPs Only')}</option>
-                      </select>
-                    </div>
-
-                    {/* Translative Language check */}
-                    <div className="flex items-center gap-1">
-                      <span className="text-slate-400 uppercase tracking-tight text-[10px] font-bold">{t('common.lang', 'Lang')}:</span>
-                      <select 
-                        value={filterLanguage}
-                        onChange={(e) => setFilterLanguage(e.target.value)}
-                        className="bg-white border text-slate-700 rounded-md py-0.5 px-1.5 focus:outline-none"
-                      >
-                         <option value="All">{t('kb.allLanguages', 'All Languages')}</option>
-                         <option value="English">English</option>
-                         <option value="German">German</option>
-                         <option value="French">French</option>
-                         <option value="Spanish">Spanish</option>
-                      </select>
-                    </div>
-
-                    {/* Tags filter selections */}
-                    <div className="flex items-center gap-1">
-                      <span className="text-slate-400 uppercase tracking-tight text-[10px] font-bold">{t('common.tag', 'Tag')}:</span>
-                      <select 
-                        value={filterTag}
-                        onChange={(e) => setFilterTag(e.target.value)}
-                        className="bg-white border text-slate-700 rounded-md py-0.5 px-1.5 focus:outline-none"
-                      >
-                         <option value="All">{t('kb.anyTag', 'Any Tag')}</option>
-                         {Array.from(new Set(articles.flatMap(a => a.tags || []))).map((t: any, idx) => (
-                           <option key={idx} value={t}>#{t}</option>
-                         ))}
-                      </select>
-                    </div>
-
-                  </div>
-
-                  {/* Reset Filters button */}
-                  {(filterOwner !== 'All' || filterVisibility !== 'All' || filterLanguage !== 'All' || filterTag !== 'All' || searchQuery) && (
-                     <button 
-                       onClick={() => {
-                          setFilterOwner('All');
-                          setFilterVisibility('All');
-                          setFilterLanguage('All');
-                          setFilterTag('All');
-                          setSearchQuery('');
-                       }}
-                       className="text-red-500 hover:text-red-700 text-[10px] font-black uppercase tracking-tight bg-red-50 hover:bg-red-100/50 px-2.5 py-1 rounded-md transition-all"
-                     >
-                       {t('kb.scrubFilters', 'Scrub Filters')}
-                     </button>
-                  )}
-                </div>
-
-              </div>
-
-              {/* ARTICLE WORKFLOW STEPPED WORKSPACE TABS */}
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center pt-2 gap-4">
-                <div className="flex flex-wrap items-center gap-1">
-                  {['All', 'Published', 'Drafts', 'Needs Review', 'Outdated', 'Internal Only'].map((tab, idx) => {
-                    const tabLabel = tab === 'All' ? t('common.statusAll', 'All') :
-                                     tab === 'Published' ? t('kb.published', 'Published') :
-                                     tab === 'Drafts' ? t('kb.drafts', 'Drafts') :
-                                     tab === 'Needs Review' ? t('kb.needsReview', 'Needs Review') :
-                                     tab === 'Outdated' ? t('kb.outdated', 'Outdated') :
-                                     tab === 'Internal Only' ? t('kb.internalOnly', 'Internal Only') : tab;
-                    return (
-                      <button 
-                        key={idx} 
-                        onClick={() => setActiveSubTab(tab)}
-                        className={cn(
-                          "text-[11.5px] font-bold transition-all px-3 py-1.5 rounded-lg border",
-                          activeSubTab === tab 
-                            ? "bg-slate-900 border-slate-900 text-white shadow-xs" 
-                            : "bg-white border-slate-200 text-slate-500 hover:text-slate-700 hover:bg-slate-55"
-                        )}
-                      >
-                        {tabLabel}
-                      </button>
-                    );
-                  })}
-                </div>
-                
-                <span className="text-[11px] font-bold text-slate-400">
-                   {t('kb.displayingCount', 'Displaying {{count}} matching entries').replace('{{count}}', String(processedArticles.length))}
-                </span>
-              </div>
+            <div className="px-6 py-2 border-b bg-white text-[11px] font-medium text-slate-400">
+              {t('kb.displayingCount', 'Displaying {{count}} matching entries').replace('{{count}}', String(processedArticles.length))}
             </div>
 
             {/* ARTICLES GRID CONTROL AREA */}

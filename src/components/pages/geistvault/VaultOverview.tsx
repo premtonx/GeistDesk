@@ -2,30 +2,23 @@ import React from 'react';
 import { 
   FolderPlus, 
   Share2, 
-  ShieldCheck, 
   CheckCircle2, 
-  AlertTriangle,
-  Lock
 } from 'lucide-react';
 import { Card } from '../../ui/card';
 import { Button } from '../../ui/button';
 import { useTranslation } from '../../../lib/context/I18nContext';
 
 interface VaultOverviewProps {
-  totalEntries: number;
   weakCount: number;
   expiringCount: number;
-  sharedCount: number;
   onNewFolder: () => void;
   onShareVault: () => void;
   onImportDummyData: () => void;
 }
 
 export function VaultOverview({
-  totalEntries,
   weakCount,
   expiringCount,
-  sharedCount,
   onNewFolder,
   onShareVault,
   onImportDummyData
@@ -55,56 +48,8 @@ export function VaultOverview({
   const status = getScoreClassification(score);
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 select-none">
-      
-      {/* CARD 1: GeistVault Overview */}
-      <Card className="lg:col-span-5 border border-[#DADCE0] rounded-2.5xl bg-white p-5 shadow-sm flex flex-col justify-between">
-        <div>
-          <h3 className="text-sm font-bold text-slate-800 tracking-tight">{t('vault.overview', 'GeistVault Overview')}</h3>
-          <p className="text-[11px] text-slate-400 mt-0.5 font-medium">{t('vault.tagline', 'Secure. Sync. Simplify.')}</p>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mt-4">
-          {/* Total entries */}
-          <div className="bg-[#F8F9FA] rounded-xl border border-[#DADCE0]/60 p-2.5 text-center flex flex-col items-center justify-center">
-            <div className="h-7 w-7 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center mb-1">
-              <Lock className="w-4 h-4" />
-            </div>
-            <span className="text-xs font-bold text-slate-800">{totalEntries}</span>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{t('vault.total', 'Total')}</span>
-          </div>
-
-          {/* Shared with me */}
-          <div className="bg-[#F8F9FA] rounded-xl border border-[#DADCE0]/60 p-2.5 text-center flex flex-col items-center justify-center">
-            <div className="h-7 w-7 rounded-lg bg-green-50 text-green-600 flex items-center justify-center mb-1">
-              <Share2 className="w-4 h-4" />
-            </div>
-            <span className="text-xs font-bold text-slate-800">{sharedCount}</span>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{t('vault.shared', 'Shared')}</span>
-          </div>
-
-          {/* Weak Passwords */}
-          <div className="bg-[#F8F9FA] rounded-xl border border-[#DADCE0]/60 p-2.5 text-center flex flex-col items-center justify-center">
-            <div className="h-7 w-7 rounded-lg bg-red-50 text-red-500 flex items-center justify-center mb-1">
-              <AlertTriangle className="w-4 h-4" />
-            </div>
-            <span className="text-xs font-bold text-slate-800">{weakCount}</span>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{t('vault.weak', 'Weak')}</span>
-          </div>
-
-          {/* Expiring Soon */}
-          <div className="bg-[#F8F9FA] rounded-xl border border-[#DADCE0]/60 p-2.5 text-center flex flex-col items-center justify-center">
-            <div className="h-7 w-7 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center mb-1">
-              <AlertTriangle className="w-4 h-4" />
-            </div>
-            <span className="text-xs font-bold text-slate-800">{expiringCount}</span>
-            <span className="text-[9px] font-bold text-slate-400 uppercase tracking-tighter mt-0.5">{t('vault.expiring', 'Expiring')}</span>
-          </div>
-        </div>
-      </Card>
-
-      {/* CARD 2: Vault Security Score */}
-      <Card className="lg:col-span-4 border border-[#DADCE0] rounded-2.5xl bg-white p-5 shadow-sm grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
+    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 select-none">
+      <Card className="lg:col-span-7 border border-slate-200/80 rounded-xl bg-white p-5 shadow-none grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
         {/* Progress Circle visualizer */}
         <div className="sm:col-span-5 flex flex-col items-center justify-center sm:border-r border-[#F1F3F4] pb-3 sm:pb-0 sm:pr-2">
           <div className={`h-16 w-16 rounded-full border-4 ${status.ring} flex flex-col items-center justify-center bg-[#F8F9FA] shadow-inner`}>
@@ -132,8 +77,7 @@ export function VaultOverview({
         </div>
       </Card>
 
-      {/* CARD 3: Quick Actions */}
-      <Card className="lg:col-span-3 border border-[#DADCE0] rounded-2.5xl bg-white p-5 shadow-sm flex flex-col justify-between">
+      <Card className="lg:col-span-5 border border-slate-200/80 rounded-xl bg-white p-5 shadow-none flex flex-col justify-between">
         <div>
           <h3 className="text-sm font-bold text-slate-800 tracking-tight">{t('vault.quickActions', 'Quick Actions')}</h3>
           <p className="text-[11px] text-slate-400 mt-0.5 font-medium">{t('vault.sovereignWorkspace', 'Sovereign workspace operations')}</p>

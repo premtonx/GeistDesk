@@ -44,6 +44,9 @@
     "emergency": "Notfall",
     "quantumSecure": "QUANTEN-SICHER"
   },
+  "modulePage": {
+    "sort": "Sortieren"
+  },
   "dashboard": {
     "title": "Unternehmens-Dashboard",
     "welcome": "Willkommen zurück, {{name}}! 👋",
@@ -94,6 +97,7 @@
   },
   "tickets": {
     "title": "Sovereign-Tickets",
+    "moduleDescription": "Support-Pipeline, SLA-Tracking und KI-gestützte Bearbeitung verwalten.",
     "searchPlaceholder": "Tickets, Kunden, Unternehmen durchsuchen...",
     "allTickets": "Alle",
     "open": "Offen",
