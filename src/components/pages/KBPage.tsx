@@ -102,7 +102,7 @@ import { KBActivitySidebar, buildRecentActivity, buildTopContributors } from '..
 import { KBViewModeSelector, type KBArticleViewMode } from '../kb/KBViewModeSelector';
 import { KBArticleViews } from '../kb/KBArticleViews';
 import { KBLeftSidebar, type KBNavFilter } from '../kb/KBLeftSidebar';
-import { filterArticlesByWorkspace, isKbOverviewMode, categoryI18nKey } from '../kb/kb-utils';
+import { filterArticlesByWorkspace, isKbOverviewMode, isKbAiAssistantMode, categoryI18nKey } from '../kb/kb-utils';
 import { useWorkspace } from '../../lib/context/WorkspaceContext';
 import { KBImporter } from '../KBImporter';
 import { RichTextEditor } from '../RichTextEditor';
@@ -321,7 +321,7 @@ export default function KBPage() {
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   // AI Knowledge Coverage Map states
-  const [viewMode, setViewMode] = useState<'standard' | 'coverage' | 'autopilot'>('standard');
+  const [viewMode, setViewMode] = useState<'standard' | 'coverage'>('standard');
   const [coverageData, setCoverageData] = useState<any>(null);
   const [isLoadingCoverage, setIsLoadingCoverage] = useState<boolean>(false);
   const [selectedCoverageCategory, setSelectedCoverageCategory] = useState<string | null>(null);
@@ -923,6 +923,7 @@ export default function KBPage() {
   const topContributors = buildTopContributors(workspaceArticles);
 
   const isOverviewMode = isKbOverviewMode(kbNav);
+  const isAiAssistantMode = isKbAiAssistantMode(kbNav);
 
   const articlesSectionTitle = useMemo(() => {
     if (isOverviewMode) return t('kb.allArticlesSection', 'All Articles');
@@ -978,9 +979,6 @@ export default function KBPage() {
       setSelectedCategory(filter.id);
     } else {
       setSelectedCategory('All');
-    }
-    if (filter.type === 'workspace' && filter.id === 'ai') {
-      setViewMode('autopilot');
     }
     if (filter.type === 'smart') {
       if (filter.id === 'recent') setSortBy('date');
@@ -1508,11 +1506,6 @@ export default function KBPage() {
 
         {viewMode === 'coverage' ? (
           renderCoverageDashboard()
-        ) : viewMode === 'autopilot' ? (
-          <KBAutopilotDashboard 
-            onBackToKB={() => setViewMode('standard')} 
-            onArticlePublished={() => setViewMode('standard')}
-          />
         ) : viewingArticle ? (
           <div className="flex-1 bg-white flex flex-col animate-in fade-in duration-250">
             {/* Header / Breadcrumb navigation */}
@@ -1744,10 +1737,18 @@ export default function KBPage() {
                 <main className="flex-1 min-w-0 px-4 sm:px-6 py-6 space-y-6 pb-10">
                   <KBPageHeader
                     onImportDocs={() => setIsImportOpen(true)}
-                    onAiGenerate={() => setViewMode('autopilot')}
+                    onAiGenerate={() => setKbNav({ type: 'workspace', id: 'ai' })}
                     onNewArticle={() => openCreateArticle()}
                   />
 
+                  {isAiAssistantMode ? (
+                    <KBAutopilotDashboard
+                      embedded
+                      onBackToKB={() => setKbNav({ type: 'workspace', id: 'overview' })}
+                      onArticlePublished={() => setKbNav({ type: 'workspace', id: 'overview' })}
+                    />
+                  ) : (
+                    <>
                   {isOverviewMode ? (
                     <KBKpiCards
                       publishedCount={publishedCount}
@@ -1874,8 +1875,11 @@ export default function KBPage() {
                       />
                     </section>
                   ) : null}
+                    </>
+                  )}
                 </main>
 
+                {!isAiAssistantMode ? (
                 <aside className="xl:w-[280px] shrink-0 border-t xl:border-t-0 xl:border-l border-slate-200/80 bg-white px-4 py-6 xl:sticky xl:top-0 xl:self-start">
                   <KBActivitySidebar
                     recentActivity={recentActivity}
@@ -1887,6 +1891,7 @@ export default function KBPage() {
                     contributors={topContributors}
                   />
                 </aside>
+                ) : null}
               </div>
             </ScrollArea>
           </div>

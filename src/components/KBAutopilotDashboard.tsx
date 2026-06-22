@@ -32,9 +32,11 @@ import { toast } from 'sonner';
 interface KBAutopilotDashboardProps {
   onBackToKB: () => void;
   onArticlePublished?: () => void;
+  /** When true, renders inline inside KB workspace (sidebar provides navigation). */
+  embedded?: boolean;
 }
 
-export function KBAutopilotDashboard({ onBackToKB, onArticlePublished }: KBAutopilotDashboardProps) {
+export function KBAutopilotDashboard({ onBackToKB, onArticlePublished, embedded }: KBAutopilotDashboardProps) {
   const [suggestions, setSuggestions] = useState<AutopilotSuggestion[]>([]);
   const [metrics, setMetrics] = useState<AutopilotMetrics>({
     ticketsPrevented: 142,
@@ -167,7 +169,10 @@ export function KBAutopilotDashboard({ onBackToKB, onArticlePublished }: KBAutop
   };
 
   return (
-    <div className="flex-1 bg-slate-50/50 p-6 space-y-6 select-none animate-in fade-in duration-200">
+    <div className={cn(
+      'flex-1 select-none animate-in fade-in duration-200',
+      embedded ? 'space-y-6' : 'bg-slate-50/50 p-6 space-y-6',
+    )}>
       
       {/* Header Widget */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-white p-6 rounded-[1.5rem] border border-slate-200/80 shadow-3xs">
@@ -189,14 +194,16 @@ export function KBAutopilotDashboard({ onBackToKB, onArticlePublished }: KBAutop
           </p>
         </div>
 
-        <div>
-          <Button
-            onClick={onBackToKB}
-            className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs h-10 px-4 rounded-xl border border-slate-250/20 cursor-pointer shadow-3xs"
-          >
-            Back to Article Desk
-          </Button>
-        </div>
+        {!embedded ? (
+          <div>
+            <Button
+              onClick={onBackToKB}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-800 font-black text-xs h-10 px-4 rounded-xl border border-slate-250/20 cursor-pointer shadow-3xs"
+            >
+              Back to Article Desk
+            </Button>
+          </div>
+        ) : null}
       </div>
 
       {/* Autopilot Real-time Operational Telemetry Metrics */}

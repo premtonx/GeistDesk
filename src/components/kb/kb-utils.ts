@@ -145,3 +145,7 @@ export function kbPanelClass(className?: string): string {
 export function isKbOverviewMode(nav: { type: string; id: string }): boolean {
   return nav.type === 'workspace' && nav.id === 'overview';
 }
+
+export function isKbAiAssistantMode(nav: { type: string; id: string }): boolean {
+  return nav.type === 'workspace' && nav.id === 'ai';
+}
