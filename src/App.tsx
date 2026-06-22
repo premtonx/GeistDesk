@@ -33,6 +33,7 @@ import SecretViewerPage from './components/pages/SecretViewerPage';
 import { useAuth, useAdmin } from './lib/hooks';
 import { usePermissions } from './hooks/usePermissions';
 import { SidebarProvider } from './lib/context/SidebarContext';
+import { WorkspaceProvider } from './lib/context/WorkspaceContext';
 import { ThemeProvider } from './lib/context/ThemeContext';
 import { I18nProvider } from './lib/context/I18nContext';
 
@@ -82,6 +83,7 @@ export default function App() {
       <I18nProvider>
         <ThemeProvider>
           <SidebarProvider>
+            <WorkspaceProvider>
             <TooltipProvider>
               <div className="min-h-screen bg-background font-sans antialiased text-foreground">
               <Routes>
@@ -124,6 +126,7 @@ export default function App() {
               <Toaster />
             </div>
             </TooltipProvider>
+            </WorkspaceProvider>
           </SidebarProvider>
         </ThemeProvider>
       </I18nProvider>

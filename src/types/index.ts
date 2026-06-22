@@ -187,8 +187,16 @@ export interface Ticket {
   aiConfidence?: number;
   originalLanguage?: string;
   type?: 'question' | 'incident' | 'problem' | 'feature_request';
+  ticketKind?: 'support' | 'bug';
   product?: 'GeistDeskTech' | 'GeistDeskMobile';
   slaDueAt?: any;
+  slaTier?: string;
+  accountHealth?: string;
+  affectedVersion?: string;
+  environment?: string;
+  stepsToReproduce?: string;
+  devStatus?: 'backlog' | 'in_dev' | 'qa' | 'merged';
+  linkedBugId?: string | null;
   resolvedAt?: any;
   closedAt?: any;
   linkedTicketIds?: string[];

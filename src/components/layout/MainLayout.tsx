@@ -64,6 +64,7 @@ import { Ticket as TicketType, Customer } from '../../types';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { GeistDeskLogo } from '../ui/GeistDeskLogo';
 import { FlagIcon } from '../ui/FlagIcon';
+import { WorkspaceSwitcher } from './WorkspaceSwitcher';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', key: 'dashboard' },
@@ -230,6 +231,9 @@ export default function MainLayout() {
           {/* Logo */}
           <div className="flex items-center cursor-pointer select-none" onClick={() => navigate('/dashboard')}>
             <GeistDeskLogo size="sm" showText={true} />
+          </div>
+          <div className="hidden lg:block pl-2 border-l border-slate-200/80 ml-1">
+            <WorkspaceSwitcher />
           </div>
         </div>
 
@@ -720,8 +724,8 @@ export default function MainLayout() {
       </header>
 
       {/* Navigation Sub-Header (Row 2) - visible lg and up */}
-      <div className="hidden lg:flex h-12 border-b bg-slate-50/50 items-center px-6 shrink-0 z-40 shadow-xs overflow-x-auto scrollbar-none">
-        <nav className="flex items-center gap-1.5 w-full">
+      <div className="hidden lg:flex h-12 border-b bg-slate-50/50 items-center px-6 gap-4 shrink-0 z-40 shadow-xs overflow-x-auto scrollbar-none">
+        <nav className="flex items-center gap-1.5 w-full min-w-0">
           {visibleNavItems.map((item) => (
             <NavLink
               key={item.path}
@@ -777,6 +781,8 @@ export default function MainLayout() {
                     <Plus className="w-5 h-5 rotate-45" />
                   </Button>
                 </div>
+
+                <WorkspaceSwitcher className="w-full border-white/10 bg-white/5 [&_button]:text-white/70 [&_button[aria-selected=true]]:bg-[#1A73E8] [&_button[aria-selected=true]]:text-white" compact />
 
                 {/* Worktimer on Mobile list */}
                 <div className="p-1 rounded-xl bg-white/5 border border-white/10 shrink-0">

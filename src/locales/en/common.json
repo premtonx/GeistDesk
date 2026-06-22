@@ -47,6 +47,11 @@
   "modulePage": {
     "sort": "Sort"
   },
+  "workspace": {
+    "switcherLabel": "Workspace",
+    "support": "Support Workspace",
+    "developer": "Developer Workspace"
+  },
   "dashboard": {
     "title": "Enterprise Dashboard",
     "welcome": "Welcome back, {{name}}! 👋",
@@ -98,7 +103,9 @@
   "tickets": {
     "title": "Sovereign Tickets",
     "titleShort": "Tickets",
-    "headerMeta": "{{open}} Open • {{pending}} In Progress • {{urgent}} Urgent",
+    "headerMetaInline": "Tickets • {{open}} Open • {{pending}} In Progress • {{urgent}} Urgent",
+    "headerMetaDev": "Tickets • {{open}} Open • {{bugs}} Bugs • {{unassigned}} Unassigned",
+    "bugsTab": "Bugs",
     "moduleDescription": "Manage support pipeline, SLA tracking, and AI-assisted resolution.",
     "searchPlaceholder": "Search tickets...",
     "allTickets": "All",
@@ -116,6 +123,42 @@
     "merged": "Merged",
     "trash": "Trash",
     "unassigned": "Unassigned",
+    "kind": {
+      "support": "Support",
+      "bug": "Bug"
+    },
+    "devStatus": {
+      "backlog": "Backlog",
+      "inDev": "In Dev",
+      "qa": "QA",
+      "merged": "Merged"
+    },
+    "fields": {
+      "supportContext": "Support Context",
+      "bugContext": "Bug Context",
+      "slaTier": "SLA Tier",
+      "slaTierPlaceholder": "e.g. Platinum",
+      "accountHealth": "Account Health",
+      "accountHealthPlaceholder": "e.g. At Risk",
+      "affectedVersion": "Affected Version / Build",
+      "environment": "Environment",
+      "environmentPlaceholder": "Production / Staging",
+      "stepsToReproduce": "Steps to Reproduce",
+      "devStatus": "Dev Status"
+    },
+    "relations": {
+      "title": "Relational Links",
+      "noBugLinked": "No engineering bug linked yet.",
+      "linkExistingBug": "Link to Existing Bug",
+      "linkToBug": "Link to Bug",
+      "createLinkToBug": "Create Link to Bug",
+      "supportCasesBlocked": "{{count}} customer cases linked",
+      "casesBlocked": "{{count}} cases",
+      "invalidBug": "Select a valid bug ticket.",
+      "linkedSuccess": "Support case linked to bug.",
+      "linkFailed": "Failed to link bug.",
+      "createBugHint": "Create a bug ticket, then link it here."
+    },
     "aiChip": {
       "label": "AI Summary",
       "critical": "Critical Issue",

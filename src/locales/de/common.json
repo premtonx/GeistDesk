@@ -47,6 +47,11 @@
   "modulePage": {
     "sort": "Sortieren"
   },
+  "workspace": {
+    "switcherLabel": "Arbeitsbereich",
+    "support": "Support-Arbeitsbereich",
+    "developer": "Entwickler-Arbeitsbereich"
+  },
   "dashboard": {
     "title": "Unternehmens-Dashboard",
     "welcome": "Willkommen zurück, {{name}}! 👋",
@@ -98,7 +103,9 @@
   "tickets": {
     "title": "Sovereign-Tickets",
     "titleShort": "Tickets",
-    "headerMeta": "{{open}} Offen • {{pending}} In Bearbeitung • {{urgent}} Dringend",
+    "headerMetaInline": "Tickets • {{open}} Offen • {{pending}} In Bearbeitung • {{urgent}} Dringend",
+    "headerMetaDev": "Tickets • {{open}} Offen • {{bugs}} Bugs • {{unassigned}} Nicht zugewiesen",
+    "bugsTab": "Bugs",
     "moduleDescription": "Support-Pipeline, SLA-Tracking und KI-gestützte Bearbeitung verwalten.",
     "searchPlaceholder": "Tickets durchsuchen...",
     "allTickets": "Alle",
@@ -116,6 +123,42 @@
     "merged": "Zusammengeführt",
     "trash": "Papierkorb",
     "unassigned": "Nicht zugewiesen",
+    "kind": {
+      "support": "Support",
+      "bug": "Bug"
+    },
+    "devStatus": {
+      "backlog": "Backlog",
+      "inDev": "In Entwicklung",
+      "qa": "QA",
+      "merged": "Merged"
+    },
+    "fields": {
+      "supportContext": "Support-Kontext",
+      "bugContext": "Bug-Kontext",
+      "slaTier": "SLA-Stufe",
+      "slaTierPlaceholder": "z. B. Platinum",
+      "accountHealth": "Kontogesundheit",
+      "accountHealthPlaceholder": "z. B. Gefährdet",
+      "affectedVersion": "Betroffene Version / Build",
+      "environment": "Umgebung",
+      "environmentPlaceholder": "Produktion / Staging",
+      "stepsToReproduce": "Schritte zur Reproduktion",
+      "devStatus": "Entwicklungsstatus"
+    },
+    "relations": {
+      "title": "Relationale Verknüpfungen",
+      "noBugLinked": "Noch kein Entwickler-Bug verknüpft.",
+      "linkExistingBug": "Mit bestehendem Bug verknüpfen",
+      "linkToBug": "Mit Bug verknüpfen",
+      "createLinkToBug": "Verknüpfung zu Bug erstellen",
+      "supportCasesBlocked": "{{count}} Kundenfälle verknüpft",
+      "casesBlocked": "{{count}} Fälle",
+      "invalidBug": "Wählen Sie ein gültiges Bug-Ticket.",
+      "linkedSuccess": "Supportfall mit Bug verknüpft.",
+      "linkFailed": "Verknüpfung fehlgeschlagen.",
+      "createBugHint": "Erstellen Sie ein Bug-Ticket und verknüpfen Sie es hier."
+    },
     "aiChip": {
       "label": "KI-Zusammenfassung",
       "critical": "Kritisches Problem",
@@ -1101,6 +1144,7 @@
     "descriptionPlaceholder": "Fügen Sie Details, Kontext, versuchte Schritte, erwartetes Ergebnis usw. hinzu.",
     "descriptionTip": "Tipp: Machen Sie detaillierte Angaben, damit wir dieses Problem schneller lösen können.",
     "additionalDetails": "Zusätzliche Details",
+    "ticketKind": "Ticket-Typ",
     "productLine": "Produktlinie",
     "internalNotes": "Interne Notizen",
     "optional": "optional",

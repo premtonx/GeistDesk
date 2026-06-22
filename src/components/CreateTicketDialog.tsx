@@ -53,6 +53,7 @@ import { cn } from '../lib/utils';
 import { customerService } from '../services/customerService';
 import { Company, Contact } from '../types';
 import { useTranslation } from '../lib/context/I18nContext';
+import { useWorkspace } from '../lib/context/WorkspaceContext';
 
 interface CreateTicketDialogProps {
   isOpen: boolean;
@@ -61,6 +62,7 @@ interface CreateTicketDialogProps {
 
 export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps) {
   const { t, language } = useTranslation();
+  const { workspace } = useWorkspace();
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
   const [isInternalNotesOpen, setIsInternalNotesOpen] = useState(false);
@@ -84,8 +86,25 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
     companyId: '',
     product: 'GeistDeskTech',
     tags: ['billing', 'new customer'] as string[],
-    assignee: 'unassigned'
+    assignee: 'unassigned',
+    ticketKind: 'support' as 'support' | 'bug',
+    slaTier: '',
+    accountHealth: '',
+    affectedVersion: '',
+    environment: '',
+    stepsToReproduce: '',
   });
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const kind = workspace === 'developer' ? 'bug' : 'support';
+    setFormData((prev) => ({
+      ...prev,
+      ticketKind: kind,
+      group: kind === 'bug' ? 'engineering' : 'support',
+      type: kind === 'bug' ? 'problem' : 'question',
+    }));
+  }, [isOpen, workspace]);
 
   useEffect(() => {
     return customerService.subscribeToCompanies(setCompanies);
@@ -165,6 +184,13 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
     try {
       await ticketService.createTicket({
         ...formData,
+        team: formData.ticketKind === 'bug' ? 'engineering' : 'support',
+        ticketKind: formData.ticketKind,
+        type: formData.ticketKind === 'bug' ? 'problem' : formData.type,
+        devStatus: formData.ticketKind === 'bug' ? 'backlog' : undefined,
+        tags: formData.ticketKind === 'bug'
+          ? [...new Set([...formData.tags, 'bug'])]
+          : formData.tags,
         creatorId: user.uid,
         sentiment: aiMeta.sentiment.toLowerCase(),
         language: aiMeta.language,
@@ -340,7 +366,7 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
                              exit={{ height: 0, opacity: 0, marginTop: 0 }}
                              className="overflow-hidden"
                         >
-                            <div className="grid grid-cols-2 gap-8">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                                 <div className="space-y-2.5">
                                     <Label className="text-[12px] font-bold text-slate-600 ml-1 uppercase tracking-wider">{t('dialog.productLine', 'Product line')}</Label>
                                     <Select value={formData.product} onValueChange={(v) => setFormData({...formData, product: v})}>
@@ -353,6 +379,53 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
                                         </SelectContent>
                                     </Select>
                                 </div>
+                                <div className="space-y-2.5">
+                                    <Label className="text-[12px] font-bold text-slate-600 ml-1 uppercase tracking-wider">{t('dialog.ticketKind', 'Ticket kind')}</Label>
+                                    <Select
+                                      value={formData.ticketKind}
+                                      onValueChange={(v) => setFormData({
+                                        ...formData,
+                                        ticketKind: v as 'support' | 'bug',
+                                        group: v === 'bug' ? 'engineering' : 'support',
+                                        type: v === 'bug' ? 'problem' : 'question',
+                                      })}
+                                    >
+                                        <SelectTrigger className="w-full h-12 border-slate-200 rounded-xl text-sm bg-white">
+                                            <SelectValue />
+                                        </SelectTrigger>
+                                        <SelectContent className="rounded-xl">
+                                            <SelectItem value="support">{t('tickets.kind.support', 'Support')}</SelectItem>
+                                            <SelectItem value="bug">{t('tickets.kind.bug', 'Bug')}</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                                {formData.ticketKind === 'support' ? (
+                                  <>
+                                    <div className="space-y-2.5">
+                                      <Label className="text-[12px] font-bold text-slate-600 ml-1">{t('tickets.fields.slaTier', 'SLA Tier')}</Label>
+                                      <Input className="h-11 rounded-xl" value={formData.slaTier} onChange={(e) => setFormData({ ...formData, slaTier: e.target.value })} />
+                                    </div>
+                                    <div className="space-y-2.5">
+                                      <Label className="text-[12px] font-bold text-slate-600 ml-1">{t('tickets.fields.accountHealth', 'Account Health')}</Label>
+                                      <Input className="h-11 rounded-xl" value={formData.accountHealth} onChange={(e) => setFormData({ ...formData, accountHealth: e.target.value })} />
+                                    </div>
+                                  </>
+                                ) : (
+                                  <>
+                                    <div className="space-y-2.5">
+                                      <Label className="text-[12px] font-bold text-slate-600 ml-1">{t('tickets.fields.affectedVersion', 'Affected Version / Build')}</Label>
+                                      <Input className="h-11 rounded-xl" value={formData.affectedVersion} onChange={(e) => setFormData({ ...formData, affectedVersion: e.target.value })} />
+                                    </div>
+                                    <div className="space-y-2.5">
+                                      <Label className="text-[12px] font-bold text-slate-600 ml-1">{t('tickets.fields.environment', 'Environment')}</Label>
+                                      <Input className="h-11 rounded-xl" value={formData.environment} onChange={(e) => setFormData({ ...formData, environment: e.target.value })} />
+                                    </div>
+                                    <div className="space-y-2.5 sm:col-span-2">
+                                      <Label className="text-[12px] font-bold text-slate-600 ml-1">{t('tickets.fields.stepsToReproduce', 'Steps to Reproduce')}</Label>
+                                      <Textarea className="min-h-[96px] rounded-xl" value={formData.stepsToReproduce} onChange={(e) => setFormData({ ...formData, stepsToReproduce: e.target.value })} />
+                                    </div>
+                                  </>
+                                )}
                             </div>
                         </motion.div>
                     )}

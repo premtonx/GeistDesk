@@ -149,6 +149,15 @@ import { customerService } from '../../services/customerService';
 import { schemaService, CustomField } from '../../services/schemaService';
 import { useAuth } from '../../lib/hooks';
 import { useSidebar } from '../../lib/context/SidebarContext';
+import { useWorkspace } from '../../lib/context/WorkspaceContext';
+import {
+  filterTicketsByWorkspace,
+  getLinkedBugTicket,
+  getLinkedSupportTickets,
+  getTicketKind,
+  isBugTicket,
+  devStatusLabelKey,
+} from '../../lib/ticketWorkspace';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useTranslation } from '../../lib/context/I18nContext';
 
@@ -166,6 +175,8 @@ import { TimelineTabContent } from '../ticket-details/TimelineTabContent';
 import { AiInsightsTabContent } from '../ticket-details/AiInsightsTabContent';
 import { AssetsTabContent } from '../ticket-details/AssetsTabContent';
 import { RelatedTicketsTabContent } from '../ticket-details/RelatedTicketsTabContent';
+import { RelationalLinksCard } from '../ticket-details/RelationalLinksCard';
+import { TicketKindFieldsCard } from '../ticket-details/TicketKindFieldsCard';
 import { RedesignedSidebar } from '../ticket-details/RedesignedSidebar';
 import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
@@ -284,6 +295,7 @@ export default function TicketsPage() {
   const { user } = useAuth();
   const { hasPermission, role, loading: permsLoading } = usePermissions();
   const { isPipelineCollapsed, togglePipelineSidebar } = useSidebar();
+  const { workspace, isDeveloperWorkspace } = useWorkspace();
   const { ticketId } = useParams();
   const navigate = useNavigate();
   
@@ -314,11 +326,17 @@ export default function TicketsPage() {
   const [activeView, setActiveView] = useState<string>(() => {
     return localStorage.getItem('geistdesk_default_view') || 'unassigned';
   });
-  const [topStatusFilter, setTopStatusFilter] = useState<'all' | 'open' | 'pending' | 'urgent' | 'unassigned'>('all');
+  const [topStatusFilter, setTopStatusFilter] = useState<'all' | 'open' | 'pending' | 'urgent' | 'unassigned' | 'bugs'>('all');
 
   useEffect(() => {
     setTopStatusFilter('all');
-  }, [activeView]);
+  }, [activeView, workspace]);
+
+  const workspaceTickets = useMemo(
+    () => filterTicketsByWorkspace(allTickets, workspace),
+    [allTickets, workspace],
+  );
+
   const [additionalCategory, setAdditionalCategory] = useState<string | null>(() => {
     return localStorage.getItem('geistdesk_additional_category') || null;
   });
@@ -630,7 +648,7 @@ export default function TicketsPage() {
   const baseSidebarTickets = useMemo(() => {
     if (!user) return [];
     
-    let filtered = [...allTickets];
+    let filtered = [...workspaceTickets];
 
     switch (activeView) {
       // INBOX
@@ -769,7 +787,7 @@ export default function TicketsPage() {
     }
 
     return filtered;
-  }, [allTickets, activeView, user, watchedTicketIds, isAiReady]);
+  }, [workspaceTickets, activeView, user, watchedTicketIds, isAiReady]);
 
   const ticketQueueStats = useMemo(() => {
     const pool = baseSidebarTickets.filter(
@@ -780,6 +798,7 @@ export default function TicketsPage() {
       open: pool.filter((tk) => matchStatus(tk.status, 'open')).length,
       pending: pool.filter((tk) => matchStatus(tk.status, 'pending')).length,
       urgent: pool.filter((tk) => tk.priority === 'urgent' || tk.priority === 'high').length,
+      bugs: pool.filter((tk) => isBugTicket(tk)).length,
       unassigned: pool.filter((tk) => !tk.agentName).length,
       vip: pool.filter(
         (tk) => tk.tags?.includes('VIP') || tk.customerName?.toLowerCase().includes('sarah'),
@@ -860,6 +879,9 @@ export default function TicketsPage() {
         break;
       case 'urgent':
         result = result.filter(t => t.priority === 'urgent' || t.priority === 'high');
+        break;
+      case 'bugs':
+        result = result.filter(t => isBugTicket(t));
         break;
       case 'unassigned':
         result = result.filter(t => !t.agentName);
@@ -1459,6 +1481,30 @@ export default function TicketsPage() {
       setSuggestedNeuralLinks(prev => prev.filter(s => s.ticketId !== targetId));
     } catch (error) {
       toast.error("Failed to link ticket.");
+    }
+  };
+
+  const linkToBug = async (bugId: string) => {
+    if (!selectedTicket) return;
+    const bug = allTickets.find((t) => t.id === bugId);
+    if (!bug || !isBugTicket(bug)) {
+      toast.error(t('tickets.relations.invalidBug', 'Select a valid bug ticket.'));
+      return;
+    }
+    try {
+      const supportLinks = selectedTicket.linkedTicketIds ?? [];
+      await ticketService.updateTicket(selectedTicket.id, {
+        linkedBugId: bugId,
+        linkedTicketIds: supportLinks.includes(bugId) ? supportLinks : [...supportLinks, bugId],
+      });
+      const bugLinks = bug.linkedTicketIds ?? [];
+      await ticketService.updateTicket(bugId, {
+        linkedTicketIds: bugLinks.includes(selectedTicket.id) ? bugLinks : [...bugLinks, selectedTicket.id],
+        devStatus: bug.devStatus ?? 'in_dev',
+      });
+      toast.success(t('tickets.relations.linkedSuccess', 'Support case linked to bug.'));
+    } catch {
+      toast.error(t('tickets.relations.linkFailed', 'Failed to link bug.'));
     }
   };
 
@@ -2464,6 +2510,19 @@ export default function TicketsPage() {
                         )}
 
                         {/* 5. Bento Grid horizontal context cards at the end */}
+                        <RelationalLinksCard
+                          ticket={selectedTicket}
+                          allTickets={allTickets}
+                          onLinkToBug={linkToBug}
+                          onCreateBugLink={() => {
+                            setIsCreateTicketOpen(true);
+                            toast.info(t('tickets.relations.createBugHint', 'Create a bug ticket, then link it here.'));
+                          }}
+                        />
+                        <TicketKindFieldsCard
+                          ticket={selectedTicket}
+                          onUpdate={(data) => handleInlineUpdate(selectedTicket.id, data)}
+                        />
                         <SmartContextPanel 
                           ticket={selectedTicket}
                           contact={ticketContact}
@@ -3755,11 +3814,17 @@ export default function TicketsPage() {
       /* List View: Expanded Full Width */
       <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#FAFBFC]">
             <ModulePageCompactHeader
-              title={t('tickets.titleShort', 'Tickets')}
-              meta={t('tickets.headerMeta', '{{open}} Open • {{pending}} In Progress • {{urgent}} Urgent')
-                .replace('{{open}}', String(ticketQueueStats.open))
-                .replace('{{pending}}', String(ticketQueueStats.pending))
-                .replace('{{urgent}}', String(ticketQueueStats.urgent))}
+              title={
+                isDeveloperWorkspace
+                  ? t('tickets.headerMetaDev', 'Tickets • {{open}} Open • {{bugs}} Bugs • {{unassigned}} Unassigned')
+                      .replace('{{open}}', String(ticketQueueStats.open))
+                      .replace('{{bugs}}', String(ticketQueueStats.bugs))
+                      .replace('{{unassigned}}', String(ticketQueueStats.unassigned))
+                  : t('tickets.headerMetaInline', 'Tickets • {{open}} Open • {{pending}} In Progress • {{urgent}} Urgent')
+                      .replace('{{open}}', String(ticketQueueStats.open))
+                      .replace('{{pending}}', String(ticketQueueStats.pending))
+                      .replace('{{urgent}}', String(ticketQueueStats.urgent))
+              }
               trailing={
                 <Button
                   variant="ghost"
@@ -3773,13 +3838,22 @@ export default function TicketsPage() {
               }
             />
             <ModulePageTabs
-              tabs={[
-                { id: 'all', label: t('tickets.allTickets', 'All'), count: ticketQueueStats.all },
-                { id: 'open', label: t('tickets.open', 'Open'), count: ticketQueueStats.open },
-                { id: 'pending', label: t('tickets.inProgress', 'In Progress'), count: ticketQueueStats.pending },
-                { id: 'urgent', label: t('tickets.priorityUrgent', 'Urgent'), count: ticketQueueStats.urgent },
-                { id: 'unassigned', label: t('tickets.unassigned', 'Unassigned'), count: ticketQueueStats.unassigned },
-              ]}
+              tabs={
+                isDeveloperWorkspace
+                  ? [
+                      { id: 'all', label: t('tickets.allTickets', 'All'), count: ticketQueueStats.all },
+                      { id: 'open', label: t('tickets.open', 'Open'), count: ticketQueueStats.open },
+                      { id: 'bugs', label: t('tickets.bugsTab', 'Bugs'), count: ticketQueueStats.bugs },
+                      { id: 'unassigned', label: t('tickets.unassigned', 'Unassigned'), count: ticketQueueStats.unassigned },
+                    ]
+                  : [
+                      { id: 'all', label: t('tickets.allTickets', 'All'), count: ticketQueueStats.all },
+                      { id: 'open', label: t('tickets.open', 'Open'), count: ticketQueueStats.open },
+                      { id: 'pending', label: t('tickets.inProgress', 'In Progress'), count: ticketQueueStats.pending },
+                      { id: 'urgent', label: t('tickets.priorityUrgent', 'Urgent'), count: ticketQueueStats.urgent },
+                      { id: 'unassigned', label: t('tickets.unassigned', 'Unassigned'), count: ticketQueueStats.unassigned },
+                    ]
+              }
               activeId={topStatusFilter}
               onChange={(id) => setTopStatusFilter(id as typeof topStatusFilter)}
             />
@@ -4524,6 +4598,25 @@ export default function TicketsPage() {
                                    {ticket.subject}
                                 </h3>
                                 <span className="text-[9px] text-muted-foreground font-semibold shrink-0">#{ticket.id.slice(0, 4)}</span>
+                                {(() => {
+                                  const kind = getTicketKind(ticket);
+                                  if (kind === 'support') {
+                                    const bug = getLinkedBugTicket(ticket, allTickets);
+                                    if (!bug) return null;
+                                    return (
+                                      <Badge variant="outline" className="text-[9px] h-4 px-1.5 font-semibold border-violet-200 bg-violet-50 text-violet-700 shrink-0">
+                                        {t(devStatusLabelKey(bug.devStatus), bug.devStatus ?? 'in_dev')}
+                                      </Badge>
+                                    );
+                                  }
+                                  const blocked = getLinkedSupportTickets(ticket, allTickets).length;
+                                  if (blocked === 0) return null;
+                                  return (
+                                    <Badge variant="outline" className="text-[9px] h-4 px-1.5 font-semibold border-amber-200 bg-amber-50 text-amber-800 shrink-0">
+                                      {t('tickets.relations.casesBlocked', '{{count}} cases').replace('{{count}}', String(blocked))}
+                                    </Badge>
+                                  );
+                                })()}
                                 
                                 {/* AI Signals inside Preview */}
                                 {viewDensity === 'comfortable' && (
