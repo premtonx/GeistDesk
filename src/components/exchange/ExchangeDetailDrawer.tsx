@@ -19,6 +19,12 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
 import { exchangePanelClass, exchangeStatusClass, type ExchangeItemRow } from './exchange-utils';
+import {
+  formatExchangeExpirationDisplay,
+  getExchangeStatusDefaultLabel,
+  getExchangeStatusLabelKey,
+  resolveExchangeStatus,
+} from './exchange-status-utils';
 
 interface ExchangeDetailDrawerProps {
   item: ExchangeItemRow | null;
@@ -73,16 +79,10 @@ export function ExchangeDetailDrawer({
 }: ExchangeDetailDrawerProps) {
   const { t } = useTranslation();
 
-  const statusLabel =
-    item?.status === 'Active'
-      ? t('exchange.status.active', 'Active')
-      : item?.status === 'Burned'
-        ? t('exchange.status.burned', 'Burned')
-        : item?.status === 'Expired'
-          ? t('exchange.status.expired', 'Expired')
-          : item?.status === 'Viewed' || (item?.views ?? 0) > 0
-            ? t('exchange.status.viewed', 'Viewed')
-            : t('exchange.status.pending', 'Pending');
+  const resolvedStatus = item ? resolveExchangeStatus(item) : null;
+  const statusLabel = resolvedStatus
+    ? t(getExchangeStatusLabelKey(resolvedStatus), getExchangeStatusDefaultLabel(resolvedStatus))
+    : '';
 
   const securityPolicy =
     item?.type === 'secret'
@@ -135,7 +135,7 @@ export function ExchangeDetailDrawer({
                     <span
                       className={cn(
                         'text-[10px] font-semibold px-2 py-0.5 rounded-lg border shrink-0',
-                        exchangeStatusClass(item.status),
+                        exchangeStatusClass(resolvedStatus ?? item.status),
                       )}
                     >
                       {statusLabel}
@@ -189,7 +189,9 @@ export function ExchangeDetailDrawer({
                         {t('exchange.drawer.expiration', 'Expiration')}
                       </span>
                     </div>
-                    <p className="font-semibold text-slate-800">{item.expires}</p>
+                    <p className="font-semibold text-slate-800">
+                      {item ? formatExchangeExpirationDisplay(item.expires, t) : ''}
+                    </p>
                   </div>
                 </div>
               </section>

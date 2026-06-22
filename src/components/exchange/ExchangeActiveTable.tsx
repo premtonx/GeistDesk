@@ -4,19 +4,39 @@ import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { exchangePanelClass, exchangeStatusClass, type ExchangeItemRow, type ExchangeQuickFilter } from './exchange-utils';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
+import {
+  exchangePanelClass,
+  exchangeStatusClass,
+  type ExchangeItemRow,
+  type ExchangeQuickFilter,
+} from './exchange-utils';
 import {
   EXCHANGE_QUICK_FILTER_DEFAULT_TITLES,
   EXCHANGE_QUICK_FILTER_TITLE_KEYS,
 } from './exchange-utils';
+import {
+  formatExchangeExpirationDisplay,
+  getExchangeStatusDefaultLabel,
+  getExchangeStatusLabelKey,
+  isExchangeActiveStatus,
+  resolveExchangeStatus,
+} from './exchange-status-utils';
 
 interface ExchangeActiveTableProps {
   items: ExchangeItemRow[];
   selectedItemId?: string | null;
   onRowSelect?: (item: ExchangeItemRow) => void;
-  onCopyLink?: (id: string) => void;
-  onBurn?: (id: string) => void;
-  onDelete?: (id: string) => void;
+  onCopyLink?: (item: ExchangeItemRow) => void;
+  onQuickAction?: (item: ExchangeItemRow) => void;
+  onDeleteRequest?: (item: ExchangeItemRow) => void;
+  onChangeSecurityPolicy?: (item: ExchangeItemRow) => void;
+  onRotateToken?: (item: ExchangeItemRow) => void;
   quickFilter?: ExchangeQuickFilter;
   className?: string;
 }
@@ -26,8 +46,10 @@ export function ExchangeActiveTable({
   selectedItemId,
   onRowSelect,
   onCopyLink,
-  onBurn,
-  onDelete,
+  onQuickAction,
+  onDeleteRequest,
+  onChangeSecurityPolicy,
+  onRotateToken,
   quickFilter,
   className,
 }: ExchangeActiveTableProps) {
@@ -76,87 +98,133 @@ export function ExchangeActiveTable({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {items.length > 0 ? (
-              items.map((item) => (
-                <tr
-                  key={item.id}
-                  onClick={() => onRowSelect?.(item)}
-                  className={cn(
-                    'transition-colors group cursor-pointer',
-                    selectedItemId === item.id
-                      ? 'bg-[#E8F0FE]/70 hover:bg-[#E8F0FE]/80'
-                      : 'hover:bg-slate-50/50',
-                  )}
-                >
-                  <td className="px-5 py-3">
-                    <div
-                      className={cn(
-                        'w-8 h-8 rounded-lg flex items-center justify-center border',
-                        item.type === 'secret'
-                          ? 'bg-blue-50 border-blue-100 text-blue-600'
-                          : 'bg-violet-50 border-violet-100 text-violet-600',
-                      )}
-                    >
-                      {item.type === 'secret' ? <Lock className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />}
-                    </div>
-                  </td>
-                  <td className="px-5 py-3 max-w-[220px]">
-                    <p className="font-semibold text-slate-900 truncate group-hover:text-blue-600">{item.name}</p>
-                    <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 truncate">
-                      <Building2 className="w-3 h-3 shrink-0" /> {item.company}
-                    </p>
-                  </td>
-                  <td className="px-5 py-3 text-slate-600 max-w-[160px] truncate">{item.recipient}</td>
-                  <td className="px-5 py-3">
-                    <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-lg border', exchangeStatusClass(item.status))}>
-                      {item.status === 'Active'
-                        ? t('exchange.status.active', 'Active')
-                        : item.status === 'Burned'
-                          ? t('exchange.status.burned', 'Burned')
-                          : item.status === 'Expired'
-                            ? t('exchange.status.expired', 'Expired')
-                            : item.status === 'Viewed' || item.views > 0
-                              ? t('exchange.status.viewed', 'Viewed')
-                              : t('exchange.status.pending', 'Pending')}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 font-medium tabular-nums text-slate-700">{item.views}</td>
-                  <td className="px-5 py-3 text-slate-500 whitespace-nowrap">{item.expires}</td>
-                  <td className="px-5 py-3">
-                    <span className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600">
-                      {item.type === 'secret'
-                        ? t('exchange.policy.burnAfterRead', 'Burn after read')
-                        : t('exchange.policy.malwareScan', 'Malware scan + 48h')}
-                    </span>
-                  </td>
-                  <td className="px-5 py-3 text-right" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex justify-end gap-1 opacity-80 group-hover:opacity-100">
-                      {onCopyLink ? (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7"
-                          onClick={() => onCopyLink(item.id)}
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </Button>
-                      ) : null}
-                      {onBurn && item.status === 'Active' ? (
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-amber-600" onClick={() => onBurn(item.id)}>
-                          <Zap className="w-3.5 h-3.5" />
-                        </Button>
-                      ) : null}
-                      {onDelete ? (
-                        <Button variant="ghost" size="icon" className="h-7 w-7 text-rose-500" onClick={() => onDelete(item.id)}>
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </Button>
-                      ) : null}
-                      <Button variant="ghost" size="icon" className="h-7 w-7">
-                        <MoreHorizontal className="w-3.5 h-3.5" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))
+              items.map((item) => {
+                const resolvedStatus = resolveExchangeStatus(item);
+                return (
+                  <tr
+                    key={item.id}
+                    onClick={() => onRowSelect?.(item)}
+                    className={cn(
+                      'transition-colors group cursor-pointer',
+                      selectedItemId === item.id
+                        ? 'bg-[#E8F0FE]/70 hover:bg-[#E8F0FE]/80'
+                        : 'hover:bg-slate-50/50',
+                    )}
+                  >
+                    <td className="px-5 py-3">
+                      <div
+                        className={cn(
+                          'w-8 h-8 rounded-lg flex items-center justify-center border',
+                          item.type === 'secret'
+                            ? 'bg-blue-50 border-blue-100 text-blue-600'
+                            : 'bg-violet-50 border-violet-100 text-violet-600',
+                        )}
+                      >
+                        {item.type === 'secret' ? <Lock className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />}
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 max-w-[220px]">
+                      <p className="font-semibold text-slate-900 truncate group-hover:text-blue-600">{item.name}</p>
+                      <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 truncate">
+                        <Building2 className="w-3 h-3 shrink-0" /> {item.company}
+                      </p>
+                    </td>
+                    <td className="px-5 py-3 text-slate-600 max-w-[160px] truncate">{item.recipient}</td>
+                    <td className="px-5 py-3">
+                      <span
+                        className={cn(
+                          'text-[10px] font-semibold px-2 py-0.5 rounded-lg border',
+                          exchangeStatusClass(resolvedStatus),
+                        )}
+                      >
+                        {t(
+                          getExchangeStatusLabelKey(resolvedStatus),
+                          getExchangeStatusDefaultLabel(resolvedStatus),
+                        )}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 font-medium tabular-nums text-slate-700">{item.views}</td>
+                    <td className="px-5 py-3 text-slate-500 whitespace-nowrap">
+                      {formatExchangeExpirationDisplay(item.expires, t)}
+                    </td>
+                    <td className="px-5 py-3">
+                      <span className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600">
+                        {item.type === 'secret'
+                          ? t('exchange.policy.burnAfterRead', 'Burn after read')
+                          : t('exchange.policy.malwareScan', 'Malware scan + 48h')}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-right" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex justify-end gap-1 opacity-80 group-hover:opacity-100">
+                        {onCopyLink ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7"
+                            title={t('exchange.actions.copyLink', 'Copy link')}
+                            onClick={() => onCopyLink(item)}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </Button>
+                        ) : null}
+                        {onQuickAction && isExchangeActiveStatus(resolvedStatus) ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-amber-600"
+                            title={t('exchange.actions.quickAction', 'Quick action')}
+                            onClick={() => onQuickAction(item)}
+                          >
+                            <Zap className="w-3.5 h-3.5" />
+                          </Button>
+                        ) : null}
+                        {onDeleteRequest ? (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-rose-500"
+                            title={t('exchange.actions.delete', 'Delete')}
+                            onClick={() => onDeleteRequest(item)}
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </Button>
+                        ) : null}
+                        <DropdownMenu>
+                          <DropdownMenuTrigger
+                            render={
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-7 w-7"
+                                title={t('exchange.actions.moreOptions', 'More options')}
+                              >
+                                <MoreHorizontal className="w-3.5 h-3.5" />
+                              </Button>
+                            }
+                          />
+                          <DropdownMenuContent
+                            align="end"
+                            className="w-52 bg-white border border-slate-200 shadow-xl rounded-xl p-1 z-[100]"
+                          >
+                            <DropdownMenuItem
+                              onClick={() => onChangeSecurityPolicy?.(item)}
+                              className="text-xs font-semibold text-slate-700 p-2.5 hover:bg-slate-50 rounded-lg cursor-pointer"
+                            >
+                              {t('exchange.actions.changeSecurityPolicy', 'Change security policy')}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              onClick={() => onRotateToken?.(item)}
+                              className="text-xs font-semibold text-slate-700 p-2.5 hover:bg-slate-50 rounded-lg cursor-pointer"
+                            >
+                              {t('exchange.actions.rotateAccessToken', 'Rotate access token')}
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })
             ) : (
               <tr>
                 <td colSpan={8} className="px-5 py-12 text-center text-slate-400 text-sm">

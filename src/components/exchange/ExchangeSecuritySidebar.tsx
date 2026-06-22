@@ -10,12 +10,21 @@ import {
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { exchangePanelClass } from './exchange-utils';
+import type { ExchangeItemRow } from './exchange-utils';
+
+export interface ExpiringSidebarRow {
+  id: string;
+  title: string;
+  meta: string;
+  tone: string;
+}
 
 interface ExchangeSecuritySidebarProps {
+  expiringItems?: ExpiringSidebarRow[];
   className?: string;
 }
 
-export function ExchangeSecuritySidebar({ className }: ExchangeSecuritySidebarProps) {
+export function ExchangeSecuritySidebar({ expiringItems = [], className }: ExchangeSecuritySidebarProps) {
   const { t } = useTranslation();
 
   const shields = [
@@ -87,12 +96,15 @@ export function ExchangeSecuritySidebar({ className }: ExchangeSecuritySidebarPr
             </h4>
           </div>
           <div className="space-y-2 text-xs">
-            {[
-              { title: 'Prod Firewall Credentials', meta: '23h', tone: 'text-rose-600 bg-rose-50' },
-              { title: 'ACME Log Dropzone', meta: '48h', tone: 'text-amber-600 bg-amber-50' },
-              { title: 'SQL Server Backup link', meta: '7d', tone: 'text-blue-600 bg-blue-50' },
-            ].map((row) => (
-              <div key={row.title} className="flex items-center justify-between gap-2">
+            {(expiringItems.length > 0
+              ? expiringItems
+              : [
+                  { id: 'fallback-1', title: 'Prod Firewall Credentials', meta: '23h', tone: 'text-rose-600 bg-rose-50' },
+                  { id: 'fallback-2', title: 'ACME Log Dropzone', meta: '48h', tone: 'text-amber-600 bg-amber-50' },
+                  { id: 'fallback-3', title: 'SQL Server Backup link', meta: '7d', tone: 'text-blue-600 bg-blue-50' },
+                ]
+            ).map((row) => (
+              <div key={row.id} className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="font-semibold text-slate-800 truncate">{row.title}</p>
                 </div>

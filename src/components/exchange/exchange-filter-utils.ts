@@ -1,4 +1,5 @@
 import type { ExchangeItemRow, ExchangeQuickFilter } from './exchange-utils';
+import { isExchangeActiveStatus, resolveExchangeStatus } from './exchange-status-utils';
 
 /** Items expiring within this window qualify for the "Expiring Soon" Schnellfilter. */
 export const EXPIRING_SOON_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -17,13 +18,15 @@ export function resolveExpiresAt(raw: unknown): Date | null {
 }
 
 export function isExchangeExpiringSoon(item: ExchangeItemRow): boolean {
-  if (item.status !== 'Active') return false;
+  const status = resolveExchangeStatus(item);
+  if (status === 'Expired' || status === 'Burned') return false;
+  if (status !== 'Active' && status !== 'Viewed') return false;
   if (item.expiresAt) {
     const expiryMs = item.expiresAt.getTime();
     const now = Date.now();
     return expiryMs > now && expiryMs - now <= EXPIRING_SOON_WINDOW_MS;
   }
-  if (item.expires === 'Once Read') return false;
+  if (item.expires === 'Once Read' || item.expires === '__expired__') return false;
   return /\b(expires in|in \d+h|in \d+d|\d+h|\d+d)\b/i.test(item.expires);
 }
 
@@ -31,7 +34,7 @@ export function matchesQuickFilter(item: ExchangeItemRow, filter: ExchangeQuickF
   if (!filter) return true;
   switch (filter) {
     case 'active':
-      return item.status === 'Active';
+      return isExchangeActiveStatus(resolveExchangeStatus(item));
     case 'expiring':
       return isExchangeExpiringSoon(item);
     case 'shared':
@@ -93,13 +96,14 @@ export function applyLegacyTableFilters(
 ): boolean {
   if (tableFilter === 'secrets' && item.type !== 'secret') return false;
   if (tableFilter === 'uploads' && item.type !== 'request') return false;
-  if (tableFilter === 'active' && item.status !== 'Active') return false;
-  if (tableFilter === 'burned' && item.status !== 'Burned') return false;
-  if (tableFilter === 'expired' && item.status !== 'Expired') return false;
+  if (tableFilter === 'active' && !isExchangeActiveStatus(resolveExchangeStatus(item))) return false;
+  if (tableFilter === 'burned' && resolveExchangeStatus(item) !== 'Burned') return false;
+  if (tableFilter === 'expired' && resolveExchangeStatus(item) !== 'Expired') return false;
 
-  if (tableTab === 'active_links' && (item.type !== 'secret' || item.status !== 'Active')) return false;
-  if (tableTab === 'active_dropzones' && (item.type !== 'request' || item.status !== 'Active')) return false;
-  if (tableTab === 'recent_uploads' && item.status !== 'Uploaded' && item.status !== 'Completed') return false;
+  const resolvedStatus = resolveExchangeStatus(item);
+  if (tableTab === 'active_links' && (item.type !== 'secret' || !isExchangeActiveStatus(resolvedStatus))) return false;
+  if (tableTab === 'active_dropzones' && (item.type !== 'request' || !isExchangeActiveStatus(resolvedStatus))) return false;
+  if (tableTab === 'recent_uploads' && resolvedStatus !== 'Uploaded' && resolvedStatus !== 'Completed') return false;
   if (tableTab === 'requests' && item.type !== 'request') return false;
   if (tableTab === 'expiring_soon' && !isExchangeExpiringSoon(item)) return false;
 

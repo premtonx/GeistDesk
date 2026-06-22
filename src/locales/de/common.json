@@ -1050,7 +1050,16 @@
       "importPackage": "Paket importieren",
       "importPackageDesc": "Verschlüsselte Austauschpakete von Partnern oder Legacy-Systemen importieren.",
       "importPackageCta": "Jetzt importieren",
-      "importSoon": "Paketimport wird bald verfügbar."
+      "importSoon": "Paketimport wird bald verfügbar.",
+      "copySuccess": "Link erfolgreich kopiert.",
+      "copyError": "Link konnte nicht in die Zwischenablage kopiert werden.",
+      "copyLink": "Link kopieren",
+      "quickAction": "Schnellaktion",
+      "delete": "Löschen",
+      "moreOptions": "Weitere Optionen",
+      "changeSecurityPolicy": "Sicherheitsrichtlinie ändern",
+      "rotateAccessToken": "Zugriffstoken rotieren",
+      "policyEditorSoon": "Editor für Sicherheitsrichtlinien wird geöffnet."
     },
     "activeExchanges": {
       "title": "Aktive Austausche",
@@ -1073,7 +1082,9 @@
       "viewed": "Angesehen",
       "burned": "Vernichtet",
       "expired": "Abgelaufen",
-      "pending": "Ausstehend"
+      "pending": "Ausstehend",
+      "uploaded": "Hochgeladen",
+      "completed": "Abgeschlossen"
     },
     "policy": {
       "burnAfterRead": "Vernichten nach Lesen",
@@ -1119,7 +1130,10 @@
       "success": "Vernichtungsbefehl in Warteschlange."
     },
     "delete": {
-      "success": "Austausch-Element entfernt."
+      "success": "Austausch-Element entfernt.",
+      "confirmTitle": "Austausch unwiderruflich löschen?",
+      "confirmMessage": "Möchten Sie diesen Austausch unwiderruflich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+      "confirmAction": "Unwiderruflich löschen"
     },
     "focusedFilter": {
       "empty": "Keine Einträge für diesen Filter gefunden.",

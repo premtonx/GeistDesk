@@ -9,6 +9,7 @@ import {
   type ExchangeTableTab,
 } from './exchange-filter-utils';
 import { buildExpiringSoonSeedItems, type ExchangeItemRowSeed } from './exchange-template-utils';
+import { normalizeExchangeItemRow } from './exchange-status-utils';
 
 export interface UseExchangeFiltersParams {
   history: VaultItem[];
@@ -36,29 +37,25 @@ function formatVaultHistoryItem(
   const relatedCompanyObj = companies.find((c) => c.id === item.metadata?.relatedCompanyId);
   const expiresAt = resolveExpiresAt(item.expiresAt);
 
-  const status = item.isBurned
-    ? 'Burned'
-    : expiresAt && expiresAt.getTime() < Date.now()
-      ? 'Expired'
-      : 'Active';
-
-  return {
+  const baseRow: ExchangeItemRow = {
     id: item.id,
     name,
     recipient: item.metadata?.targetRecipient || 'john.doe@client.com',
     company: relatedCompanyObj?.name || 'External Customer',
     ticketId: relatedTicketObj?.subject ? `TKT-${item.metadata?.relatedTicketId?.substring(0, 4)}` : 'N/A',
-    status,
+    status: item.isBurned ? 'Burned' : 'Active',
     expires: expiresAt ? expiresAt.toLocaleDateString() : 'Once Read',
     expiresAt,
     views: item.isBurned ? 1 : 0,
     type: item.type,
     createdAt: item.createdAt?.toDate ? item.createdAt.toDate() : new Date(),
   };
+
+  return normalizeExchangeItemRow(baseRow);
 }
 
 function seedToRow(seed: ExchangeItemRowSeed): ExchangeItemRow {
-  return {
+  return normalizeExchangeItemRow({
     id: seed.id,
     name: seed.name,
     recipient: seed.recipient,
@@ -71,7 +68,7 @@ function seedToRow(seed: ExchangeItemRowSeed): ExchangeItemRow {
     type: seed.type,
     size: seed.size,
     createdAt: seed.createdAt,
-  };
+  });
 }
 
 export function useExchangeFilters({

@@ -1050,7 +1050,16 @@
       "importPackage": "Import Package",
       "importPackageDesc": "Import encrypted exchange packages from partners or legacy systems.",
       "importPackageCta": "Import Now",
-      "importSoon": "Package import opening soon."
+      "importSoon": "Package import opening soon.",
+      "copySuccess": "Link copied successfully.",
+      "copyError": "Unable to copy link to clipboard.",
+      "copyLink": "Copy link",
+      "quickAction": "Quick action",
+      "delete": "Delete",
+      "moreOptions": "More options",
+      "changeSecurityPolicy": "Change security policy",
+      "rotateAccessToken": "Rotate access token",
+      "policyEditorSoon": "Security policy editor opening."
     },
     "activeExchanges": {
       "title": "Active Exchanges",
@@ -1073,7 +1082,9 @@
       "viewed": "Viewed",
       "burned": "Burned",
       "expired": "Expired",
-      "pending": "Pending"
+      "pending": "Pending",
+      "uploaded": "Uploaded",
+      "completed": "Completed"
     },
     "policy": {
       "burnAfterRead": "Burn after read",
@@ -1119,7 +1130,10 @@
       "success": "Burn command queued."
     },
     "delete": {
-      "success": "Exchange item removed."
+      "success": "Exchange item removed.",
+      "confirmTitle": "Delete exchange permanently?",
+      "confirmMessage": "Do you want to permanently delete this exchange? This action cannot be undone.",
+      "confirmAction": "Delete permanently"
     },
     "focusedFilter": {
       "empty": "No entries found for this filter.",

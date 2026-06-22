@@ -70,7 +70,11 @@ import { ExchangeTrustFooter } from '../exchange/ExchangeTrustFooter';
 import { ExchangeCreateTemplateModal } from '../exchange/ExchangeCreateTemplateModal';
 import { useExchangeFilters, useQuickFilterHandler } from '../exchange/useExchangeFilters';
 import { useExchangeTemplates } from '../exchange/useExchangeTemplates';
-import type { ExchangeItemRowSeed } from '../exchange/exchange-template-utils';
+import { ExchangeDeleteConfirmModal } from '../exchange/ExchangeDeleteConfirmModal';
+import { copyExchangeLinkToClipboard } from '../exchange/exchange-actions';
+import { isExchangeExpiringSoon, matchesExchangeSearch } from '../exchange/exchange-filter-utils';
+import { resolveExchangeStatus } from '../exchange/exchange-status-utils';
+import { buildExpiringSoonSeedItems, type ExchangeItemRowSeed } from '../exchange/exchange-template-utils';
 import type { ExchangeNavId, ExchangeQuickFilter, ExchangeItemRow } from '../exchange/exchange-utils';
 import {
   isExchangeFocusedFilterMode,
@@ -88,6 +92,8 @@ export default function VaultPage() {
   const [exchangeNav, setExchangeNav] = useState<ExchangeNavId>('overview');
   const [quickFilter, setQuickFilter] = useState<ExchangeQuickFilter>(null);
   const [selectedExchangeItem, setSelectedExchangeItem] = useState<ExchangeItemRow | null>(null);
+  const [deleteTargetItem, setDeleteTargetItem] = useState<ExchangeItemRow | null>(null);
+  const [seedExpiringItems, setSeedExpiringItems] = useState(() => buildExpiringSoonSeedItems());
   
   // Real DB Data
   const [history, setHistory] = useState<VaultItem[]>([]);
@@ -165,7 +171,7 @@ export default function VaultPage() {
       ticketId: 'TKT-443',
       status: 'Completed',
       expires: 'Expired',
-      expiresAt: null,
+      expiresAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
       views: 1,
       type: 'request',
       size: '1.2 GB',
@@ -198,6 +204,7 @@ export default function VaultPage() {
   const { allExchangeItems, filteredExchangeItems, exchangeSidebarCounts } = useExchangeFilters({
     history,
     mockUploads,
+    seedExpiringItems,
     tickets,
     companies,
     searchTerm,
@@ -205,6 +212,13 @@ export default function VaultPage() {
     tableFilter,
     tableTab,
   });
+
+  useEffect(() => {
+    setSelectedExchangeItem((current) => {
+      if (!current) return null;
+      return allExchangeItems.find((row) => row.id === current.id) ?? null;
+    });
+  }, [allExchangeItems]);
 
   const applyQuickFilter = useQuickFilterHandler({
     quickFilter,
@@ -425,13 +439,33 @@ export default function VaultPage() {
     }
   };
 
-  // Copy to Clipboard helper
+  // Copy to Clipboard helper (form-generated links)
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setCopying(true);
     setTimeout(() => setCopying(false), 2000);
-    toast.success("Link copied to clipboard.");
+    toast.success(t('exchange.actions.copySuccess', 'Link copied successfully.'));
   };
+
+  const handleCopyExchangeLink = React.useCallback(
+    (item: ExchangeItemRow) => copyExchangeLinkToClipboard(item.id, t),
+    [t],
+  );
+
+  const handleRotateAccessToken = React.useCallback(
+    (_item: ExchangeItemRow) => {
+      toast.success(t('exchange.drawer.rotateSuccess', 'Token rotation queued.'));
+    },
+    [t],
+  );
+
+  const handleChangeSecurityPolicy = React.useCallback(
+    (item: ExchangeItemRow) => {
+      setSelectedExchangeItem(item);
+      toast.info(t('exchange.actions.policyEditorSoon', 'Security policy editor opening.'));
+    },
+    [t],
+  );
 
   // Run AI Insights Simulation
   const handleRunAIAnalysis = (fileName: string) => {
@@ -505,13 +539,60 @@ export default function VaultPage() {
 
   const exchangeKpiStats = React.useMemo(
     () => ({
-      activeSecrets: allExchangeItems.filter((i) => i.type === 'secret' && i.status === 'Active').length || 42,
-      activeDropzones: allExchangeItems.filter((i) => i.type === 'request' && i.status === 'Active').length || 18,
+      activeSecrets:
+        allExchangeItems.filter(
+          (i) => i.type === 'secret' && resolveExchangeStatus(i) === 'Active',
+        ).length || 42,
+      activeDropzones:
+        allExchangeItems.filter(
+          (i) => i.type === 'request' && resolveExchangeStatus(i) === 'Active',
+        ).length || 18,
       filesReceived: allExchangeItems.filter((i) => i.type === 'request').length || 247,
       securityScore: 94,
     }),
     [allExchangeItems],
   );
+
+  const secretItems = React.useMemo(
+    () => allExchangeItems.filter((i) => i.type === 'secret' && matchesExchangeSearch(i, searchTerm)),
+    [allExchangeItems, searchTerm],
+  );
+
+  const dropzoneItems = React.useMemo(
+    () => allExchangeItems.filter((i) => i.type === 'request' && matchesExchangeSearch(i, searchTerm)),
+    [allExchangeItems, searchTerm],
+  );
+
+  const expiringSidebarRows = React.useMemo(
+    () =>
+      allExchangeItems
+        .filter(isExchangeExpiringSoon)
+        .slice(0, 3)
+        .map((item) => {
+          const hoursLeft = item.expiresAt
+            ? Math.max(1, Math.ceil((item.expiresAt.getTime() - Date.now()) / (60 * 60 * 1000)))
+            : 0;
+          const meta = hoursLeft <= 48 ? `${hoursLeft}h` : `${Math.ceil(hoursLeft / 24)}d`;
+          const tone =
+            hoursLeft <= 24
+              ? 'text-rose-600 bg-rose-50'
+              : hoursLeft <= 48
+                ? 'text-amber-600 bg-amber-50'
+                : 'text-blue-600 bg-blue-50';
+          return { id: item.id, title: item.name, meta, tone };
+        }),
+    [allExchangeItems],
+  );
+
+  const exchangeTableProps = {
+    selectedItemId: selectedExchangeItem?.id ?? null,
+    onRowSelect: setSelectedExchangeItem,
+    onCopyLink: handleCopyExchangeLink,
+    onQuickAction: setSelectedExchangeItem,
+    onDeleteRequest: setDeleteTargetItem,
+    onChangeSecurityPolicy: handleChangeSecurityPolicy,
+    onRotateToken: handleRotateAccessToken,
+  };
 
   const handleExchangeNavigate = (nav: ExchangeNavId) => {
     setExchangeNav(nav);
@@ -535,8 +616,10 @@ export default function VaultPage() {
     if (selectedExchangeItem?.id === id) {
       setSelectedExchangeItem(null);
     }
-    if (id.startsWith('upload-mock') || id.startsWith('seed-expiring-')) {
+    if (id.startsWith('upload-mock')) {
       setMockUploads((prev) => prev.filter((p) => p.id !== id));
+    } else if (id.startsWith('seed-expiring-')) {
+      setSeedExpiringItems((prev) => prev.filter((p) => p.id !== id));
     } else {
       await vaultService.deleteItem(id);
     }
@@ -656,15 +739,8 @@ export default function VaultPage() {
                 ) : null}
                 <ExchangeActiveTable
                   items={filteredExchangeItems}
-                  selectedItemId={selectedExchangeItem?.id ?? null}
-                  onRowSelect={setSelectedExchangeItem}
                   quickFilter={isFocusedFilterMode ? quickFilter : null}
-                  onCopyLink={(id) => copyToClipboard(`${window.location.origin}/v/${id}`)}
-                  onBurn={async (id) => {
-                    await vaultService.burnItem(id);
-                    toast.success(t('exchange.burn.success', 'Burn command queued.'));
-                  }}
-                  onDelete={handleDeleteExchangeItem}
+                  {...exchangeTableProps}
                 />
                 {isOverviewMode ? (
                   <>
@@ -683,7 +759,7 @@ export default function VaultPage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="max-w-3xl mx-auto"
+                className="max-w-5xl mx-auto space-y-5 w-full"
               >
                 <Card className="shadow-sm border border-slate-200 rounded-3xl overflow-hidden bg-white">
                   <header className="border-b border-slate-100 px-8 py-6 bg-slate-50/50">
@@ -901,6 +977,7 @@ export default function VaultPage() {
 
                   </CardContent>
                 </Card>
+                <ExchangeActiveTable items={secretItems} {...exchangeTableProps} />
               </motion.div>
             )}
 
@@ -910,7 +987,7 @@ export default function VaultPage() {
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="max-w-3xl mx-auto"
+                className="max-w-5xl mx-auto space-y-5 w-full"
               >
                 <Card className="shadow-sm border border-slate-200 rounded-3xl overflow-hidden bg-white">
                   <header className="border-b border-slate-100 px-8 py-6 bg-slate-50/50">
@@ -1082,6 +1159,7 @@ export default function VaultPage() {
 
                   </CardContent>
                 </Card>
+                <ExchangeActiveTable items={dropzoneItems} {...exchangeTableProps} />
               </motion.div>
             )}
 
@@ -1321,13 +1399,19 @@ export default function VaultPage() {
           />
         </div>
 
-        <ExchangeSecuritySidebar className="hidden xl:flex" />
+        <ExchangeSecuritySidebar className="hidden xl:flex" expiringItems={expiringSidebarRows} />
       </div>
 
       <ExchangeCreateTemplateModal
         open={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSubmit={handleCreateTemplateSubmit}
+      />
+
+      <ExchangeDeleteConfirmModal
+        item={deleteTargetItem}
+        onClose={() => setDeleteTargetItem(null)}
+        onConfirm={handleDeleteExchangeItem}
       />
 
       {/* EMERGENCY BYPASS OPTIONAL MODAL */}
