@@ -25,10 +25,9 @@ export function KBAiInsightsBanner({
 
   const summaryLine = t(
     'kb.insights.inlineSummary',
-    'AI Insights: Knowledge engagement is up {{percent}}% | {{review}} articles need review | {{outdated}} outdated SOPs',
+    'AI Insights: Documentation engagement increased by {{percent}}% this month | {{outdated}} outdated SOPs detected',
   )
     .replace('{{percent}}', String(engagementGrowth))
-    .replace('{{review}}', String(reviewCount))
     .replace('{{outdated}}', String(outdatedCount));
 
   const insights = [
@@ -63,6 +62,7 @@ export function KBAiInsightsBanner({
           onClick={() => setExpanded((v) => !v)}
           className="flex-1 min-w-0 text-left text-xs font-medium text-slate-700 truncate hover:text-slate-900"
           aria-expanded={expanded}
+          aria-label={t('kb.insights.toggleDetails', 'Toggle AI insights details')}
         >
           {summaryLine}
         </button>

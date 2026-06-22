@@ -629,6 +629,9 @@
   "kb": {
     "title": "GeistKB Wissensdatenbank",
     "pageTitle": "Wissensdatenbank",
+    "metaPillPublished": "Veröffentlicht",
+    "metaPillDrafts": "Entwürfe",
+    "metaPillReview": "Prüfung erforderlich",
     "pageSubtitle": "Zentralisierte Dokumentation, SOPs, Onboarding-Leitfäden und KI-gestütztes Unternehmenswissen",
     "headerMetaSummary": "{{articles}} Artikel • {{categories}} Kategorien • {{health}}% Gesundheitswert",
     "headerMetaInline": "GeistKB • {{published}} Veröffentlicht • {{drafts}} Entwürfe • {{review}} Prüfung erforderlich",
@@ -652,7 +655,9 @@
     },
     "actions": {
       "newArticle": "Neuer Artikel",
+      "newDocument": "Neues Dokument",
       "newCategory": "Neue Kategorie",
+      "newFolder": "Neuer Ordner / Kategorie",
       "importDocs": "Dokumente importieren",
       "aiGenerate": "Artikel mit KI generieren"
     },
@@ -674,7 +679,8 @@
       "engagement": "Ihre Wissensdatenbank verzeichnet diesen Monat {{percent}}% mehr Engagement."
     },
     "insights": {
-      "inlineSummary": "KI-Einblicke: Wissens-Engagement +{{percent}}% | {{review}} Artikel benötigen Prüfung | {{outdated}} veraltete SOPs",
+      "inlineSummary": "KI-Einblicke: Dokumentations-Engagement +{{percent}}% diesen Monat | {{outdated}} veraltete SOPs erkannt",
+      "toggleDetails": "KI-Einblicke Details umschalten",
       "reviewNeeded": "{{count}} Artikel benötigen Prüfung",
       "missingTags": "{{count}} Artikel ohne Tags",
       "outdatedSops": "{{count}} veraltete SOPs"
@@ -695,7 +701,9 @@
     "tabAll": "Alle",
     "underReview": "In Prüfung",
     "sortPopular": "Beliebt",
+    "sortPopularity": "Beliebtheit",
     "aiQualityScore": "KI-Qualitätswert",
+    "docHealthBar": "Dokumentations-Gesundheit",
     "workspaceSupportHint": "Support-Arbeitsbereich — öffentliche Kunden-FAQs",
     "workspaceDeveloperHint": "Entwickler-Arbeitsbereich — interne Docs & Runbooks",
     "outdated": "Veraltet",

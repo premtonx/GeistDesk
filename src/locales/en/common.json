@@ -629,6 +629,9 @@
   "kb": {
     "title": "GeistKB Knowledge Base",
     "pageTitle": "Knowledge Base",
+    "metaPillPublished": "Published",
+    "metaPillDrafts": "Drafts",
+    "metaPillReview": "Review Required",
     "pageSubtitle": "Centralized documentation, SOPs, onboarding guides, and AI-powered company knowledge",
     "headerMetaSummary": "{{articles}} Articles • {{categories}} Categories • {{health}}% Health Score",
     "headerMetaInline": "GeistKB • {{published}} Published • {{drafts}} Drafts • {{review}} Needs Review",
@@ -652,7 +655,9 @@
     },
     "actions": {
       "newArticle": "New Article",
+      "newDocument": "New Document",
       "newCategory": "New Category",
+      "newFolder": "New Folder / Category",
       "importDocs": "Import Docs",
       "aiGenerate": "AI Generate Article"
     },
@@ -674,7 +679,8 @@
       "engagement": "Your knowledge base gained {{percent}}% more engagement this month."
     },
     "insights": {
-      "inlineSummary": "AI Insights: Knowledge engagement is up {{percent}}% | {{review}} articles need review | {{outdated}} outdated SOPs",
+      "inlineSummary": "AI Insights: Documentation engagement increased by {{percent}}% this month | {{outdated}} outdated SOPs detected",
+      "toggleDetails": "Toggle AI insights details",
       "reviewNeeded": "{{count}} articles need review",
       "missingTags": "{{count}} articles missing tags",
       "outdatedSops": "{{count}} outdated SOPs"
@@ -695,7 +701,9 @@
     "tabAll": "All",
     "underReview": "Under Review",
     "sortPopular": "Popular",
+    "sortPopularity": "Popularity",
     "aiQualityScore": "AI Quality Score",
+    "docHealthBar": "Documentation Health",
     "workspaceSupportHint": "Support workspace — public customer FAQs",
     "workspaceDeveloperHint": "Developer workspace — internal docs & runbooks",
     "outdated": "Outdated",

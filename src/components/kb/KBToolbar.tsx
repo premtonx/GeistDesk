@@ -37,8 +37,8 @@ export function KBToolbar({
         className,
       )}
     >
-      <div className={cn(MODULE_PAGE_INNER, 'h-full flex items-center gap-2 min-w-0')}>
-        <div className="relative flex-1 min-w-[140px] max-w-md">
+      <div className={cn(MODULE_PAGE_INNER, 'h-full flex items-center gap-1.5 sm:gap-2 min-w-0 flex-wrap sm:flex-nowrap')}>
+        <div className="relative flex-1 min-w-[120px] basis-full sm:basis-auto sm:max-w-md order-1">
           <Sparkles className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-blue-500 pointer-events-none" />
           <input
             type="search"
@@ -56,7 +56,7 @@ export function KBToolbar({
           </kbd>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0 ml-auto sm:ml-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 order-2 sm:order-none ml-auto">
           {onFilterClick ? (
             <Button
               type="button"
@@ -77,7 +77,7 @@ export function KBToolbar({
           {viewsSlot}
         </div>
 
-        {createAction ? <div className="shrink-0">{createAction}</div> : null}
+        {createAction ? <div className="shrink-0 order-3">{createAction}</div> : null}
       </div>
     </div>
   );

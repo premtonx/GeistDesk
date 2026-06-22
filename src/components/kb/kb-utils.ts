@@ -3,8 +3,19 @@ import type { AppWorkspace } from '../../lib/ticketWorkspace';
 
 export const KB_RADIUS = 'rounded-xl';
 
-const DEVELOPER_CATEGORIES = new Set(['API Documentation', 'Internal SOPs', 'Integrations']);
-const SUPPORT_CATEGORIES = new Set(['Getting Started', 'Billing', 'Troubleshooting']);
+const DEVELOPER_CATEGORIES = new Set([
+  'API Documentation',
+  'Internal SOPs',
+  'Integrations',
+]);
+const SUPPORT_CATEGORIES = new Set([
+  'Getting Started',
+  'Billing',
+  'Troubleshooting',
+]);
+
+const SUPPORT_TAG_RE = /faq|sla|customer|troubleshoot|onboarding|billing|support|public/i;
+const DEVELOPER_TAG_RE = /api|developer|sop|internal|runbook|engineering|security|infrastructure|architecture/i;
 
 export function stripHtml(html: string): string {
   if (typeof document === 'undefined') {
@@ -66,13 +77,14 @@ export function filterArticlesByWorkspace<
       (a) =>
         a.visibility === 'Private' ||
         DEVELOPER_CATEGORIES.has(a.category ?? '') ||
-        (a.tags ?? []).some((tag) => /api|developer|sop|internal|runbook|engineering/i.test(tag)),
+        (a.tags ?? []).some((tag) => DEVELOPER_TAG_RE.test(tag)),
     );
   }
   return articles.filter(
     (a) =>
       a.visibility === 'Public' ||
       SUPPORT_CATEGORIES.has(a.category ?? '') ||
+      (a.tags ?? []).some((tag) => SUPPORT_TAG_RE.test(tag)) ||
       !(DEVELOPER_CATEGORIES.has(a.category ?? '') && a.visibility === 'Private'),
   );
 }

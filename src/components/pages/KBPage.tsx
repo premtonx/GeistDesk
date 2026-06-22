@@ -884,12 +884,10 @@ export default function KBPage() {
   const publishedCount = workspaceArticles.filter(a => a.status === 'Published').length;
   const draftCount = workspaceArticles.filter(a => a.status === 'Draft').length;
   const needsReviewCount = workspaceArticles.filter(a => a.status === 'Needs Review' || a.status === 'Under Revision').length;
-  const outdatedCount = workspaceArticles.filter(a => a.status === 'Outdated').length;
-  const categoryCount = new Set(workspaceArticles.map((a) => a.category).filter(Boolean)).size;
-
-  const healthScore = Math.round(
-    workspaceArticles.reduce((sum, a) => sum + (a.trustScore || 0), 0) / Math.max(workspaceArticles.length, 1),
-  );
+  const archivedCount = workspaceArticles.filter(
+    (a) => a.status === 'Archived' || a.status === 'Outdated',
+  ).length;
+  const outdatedCount = workspaceArticles.filter((a) => a.status === 'Outdated').length;
   const missingTagsCount = workspaceArticles.filter((a) => !a.tags || a.tags.length === 0).length;
   const featuredArticles = [...workspaceArticles]
     .filter((a) => a.status === 'Published')
@@ -910,7 +908,7 @@ export default function KBPage() {
     { id: 'All', label: `${t('kb.tabAll', 'All')} (${workspaceArticles.length})` },
     { id: 'Published', label: `${t('kb.published', 'Published')} (${publishedCount})` },
     { id: 'Drafts', label: `${t('kb.drafts', 'Drafts')} (${draftCount})` },
-    { id: 'Needs Review', label: `${t('kb.underReview', 'Under Review')} (${needsReviewCount})` },
+    { id: 'Archived', label: `${t('kb.status.archived', 'Archived')} (${archivedCount})` },
   ];
 
   // Helper translations for preview reading
@@ -1649,9 +1647,6 @@ export default function KBPage() {
         ) : (
           <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-slate-50/30">
             <KBPageHeader
-              articleCount={workspaceArticles.length}
-              categoryCount={categoryCount}
-              healthScore={healthScore}
               trailing={
                 <div className="hidden sm:flex items-center gap-2">
                   <Button
@@ -1682,6 +1677,7 @@ export default function KBPage() {
             />
 
             <ModulePageTabs
+              className="border-0 bg-transparent"
               tabs={statusTabs}
               activeId={activeSubTab}
               onChange={setActiveSubTab}
@@ -1702,7 +1698,7 @@ export default function KBPage() {
                     onChange={(v) => setSortBy(v as typeof sortBy)}
                     aria-label={t('actions.sort', 'Sort')}
                   >
-                    <option value="popular">{t('kb.sortPopular', 'Popular')}</option>
+                    <option value="popular">{t('kb.sortPopularity', 'Popularity')}</option>
                     <option value="date">{t('kb.sortDate', 'Date updated')}</option>
                     <option value="views">{t('kb.sortViews', 'Most views')}</option>
                     <option value="confidence">{t('kb.sortConfidence', 'Trust score')}</option>
@@ -1717,14 +1713,14 @@ export default function KBPage() {
                   iconOnly
                   menuItems={[
                     {
-                      labelKey: 'kb.actions.newArticle',
-                      labelDefault: 'New Article',
+                      labelKey: 'kb.actions.newDocument',
+                      labelDefault: 'New Document',
                       icon: <Plus className="w-3.5 h-3.5" />,
                       onClick: () => openCreateArticle(),
                     },
                     {
-                      labelKey: 'kb.actions.newCategory',
-                      labelDefault: 'New Category',
+                      labelKey: 'kb.actions.newFolder',
+                      labelDefault: 'New Folder / Category',
                       icon: <FolderPlus className="w-3.5 h-3.5" />,
                       onClick: () => setIsAddingCategory(true),
                     },

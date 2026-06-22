@@ -25,6 +25,7 @@ import {
   kbPanelClass,
   KB_RADIUS,
 } from './kb-utils';
+import { KB_LIST_GRID, KB_LIST_HEADER_CELL } from './kbListLayout';
 import type { KBArticleViewMode } from './KBViewModeSelector';
 import type { KBArticleItem } from './KBFeaturedArticles';
 import type { KBCategoryItem } from './KBCategoryGrid';
@@ -148,22 +149,24 @@ function ListView({
 
   return (
     <div className={kbPanelClass()}>
-      <div className="hidden md:grid md:grid-cols-[minmax(0,1fr)_110px_90px_100px_80px_60px] gap-2 px-3 py-2 border-b border-slate-100 bg-slate-50/80 text-[10px] uppercase font-semibold tracking-wider text-slate-400">
-        <span>{t('kb.table.title', 'Title')}</span>
-        <span>{t('kb.table.category', 'Category')}</span>
-        <span>{t('kb.table.workflowStatus', 'Status')}</span>
-        <span>{t('kb.table.metadataOwner', 'Owner')}</span>
-        <span>{t('kb.table.updated', 'Updated')}</span>
-        <span className="text-right">{t('kb.table.views', 'Views')}</span>
+      <div className={cn('hidden md:grid px-3 py-2 border-b border-slate-100 bg-slate-50/80', KB_LIST_GRID)}>
+        <span className={KB_LIST_HEADER_CELL}>{t('kb.table.title', 'Title')}</span>
+        <span className={KB_LIST_HEADER_CELL}>{t('kb.table.category', 'Category')}</span>
+        <span className={KB_LIST_HEADER_CELL}>{t('kb.table.workflowStatus', 'Status')}</span>
+        <span className={KB_LIST_HEADER_CELL}>{t('kb.table.metadataOwner', 'Owner')}</span>
+        <span className={cn(KB_LIST_HEADER_CELL, 'text-right')}>{t('kb.table.views', 'Views')}</span>
       </div>
       <div className="divide-y divide-slate-100">
         {articles.map((art) => (
           <div
             key={art.id}
             onClick={() => onSelect(art)}
-            className="grid grid-cols-1 md:grid-cols-[minmax(0,1fr)_110px_90px_100px_80px_60px] gap-2 px-3 py-2 hover:bg-slate-50/60 cursor-pointer items-center group"
+            className={cn(
+              KB_LIST_GRID,
+              'px-3 py-2 hover:bg-slate-50/60 cursor-pointer group',
+            )}
           >
-            <div className="min-w-0 flex items-center gap-2">
+            <div className="min-w-0 flex items-center gap-2 md:col-span-1">
               <p className="text-xs font-semibold text-slate-900 truncate group-hover:text-blue-600">{art.title}</p>
               <div className="md:hidden flex gap-1 ml-auto shrink-0" onClick={(e) => e.stopPropagation()}>
                 <RowActions art={art} onSelect={onSelect} onEdit={onEdit} onDelete={onDelete} />
@@ -181,9 +184,8 @@ function ListView({
                   {art.owner?.charAt(0) ?? '?'}
                 </AvatarFallback>
               </Avatar>
-              <span className="text-[11px] text-slate-600 truncate hidden sm:inline">{art.owner ?? '—'}</span>
+              <span className="text-[11px] text-slate-600 truncate">{art.owner ?? t('kb.unassignedOwner', 'Unassigned')}</span>
             </span>
-            <span className="text-[11px] text-slate-400">{formatArticleDate(art)}</span>
             <div className="flex items-center justify-between md:justify-end gap-1">
               <span className="text-[11px] font-medium tabular-nums text-slate-600">{art.views ?? 0}</span>
               <div className="hidden md:flex opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
@@ -359,7 +361,7 @@ function GridArticleCard({
         <div className="flex items-center justify-between text-[10px] text-slate-500">
           <span className="inline-flex items-center gap-1">
             <Sparkles className="w-3 h-3 text-indigo-500" />
-            {t('kb.aiQualityScore', 'AI Quality Score')}
+            {t('kb.docHealthBar', 'Documentation Health')}
           </span>
           <span className="font-semibold text-slate-700 tabular-nums">{score}%</span>
         </div>
