@@ -3,6 +3,7 @@ import { Eye, PenLine, Trash2, FileText, Clock, MoreHorizontal } from 'lucide-re
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import {
   formatArticleDate,
@@ -13,15 +14,20 @@ import {
   estimateReadTime,
   qualityBarClass,
   kbPanelClass,
-  KB_RADIUS,
 } from './kb-utils';
 import { KB_LIST_GRID, KB_LIST_HEADER_CELL } from './kbListLayout';
 import type { KBArticleViewMode } from './KBViewModeSelector';
 import type { KBArticleItem } from './KBFeaturedArticles';
+import type { KBCategoryRecord } from './kbCategoryUtils';
+import { getCategoryDisplayName } from './kbCategoryUtils';
 
 interface KBArticleViewsProps {
   articles: KBArticleItem[];
   viewMode: KBArticleViewMode;
+  categories?: KBCategoryRecord[];
+  selectedIds: Set<string>;
+  onToggleSelect: (id: string) => void;
+  onToggleSelectAll: () => void;
   onSelect: (article: KBArticleItem) => void;
   onEdit: (article: KBArticleItem) => void;
   onDuplicate: (article: KBArticleItem) => void;
@@ -32,6 +38,10 @@ interface KBArticleViewsProps {
 export function KBArticleViews({
   articles,
   viewMode,
+  categories = [],
+  selectedIds,
+  onToggleSelect,
+  onToggleSelectAll,
   onSelect,
   onEdit,
   onDuplicate,
@@ -39,6 +49,7 @@ export function KBArticleViews({
   onResetFilters,
 }: KBArticleViewsProps) {
   const { t } = useTranslation();
+  const allSelected = articles.length > 0 && articles.every((a) => selectedIds.has(a.id));
 
   if (articles.length === 0) {
     return <EmptyState onResetFilters={onResetFilters} />;
@@ -48,6 +59,11 @@ export function KBArticleViews({
     return (
       <TableView
         articles={articles}
+        categories={categories}
+        selectedIds={selectedIds}
+        allSelected={allSelected}
+        onToggleSelect={onToggleSelect}
+        onToggleSelectAll={onToggleSelectAll}
         onSelect={onSelect}
         onEdit={onEdit}
         onDelete={onDelete}
@@ -62,8 +78,12 @@ export function KBArticleViews({
           <GridArticleCard
             key={art.id}
             art={art}
+            categories={categories}
+            selected={selectedIds.has(art.id)}
+            onToggleSelect={() => onToggleSelect(art.id)}
             onSelect={onSelect}
             onEdit={onEdit}
+            onDelete={onDelete}
           />
         ))}
       </div>
@@ -73,6 +93,11 @@ export function KBArticleViews({
   return (
     <ListView
       articles={articles}
+      categories={categories}
+      selectedIds={selectedIds}
+      allSelected={allSelected}
+      onToggleSelect={onToggleSelect}
+      onToggleSelectAll={onToggleSelectAll}
       onSelect={onSelect}
       onEdit={onEdit}
       onDelete={onDelete}
@@ -100,13 +125,38 @@ function EmptyState({ onResetFilters }: { onResetFilters?: () => void }) {
   );
 }
 
+function CategoryLabel({
+  art,
+  categories,
+}: {
+  art: KBArticleItem;
+  categories: KBCategoryRecord[];
+}) {
+  const { t } = useTranslation();
+  return (
+    <span className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 w-fit truncate">
+      {getCategoryDisplayName(art.category, categories, t, categoryI18nKey)}
+    </span>
+  );
+}
+
 function ListView({
   articles,
+  categories,
+  selectedIds,
+  allSelected,
+  onToggleSelect,
+  onToggleSelectAll,
   onSelect,
   onEdit,
   onDelete,
 }: {
   articles: KBArticleItem[];
+  categories: KBCategoryRecord[];
+  selectedIds: Set<string>;
+  allSelected: boolean;
+  onToggleSelect: (id: string) => void;
+  onToggleSelectAll: () => void;
   onSelect: (a: KBArticleItem) => void;
   onEdit: (a: KBArticleItem) => void;
   onDelete: (id: string) => void;
@@ -115,7 +165,8 @@ function ListView({
 
   return (
     <div className={kbPanelClass()}>
-      <div className={cn('hidden md:grid px-4 py-2 border-b border-slate-100 bg-slate-50/80', KB_LIST_GRID)}>
+      <div className={cn('hidden md:grid px-4 py-2 border-b border-slate-100 bg-slate-50/80 items-center', KB_LIST_GRID, '[grid-template-columns:2rem_1fr_repeat(4,minmax(0,1fr))]')}>
+        <Checkbox checked={allSelected} onCheckedChange={onToggleSelectAll} aria-label={t('kb.bulk.selectAll', 'Select all')} />
         <span className={KB_LIST_HEADER_CELL}>{t('kb.table.title', 'Title')}</span>
         <span className={KB_LIST_HEADER_CELL}>{t('kb.table.category', 'Category')}</span>
         <span className={KB_LIST_HEADER_CELL}>{t('kb.table.workflowStatus', 'Status')}</span>
@@ -126,13 +177,27 @@ function ListView({
         {articles.map((art) => (
           <div
             key={art.id}
-            onClick={() => onSelect(art)}
-            className={cn(KB_LIST_GRID, 'px-4 py-2 hover:bg-slate-50/60 cursor-pointer group')}
+            className={cn(
+              'grid px-4 py-2 hover:bg-slate-50/60 cursor-pointer group items-center',
+              KB_LIST_GRID,
+              '[grid-template-columns:2rem_1fr_repeat(4,minmax(0,1fr))]',
+              selectedIds.has(art.id) && 'bg-blue-50/40',
+            )}
           >
-            <p className="text-xs font-semibold text-slate-900 truncate group-hover:text-blue-600">{art.title}</p>
-            <span className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600 w-fit truncate">
-              {t(categoryI18nKey(art.category ?? ''), art.category ?? '—')}
-            </span>
+            <div onClick={(e) => e.stopPropagation()}>
+              <Checkbox
+                checked={selectedIds.has(art.id)}
+                onCheckedChange={() => onToggleSelect(art.id)}
+                aria-label={t('kb.bulk.selectItem', 'Select article')}
+              />
+            </div>
+            <p
+              className="text-xs font-semibold text-slate-900 truncate group-hover:text-blue-600"
+              onClick={() => onSelect(art)}
+            >
+              {art.title}
+            </p>
+            <CategoryLabel art={art} categories={categories} />
             <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-lg border w-fit', getStatusBadgeClass(art.status))}>
               {t(statusLabelKey(art.status), art.status ?? 'Draft')}
             </span>
@@ -152,11 +217,21 @@ function ListView({
 
 function TableView({
   articles,
+  categories,
+  selectedIds,
+  allSelected,
+  onToggleSelect,
+  onToggleSelectAll,
   onSelect,
   onEdit,
   onDelete,
 }: {
   articles: KBArticleItem[];
+  categories: KBCategoryRecord[];
+  selectedIds: Set<string>;
+  allSelected: boolean;
+  onToggleSelect: (id: string) => void;
+  onToggleSelectAll: () => void;
   onSelect: (a: KBArticleItem) => void;
   onEdit: (a: KBArticleItem) => void;
   onDelete: (id: string) => void;
@@ -169,6 +244,9 @@ function TableView({
         <table className="w-full text-left text-xs">
           <thead>
             <tr className="bg-slate-50/80 border-b border-slate-100 text-[10px] uppercase font-semibold tracking-wider text-slate-400">
+              <th className="px-4 py-3 w-10">
+                <Checkbox checked={allSelected} onCheckedChange={onToggleSelectAll} aria-label={t('kb.bulk.selectAll', 'Select all')} />
+              </th>
               <th className="px-4 py-3">{t('kb.table.title', 'Title')}</th>
               <th className="px-4 py-3">{t('kb.table.category', 'Category')}</th>
               <th className="px-4 py-3">{t('kb.table.workflowStatus', 'Status')}</th>
@@ -180,15 +258,24 @@ function TableView({
           </thead>
           <tbody className="divide-y divide-slate-100">
             {articles.map((art) => (
-              <tr key={art.id} onClick={() => onSelect(art)} className="hover:bg-slate-50/50 cursor-pointer">
+              <tr
+                key={art.id}
+                onClick={() => onSelect(art)}
+                className={cn('hover:bg-slate-50/50 cursor-pointer', selectedIds.has(art.id) && 'bg-blue-50/40')}
+              >
+                <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
+                  <Checkbox
+                    checked={selectedIds.has(art.id)}
+                    onCheckedChange={() => onToggleSelect(art.id)}
+                    aria-label={t('kb.bulk.selectItem', 'Select article')}
+                  />
+                </td>
                 <td className="px-4 py-3 max-w-[240px]">
                   <p className="font-semibold text-slate-900 truncate">{art.title}</p>
                   <p className="text-[10px] text-slate-400 truncate mt-0.5">{stripHtml(art.content ?? '').slice(0, 60)}</p>
                 </td>
                 <td className="px-4 py-3">
-                  <span className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600">
-                    {t(categoryI18nKey(art.category ?? ''), art.category ?? '—')}
-                  </span>
+                  <CategoryLabel art={art} categories={categories} />
                 </td>
                 <td className="px-4 py-3">
                   <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-lg border', getStatusBadgeClass(art.status))}>
@@ -219,12 +306,20 @@ function TableView({
 
 function GridArticleCard({
   art,
+  categories,
+  selected,
+  onToggleSelect,
   onSelect,
   onEdit,
+  onDelete,
 }: {
   art: KBArticleItem;
+  categories: KBCategoryRecord[];
+  selected: boolean;
+  onToggleSelect: () => void;
   onSelect: (a: KBArticleItem) => void;
   onEdit: (a: KBArticleItem) => void;
+  onDelete: (id: string) => void;
 }) {
   const { t } = useTranslation();
   const score = art.trustScore ?? 85;
@@ -232,48 +327,61 @@ function GridArticleCard({
 
   return (
     <div
-      onClick={() => onSelect(art)}
       className={cn(
-        'border border-slate-200/80 bg-white p-4 cursor-pointer group hover:border-blue-200 hover:shadow-md transition-all flex flex-col h-full rounded-2xl',
+        'border border-slate-200/80 bg-white p-4 cursor-pointer group hover:border-blue-200 hover:shadow-md transition-all flex flex-col h-full rounded-xl relative',
+        selected && 'border-blue-300 ring-2 ring-blue-500/15 bg-blue-50/20',
       )}
     >
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <span className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700">
-          {t(categoryI18nKey(art.category ?? ''), art.category ?? '—')}
-        </span>
-        <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-lg border', getStatusBadgeClass(art.status))}>
-          {t(statusLabelKey(art.status), art.status ?? 'Draft')}
-        </span>
+      <div
+        className="absolute top-3 left-3 z-10"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Checkbox checked={selected} onCheckedChange={onToggleSelect} aria-label={t('kb.bulk.selectItem', 'Select article')} />
       </div>
-      <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 line-clamp-2 leading-snug mb-1.5">
-        {art.title}
-      </h3>
-      <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed flex-1 mb-3">
-        {stripHtml(art.content ?? '').slice(0, 100)}
-      </p>
-      <div className="flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-3">
-        <span className="inline-flex items-center gap-1.5">
-          <Avatar className="h-5 w-5 border border-slate-200">
-            <AvatarFallback className="text-[8px] font-bold">{art.owner?.charAt(0) ?? '?'}</AvatarFallback>
-          </Avatar>
-          {art.owner ?? '—'}
-        </span>
-        <span>{formatArticleDate(art)}</span>
-        <span className="tabular-nums font-medium">{art.views ?? 0} {t('kb.viewsLabel', 'views')}</span>
-      </div>
-      <div className="mt-2 flex items-center gap-2 text-[10px] text-slate-400">
-        <Clock className="w-3 h-3" />
-        {readTime}
-        <div className="flex-1 h-1 rounded-full bg-slate-100 overflow-hidden ml-1">
-          <div className={cn('h-full rounded-full', qualityBarClass(score))} style={{ width: `${score}%` }} />
+      <div onClick={() => onSelect(art)} className="flex flex-col h-full pl-6">
+        <div className="flex items-start justify-between gap-2 mb-2">
+          <CategoryLabel art={art} categories={categories} />
+          <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-lg border', getStatusBadgeClass(art.status))}>
+            {t(statusLabelKey(art.status), art.status ?? 'Draft')}
+          </span>
         </div>
-        <button
-          type="button"
-          onClick={(e) => { e.stopPropagation(); onEdit(art); }}
-          className="p-1 rounded-md hover:bg-slate-100 opacity-0 group-hover:opacity-100"
-        >
-          <MoreHorizontal className="w-3.5 h-3.5" />
-        </button>
+        <h3 className="text-sm font-bold text-slate-900 group-hover:text-blue-600 line-clamp-2 leading-snug mb-1.5">
+          {art.title}
+        </h3>
+        <p className="text-[11px] text-slate-500 line-clamp-2 leading-relaxed flex-1 mb-3">
+          {stripHtml(art.content ?? '').slice(0, 100)}
+        </p>
+        <div className="flex items-center justify-between text-[10px] text-slate-500 border-t border-slate-100 pt-3">
+          <span className="inline-flex items-center gap-1.5">
+            <Avatar className="h-5 w-5 border border-slate-200">
+              <AvatarFallback className="text-[8px] font-bold">{art.owner?.charAt(0) ?? '?'}</AvatarFallback>
+            </Avatar>
+            {art.owner ?? '—'}
+          </span>
+          <span>{formatArticleDate(art)}</span>
+          <span className="tabular-nums font-medium">{art.views ?? 0} {t('kb.viewsLabel', 'views')}</span>
+        </div>
+        <div className="mt-2 flex items-center gap-2 text-[10px] text-slate-400">
+          <Clock className="w-3 h-3" />
+          {readTime}
+          <div className="flex-1 h-1 rounded-full bg-slate-100 overflow-hidden ml-1">
+            <div className={cn('h-full rounded-full', qualityBarClass(score))} style={{ width: `${score}%` }} />
+          </div>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onEdit(art); }}
+            className="p-1 rounded-md hover:bg-slate-100 opacity-0 group-hover:opacity-100"
+          >
+            <MoreHorizontal className="w-3.5 h-3.5" />
+          </button>
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDelete(art.id); }}
+            className="p-1 rounded-md hover:bg-rose-50 text-rose-500 opacity-0 group-hover:opacity-100"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+          </button>
+        </div>
       </div>
     </div>
   );

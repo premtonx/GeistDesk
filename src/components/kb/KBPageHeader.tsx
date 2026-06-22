@@ -14,6 +14,7 @@ interface KBPageHeaderProps {
   onImportDocs: () => void;
   onAiGenerate: () => void;
   onNewArticle: () => void;
+  onNewCategory?: () => void;
   className?: string;
 }
 
@@ -21,6 +22,7 @@ export function KBPageHeader({
   onImportDocs,
   onAiGenerate,
   onNewArticle,
+  onNewCategory,
   className,
 }: KBPageHeaderProps) {
   const { t } = useTranslation();
@@ -77,7 +79,7 @@ export function KBPageHeader({
             <DropdownMenuItem onClick={onNewArticle} className="text-xs font-medium">
               {t('kb.actions.newDocument', 'New Document')}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={onNewArticle} className="text-xs font-medium">
+            <DropdownMenuItem onClick={onNewCategory ?? onNewArticle} className="text-xs font-medium">
               {t('kb.actions.newFolder', 'New Folder / Category')}
             </DropdownMenuItem>
           </DropdownMenuContent>

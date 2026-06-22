@@ -13,6 +13,8 @@ const SUPPORT_CATEGORIES = new Set([
   'Billing',
   'Troubleshooting',
 ]);
+const DEVELOPER_CATEGORY_IDS = new Set(['api-documentation', 'internal-sops', 'integrations']);
+const SUPPORT_CATEGORY_IDS = new Set(['getting-started', 'billing', 'troubleshooting']);
 
 const SUPPORT_TAG_RE = /faq|sla|customer|troubleshoot|onboarding|billing|support|public/i;
 const DEVELOPER_TAG_RE = /api|developer|sop|internal|runbook|engineering|security|infrastructure|architecture/i;
@@ -77,16 +79,23 @@ export function filterArticlesByWorkspace<
       (a) =>
         a.visibility === 'Private' ||
         DEVELOPER_CATEGORIES.has(a.category ?? '') ||
+        DEVELOPER_CATEGORY_IDS.has(a.category ?? '') ||
         (a.tags ?? []).some((tag) => DEVELOPER_TAG_RE.test(tag)),
     );
   }
-  return articles.filter(
-    (a) =>
+  return articles.filter((a) => {
+    const cat = a.category ?? '';
+    const isDevPrivate =
+      (DEVELOPER_CATEGORIES.has(cat) || DEVELOPER_CATEGORY_IDS.has(cat)) &&
+      a.visibility === 'Private';
+    return (
       a.visibility === 'Public' ||
-      SUPPORT_CATEGORIES.has(a.category ?? '') ||
+      SUPPORT_CATEGORIES.has(cat) ||
+      SUPPORT_CATEGORY_IDS.has(cat) ||
       (a.tags ?? []).some((tag) => SUPPORT_TAG_RE.test(tag)) ||
-      !(DEVELOPER_CATEGORIES.has(a.category ?? '') && a.visibility === 'Private'),
-  );
+      !isDevPrivate
+    );
+  });
 }
 
 export interface KBTreeNode {

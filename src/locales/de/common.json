@@ -698,6 +698,87 @@
     "updatedAgo": "Aktualisiert {{date}}",
     "allArticlesSection": "Alle Artikel",
     "resultsCount": "{{count}} Ergebnisse",
+    "allOwners": "Alle Eigentümer",
+    "allAccess": "Alle Zugriffe",
+    "publicPortal": "Öffentlich",
+    "internalSopsOnly": "Intern",
+    "editor": {
+      "placeholder": "Tippe / für Blöcke oder beginne zu schreiben…",
+      "slashMenu": "Block einfügen",
+      "bold": "Fett",
+      "italic": "Kursiv",
+      "underline": "Unterstrichen",
+      "strike": "Durchgestrichen",
+      "heading": "Überschrift",
+      "bulletList": "Aufzählungsliste",
+      "orderedList": "Nummerierte Liste",
+      "codeBlock": "Codeblock",
+      "link": "Link",
+      "image": "Bild",
+      "linkPrompt": "URL eingeben",
+      "slash": {
+        "heading1": "Überschrift 1",
+        "heading2": "Überschrift 2",
+        "heading3": "Überschrift 3",
+        "bulletList": "Aufzählungsliste",
+        "orderedList": "Nummerierte Liste",
+        "quote": "Zitat",
+        "codeBlock": "Codeblock",
+        "divider": "Trennlinie"
+      }
+    },
+    "delete": {
+      "undoToast": "Artikel entfernt",
+      "undoToastBulk": "{{count}} Artikel entfernt",
+      "undo": "Rückgängig"
+    },
+    "bulk": {
+      "itemsSelected": "{{count}} Elemente ausgewählt",
+      "deleteSelected": "Massenlöschung",
+      "clearSelection": "Auswahl aufheben",
+      "selectAll": "Alle auswählen",
+      "selectItem": "Artikel auswählen",
+      "confirmTitle": "Ausgewählte Artikel löschen?",
+      "confirmDescription": "Es werden {{count}} Artikel entfernt. Rückgängig ist innerhalb von 5 Sekunden möglich.",
+      "confirmDelete": "{{count}} Elemente löschen"
+    },
+    "categoryActions": {
+      "menu": "Kategorieaktionen",
+      "rename": "Kategorie umbenennen",
+      "delete": "Kategorie löschen"
+    },
+    "categoryRename": {
+      "title": "Kategorie umbenennen",
+      "description": "Anzeigename aktualisieren. Artikel-IDs und Referenzen bleiben unverändert.",
+      "placeholder": "Kategoriename",
+      "confirm": "Name speichern",
+      "success": "Kategorie umbenannt. Artikelreferenzen bleiben erhalten.",
+      "duplicate": "Eine andere Kategorie verwendet diesen Namen bereits."
+    },
+    "categoryDelete": {
+      "title": "Kategorie löschen?",
+      "description": "Sie entfernen \"{{name}}\" mit {{count}} Artikeln. Wählen Sie, wie mit dem Inhalt verfahren wird.",
+      "reassignTitle": "Nach Unkategorisiert verschieben",
+      "reassignDesc": "Alle Artikel sicher in den Unkategorisiert-Ordner verschieben.",
+      "purgeTitle": "Alle Artikel löschen",
+      "purgeDesc": "Kategorie und alle enthaltenen Artikel dauerhaft entfernen.",
+      "confirmReassign": "Verschieben & Kategorie löschen",
+      "confirmPurge": "Alles löschen",
+      "reassignedToast": "{{count}} Artikel nach Unkategorisiert verschoben.",
+      "purgedToast": "{{count}} Artikel zur Löschung vorgemerkt."
+    },
+    "categoryAdd": {
+      "title": "Kategorie erstellen",
+      "description": "Erweitern Sie Ihre Wissensstruktur um einen neuen Ordner.",
+      "defaultDesc": "Unternehmensseigene Wissensstruktur-Pipeline.",
+      "justNow": "Gerade eben",
+      "success": "Kategorie erfolgreich registriert.",
+      "duplicate": "Kategorie existiert bereits im Workspace.",
+      "confirm": "Kategorie erstellen"
+    },
+    "archive": {
+      "success": "Artikel ins Archiv verschoben."
+    },
     "sortLatest": "Zuletzt aktualisiert",
     "aiInsightsTitle": "KI-Wissens-Einblicke",
     "beta": "Beta",
@@ -856,6 +937,11 @@
         "name": "Interne SOPs",
         "subCategory": "SOC2-Vorfalls-Playbooks",
         "desc": "Strikte Standard-Betriebsverfahren für SOC2-Hygieneprüfungen und Sicherheitsoperationen."
+      },
+      "uncategorized": {
+        "name": "Unkategorisiert",
+        "subCategory": "Allgemein",
+        "desc": "Artikel ohne zugewiesenen Kategorieordner."
       }
     },
     "audit": {

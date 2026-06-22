@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { 
   Search, 
@@ -103,9 +103,18 @@ import { KBViewModeSelector, type KBArticleViewMode } from '../kb/KBViewModeSele
 import { KBArticleViews } from '../kb/KBArticleViews';
 import { KBLeftSidebar, type KBNavFilter } from '../kb/KBLeftSidebar';
 import { filterArticlesByWorkspace, isKbOverviewMode, isKbAiAssistantMode, categoryI18nKey } from '../kb/kb-utils';
+import {
+  type KBCategoryRecord,
+  UNCATEGORIZED_CATEGORY_ID,
+  slugifyCategoryId,
+  resolveArticleCategoryId,
+  articleMatchesCategoryId,
+} from '../kb/kbCategoryUtils';
+import { KBRichTextEditor } from '../kb/KBRichTextEditor';
+import { KBBulkActionBar } from '../kb/KBBulkActionBar';
+import { KBCategoryDeleteModal, type CategoryDeleteStrategy } from '../kb/KBCategoryDeleteModal';
 import { useWorkspace } from '../../lib/context/WorkspaceContext';
 import { KBImporter } from '../KBImporter';
-import { RichTextEditor } from '../RichTextEditor';
 import { KBAutopilotDashboard } from '../KBAutopilotDashboard';
 import { KBArticle } from '../../types';
 import { KBArticleTrustPanel } from '../KBArticleTrustPanel';
@@ -544,6 +553,13 @@ export default function KBPage() {
   
   // Advanced side panels & creation states
   const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [isRenamingCategory, setIsRenamingCategory] = useState(false);
+  const [renameCategoryId, setRenameCategoryId] = useState<string | null>(null);
+  const [renameCategoryName, setRenameCategoryName] = useState('');
+  const [deleteCategoryTarget, setDeleteCategoryTarget] = useState<KBCategoryRecord | null>(null);
+  const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
+  const pendingDeleteRef = useRef<{ items: any[]; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
   const [newCategoryName, setNewCategoryName] = useState('');
   const [newCategoryDesc, setNewCategoryDesc] = useState('');
   const [newCategoryOwner, setNewCategoryOwner] = useState('Sarah James');
@@ -584,13 +600,13 @@ export default function KBPage() {
   }, [workspace]);
 
   // Default internal structures
-  const [categories, setCategories] = useState([
-    { name: 'Getting Started', subCategory: 'Workspace Setup', desc: 'Onboarding tools, basic walk-throughs, and quick guides for setting up core nodes.', owner: 'Sarah James', updated: '2 days ago', icon: BookOpen, order: 1 },
-    { name: 'Billing', subCategory: 'Invoicing Methods', desc: 'Invoices troubleshooting, subscription models, and finance integration configurations.', owner: 'John Doe', updated: '5 days ago', icon: FileText, order: 2 },
-    { name: 'API Documentation', subCategory: 'Authentication', desc: 'Developer integration guidelines, dynamic webhooks, API tokens, and sandbox tools.', owner: 'Anna Bell', updated: 'Yesterday', icon: FileJson, order: 3 },
-    { name: 'Integrations', subCategory: 'Slack Integrations', desc: 'Third-party notification setups, Slack pipelines, and Teams live synchronization.', owner: 'Anna Bell', updated: '1 week ago', icon: Link, order: 4 },
-    { name: 'Troubleshooting', subCategory: 'VPN Configuration Issues', desc: 'Diagnostic flowcharts, DNS routing remedies, and customer hardware alignment SOPs.', owner: 'Will Coyote', updated: 'Today', icon: Wrench, order: 5 },
-    { name: 'Internal SOPs', subCategory: 'SOC2 Incident Playbooks', desc: 'Rigorous standard operating procedures for SOC2 sanitization audits and security operations.', owner: 'Mike Chen', updated: '6 days ago', icon: ShieldCheck, order: 6 }
+  const [categories, setCategories] = useState<KBCategoryRecord[]>([
+    { id: 'getting-started', name: 'Getting Started', subCategory: 'Workspace Setup', desc: 'Onboarding tools, basic walk-throughs, and quick guides for setting up core nodes.', owner: 'Sarah James', updated: '2 days ago', icon: BookOpen, order: 1 },
+    { id: 'billing', name: 'Billing', subCategory: 'Invoicing Methods', desc: 'Invoices troubleshooting, subscription models, and finance integration configurations.', owner: 'John Doe', updated: '5 days ago', icon: FileText, order: 2 },
+    { id: 'api-documentation', name: 'API Documentation', subCategory: 'Authentication', desc: 'Developer integration guidelines, dynamic webhooks, API tokens, and sandbox tools.', owner: 'Anna Bell', updated: 'Yesterday', icon: FileJson, order: 3 },
+    { id: 'integrations', name: 'Integrations', subCategory: 'Slack Integrations', desc: 'Third-party notification setups, Slack pipelines, and Teams live synchronization.', owner: 'Anna Bell', updated: '1 week ago', icon: Link, order: 4 },
+    { id: 'troubleshooting', name: 'Troubleshooting', subCategory: 'VPN Configuration Issues', desc: 'Diagnostic flowcharts, DNS routing remedies, and customer hardware alignment SOPs.', owner: 'Will Coyote', updated: 'Today', icon: Wrench, order: 5 },
+    { id: 'internal-sops', name: 'Internal SOPs', subCategory: 'SOC2 Incident Playbooks', desc: 'Rigorous standard operating procedures for SOC2 sanitization audits and security operations.', owner: 'Mike Chen', updated: '6 days ago', icon: ShieldCheck, order: 6 },
   ]);
 
   // Syncing with Firestore DB
@@ -634,31 +650,164 @@ export default function KBPage() {
 
   const handleAddCategory = () => {
     if (newCategoryName.trim()) {
-      if (!categories.find(c => c.name === newCategoryName)) {
-        setCategories([...categories, { 
-          name: newCategoryName, 
+      const id = slugifyCategoryId(newCategoryName);
+      if (!categories.find((c) => c.id === id || c.name === newCategoryName)) {
+        setCategories([...categories, {
+          id,
+          name: newCategoryName,
           subCategory: newCategoryParent !== 'None' ? `${newCategoryParent} Child` : 'General Node',
-          desc: newCategoryDesc || 'Enterprise custom knowledge structures pipeline.', 
-          owner: newCategoryOwner, 
-          updated: 'Just now', 
+          desc: newCategoryDesc || t('kb.categoryAdd.defaultDesc', 'Enterprise custom knowledge structures pipeline.'),
+          owner: newCategoryOwner,
+          updated: t('kb.categoryAdd.justNow', 'Just now'),
           icon: BookOpen,
-          order: categories.length + 1
+          order: categories.length + 1,
         }]);
         setNewCategoryName('');
         setNewCategoryDesc('');
         setIsAddingCategory(false);
-        toast.success(`Category "${newCategoryName}" registered under "${newCategoryParent}" scope successfully.`);
+        toast.success(t('kb.categoryAdd.success', 'Category registered successfully.'));
       } else {
-        toast.error("Category node already configured in workspace.");
+        toast.error(t('kb.categoryAdd.duplicate', 'Category already exists in workspace.'));
       }
     }
   };
 
-  const openCreateArticle = (category = selectedCategory || 'Getting Started') => {
+  const openRenameCategory = (categoryId: string) => {
+    const cat = categories.find((c) => c.id === categoryId);
+    if (!cat) return;
+    setRenameCategoryId(categoryId);
+    setRenameCategoryName(cat.name);
+    setIsRenamingCategory(true);
+  };
+
+  const handleRenameCategory = () => {
+    if (!renameCategoryId || !renameCategoryName.trim()) return;
+    const duplicate = categories.some(
+      (c) => c.id !== renameCategoryId && c.name.toLowerCase() === renameCategoryName.trim().toLowerCase(),
+    );
+    if (duplicate) {
+      toast.error(t('kb.categoryRename.duplicate', 'Another category already uses this name.'));
+      return;
+    }
+    setCategories((prev) =>
+      prev.map((c) =>
+        c.id === renameCategoryId
+          ? { ...c, name: renameCategoryName.trim(), updated: t('kb.categoryAdd.justNow', 'Just now') }
+          : c,
+      ),
+    );
+    setIsRenamingCategory(false);
+    setRenameCategoryId(null);
+    toast.success(t('kb.categoryRename.success', 'Category renamed. Article references preserved.'));
+  };
+
+  const openDeleteCategory = (categoryId: string) => {
+    const cat = categories.find((c) => c.id === categoryId);
+    if (!cat || cat.id === UNCATEGORIZED_CATEGORY_ID) return;
+    setDeleteCategoryTarget(cat);
+  };
+
+  const handleConfirmDeleteCategory = async (strategy: CategoryDeleteStrategy) => {
+    if (!deleteCategoryTarget) return;
+    const catId = deleteCategoryTarget.id;
+    const affected = articles.filter((a) => resolveArticleCategoryId(a, categories) === catId);
+
+    if (strategy === 'reassign') {
+      setArticles((prev) =>
+        prev.map((a) =>
+          resolveArticleCategoryId(a, categories) === catId
+            ? { ...a, category: UNCATEGORIZED_CATEGORY_ID }
+            : a,
+        ),
+      );
+      const firestoreItems = affected.filter((a) => !a.id.startsWith('seed-'));
+      await Promise.all(
+        firestoreItems.map((a) => kbService.updateArticle(a.id, { category: UNCATEGORIZED_CATEGORY_ID }, a.tags ?? [])),
+      );
+      toast.success(
+        t('kb.categoryDelete.reassignedToast', '{{count}} articles moved to Uncategorized.')
+          .replace('{{count}}', String(affected.length)),
+      );
+    } else {
+      schedulePermanentDelete(affected);
+      toast.success(
+        t('kb.categoryDelete.purgedToast', '{{count}} articles queued for deletion.')
+          .replace('{{count}}', String(affected.length)),
+      );
+    }
+
+    setCategories((prev) => prev.filter((c) => c.id !== catId));
+    if (selectedCategory === catId || kbNav.type === 'category' && kbNav.id === catId) {
+      setSelectedCategory('All');
+      setKbNav({ type: 'workspace', id: 'overview' });
+    }
+    setDeleteCategoryTarget(null);
+  };
+
+  const schedulePermanentDelete = useCallback((items: any[]) => {
+    if (items.length === 0) return;
+    const ids = new Set(items.map((a) => a.id));
+    setArticles((prev) => prev.filter((a) => !ids.has(a.id)));
+    setSelectedArticleIds((prev) => {
+      const next = new Set(prev);
+      ids.forEach((id) => next.delete(id));
+      return next;
+    });
+
+    if (pendingDeleteRef.current) {
+      clearTimeout(pendingDeleteRef.current.timeoutId);
+    }
+
+    const timeoutId = setTimeout(async () => {
+      const firestoreItems = items.filter((a) => !a.id.startsWith('seed-'));
+      if (firestoreItems.length === 1) {
+        await kbService.deleteArticle(firestoreItems[0].id, firestoreItems[0].tags ?? []);
+      } else if (firestoreItems.length > 1) {
+        await kbService.deleteArticles(
+          firestoreItems.map((a) => ({ id: a.id, tags: a.tags ?? [] })),
+        );
+      }
+      pendingDeleteRef.current = null;
+    }, 5000);
+
+    pendingDeleteRef.current = { items, timeoutId };
+  }, []);
+
+  const restorePendingDelete = useCallback(() => {
+    if (!pendingDeleteRef.current) return;
+    clearTimeout(pendingDeleteRef.current.timeoutId);
+    const { items } = pendingDeleteRef.current;
+    setArticles((prev) => {
+      const existing = new Set(prev.map((a) => a.id));
+      const restored = items.filter((a) => !existing.has(a.id));
+      return [...restored, ...prev];
+    });
+    pendingDeleteRef.current = null;
+  }, []);
+
+  const showUndoDeleteToast = useCallback((count: number) => {
+    toast(t('kb.delete.undoToast', 'Article removed'), {
+      description:
+        count > 1
+          ? t('kb.delete.undoToastBulk', '{{count}} articles removed').replace('{{count}}', String(count))
+          : undefined,
+      action: {
+        label: t('kb.delete.undo', 'Undo'),
+        onClick: restorePendingDelete,
+      },
+      duration: 5000,
+    });
+  }, [restorePendingDelete, t]);
+
+  const openCreateArticle = (category = selectedCategory || 'getting-started') => {
+    const catId =
+      category === 'All'
+        ? 'getting-started'
+        : resolveArticleCategoryId({ category }, categories);
     setNewArticle({
       title: '',
       content: '',
-      category,
+      category: catId,
       subCategory: 'Workspace Setup',
       visibility: 'Public',
       tags: [],
@@ -757,7 +906,7 @@ export default function KBPage() {
     setNewArticle({
       title: article.title,
       content: article.content,
-      category: article.category,
+      category: resolveArticleCategoryId(article, categories),
       subCategory: article.subCategory || 'Workspace Setup',
       visibility: article.visibility || 'Public',
       tags: article.tags || [],
@@ -787,12 +936,7 @@ export default function KBPage() {
 
   const handleArchiveArticle = (id: string) => {
     setArticles(p => p.map(a => a.id === id ? { ...a, status: 'Archived' } : a));
-    toast.success("Article shifted to secure archive partition.");
-  };
-
-  const handleDeleteArticle = (id: string) => {
-    setArticles(p => p.filter(a => a.id !== id));
-    toast.warning("Article shredded from physical databases.");
+    toast.success(t('kb.archive.success', 'Article moved to archive.'));
   };
 
   const handleUpdateStatus = (id: string, newStats: string) => {
@@ -838,19 +982,8 @@ export default function KBPage() {
     [withConfidence, workspace],
   );
 
-  const matchSidebarCategory = (art: { category?: string; tags?: string[] }, catId: string) => {
-    if (catId === 'Product Guides') {
-      return art.category === 'Getting Started' || (art.tags ?? []).some((tag) => /product|guide/i.test(tag));
-    }
-    if (catId === 'Security') {
-      return art.category === 'Internal SOPs' || (art.tags ?? []).some((tag) => /security|soc2/i.test(tag));
-    }
-    if (catId === 'Company Policies') {
-      return (art.tags ?? []).some((tag) => /policy|compliance|gdpr/i.test(tag));
-    }
-    if (catId === 'Billing') return art.category === 'Billing';
-    return art.category === catId;
-  };
+  const matchSidebarCategory = (art: { category?: string; tags?: string[] }, catId: string) =>
+    articleMatchesCategoryId(art, catId, categories);
 
   const processedArticles = workspaceArticles.filter((art) => {
     if (selectedCategory !== 'All' && !matchSidebarCategory(art, selectedCategory)) return false;
@@ -903,6 +1036,43 @@ export default function KBPage() {
       return dateB.getTime() - dateA.getTime();
     }
   });
+
+  const handleDeleteArticle = (id: string) => {
+    const article = articles.find((a) => a.id === id);
+    if (!article) return;
+    schedulePermanentDelete([article]);
+    showUndoDeleteToast(1);
+    if (viewingArticle?.id === id) setViewingArticle(null);
+  };
+
+  const toggleArticleSelection = (id: string) => {
+    setSelectedArticleIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAllArticles = () => {
+    const visibleIds = processedArticles.map((a) => a.id);
+    const allSelected = visibleIds.length > 0 && visibleIds.every((id) => selectedArticleIds.has(id));
+    setSelectedArticleIds((prev) => {
+      const next = new Set(prev);
+      if (allSelected) visibleIds.forEach((id) => next.delete(id));
+      else visibleIds.forEach((id) => next.add(id));
+      return next;
+    });
+  };
+
+  const handleBulkDelete = () => {
+    const items = articles.filter((a) => selectedArticleIds.has(a.id));
+    if (items.length === 0) return;
+    schedulePermanentDelete(items);
+    showUndoDeleteToast(items.length);
+    setBulkDeleteOpen(false);
+    setSelectedArticleIds(new Set());
+  };
 
   // Library stats for compact header and tab counts
   const publishedCount = workspaceArticles.filter(a => a.status === 'Published').length;
@@ -1739,6 +1909,7 @@ export default function KBPage() {
                     onImportDocs={() => setIsImportOpen(true)}
                     onAiGenerate={() => setKbNav({ type: 'workspace', id: 'ai' })}
                     onNewArticle={() => openCreateArticle()}
+                    onNewCategory={() => setIsAddingCategory(true)}
                   />
 
                   {isAiAssistantMode ? (
@@ -1817,8 +1988,18 @@ export default function KBPage() {
                           </div>
                         </div>
                       </div>
+                      <KBBulkActionBar
+                        selectedCount={selectedArticleIds.size}
+                        onClear={() => setSelectedArticleIds(new Set())}
+                        onBulkDelete={() => setBulkDeleteOpen(true)}
+                        className="mb-3"
+                      />
                       <KBArticleViews
                         articles={processedArticles}
+                        categories={categories}
+                        selectedIds={selectedArticleIds}
+                        onToggleSelect={toggleArticleSelection}
+                        onToggleSelectAll={toggleSelectAllArticles}
                         viewMode={viewLayout}
                         onSelect={(art) => setViewingArticle(art)}
                         onEdit={handleEditArticle}
@@ -1832,12 +2013,15 @@ export default function KBPage() {
                   {isOverviewMode ? (
                     <KBCategoryGrid
                       categories={categories}
+                      categoryRecords={categories}
                       articles={workspaceArticles}
                       selectedCategory={selectedCategory}
                       onSelect={(name) => {
                         setSelectedCategory(name);
                         setKbNav({ type: 'category', id: name });
                       }}
+                      onRename={openRenameCategory}
+                      onDelete={openDeleteCategory}
                     />
                   ) : null}
 
@@ -1864,8 +2048,18 @@ export default function KBPage() {
                           </div>
                         </div>
                       </div>
+                      <KBBulkActionBar
+                        selectedCount={selectedArticleIds.size}
+                        onClear={() => setSelectedArticleIds(new Set())}
+                        onBulkDelete={() => setBulkDeleteOpen(true)}
+                        className="mb-3"
+                      />
                       <KBArticleViews
                         articles={processedArticles}
+                        categories={categories}
+                        selectedIds={selectedArticleIds}
+                        onToggleSelect={toggleArticleSelection}
+                        onToggleSelectAll={toggleSelectAllArticles}
                         viewMode={viewLayout}
                         onSelect={(art) => setViewingArticle(art)}
                         onEdit={handleEditArticle}
@@ -1955,8 +2149,8 @@ export default function KBPage() {
                       onChange={(e) => setNewArticle({...newArticle, category: e.target.value})}
                       className="w-full h-11 border border-slate-200 rounded-xl px-3 text-xs bg-slate-50 font-bold cursor-pointer"
                     >
-                       {categories.map((cat, idx) => (
-                         <option key={idx} value={cat.name}>{cat.name}</option>
+                       {categories.map((cat) => (
+                         <option key={cat.id} value={cat.id}>{cat.name}</option>
                        ))}
                     </select>
                   </div>
@@ -1981,11 +2175,11 @@ export default function KBPage() {
                       </span>
                    </div>
 
-                   <RichTextEditor
+                   <KBRichTextEditor
                      value={newArticle.content}
                      onChange={(c) => setNewArticle({...newArticle, content: c})}
-                     placeholder="Type deep formatted guide procedures using standard clean html..."
-                     className="flex-1 min-h-[200px] border border-slate-200 rounded-xl overflow-hidden bg-slate-50/20"
+                     placeholder={t('kb.editor.placeholder', 'Type / for blocks, or start writing…')}
+                     className="flex-1 min-h-[200px]"
                    />
                 </div>
 
@@ -2111,8 +2305,8 @@ export default function KBPage() {
       <Dialog open={isAddingCategory} onOpenChange={setIsAddingCategory}>
         <DialogContent className="max-w-[440px] rounded-2xl p-5 border shadow-2xl">
           <DialogHeader className="pb-3 border-b">
-             <DialogTitle className="text-sm font-black uppercase text-slate-800 tracking-wider">Create Enterprise category node</DialogTitle>
-             <DialogDescription className="text-[11px] text-slate-400 font-semibold">Extend your team's knowledge mapping structure with nested directories.</DialogDescription>
+             <DialogTitle className="text-sm font-black uppercase text-slate-800 tracking-wider">{t('kb.categoryAdd.title', 'Create category')}</DialogTitle>
+             <DialogDescription className="text-[11px] text-slate-400 font-semibold">{t('kb.categoryAdd.description', 'Extend your knowledge structure with a new folder.')}</DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4 text-xs">
@@ -2168,11 +2362,69 @@ export default function KBPage() {
 
           <DialogFooter className="pt-3 border-t">
              <Button variant="ghost" className="text-xs h-9" onClick={() => setIsAddingCategory(false)}>
-                Dismiss
+                {t('actions.cancel', 'Cancel')}
              </Button>
              <Button className="bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs h-9.5 px-4" onClick={handleAddCategory}>
-                Instantiate Directory
+                {t('kb.categoryAdd.confirm', 'Create category')}
              </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <KBCategoryDeleteModal
+        open={!!deleteCategoryTarget}
+        onOpenChange={(open) => { if (!open) setDeleteCategoryTarget(null); }}
+        category={deleteCategoryTarget}
+        articleCount={
+          deleteCategoryTarget
+            ? articles.filter((a) => resolveArticleCategoryId(a, categories) === deleteCategoryTarget.id).length
+            : 0
+        }
+        onConfirm={handleConfirmDeleteCategory}
+      />
+
+      <Dialog open={isRenamingCategory} onOpenChange={setIsRenamingCategory}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{t('kb.categoryRename.title', 'Rename category')}</DialogTitle>
+            <DialogDescription>{t('kb.categoryRename.description', 'Update the display name. Article IDs and references stay intact.')}</DialogDescription>
+          </DialogHeader>
+          <Input
+            value={renameCategoryName}
+            onChange={(e) => setRenameCategoryName(e.target.value)}
+            className="h-10 rounded-xl"
+            placeholder={t('kb.categoryRename.placeholder', 'Category name')}
+          />
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setIsRenamingCategory(false)}>
+              {t('actions.cancel', 'Cancel')}
+            </Button>
+            <Button className="rounded-xl bg-blue-600 hover:bg-blue-700" onClick={handleRenameCategory}>
+              {t('kb.categoryRename.confirm', 'Save name')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={bulkDeleteOpen} onOpenChange={setBulkDeleteOpen}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Trash2 className="w-5 h-5 text-rose-500" />
+              {t('kb.bulk.confirmTitle', 'Delete selected articles?')}
+            </DialogTitle>
+            <DialogDescription>
+              {t('kb.bulk.confirmDescription', 'This will remove {{count}} articles. You can undo within 5 seconds.')
+                .replace('{{count}}', String(selectedArticleIds.size))}
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" className="rounded-xl" onClick={() => setBulkDeleteOpen(false)}>
+              {t('actions.cancel', 'Cancel')}
+            </Button>
+            <Button variant="destructive" className="rounded-xl" onClick={handleBulkDelete}>
+              {t('kb.bulk.confirmDelete', 'Delete {{count}} items').replace('{{count}}', String(selectedArticleIds.size))}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

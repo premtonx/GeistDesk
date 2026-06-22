@@ -698,6 +698,87 @@
     "updatedAgo": "Updated {{date}}",
     "allArticlesSection": "All Articles",
     "resultsCount": "{{count}} results",
+    "allOwners": "All owners",
+    "allAccess": "All access",
+    "publicPortal": "Public",
+    "internalSopsOnly": "Internal",
+    "editor": {
+      "placeholder": "Type / for blocks, or start writing…",
+      "slashMenu": "Insert block",
+      "bold": "Bold",
+      "italic": "Italic",
+      "underline": "Underline",
+      "strike": "Strikethrough",
+      "heading": "Heading",
+      "bulletList": "Bullet list",
+      "orderedList": "Numbered list",
+      "codeBlock": "Code block",
+      "link": "Link",
+      "image": "Image",
+      "linkPrompt": "Enter URL",
+      "slash": {
+        "heading1": "Heading 1",
+        "heading2": "Heading 2",
+        "heading3": "Heading 3",
+        "bulletList": "Bullet list",
+        "orderedList": "Numbered list",
+        "quote": "Quote",
+        "codeBlock": "Code block",
+        "divider": "Divider"
+      }
+    },
+    "delete": {
+      "undoToast": "Article removed",
+      "undoToastBulk": "{{count}} articles removed",
+      "undo": "Undo"
+    },
+    "bulk": {
+      "itemsSelected": "{{count}} items selected",
+      "deleteSelected": "Bulk Delete",
+      "clearSelection": "Clear selection",
+      "selectAll": "Select all",
+      "selectItem": "Select article",
+      "confirmTitle": "Delete selected articles?",
+      "confirmDescription": "This will remove {{count}} articles. You can undo within 5 seconds.",
+      "confirmDelete": "Delete {{count}} items"
+    },
+    "categoryActions": {
+      "menu": "Category actions",
+      "rename": "Rename Category",
+      "delete": "Delete Category"
+    },
+    "categoryRename": {
+      "title": "Rename category",
+      "description": "Update the display name. Article IDs and references stay intact.",
+      "placeholder": "Category name",
+      "confirm": "Save name",
+      "success": "Category renamed. Article references preserved.",
+      "duplicate": "Another category already uses this name."
+    },
+    "categoryDelete": {
+      "title": "Delete category?",
+      "description": "You are about to remove \"{{name}}\" which contains {{count}} articles. Choose how to handle the content.",
+      "reassignTitle": "Move to Uncategorized",
+      "reassignDesc": "Safely reassign all articles to the Uncategorized fallback bucket.",
+      "purgeTitle": "Delete all articles",
+      "purgeDesc": "Permanently remove the category and every article inside it.",
+      "confirmReassign": "Move & delete category",
+      "confirmPurge": "Delete everything",
+      "reassignedToast": "{{count}} articles moved to Uncategorized.",
+      "purgedToast": "{{count}} articles queued for deletion."
+    },
+    "categoryAdd": {
+      "title": "Create category",
+      "description": "Extend your knowledge structure with a new folder.",
+      "defaultDesc": "Enterprise custom knowledge structures pipeline.",
+      "justNow": "Just now",
+      "success": "Category registered successfully.",
+      "duplicate": "Category already exists in workspace.",
+      "confirm": "Create category"
+    },
+    "archive": {
+      "success": "Article moved to archive."
+    },
     "sortLatest": "Latest updated",
     "aiInsightsTitle": "AI Knowledge Insights",
     "beta": "Beta",
@@ -856,6 +937,11 @@
         "name": "Internal SOPs",
         "subCategory": "SOC2 Incident Playbooks",
         "desc": "Rigorous standard operating procedures for SOC2 sanitization audits and security operations."
+      },
+      "uncategorized": {
+        "name": "Uncategorized",
+        "subCategory": "General",
+        "desc": "Articles without an assigned category folder."
       }
     },
     "audit": {

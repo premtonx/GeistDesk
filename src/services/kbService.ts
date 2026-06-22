@@ -9,6 +9,8 @@ import {
   getDocs,
   doc,
   updateDoc,
+  deleteDoc,
+  writeBatch,
   increment,
   setDoc
 } from 'firebase/firestore';
@@ -103,6 +105,64 @@ export const kbService = {
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, KB_COLLECTION);
+    }
+  },
+
+  deleteArticle: async (id: string, tags: string[] = []) => {
+    try {
+      const docRef = doc(db, KB_COLLECTION, id);
+      await deleteDoc(docRef);
+      for (const tagName of tags) {
+        const tagId = tagName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+        const tagRef = doc(db, TAGS_COLLECTION, tagId);
+        await setDoc(tagRef, { count: increment(-1) }, { merge: true });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, KB_COLLECTION);
+      throw error;
+    }
+  },
+
+  deleteArticles: async (items: { id: string; tags?: string[] }[]) => {
+    try {
+      const batch = writeBatch(db);
+      const tagDeltas = new Map<string, number>();
+
+      for (const item of items) {
+        batch.delete(doc(db, KB_COLLECTION, item.id));
+        for (const tagName of item.tags ?? []) {
+          const tagId = tagName.toLowerCase().replace(/[^a-z0-9]/g, '-');
+          tagDeltas.set(tagId, (tagDeltas.get(tagId) ?? 0) - 1);
+        }
+      }
+
+      await batch.commit();
+
+      for (const [tagId, delta] of tagDeltas) {
+        const tagRef = doc(db, TAGS_COLLECTION, tagId);
+        await setDoc(tagRef, { count: increment(delta) }, { merge: true });
+      }
+    } catch (error) {
+      handleFirestoreError(error, OperationType.DELETE, KB_COLLECTION);
+      throw error;
+    }
+  },
+
+  reassignCategory: async (fromCategoryId: string, toCategoryId: string) => {
+    try {
+      const q = query(collection(db, KB_COLLECTION), where('category', '==', fromCategoryId));
+      const snapshot = await getDocs(q);
+      if (snapshot.empty) return 0;
+
+      const batch = writeBatch(db);
+      snapshot.docs.forEach((d) => {
+        batch.update(d.ref, { category: toCategoryId, updatedAt: serverTimestamp() });
+      });
+      await batch.commit();
+      return snapshot.docs.length;
+    } catch (error) {
+      handleFirestoreError(error, OperationType.UPDATE, KB_COLLECTION);
+      throw error;
     }
   },
 
