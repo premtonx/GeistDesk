@@ -1,49 +1,88 @@
 import React from 'react';
+import { ChevronDown, Sparkles, Upload, Plus } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
-import { MODULE_PAGE_PX } from '../ui/module-page/styles';
-
-interface MetaPillProps {
-  dotClass: string;
-  label: string;
-}
-
-function MetaPill({ dotClass, label }: MetaPillProps) {
-  return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-slate-200/80 bg-slate-50/80 px-2.5 py-1 text-[11px] font-medium text-slate-600 shrink-0">
-      <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', dotClass)} aria-hidden />
-      {label}
-    </span>
-  );
-}
+import { Button } from '../ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 
 interface KBPageHeaderProps {
-  trailing?: React.ReactNode;
+  onImportDocs: () => void;
+  onAiGenerate: () => void;
+  onNewArticle: () => void;
   className?: string;
 }
 
-export function KBPageHeader({ trailing, className }: KBPageHeaderProps) {
+export function KBPageHeader({
+  onImportDocs,
+  onAiGenerate,
+  onNewArticle,
+  className,
+}: KBPageHeaderProps) {
   const { t } = useTranslation();
 
   return (
-    <header
-      className={cn(
-        MODULE_PAGE_PX,
-        'h-14 min-h-[3.5rem] max-h-14 flex items-center justify-between border-b border-slate-200/80 bg-white shrink-0',
-        className,
-      )}
-    >
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <h1 className="text-base font-bold tracking-tight text-slate-900 shrink-0">
+    <header className={cn('flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4', className)}>
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">
           {t('kb.pageTitle', 'Knowledge Base')}
         </h1>
-        <div className="hidden sm:flex items-center gap-1.5 flex-wrap min-w-0">
-          <MetaPill dotClass="bg-emerald-500" label={t('kb.metaPillPublished', 'Published')} />
-          <MetaPill dotClass="bg-orange-500" label={t('kb.metaPillDrafts', 'Drafts')} />
-          <MetaPill dotClass="bg-violet-500" label={t('kb.metaPillReview', 'Review Required')} />
-        </div>
+        <p className="text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
+          {t(
+            'kb.pageSubtitle',
+            'Centralized documentation, SOPs, onboarding guides, and AI-powered company knowledge',
+          )}
+        </p>
       </div>
-      {trailing ? <div className="shrink-0 flex items-center gap-2">{trailing}</div> : null}
+      <div className="flex flex-wrap items-center gap-2 shrink-0">
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onImportDocs}
+          className="h-9 rounded-xl text-xs font-semibold border-slate-200/80"
+        >
+          <Upload className="w-3.5 h-3.5 mr-1.5" />
+          {t('kb.actions.importDocs', 'Import Docs')}
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={onAiGenerate}
+          className="h-9 rounded-xl text-xs font-semibold border-slate-200/80"
+        >
+          <Sparkles className="w-3.5 h-3.5 mr-1.5 text-blue-500" />
+          {t('kb.actions.aiGenerateShort', 'AI Generate')}
+        </Button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                {t('kb.actions.newArticle', 'New Article')}
+                <ChevronDown className="w-3.5 h-3.5 opacity-80" />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" className="w-48 rounded-xl">
+            <DropdownMenuItem onClick={onNewArticle} className="text-xs font-medium">
+              {t('kb.actions.newDocument', 'New Document')}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={onNewArticle} className="text-xs font-medium">
+              {t('kb.actions.newFolder', 'New Folder / Category')}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
     </header>
   );
 }

@@ -650,8 +650,9 @@
     "kpi": {
       "publishedArticles": "Published Articles",
       "draftArticles": "Draft Articles",
-      "healthScore": "Knowledge Health Score",
-      "monthlyViews": "Monthly Views"
+      "healthScore": "Knowledge Health",
+      "monthlyViews": "Monthly Views",
+      "vsLastMonth": "vs last month"
     },
     "actions": {
       "newArticle": "New Article",
@@ -659,8 +660,49 @@
       "newCategory": "New Category",
       "newFolder": "New Folder / Category",
       "importDocs": "Import Docs",
-      "aiGenerate": "AI Generate Article"
+      "aiGenerate": "AI Generate Article",
+      "aiGenerateShort": "AI Generate"
     },
+    "sidebar": {
+      "workspace": "Workspace",
+      "categories": "Categories",
+      "smartViews": "Smart Views",
+      "settings": "Settings",
+      "overview": "Overview",
+      "allArticles": "All Articles",
+      "drafts": "Drafts",
+      "reviews": "Reviews",
+      "aiAssistant": "AI Assistant",
+      "analytics": "Analytics",
+      "billingPlans": "Billing & Plans",
+      "popularArticles": "Popular Articles",
+      "recentlyUpdated": "Recently Updated",
+      "mostViewed": "Most Viewed",
+      "missingArticles": "Missing Articles",
+      "outdatedContent": "Outdated Content"
+    },
+    "popularLabel": "Popular",
+    "popular": {
+      "ssoSetup": "SSO Setup",
+      "apiAuth": "API Authentication",
+      "billing": "Billing FAQ",
+      "vpn": "VPN Troubleshooting"
+    },
+    "aiSearchHeading": "Ask Geist AI or search documentation...",
+    "categoryExplorer": "Category Explorer",
+    "coverage": "Coverage",
+    "helpfulness": "Helpfulness",
+    "featuredBadge": "Featured",
+    "viewAll": "View all",
+    "helpful": "helpful",
+    "updatedAgo": "Updated {{date}}",
+    "allArticlesSection": "All Articles",
+    "sortLatest": "Latest updated",
+    "aiInsightsTitle": "AI Knowledge Insights",
+    "beta": "Beta",
+    "viewAllInsights": "View all insights",
+    "topContributors": "Top Contributors",
+    "articlesShort": "articles",
     "layout": {
       "list": "List",
       "tree": "Tree",
@@ -683,7 +725,8 @@
       "toggleDetails": "Toggle AI insights details",
       "reviewNeeded": "{{count}} articles need review",
       "missingTags": "{{count}} articles missing tags",
-      "outdatedSops": "{{count}} outdated SOPs"
+      "outdatedSops": "{{count}} outdated SOPs",
+      "aiRecommendations": "{{count}} AI recommendations"
     },
     "activity": {
       "title": "Recent Activity",

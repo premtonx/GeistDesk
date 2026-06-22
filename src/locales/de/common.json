@@ -650,8 +650,9 @@
     "kpi": {
       "publishedArticles": "Veröffentlichte Artikel",
       "draftArticles": "Entwürfe",
-      "healthScore": "Wissens-Gesundheitswert",
-      "monthlyViews": "Monatliche Aufrufe"
+      "healthScore": "Wissens-Gesundheit",
+      "monthlyViews": "Monatliche Aufrufe",
+      "vsLastMonth": "ggü. Vormonat"
     },
     "actions": {
       "newArticle": "Neuer Artikel",
@@ -659,8 +660,49 @@
       "newCategory": "Neue Kategorie",
       "newFolder": "Neuer Ordner / Kategorie",
       "importDocs": "Dokumente importieren",
-      "aiGenerate": "Artikel mit KI generieren"
+      "aiGenerate": "Artikel mit KI generieren",
+      "aiGenerateShort": "KI generieren"
     },
+    "sidebar": {
+      "workspace": "Arbeitsbereich",
+      "categories": "Kategorien",
+      "smartViews": "Intelligente Ansichten",
+      "settings": "Einstellungen",
+      "overview": "Übersicht",
+      "allArticles": "Alle Artikel",
+      "drafts": "Entwürfe",
+      "reviews": "Prüfungen",
+      "aiAssistant": "KI-Assistent",
+      "analytics": "Analytik",
+      "billingPlans": "Abrechnung & Pläne",
+      "popularArticles": "Beliebte Artikel",
+      "recentlyUpdated": "Kürzlich aktualisiert",
+      "mostViewed": "Meist aufgerufen",
+      "missingArticles": "Fehlende Artikel",
+      "outdatedContent": "Veraltete Inhalte"
+    },
+    "popularLabel": "Beliebt",
+    "popular": {
+      "ssoSetup": "SSO-Einrichtung",
+      "apiAuth": "API-Authentifizierung",
+      "billing": "Abrechnungs-FAQ",
+      "vpn": "VPN-Fehlerbehebung"
+    },
+    "aiSearchHeading": "Geist AI fragen oder Dokumentation durchsuchen...",
+    "categoryExplorer": "Kategorie-Explorer",
+    "coverage": "Abdeckung",
+    "helpfulness": "Hilfreichkeit",
+    "featuredBadge": "Empfohlen",
+    "viewAll": "Alle anzeigen",
+    "helpful": "hilfreich",
+    "updatedAgo": "Aktualisiert {{date}}",
+    "allArticlesSection": "Alle Artikel",
+    "sortLatest": "Zuletzt aktualisiert",
+    "aiInsightsTitle": "KI-Wissens-Einblicke",
+    "beta": "Beta",
+    "viewAllInsights": "Alle Einblicke anzeigen",
+    "topContributors": "Top-Mitwirkende",
+    "articlesShort": "Artikel",
     "layout": {
       "list": "Liste",
       "tree": "Baum",
@@ -683,7 +725,8 @@
       "toggleDetails": "KI-Einblicke Details umschalten",
       "reviewNeeded": "{{count}} Artikel benötigen Prüfung",
       "missingTags": "{{count}} Artikel ohne Tags",
-      "outdatedSops": "{{count}} veraltete SOPs"
+      "outdatedSops": "{{count}} veraltete SOPs",
+      "aiRecommendations": "{{count}} KI-Empfehlungen"
     },
     "activity": {
       "title": "Kürzliche Aktivität",

@@ -1,5 +1,5 @@
 import React from 'react';
-import { BookOpen, FilePen, HeartPulse, Eye, TrendingUp, TrendingDown } from 'lucide-react';
+import { BookOpen, FilePen, HeartPulse, Eye, TrendingUp } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 
@@ -7,39 +7,29 @@ interface KpiCardProps {
   icon: React.ReactNode;
   label: string;
   value: string | number;
-  trend?: { value: string; up?: boolean };
-  accent?: string;
+  trend?: string;
+  accent: string;
+  iconBg: string;
 }
 
-function KpiCard({ icon, label, value, trend, accent = 'from-blue-500/10 to-indigo-500/5' }: KpiCardProps) {
+function KpiCard({ icon, label, value, trend, accent, iconBg }: KpiCardProps) {
+  const { t } = useTranslation();
   return (
-    <div
-      className={cn(
-        'relative overflow-hidden rounded-2xl border border-white/60 bg-white/70 backdrop-blur-md p-4 shadow-sm',
-        'hover:shadow-md transition-shadow',
-      )}
-    >
-      <div className={cn('absolute inset-0 bg-gradient-to-br opacity-80 pointer-events-none', accent)} />
-      <div className="relative flex flex-col gap-3">
-        <div className="flex items-center justify-between">
-          <div className="h-9 w-9 rounded-xl bg-white/80 border border-slate-200/60 flex items-center justify-center text-blue-600 shadow-sm">
-            {icon}
-          </div>
+    <div className="relative overflow-hidden rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
+      <div className={cn('absolute inset-0 bg-gradient-to-br opacity-60 pointer-events-none', accent)} />
+      <div className="relative flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-3xl font-bold text-slate-900 tabular-nums tracking-tight">{value}</p>
+          <p className="text-xs font-medium text-slate-500 mt-1">{label}</p>
           {trend ? (
-            <span
-              className={cn(
-                'inline-flex items-center gap-0.5 text-[11px] font-semibold px-2 py-0.5 rounded-full',
-                trend.up ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-600',
-              )}
-            >
-              {trend.up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-              {trend.value}
-            </span>
+            <p className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 mt-2">
+              <TrendingUp className="w-3 h-3" />
+              {trend} {t('kb.kpi.vsLastMonth', 'vs last month')}
+            </p>
           ) : null}
         </div>
-        <div>
-          <p className="text-2xl font-bold text-slate-900 tabular-nums">{value}</p>
-          <p className="text-xs font-medium text-slate-500 mt-0.5">{label}</p>
+        <div className={cn('h-11 w-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm', iconBg)}>
+          {icon}
         </div>
       </div>
     </div>
@@ -64,34 +54,38 @@ export function KBKpiCards({
   const { t } = useTranslation();
 
   return (
-    <div className={cn('grid grid-cols-2 lg:grid-cols-4 gap-3', className)}>
+    <div className={cn('grid grid-cols-2 lg:grid-cols-4 gap-4', className)}>
       <KpiCard
-        icon={<BookOpen className="w-4 h-4" />}
+        icon={<BookOpen className="w-5 h-5 text-blue-600" />}
         label={t('kb.kpi.publishedArticles', 'Published Articles')}
         value={publishedCount}
-        trend={{ value: '+8%', up: true }}
-        accent="from-emerald-500/10 to-teal-500/5"
+        trend="↑ 18%"
+        accent="from-blue-50/80 to-white"
+        iconBg="bg-blue-50 text-blue-600"
       />
       <KpiCard
-        icon={<FilePen className="w-4 h-4" />}
+        icon={<FilePen className="w-5 h-5 text-orange-600" />}
         label={t('kb.kpi.draftArticles', 'Draft Articles')}
         value={draftCount}
-        trend={{ value: '+2', up: true }}
-        accent="from-orange-500/10 to-amber-500/5"
+        trend="↑ 2"
+        accent="from-orange-50/80 to-white"
+        iconBg="bg-orange-50 text-orange-600"
       />
       <KpiCard
-        icon={<HeartPulse className="w-4 h-4" />}
-        label={t('kb.kpi.healthScore', 'Knowledge Health Score')}
-        value={`${healthScore}/100`}
-        trend={{ value: '+4%', up: true }}
-        accent="from-violet-500/10 to-purple-500/5"
+        icon={<HeartPulse className="w-5 h-5 text-emerald-600" />}
+        label={t('kb.kpi.healthScore', 'Knowledge Health')}
+        value={`${healthScore}%`}
+        trend="↑ 4%"
+        accent="from-emerald-50/80 to-white"
+        iconBg="bg-emerald-50 text-emerald-600"
       />
       <KpiCard
-        icon={<Eye className="w-4 h-4" />}
+        icon={<Eye className="w-5 h-5 text-violet-600" />}
         label={t('kb.kpi.monthlyViews', 'Monthly Views')}
         value={monthlyViews.toLocaleString()}
-        trend={{ value: '+18%', up: true }}
-        accent="from-blue-500/10 to-sky-500/5"
+        trend="↑ 18%"
+        accent="from-violet-50/80 to-white"
+        iconBg="bg-violet-50 text-violet-600"
       />
     </div>
   );
