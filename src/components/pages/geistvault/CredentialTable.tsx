@@ -1,16 +1,12 @@
 import React, { useState } from 'react';
-import { 
-  Star, 
-  MoreVertical, 
-  ExternalLink, 
-  Eye, 
-  EyeOff, 
-  Copy, 
-  Trash, 
+import {
+  Star,
+  MoreVertical,
+  Copy,
+  Trash,
   Edit,
   RotateCcw,
   Check,
-  ShieldAlert,
   Terminal,
   Globe,
   Monitor,
@@ -21,11 +17,14 @@ import {
   FileCode,
   Lock,
   Calendar,
-  Layers
+  Layers,
+  MessageSquare,
+  Container,
 } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import { toast } from 'sonner';
+import { useTranslation } from '../../../lib/context/I18nContext';
 
 interface Credential {
   id?: number | string;
@@ -34,43 +33,12 @@ interface Credential {
   username: string;
   encryptedPassword: string;
   host?: string;
-  port?: string;
-  domain?: string;
-  gateway?: string;
-  configData?: string;
-  notes?: string;
   updatedAt: number;
-  icon?: string;
-  iconType?: 'preset' | 'custom';
-  lastModifiedBy?: string;
   favorite?: boolean;
   deleted?: boolean;
   vaultId?: string;
-
-  // Enterprise Extensions
-  visibility?: string;
-  owner?: string;
-  team?: string;
-  department?: string;
-  linkedCompany?: string;
-  linkedAsset?: string;
-  linkedTicket?: string;
-  tags?: string[];
-  expirationPolicy?: string;
-  rotationPolicy?: string;
-  totpSecret?: string;
-  backupCodes?: string;
-  recoveryKeys?: string;
-  authenticatorNotes?: string;
-  attachments?: { name: string; size: string; type: string }[];
-  securitySettings?: {
-    burnAfterRead?: boolean;
-    requireApproval?: boolean;
-    jitAccess?: boolean;
-    requireMfa?: boolean;
-    disableExport?: boolean;
-    disableCopy?: boolean;
-  };
+  notes?: string;
+  lastModifiedBy?: string;
 }
 
 interface CredentialTableProps {
@@ -84,6 +52,76 @@ interface CredentialTableProps {
   selectedView: 'all' | 'favorites' | 'recently' | 'shared' | 'trash';
 }
 
+const CATEGORY_STYLES: Record<string, { label: string; className: string }> = {
+  rdp: { label: 'RDP Session', className: 'bg-blue-50 text-blue-700' },
+  vpn: { label: 'VPN Access', className: 'bg-emerald-50 text-emerald-700' },
+  ssh: { label: 'Server', className: 'bg-amber-50 text-amber-700' },
+  web: { label: 'Web Login', className: 'bg-violet-50 text-violet-700' },
+  db: { label: 'Database', className: 'bg-orange-50 text-orange-700' },
+  api: { label: 'API Key', className: 'bg-rose-50 text-rose-700' },
+  cloud: { label: 'Cloud Account', className: 'bg-cyan-50 text-cyan-800' },
+  cert: { label: 'Certificate', className: 'bg-pink-50 text-pink-700' },
+  k8s: { label: 'Kubernetes', className: 'bg-indigo-50 text-indigo-700' },
+  slack: { label: 'Slack Workspace', className: 'bg-fuchsia-50 text-fuchsia-700' },
+};
+
+function renderIcon(type: string) {
+  const cls = 'w-3.5 h-3.5 text-slate-500';
+  switch (type) {
+    case 'rdp': return <Monitor className={cls} />;
+    case 'vpn': return <Shield className={cls} />;
+    case 'ssh': return <Terminal className={cls} />;
+    case 'web': return <Globe className={cls} />;
+    case 'db': return <Database className={cls} />;
+    case 'api': return <KeyIcon className={cls} />;
+    case 'cloud': return <Cloud className={cls} />;
+    case 'cert': return <FileCode className={cls} />;
+    case 'k8s': return <Container className={cls} />;
+    case 'slack': return <MessageSquare className={cls} />;
+    default: return <Lock className={cls} />;
+  }
+}
+
+function renderCategoryBadge(type: string) {
+  const meta = CATEGORY_STYLES[type] ?? { label: 'Web Login', className: 'bg-slate-100 text-slate-700' };
+  return (
+    <Badge className={`border-none font-semibold text-[9px] uppercase tracking-wide px-2 py-0 h-5 ${meta.className}`}>
+      {meta.label}
+    </Badge>
+  );
+}
+
+function renderStatus(cred: Credential) {
+  const isWeak =
+    cred.notes?.toLowerCase().includes('weak') ||
+    cred.label.toLowerCase().includes('database') ||
+    cred.username === 'db_admin';
+  const isExpiring = cred.label.toLowerCase().includes('aws') || cred.type === 'cloud';
+
+  if (isWeak) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] text-red-600 font-medium">
+        <span className="h-1.5 w-1.5 rounded-full bg-red-500" />
+        Weak
+      </span>
+    );
+  }
+  if (isExpiring) {
+    return (
+      <span className="inline-flex items-center gap-1 text-[11px] text-amber-600 font-medium">
+        <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+        Expiring
+      </span>
+    );
+  }
+  return (
+    <span className="inline-flex items-center gap-1 text-[11px] text-emerald-600 font-medium">
+      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+      Healthy
+    </span>
+  );
+}
+
 export function CredentialTable({
   credentials,
   onRowClick,
@@ -92,12 +130,12 @@ export function CredentialTable({
   onEdit,
   onDelete,
   onRestore,
-  selectedView
+  selectedView,
 }: CredentialTableProps) {
+  const { t } = useTranslation();
   const [activeMenuId, setActiveMenuId] = useState<number | string | null>(null);
   const [copiedId, setCopiedId] = useState<number | string | null>(null);
 
-  // Decrypt and copy secret directly from table action
   const handleQuickCopyPassword = async (e: React.MouseEvent, cred: Credential) => {
     e.stopPropagation();
     try {
@@ -106,276 +144,176 @@ export function CredentialTable({
         navigator.clipboard.writeText(plain);
         if (cred.id) {
           setCopiedId(cred.id);
-          toast.success("Password copied!");
+          toast.success(t('vault.passwordCopied', 'Password copied'));
           setTimeout(() => setCopiedId(null), 2000);
         }
       } else {
-        toast.error("Decryption failed. Unlock vault first.");
+        toast.error(t('vault.decryptFailed', 'Decryption failed. Unlock vault first.'));
       }
-    } catch (err) {
-      toast.error("Error decrypting vault secret.");
+    } catch {
+      toast.error(t('vault.decryptError', 'Error decrypting secret.'));
     }
   };
 
   const handleQuickCopyUsername = (e: React.MouseEvent, username: string) => {
     e.stopPropagation();
     navigator.clipboard.writeText(username);
-    toast.success("Username copied!");
+    toast.success(t('vault.usernameCopied', 'Username copied'));
   };
 
-  // Maps credential types to Category labels & styling badge
-  const renderCategoryBadge = (type: string) => {
-    let label = 'Web Login';
-    let style = 'bg-slate-100 text-slate-800 border-none font-bold text-[9px] uppercase tracking-wider px-2 py-0.5 rounded-full';
-
-    switch (type) {
-      case 'rdp':
-        label = 'RDP Session';
-        style = 'bg-blue-50 text-[#1A73E8] border-none font-bold text-[9.5px] uppercase tracking-wider px-2 py-0.5 rounded-full';
-        break;
-      case 'vpn':
-        label = 'VPN Access';
-        style = 'bg-green-50 text-[#137333] border-none font-bold text-[9.5px] uppercase tracking-wider px-2 py-0.5 rounded-full';
-        break;
-      case 'ssh':
-        label = 'SSH Node';
-        style = 'bg-[#FFF9E6] text-[#B06000] border-none font-bold text-[9.5px] uppercase tracking-wider px-2 py-0.5 rounded-full';
-        break;
-      case 'web':
-        label = 'Web Login';
-        style = 'bg-purple-50 text-[#6B21A8] border-none font-bold text-[9.5px] uppercase tracking-wider px-2 py-0.5 rounded-full';
-        break;
-      case 'db':
-        label = 'Database';
-        style = 'bg-[#FEF3C7] text-[#D97706] border-none font-bold text-[9.5px] uppercase tracking-wider px-2 py-0.5 rounded-full';
-        break;
-      case 'api':
-        label = 'API Key';
-        style = 'bg-[#FCE8E6] text-[#C5221F] border-none font-bold text-[9.5px] uppercase tracking-wider px-2 py-0.5 rounded-full';
-        break;
-      case 'cloud':
-        label = 'Cloud Account';
-        style = 'bg-[#E0F7FA] text-[#006064] border-none font-bold text-[9.5px] uppercase tracking-wider px-2 py-0.5 rounded-full';
-        break;
-      case 'cert':
-        label = 'Certificate';
-        style = 'bg-pink-50 text-pink-700 border-none font-bold text-[9.5px] uppercase tracking-wider px-2 py-0.5 rounded-full';
-        break;
-    }
-
-    return (
-      <Badge className={style}>{label}</Badge>
-    );
-  };
-
-  // Render icons beautifully
-  const renderIcon = (type: string) => {
-    const iconStyle = "w-4 h-4 text-slate-500";
-    switch (type) {
-      case 'rdp': return <Monitor className={iconStyle} />;
-      case 'vpn': return <Shield className={iconStyle} />;
-      case 'ssh': return <Terminal className={iconStyle} />;
-      case 'web': return <Globe className={iconStyle} />;
-      case 'db': return <Database className={iconStyle} />;
-      case 'api': return <KeyIcon className={iconStyle} />;
-      case 'cloud': return <Cloud className={iconStyle} />;
-      case 'cert': return <FileCode className={iconStyle} />;
-      default: return <Lock className={iconStyle} />;
-    }
-  };
-
-  // Determine password health/status badge from strength logic
-  const renderStatus = (cred: Credential) => {
-    const isWeak = cred.notes?.toLowerCase().includes('weak') || 
-                   cred.label.toLowerCase().includes('database') || 
-                   cred.username === 'db_admin';
-    const isExpiring = cred.label.toLowerCase().includes('aws') || cred.type === 'cloud';
-
-    if (isWeak) {
-      return (
-        <span className="flex items-center gap-1.5 text-xs text-red-600 font-semibold select-none">
-          <span className="h-1.5 w-1.5 rounded-full bg-red-600 animate-pulse" />
-          ▲ Weak Password
-        </span>
-      );
-    }
-    if (isExpiring) {
-      return (
-        <span className="flex items-center gap-1.5 text-xs text-amber-500 font-semibold select-none">
-          <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-          ◔ Expiring Soon
-        </span>
-      );
-    }
-    return (
-      <span className="flex items-center gap-1.5 text-xs text-green-600 font-semibold select-none">
-        <span className="h-1.5 w-1.5 rounded-full bg-green-500" />
-        ● Healthy
-      </span>
-    );
-  };
-
-  const getVaultName = (cred: Credential) => {
-    return cred.vaultId === 'shared' ? 'Team Shared Vault' : 'Personal Local Vault';
-  };
+  const getVaultName = (cred: Credential) =>
+    cred.vaultId === 'shared'
+      ? t('vault.teamSharedVault', 'Team Shared Vault')
+      : t('vault.personalLocalVault', 'Personal Local Vault');
 
   if (credentials.length === 0) {
     return (
-      <div className="bg-white border border-[#DADCE0] rounded-2.5xl p-16 text-center shadow-xs flex flex-col items-center justify-center select-none">
-        <div className="h-16 w-16 bg-[#F8F9FA] rounded-2xl flex items-center justify-center border border-[#F1F3F4] text-slate-400 mb-4 shadow-inner">
-          <Lock className="w-8 h-8" />
+      <div className="bg-white border border-slate-200/80 rounded-xl p-12 text-center flex flex-col items-center justify-center">
+        <div className="h-12 w-12 bg-slate-50 rounded-xl flex items-center justify-center border border-slate-200/80 text-slate-400 mb-3">
+          <Lock className="w-6 h-6" />
         </div>
-        <h3 className="text-base font-bold text-slate-800">No Secret Found</h3>
-        <p className="text-xs text-slate-400 max-w-sm mt-1 mb-6 leading-relaxed">
-          Create a new entry, search by another query, or switch categories to view your keys.
-        </p>
+        <h3 className="text-sm font-semibold text-slate-800">{t('vault.noSecretsFound', 'No secrets found')}</h3>
+        <p className="text-xs text-slate-400 max-w-sm mt-1">{t('vault.noSecretsHint', 'Create an entry or adjust filters to view assets.')}</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-white border border-[#DADCE0] rounded-2.5xl shadow-sm overflow-hidden select-none">
-      <div className="overflow-x-auto">
-        <table className="w-full text-left table-auto border-collapse">
-          <thead>
-            <tr className="bg-[#F8F9FA] border-b border-[#F1F3F4] text-[10px] font-bold text-[#5F6368] uppercase tracking-wider select-none">
-              <th className="py-4 px-5 w-12 text-center">Fav</th>
-              <th className="py-4 px-5">Name / Endpoint</th>
-              <th className="py-4 px-5">Category</th>
-              <th className="py-4 px-5">Username</th>
-              <th className="py-4 px-5">Vault Authority</th>
-              <th className="py-4 px-5">Status</th>
-              <th className="py-4 px-5">Last Updated</th>
-              <th className="py-4 px-5 w-16 text-center">Actions</th>
+    <div className="bg-white border border-slate-200/80 rounded-xl shadow-sm overflow-hidden flex-1 min-h-0 flex flex-col">
+      <div className="overflow-x-auto overflow-y-auto flex-1 min-h-0">
+        <table className="w-full text-left border-collapse">
+          <thead className="sticky top-0 z-10">
+            <tr className="bg-slate-50/90 border-b border-slate-200/80 text-[10px] font-semibold text-slate-500 uppercase tracking-wider">
+              <th className="py-2 px-3 w-9 text-center">★</th>
+              <th className="py-2 px-3">{t('vault.colAsset', 'Asset')}</th>
+              <th className="py-2 px-3 hidden md:table-cell">{t('vault.colCategory', 'Category')}</th>
+              <th className="py-2 px-3">{t('vault.colUsername', 'Username')}</th>
+              <th className="py-2 px-3 hidden lg:table-cell">{t('vault.colAuthority', 'Vault Authority')}</th>
+              <th className="py-2 px-3 hidden sm:table-cell">{t('vault.colStatus', 'Status')}</th>
+              <th className="py-2 px-3 hidden xl:table-cell">{t('vault.colUpdated', 'Updated')}</th>
+              <th className="py-2 px-3 w-10" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-[#F1F3F4]">
+          <tbody className="divide-y divide-slate-100">
             {credentials.map((cred) => (
-              <tr 
+              <tr
                 key={cred.id}
                 onClick={() => onRowClick(cred)}
-                className="hover:bg-[#E8F0FE]/10 transition-colors cursor-pointer group select-none"
+                className="hover:bg-blue-50/30 transition-colors cursor-pointer group h-10"
               >
-                {/* Star toggle */}
-                <td className="py-3 px-5 text-center" onClick={(e) => e.stopPropagation()}>
-                  <button 
+                <td className="py-1.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                  <button
+                    type="button"
                     onClick={() => onToggleFavorite(cred)}
-                    className="p-1.5 rounded-full hover:bg-neutral-100 text-slate-300 hover:text-amber-500 transition-all active:scale-95"
+                    className="p-1 rounded-md hover:bg-slate-100 text-slate-300 hover:text-amber-500 transition-colors"
                   >
-                    <Star className={`w-4 h-4 ${cred.favorite ? 'fill-amber-400 text-amber-500' : ''}`} />
+                    <Star className={`w-3.5 h-3.5 ${cred.favorite ? 'fill-amber-400 text-amber-500' : ''}`} />
                   </button>
                 </td>
 
-                {/* Name & endpoint */}
-                <td className="py-3 px-5">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-[#F8F9FA] flex items-center justify-center border border-[#F1F3F4] flex-shrink-0 group-hover:scale-105 transition-transform shadow-3xs">
+                <td className="py-1.5 px-3">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="h-7 w-7 rounded-lg bg-slate-50 flex items-center justify-center border border-slate-200/60 shrink-0">
                       {renderIcon(cred.type)}
                     </div>
-                    <div className="max-w-[180px] sm:max-w-[240px] truncate">
-                      <p className="text-xs font-bold text-slate-800 tracking-tight">{cred.label}</p>
-                      <p className="text-[10px] font-mono text-slate-400/80 mt-0.5 truncate">{cred.host || 'Local binding'}</p>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 truncate max-w-[180px]">{cred.label}</p>
+                      <p className="text-[10px] font-mono text-slate-400 truncate max-w-[180px]">{cred.host || '—'}</p>
                     </div>
                   </div>
                 </td>
 
-                {/* Category Badge */}
-                <td className="py-3 px-5">
-                  {renderCategoryBadge(cred.type)}
-                </td>
+                <td className="py-1.5 px-3 hidden md:table-cell">{renderCategoryBadge(cred.type)}</td>
 
-                {/* Username with Copy Button */}
-                <td className="py-3 px-5" onClick={(e) => e.stopPropagation()}>
-                  <div className="flex items-center gap-1">
-                    <span className="text-xs font-mono font-medium text-slate-700 bg-[#F8F9FA] border border-[#F1F3F4] px-1.5 py-0.5 rounded-md truncate max-w-[120px]">{cred.username}</span>
-                    <button 
+                <td className="py-1.5 px-3" onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-center gap-0.5">
+                    <span className="text-[11px] font-mono text-slate-700 truncate max-w-[100px]">{cred.username}</span>
+                    <button
+                      type="button"
                       onClick={(e) => handleQuickCopyUsername(e, cred.username)}
-                      className="p-1 rounded hover:bg-neutral-100 text-slate-400 hover:text-slate-600 transition-colors"
-                      title="Copy Username"
+                      className="p-0.5 rounded opacity-0 group-hover:opacity-100 hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-all"
+                      title={t('vault.copyUsername', 'Copy username')}
                     >
-                      <Copy className="w-3.5 h-3.5" />
+                      <Copy className="w-3 h-3" />
                     </button>
                   </div>
                 </td>
 
-                {/* Vault Identifier */}
-                <td className="py-3 px-5">
-                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md border ${
-                    cred.vaultId === 'shared' 
-                      ? 'bg-purple-50 text-purple-700 border-purple-100' 
-                      : 'bg-blue-50 text-[#1A73E8] border-blue-100'
-                  }`}>
+                <td className="py-1.5 px-3 hidden lg:table-cell">
+                  <span
+                    className={`text-[10px] font-semibold px-1.5 py-0.5 rounded border ${
+                      cred.vaultId === 'shared'
+                        ? 'bg-violet-50 text-violet-700 border-violet-100'
+                        : 'bg-blue-50 text-blue-700 border-blue-100'
+                    }`}
+                  >
                     {getVaultName(cred)}
                   </span>
                 </td>
 
-                {/* Status indicator */}
-                <td className="py-3 px-5">
-                  {renderStatus(cred)}
-                </td>
+                <td className="py-1.5 px-3 hidden sm:table-cell">{renderStatus(cred)}</td>
 
-                {/* Last updated */}
-                <td className="py-3 px-5">
-                  <div className="flex flex-col">
-                    <span className="text-[10px] text-slate-500 font-semibold">{new Date(cred.updatedAt).toLocaleDateString()}</span>
-                    <span className="text-[9px] text-[#9AA0A6] mt-0.5">by {cred.lastModifiedBy || 'System Operator'}</span>
+                <td className="py-1.5 px-3 hidden xl:table-cell">
+                  <div className="text-[10px] text-slate-500">
+                    <span>{new Date(cred.updatedAt).toLocaleDateString()}</span>
+                    <span className="text-slate-400 ml-1">· {cred.lastModifiedBy || 'System'}</span>
                   </div>
                 </td>
 
-                {/* Dropdown Options trigger */}
-                <td className="py-3 px-5 text-center" onClick={(e) => e.stopPropagation()}>
-                  <div className="relative inline-block text-left">
-                    <button 
-                      onClick={() => setActiveMenuId(activeMenuId === cred.id ? null : (cred.id || null))}
-                      className="p-1.5 rounded-full hover:bg-neutral-100 text-slate-500"
+                <td className="py-1.5 px-3 text-center" onClick={(e) => e.stopPropagation()}>
+                  <div className="relative">
+                    <button
+                      type="button"
+                      onClick={() => setActiveMenuId(activeMenuId === cred.id ? null : (cred.id ?? null))}
+                      className="p-1 rounded-md hover:bg-slate-100 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity"
                     >
-                      <MoreVertical className="w-4 h-4" />
+                      <MoreVertical className="w-3.5 h-3.5" />
                     </button>
-
                     {activeMenuId === cred.id && (
-                      <div className="origin-top-right absolute right-0 mt-1 w-44 rounded-xl shadow-lg bg-white ring-1 ring-black ring-opacity-5 divide-y divide-neutral-100 z-50 text-left select-none overflow-hidden border border-[#DADCE0]">
-                        <div className="py-1">
-                          <button 
-                            onClick={(e) => { setActiveMenuId(null); onRowClick(cred); }}
-                            className="flex items-center gap-2 px-4 py-2 text-xs text-slate-700 hover:bg-[#E8F0FE]/30 hover:text-[#1A73E8] w-full"
+                      <div className="absolute right-0 mt-1 w-40 rounded-lg shadow-lg bg-white border border-slate-200/80 z-50 text-left overflow-hidden">
+                        <button
+                          type="button"
+                          onClick={() => { setActiveMenuId(null); onRowClick(cred); }}
+                          className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 w-full"
+                        >
+                          <Calendar className="w-3.5 h-3.5" />
+                          {t('vault.openDetails', 'Open Details')}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { setActiveMenuId(null); handleQuickCopyPassword(e, cred); }}
+                          className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 w-full"
+                        >
+                          {copiedId === cred.id ? <Check className="w-3.5 h-3.5 text-emerald-500" /> : <Copy className="w-3.5 h-3.5" />}
+                          {t('vault.copySecret', 'Copy Secret')}
+                        </button>
+                        {selectedView === 'trash' ? (
+                          <button
+                            type="button"
+                            onClick={() => { setActiveMenuId(null); cred.id && onRestore(cred.id); }}
+                            className="flex items-center gap-2 px-3 py-2 text-xs text-emerald-700 hover:bg-emerald-50 w-full"
                           >
-                            <Calendar className="w-3.5 h-3.5" />
-                            Open Diagnostics
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            {t('vault.restore', 'Restore')}
                           </button>
-                          <button 
-                            onClick={(e) => { setActiveMenuId(null); handleQuickCopyPassword(e, cred); }}
-                            className="flex items-center gap-2 px-4 py-2 text-xs text-slate-700 hover:bg-[#E8F0FE]/30 hover:text-[#1A73E8] w-full font-bold"
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { setActiveMenuId(null); onEdit(cred); }}
+                            className="flex items-center gap-2 px-3 py-2 text-xs text-slate-700 hover:bg-slate-50 w-full"
                           >
-                            {copiedId === cred.id ? <Check className="w-3.5 h-3.5 text-green-500" /> : <Copy className="w-3.5 h-3.5" />}
-                            Copy Password
+                            <Edit className="w-3.5 h-3.5" />
+                            {t('vault.editAsset', 'Edit Asset')}
                           </button>
-                        </div>
-                        <div className="py-1">
-                          {selectedView === 'trash' ? (
-                            <button 
-                              onClick={() => { setActiveMenuId(null); cred.id && onRestore(cred.id); }}
-                              className="flex items-center gap-2 px-4 py-2 text-xs text-[#137333] hover:bg-green-50 w-full"
-                            >
-                              <RotateCcw className="w-3.5 h-3.5" />
-                              Restore Credential
-                            </button>
-                          ) : (
-                            <button 
-                              onClick={() => { setActiveMenuId(null); onEdit(cred); }}
-                              className="flex items-center gap-2 px-4 py-2 text-xs text-slate-700 hover:bg-slate-50 w-full"
-                            >
-                              <Edit className="w-3.5 h-3.5" />
-                              Edit Asset
-                            </button>
-                          )}
-                          <button 
-                            onClick={() => { setActiveMenuId(null); cred.id && onDelete(cred.id); }}
-                            className="flex items-center gap-2 px-4 py-2 text-xs text-red-600 hover:bg-red-50 w-full"
-                          >
-                            <Trash className="w-3.5 h-3.5" />
-                            {selectedView === 'trash' ? 'Permanent Delete' : 'Move to Trash'}
-                          </button>
-                        </div>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => { setActiveMenuId(null); cred.id && onDelete(cred.id); }}
+                          className="flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50 w-full"
+                        >
+                          <Trash className="w-3.5 h-3.5" />
+                          {selectedView === 'trash' ? t('vault.deletePermanent', 'Delete Forever') : t('vault.moveToTrash', 'Move to Trash')}
+                        </button>
                       </div>
                     )}
                   </div>
@@ -386,21 +324,8 @@ export function CredentialTable({
         </table>
       </div>
 
-      {/* Pagination Row */}
-      <div className="flex items-center justify-between px-6 py-4 border-t border-[#F1F3F4] bg-[#F8F9FA] text-[11px] text-[#5F6368] font-bold select-none">
-        <div className="flex items-center gap-3">
-          <span>Showing 1 to {credentials.length} of {credentials.length} entries</span>
-          <select className="bg-white border text-[10px] rounded px-1.5 py-0.5 outline-none font-bold text-slate-700">
-            <option>20 / page</option>
-            <option>50 / page</option>
-            <option>100 / page</option>
-          </select>
-        </div>
-        <div className="flex items-center gap-1">
-          <Button variant="outline" size="sm" disabled className="h-6 text-[10px] rounded px-2 select-none border-neutral-200">Previous</Button>
-          <button className="h-6 w-6 rounded bg-[#1A73E8] text-white flex items-center justify-center font-black">1</button>
-          <Button variant="outline" size="sm" disabled className="h-6 text-[10px] rounded px-2 select-none border-neutral-200">Next</Button>
-        </div>
+      <div className="flex items-center justify-between px-4 py-2 border-t border-slate-200/80 bg-slate-50/80 text-[10px] text-slate-500 font-medium shrink-0">
+        <span>{t('vault.showingEntries', 'Showing {{count}} entries').replace('{{count}}', String(credentials.length))}</span>
       </div>
     </div>
   );

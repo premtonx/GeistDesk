@@ -37,7 +37,10 @@ import {
   User,
   Sliders,
   History,
-  CheckSquare
+  CheckSquare,
+  ChevronDown,
+  ArrowLeft,
+  Layout,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { useSearchParams } from 'react-router-dom';
@@ -67,6 +70,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '../../components/ui/dropdown-menu';
 
 import { useAuth, useAdmin } from '../../lib/hooks';
 import { useTranslation } from '../../lib/context/I18nContext';
@@ -104,6 +114,7 @@ import { SEEDED_CREDENTIALS, MOCK_CHROME_EXTENSION } from './geistvault/DefaultD
 import { CredentialDrawer } from './geistvault/CredentialDrawer';
 import { CredentialTable } from './geistvault/CredentialTable';
 import { VaultOverview } from './geistvault/VaultOverview';
+import { VaultInsightsFooter } from './geistvault/VaultInsightsFooter';
 
 // --- Database Schema ---
 interface Credential {
@@ -247,6 +258,8 @@ export default function CredentialVaultPage() {
   const [derivedKey, setDerivedKey] = useState<Uint8Array | null>(null);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sortBy, setSortBy] = useState<'newest' | 'name' | 'category'>('newest');
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedView, setSelectedView] = useState<'all' | 'favorites' | 'recently' | 'shared' | 'trash'>('all');
   const [selectedType, setSelectedType] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -792,6 +805,8 @@ export default function CredentialVaultPage() {
   const weakCount = nonDeletedItems.filter(c => c.notes?.toLowerCase().includes('weak') || c.label.toLowerCase().includes('database') || c.username === 'db_admin').length;
   const expiringCount = nonDeletedItems.filter(c => c.label.toLowerCase().includes('aws') || c.type === 'cloud').length;
   const sharedCount = nonDeletedItems.filter(c => c.vaultId === 'shared').length;
+  const pinnedCount = nonDeletedItems.filter(c => c.favorite).length;
+  const recentCount = Math.min(6, nonDeletedItems.length);
 
   const getFilteredCredentials = () => {
     let list = [...credentialsQuery];
@@ -825,6 +840,14 @@ export default function CredentialVaultPage() {
         (c.host && c.host.toLowerCase().includes(q)) || 
         c.type.toLowerCase().includes(q)
       );
+    }
+
+    if (sortBy === 'name') {
+      list.sort((a, b) => a.label.localeCompare(b.label));
+    } else if (sortBy === 'category') {
+      list.sort((a, b) => a.type.localeCompare(b.type) || a.label.localeCompare(b.label));
+    } else {
+      list.sort((a, b) => b.updatedAt - a.updatedAt);
     }
 
     return list;
@@ -900,199 +923,198 @@ export default function CredentialVaultPage() {
     );
   }
 
-  const vaultModeTabs: ModuleTabItem[] = [
-    { id: 'vault', label: t('vault.sovereignVault', 'Sovereign Vault') },
-    { id: 'security', label: t('vault.securityChecks', 'AI Security Checks') },
-    { id: 'emergency', label: t('vault.breakGlass', 'Break Glass Emergency') },
-  ];
-
   const vaultStorageTabs: ModuleTabItem[] = [
     { id: 'all', label: t('vault.allEntries', 'All Entries'), count: totalEntries },
-    { id: 'favorites', label: t('vault.pinnedFavorites', 'Favorites'), count: nonDeletedItems.filter((c) => c.favorite).length },
-    { id: 'recently', label: t('vault.recentlyAccessed', 'Recent') },
-    { id: 'shared', label: t('vault.sharedWithMe', 'Shared'), count: sharedCount },
-    { id: 'trash', label: t('vault.trashFolder', 'Trash'), count: trashItems.length },
+    { id: 'favorites', label: t('vault.pinned', 'Pinned'), count: pinnedCount },
+    { id: 'recently', label: t('vault.recent', 'Recent'), count: recentCount },
+    { id: 'shared', label: t('vault.shared', 'Shared'), count: sharedCount },
+    { id: 'trash', label: t('vault.trash', 'Trash'), count: trashItems.length },
   ];
+
+  const quickActionsMenu = (
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button variant="outline" size="sm" className="h-8 gap-1 rounded-md border-slate-200/80 text-slate-600 font-medium px-2.5 text-xs">
+            {t('vault.quickActions', 'Quick Actions')}
+            <ChevronDown className="w-3.5 h-3.5" />
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-48">
+        <DropdownMenuItem onClick={() => setShowAddModal(true)}>
+          {t('vault.createNewEntry', 'Create New Entry')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => toast.success(t('vault.shareAuthorized', 'Secure sharing protocols authorized.'))}>
+          {t('vault.shareVault', 'Share Vault')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={handleImportDummyData}>
+          {t('vault.importAssets', 'Import Assets')}
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem onClick={() => setVaultViewMode('security')}>
+          {t('vault.securityChecks', 'AI Security Checks')}
+        </DropdownMenuItem>
+        <DropdownMenuItem onClick={() => setVaultViewMode('emergency')}>
+          {t('vault.breakGlass', 'Break Glass Emergency')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  );
 
   return (
     <ModulePageShell scrollable={false} className="bg-[#FAFBFC]">
       <ModulePageCompactHeader
-        title={t('vault.titleShort', 'GeistVault')}
-        meta={t('vault.headerMeta', '{{total}} entries • {{weak}} weak • {{expiring}} expiring')
-          .replace('{{total}}', String(totalEntries))
-          .replace('{{weak}}', String(weakCount))
+        title={t('vault.headerMetaInline', 'Vault • {{assets}} Assets • {{pinned}} Pinned • {{expiring}} Expiring Soon')
+          .replace('{{assets}}', String(totalEntries))
+          .replace('{{pinned}}', String(pinnedCount))
           .replace('{{expiring}}', String(expiringCount))}
-      />
-      <ModulePageTabs
-        tabs={vaultModeTabs}
-        activeId={vaultViewMode}
-        onChange={(id) => setVaultViewMode(id as typeof vaultViewMode)}
-      />
-      {vaultViewMode === 'vault' ? (
-        <ModulePageTabs
-          tabs={vaultStorageTabs}
-          activeId={selectedView === 'all' && selectedType === 'all' ? 'all' : selectedView}
-          onChange={(id) => {
-            if (id === 'all') {
-              setSelectedView('all');
-              setSelectedType('all');
-            } else {
-              setSelectedView(id as typeof selectedView);
-              setSelectedType('all');
-            }
-          }}
-        />
-      ) : null}
-      {vaultViewMode === 'vault' ? (
-        <ModuleToolbar
-          searchPlaceholder={t('vault.searchPlaceholderAdvanced', 'Search assets, usernames, hosts...')}
-          searchValue={searchQuery}
-          onSearchChange={setSearchQuery}
-          sortControl={
-            <ModuleToolbarSelect
-              value={selectedType}
-              onChange={(v) => {
-                setSelectedView('all');
-                setSelectedType(v);
-              }}
-              aria-label={t('vault.accessCategories', 'Category')}
+        trailing={
+          vaultViewMode === 'vault' ? (
+            quickActionsMenu
+          ) : (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => setVaultViewMode('vault')}
+              className="h-8 gap-1 text-xs font-medium text-slate-600"
             >
-              <option value="all">{t('vault.allCategories', 'All categories')}</option>
-              <option value="rdp">{t('category.rdp', 'RDP Sessions')}</option>
-              <option value="vpn">{t('category.vpn', 'VPN Access')}</option>
-              <option value="ssh">{t('category.ssh', 'SSH Server Nodes')}</option>
-              <option value="web">{t('category.web', 'Web Logins')}</option>
-              <option value="db">{t('category.database', 'Databases')}</option>
-              <option value="api">{t('category.api', 'APIs & Keys')}</option>
-              <option value="cloud">{t('category.cloud', 'Cloud Accounts')}</option>
-              {customCategories.map((c) => (
-                <option key={c.slug} value={c.slug}>
-                  {c.name}
-                </option>
-              ))}
-            </ModuleToolbarSelect>
-          }
-          createAction={
-            <ModuleCreateButton
-              ariaLabelKey="vault.createCredential"
-              ariaLabelDefault="Create Credential"
-              onClick={() => setShowAddModal(true)}
-              iconOnly
-            />
-          }
-        />
+              <ArrowLeft className="w-3.5 h-3.5" />
+              {t('vault.backToVault', 'Back to Vault')}
+            </Button>
+          )
+        }
+      />
+
+      {vaultViewMode === 'vault' ? (
+        <>
+          <ModulePageTabs
+            tabs={vaultStorageTabs}
+            activeId={selectedView === 'all' && selectedType === 'all' ? 'all' : selectedView}
+            onChange={(id) => {
+              if (id === 'all') {
+                setSelectedView('all');
+                setSelectedType('all');
+              } else {
+                setSelectedView(id as typeof selectedView);
+                setSelectedType('all');
+              }
+            }}
+          />
+          <ModuleToolbar
+            searchPlaceholder={t('vault.searchPlaceholderAdvanced', 'Search assets, usernames, hostnames...')}
+            searchValue={searchQuery}
+            onSearchChange={setSearchQuery}
+            onFilterClick={() => setIsFilterOpen((v) => !v)}
+            filterActive={isFilterOpen}
+            sortControl={
+              <ModuleToolbarSelect
+                value={sortBy}
+                onChange={(v) => setSortBy(v as typeof sortBy)}
+                aria-label={t('actions.sort', 'Sort')}
+              >
+                <option value="newest">{t('vault.sortNewest', 'Newest')}</option>
+                <option value="name">{t('vault.sortName', 'Name')}</option>
+                <option value="category">{t('vault.sortCategory', 'Category')}</option>
+              </ModuleToolbarSelect>
+            }
+            filtersSlot={
+              isFilterOpen ? (
+                <ModuleToolbarSelect
+                  value={selectedType}
+                  onChange={(v) => {
+                    setSelectedView('all');
+                    setSelectedType(v);
+                  }}
+                  aria-label={t('vault.accessCategories', 'Category')}
+                >
+                  <option value="all">{t('vault.allCategories', 'All categories')}</option>
+                  <option value="rdp">{t('category.rdp', 'RDP Sessions')}</option>
+                  <option value="vpn">{t('category.vpn', 'VPN Access')}</option>
+                  <option value="ssh">{t('category.ssh', 'SSH Server Nodes')}</option>
+                  <option value="web">{t('category.web', 'Web Logins')}</option>
+                  <option value="db">{t('category.database', 'Databases')}</option>
+                  <option value="api">{t('category.api', 'APIs & Keys')}</option>
+                  <option value="cloud">{t('category.cloud', 'Cloud Accounts')}</option>
+                  <option value="k8s">{t('category.k8s', 'Kubernetes')}</option>
+                  <option value="slack">{t('category.slack', 'Slack Workspaces')}</option>
+                  {customCategories.map((c) => (
+                    <option key={c.slug} value={c.slug}>{c.name}</option>
+                  ))}
+                </ModuleToolbarSelect>
+              ) : null
+            }
+            viewsSlot={
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setActiveVaultId(activeVaultId === 'local' ? 'shared' : 'local')}
+                className="h-8 gap-1 rounded-md border-slate-200/80 text-slate-600 font-medium shrink-0 px-2.5"
+              >
+                <Layout className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline text-xs">{t('vault.views', 'Views')}</span>
+              </Button>
+            }
+            createAction={
+              <ModuleCreateButton
+                ariaLabelKey="vault.createCredential"
+                ariaLabelDefault="Create Credential"
+                onClick={() => setShowAddModal(true)}
+                iconOnly
+              />
+            }
+          />
+        </>
       ) : null}
 
       <ModulePageScrollRegion>
-      <div className="px-6 py-4 space-y-8 select-none">
-      {vaultViewMode === 'security' && (
-        <GeistVaultAIAssistant credentialsList={nonDeletedItems as any} />
-      )}
+        <div className="px-6 py-3 flex flex-col gap-3 min-h-0 flex-1">
+          {vaultViewMode === 'security' && (
+            <GeistVaultAIAssistant credentialsList={nonDeletedItems as any} />
+          )}
 
-      {vaultViewMode === 'emergency' && (
-        <GeistVaultEmergency />
-      )}
+          {vaultViewMode === 'emergency' && (
+            <GeistVaultEmergency />
+          )}
 
-      {/* Main Vault Workspace tab */}
-      {vaultViewMode === 'vault' && (
-        <div className="space-y-4 select-none">
-          
-            
-            {/* 1. Statistics Cards widget row */}
-            <VaultOverview 
-              weakCount={weakCount}
-              expiringCount={expiringCount}
-              onNewFolder={() => toast.success("Folder directories schema created.")}
-              onShareVault={() => toast.success("Secure sharing protocols authorized.")}
-              onImportDummyData={handleImportDummyData}
-            />
+          {vaultViewMode === 'vault' && (
+            <div className="flex flex-col gap-3 min-h-0 flex-1">
+              <VaultOverview
+                weakCount={weakCount}
+                expiringCount={expiringCount}
+                onNewFolder={() => toast.success(t('vault.folderCreated', 'Folder directories schema created.'))}
+                onShareVault={() => toast.success(t('vault.shareAuthorized', 'Secure sharing protocols authorized.'))}
+                onImportDummyData={handleImportDummyData}
+              />
 
-            {/* Credential Inventory Table */}
-            <CredentialTable 
-              credentials={currentList}
-              onRowClick={(cred) => setSelectedCredential(cred)}
-              onToggleFavorite={handleToggleFavorite}
-              onDecryptPassword={handleDecryptPassword}
-              onEdit={(cred) => { setEditingCred(cred); }}
-              onDelete={handleDeleteEntry}
-              onRestore={handleRestoreEntry}
-              selectedView={selectedView}
-            />
+              <CredentialTable
+                credentials={currentList}
+                onRowClick={(cred) => setSelectedCredential(cred)}
+                onToggleFavorite={handleToggleFavorite}
+                onDecryptPassword={handleDecryptPassword}
+                onEdit={(cred) => { setEditingCred(cred); }}
+                onDelete={handleDeleteEntry}
+                onRestore={handleRestoreEntry}
+                selectedView={selectedView}
+              />
 
-            {/* 4. Redesigned Grid Widgets Footer Row */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 select-none">
-              
-              {/* Passwords Health segmented bar layout inside footer card */}
-              <Card className="border border-[#DADCE0] rounded-2.5xl p-5 bg-white shadow-xs flex flex-col justify-between min-h-[170px]">
-                <div>
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide">{t('vault.passwordsStrengthAudit', 'Passwords Strength Audit')}</h4>
-                  <p className="text-[9px] text-[#34A853] font-semibold mt-0.5">{t('vault.lastCryptoScan', '✓ Last cryptography scan completed 2 hours ago')}</p>
-                </div>
-
-                <div className="my-3">
-                  {/* Styled segmented horizontal health bar represent values */}
-                  <div className="h-3 rounded-full overflow-hidden flex shadow-inner bg-neutral-100 border text-white text-[8px] font-black text-center select-none">
-                    <div className="bg-[#34A853] h-full transition-all" style={{ width: `${Math.max(20, (totalEntries - weakCount) * 11)}%` }} />
-                    <div className="bg-red-500 h-full transition-all" style={{ width: `${weakCount > 0 ? (weakCount * 12) : 5}%` }} />
-                    <div className="bg-amber-400 h-full transition-all" style={{ width: `${expiringCount > 0 ? (expiringCount * 10) : 5}%` }} />
-                  </div>
-
-                  {/* Dot legends */}
-                  <div className="grid grid-cols-3 gap-2 mt-3 select-none text-[9px] font-bold text-slate-500 font-sans">
-                    <div className="flex items-center gap-1">
-                      <span className="h-2 w-2 rounded-full bg-[#34A853] shrink-0" />
-                      <span className="truncate">{t('vault.sovereignLabel', 'Sovereign')} ({totalEntries - weakCount})</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="h-2 w-2 rounded-full bg-red-500 shrink-0" />
-                      <span className="truncate">{t('vault.weakLabel', 'Weak')} ({weakCount})</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <span className="h-2 w-2 rounded-full bg-amber-400 shrink-0" />
-                      <span className="truncate">{t('vault.expiringLabel', 'Expiring')} ({expiringCount})</span>
-                    </div>
-                  </div>
-                </div>
-
-                <p className="text-[10px] text-slate-400 italic">
-                  {t('vault.strengthAuditDesc', 'Run standard AI Insight audit triggers in the subtabs above to check for breached database logs.')}
-                </p>
-              </Card>
-
-              {/* Expiring items details countdown list */}
-              <Card className="border border-[#DADCE0] rounded-2.5xl p-5 bg-white shadow-xs flex flex-col justify-between min-h-[170px]">
-                <div>
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-wide">{t('vault.expiringInfraKeys', 'Expiring Infrastructure Keys')}</h4>
-                    <span className="text-[8px] font-bold bg-[#FFF9E6] text-[#B06000] px-1 rounded uppercase tracking-tighter shrink-0">{t('vault.actionNeeded', 'Action Needed')}</span>
-                  </div>
-                  <p className="text-[9.5px] text-slate-400 font-semibold mt-0.5">{t('vault.criticalItemsExpiring', 'Critical items expiring in the next 30 days')}</p>
-                </div>
-
-                <div className="space-y-1.5 my-2 select-none">
-                  {nonDeletedItems.filter(c => c.type === 'cloud' || c.label.toLowerCase().includes('aws')).map((exp, idx) => (
-                    <div 
-                      key={idx} 
-                      onClick={() => setSelectedCredential(exp)}
-                      className="flex items-center justify-between p-1.5 rounded-lg bg-[#F8F9FA] border border-[#DADCE0]/50 hover:bg-[#E8F0FE]/20 transition-all text-[11px] cursor-pointer shadow-3xs"
-                    >
-                      <span className="font-bold text-slate-700">{exp.label}</span>
-                      <span className="text-[9px] font-extrabold text-[#B06000] bg-[#FFF9E6] px-1.5 py-0.5 rounded-full select-none shrink-0">
-                        {t('vault.expiresInDays', 'Expires in {{count}} Days').replace('{{count}}', String(30 - (idx * 5)))}
-                      </span>
-                    </div>
-                  ))}
-                  {nonDeletedItems.filter(c => c.type === 'cloud' || c.label.toLowerCase().includes('aws')).length === 0 && (
-                    <p className="text-xs text-slate-400 text-center py-4 select-none">{t('vault.zeroExpirations', 'Zero looming credential expirations detected.')}</p>
-                  )}
-                </div>
-
-                <span className="text-[10px] text-[#1A73E8] font-bold block select-none cursor-pointer hover:underline text-right mt-1">{t('vault.viewCertificationCenter', 'View Certification Center →')}</span>
-              </Card>
-
+              <VaultInsightsFooter
+                credentials={nonDeletedItems}
+                totalCount={totalEntries}
+                weakCount={weakCount}
+                expiringCount={expiringCount}
+                onSelectCredential={(cred) => setSelectedCredential(cred as Credential)}
+                onViewAllExpiring={() => {
+                  setSelectedView('all');
+                  setSelectedType('cloud');
+                }}
+              />
             </div>
+          )}
         </div>
-      )}
+      </ModulePageScrollRegion>
 
       {/* Slide drawer for secrets diagnostics detail information */}
       <AnimatePresence>
@@ -2393,8 +2415,6 @@ export default function CredentialVaultPage() {
           </form>
         </DialogContent>
       </Dialog>
-      </div>
-      </ModulePageScrollRegion>
     </ModulePageShell>
   );
 }

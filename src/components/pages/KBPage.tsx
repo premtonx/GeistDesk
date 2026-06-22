@@ -94,10 +94,10 @@ import { useAuth } from '../../lib/hooks';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
 import {
-  ModulePageHeader,
+  ModulePageCompactHeader,
   ModulePageTabs,
-  ModuleKpiGrid,
   ModuleToolbar,
+  ModuleToolbarSelect,
   type ModuleTabItem,
 } from '../ui/module-page';
 import { RichTextEditor } from '../RichTextEditor';
@@ -544,13 +544,6 @@ export default function KBPage() {
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
   const [viewingArticle, setViewingArticle] = useState<any>(null);
   
-  // Collapsible left sidebar sections (closed by default)
-  const [isAiContentCenterOpen, setIsAiContentCenterOpen] = useState(false);
-  const [isEliteArticlesOpen, setIsEliteArticlesOpen] = useState(false);
-  const [isGraphOpen, setIsGraphOpen] = useState(false);
-  const [isTagsOpen, setIsTagsOpen] = useState(false);
-  const [isAuditLogOpen, setIsAuditLogOpen] = useState(false);
-  
   const handleSelectArticleByTitle = (title: string) => {
     const matched = articles.find(a => a.title.toLowerCase() === title.toLowerCase());
     if (matched) {
@@ -574,12 +567,6 @@ export default function KBPage() {
     avgReadTime: '3m 00s'
   });
   const [tagInput, setTagInput] = useState('');
-  
-  // AI Interactive Simulator tools
-  const [isGeneratingAI, setIsGeneratingAI] = useState<boolean>(false);
-  const [aiGeneratorWorkflow, setAiGeneratorWorkflow] = useState<string | null>(null);
-  const [aiPromptInput, setAiPromptInput] = useState<string>('');
-  const [aiOutputStream, setAiOutputStream] = useState<string>('');
 
   // Default internal structures
   const [categories, setCategories] = useState([
@@ -805,56 +792,6 @@ export default function KBPage() {
     toast.success("Document canonical URI pinned to host clipboard!");
   };
 
-  const simulateAIGeneration = (type: string) => {
-    setAiGeneratorWorkflow(type);
-    setIsGeneratingAI(true);
-    setAiOutputStream('');
-    
-    let content = '';
-    let title = '';
-    
-    if (type === 'vpn-ticket') {
-       title = "OSX & Windows DNS Leak Resolvers SOP";
-       content = `<h2>Overview of OSX Tunnel Fix</h2><p>This automated procedure resolves local router conflicts causing DNS queries to leak outside authenticated TLS tunnels during remote IPSec sessions.</p><h3>Pre-requisites</h3><ul><li>Terminal Administrator credentials.</li><li>GeistExchange active profile.</li></ul><h3>Step-by-step Actions</h3><p>Run the following command script to isolate routing priority tables:</p><pre><code>scutil --dns | grep -i internal</code></pre><p>Confirm all outbound queries route through fallback loops to bypass local isp tracking variables.</p>`;
-    } else if (type === 'sop') {
-       title = "Standard Operating Procedure: Live Telemetry sanitization";
-       content = `<h2>Production Server Log Sanity SOP</h2><p>Provides standardized telemetry cleanup tasks complying with SOC2 standards for data containment.</p><h3>Task Outline</h3><ol><li>Verify support logs are decrypted strictly in Sandbox mode.</li><li>Perform daily entropy check on key storage partitions.</li></ol>`;
-    } else if (type === 'faq') {
-       title = "Frequently Asked Questions: API Gateway throttling rules";
-       content = `<h2>API Throttling Guidelines</h2><h3>Q: What is the default rate threshold?</h3><p>We restrict API endpoints to 150 requests per minute under standard licenses to guarantee optimal latency speeds.</p><h3>Q: How do I handle 429 response buffers?</h3><p>Check the Retry-After header mapping to configure progressive backoff delays automatically.</p>`;
-    } else if (type === 'troubleshooting') {
-       title = "Remediation Playbook: Azure AD SSO SAML invalid handshake";
-       content = `<h2>Azure Active Directory Token Mismatch Remediation</h2><p>This playbook targets common security certificate mismatches occurring on corporate SSO nodes.</p><h3>Remediation Method</h3><p>Verify that your SAML sign-on certificate metadata fingerprint is registered inside GeistDesk settings.</p>`;
-    }
-
-    let i = 0;
-    const interval = setInterval(() => {
-      if (i < content.length) {
-        setAiOutputStream(prev => prev + content.substr(i, 8));
-        i += 8;
-      } else {
-        clearInterval(interval);
-        setIsGeneratingAI(false);
-        // Pre-fill editor values
-        setNewArticle({
-          title: title,
-          content: content,
-          category: selectedCategory,
-          subCategory: 'Workspace Setup',
-          visibility: 'Public',
-          tags: ["ai-drafted", "automated"],
-          owner: 'Sarah James',
-          reviewer: 'Mike Chen',
-          lastEditor: 'Gemini Assistant',
-          status: 'AI Generated',
-          avgReadTime: '2m 15s'
-        });
-        setTagInput('ai-drafted, automated');
-        toast.success("AI generated content loaded directly into document buffer!");
-      }
-    }, 30);
-  };
-
   const handleTranslateArticle = (lang: string) => {
     setIsTranslating(true);
     toast.info(`Orchestrating premium AI Translation of "${viewingArticle.title}" into ${lang}...`);
@@ -866,16 +803,6 @@ export default function KBPage() {
       toast.success(`Article successfully localized! Dynamic translations rendered under ML-KEM Shield.`);
     }, 1500);
   };
-
-  // KPI Dashboard calculator
-  const filteredCategoryArticles = articles.filter(a => a.category === selectedCategory);
-  
-  const totalArticlesInCategory = filteredCategoryArticles.length;
-  const totalViewsInCategory = filteredCategoryArticles.reduce((acc, obj) => acc + (obj.views || 0), 0);
-  const helpRatingInCategory = filteredCategoryArticles.length > 0 
-    ? Math.round((filteredCategoryArticles.reduce((acc, obj) => acc + (obj.helpfulCount || 0), 0) / 
-    Math.max(1, filteredCategoryArticles.reduce((acc, obj) => acc + (obj.helpfulCount || 0) + (obj.unhelpfulCount || 0), 0))) * 100) 
-    : 92;
 
   // Global search & tags & owner matching logic
   const searchNormalized = searchQuery.toLowerCase();
@@ -935,14 +862,32 @@ export default function KBPage() {
     }
   });
 
-  // Calculate distinct stats for left sidebar widget
+  // Library stats for compact header and tab counts
   const publishedCount = articles.filter(a => a.status === 'Published').length;
   const draftCount = articles.filter(a => a.status === 'Draft').length;
   const needsReviewCount = articles.filter(a => a.status === 'Needs Review' || a.status === 'Under Revision').length;
   const outdatedCount = articles.filter(a => a.status === 'Outdated').length;
-  const archivedCount = articles.filter(a => a.status === 'Archived').length;
-  const totalLibraryCount = articles.length;
-  const knowledgeCoveragePct = 94; // Custom ML metric
+
+  const categoryArticles = articles.filter((a) => a.category === selectedCategory);
+  const kbStatusCounts = {
+    all: categoryArticles.length,
+    published: categoryArticles.filter((a) => a.status === 'Published').length,
+    drafts: categoryArticles.filter((a) => a.status === 'Draft').length,
+    needsReview: categoryArticles.filter(
+      (a) => a.status === 'Needs Review' || a.status === 'Under Revision',
+    ).length,
+    outdated: categoryArticles.filter((a) => a.status === 'Outdated').length,
+    internal: categoryArticles.filter((a) => a.visibility === 'Private').length,
+  };
+
+  const categoryTabItems: ModuleTabItem[] = categories.map((cat) => {
+    const catKey = cat.name.replace(/\s+/g, '_').toLowerCase();
+    return {
+      id: cat.name,
+      label: t(`kb.categories.${catKey}.name`, cat.name),
+      count: articles.filter((a) => a.category === cat.name).length,
+    };
+  });
 
   // Helper translations for preview reading
   const getLocalizedTitle = (art: any, lang: string) => {
@@ -1448,430 +1393,9 @@ export default function KBPage() {
   };
 
   return (
-    <div className="flex flex-col lg:flex-row h-full w-full bg-slate-50 overflow-hidden text-slate-800 font-sans">
-      
-      {/* ======================================================== */}
-      {/* COLUMN 1: LEFT SIDEBAR - KNOWLEDGE STRUCTURE            */}
-      {/* ======================================================== */}
-      <aside className="w-full lg:w-[320px] bg-white border-r border-slate-200/80 p-5 flex flex-col shrink-0 overflow-y-auto custom-scroll space-y-6">
+    <div className="flex flex-col h-full w-full bg-[#FAFBFC] overflow-hidden text-slate-800 font-sans">
 
-        {/* AI Knowledge Coverage Map CTA */}
-        <div className="bg-slate-50 border border-slate-200/60 p-3.5 rounded-[1.25rem] space-y-2">
-          <div className="flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
-            <h3 className="text-[9px] font-black uppercase text-slate-400 tracking-wider">AI Quality Auditing</h3>
-          </div>
-          <button
-            onClick={() => {
-              if (viewMode === 'coverage') {
-                setViewMode('standard');
-              } else {
-                setViewMode('coverage');
-                fetchCoverageData();
-              }
-            }}
-            className={cn(
-              "w-full flex items-center justify-between px-3.5 py-3 rounded-xl border text-xs font-black transition-all hover:scale-[1.01] active:scale-95 cursor-pointer",
-              viewMode === 'coverage'
-                ? "bg-indigo-600 border-indigo-650 text-white shadow-md shadow-indigo-600/10"
-                : "bg-white border-slate-200/80 text-indigo-950 hover:bg-slate-50"
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <Network className="w-4 h-4 text-indigo-500 shrink-0" />
-              <span>AI Coverage Map</span>
-            </div>
-            {viewMode === 'coverage' ? (
-              <ChevronRight className="w-3.5 h-3.5 text-white" />
-            ) : (
-              <Badge className="bg-indigo-50 text-indigo-600 hover:bg-indigo-50 border-none px-1 text-[8px] font-black h-4.5">AI Engine</Badge>
-            )}
-          </button>
 
-          {/* Ticket-to-Knowledge Autopilot Button */}
-          <button
-            onClick={() => {
-              if (viewMode === 'autopilot') {
-                setViewMode('standard');
-              } else {
-                setViewMode('autopilot');
-              }
-            }}
-            className={cn(
-              "w-full flex items-center justify-between px-3.5 py-3 rounded-xl border text-xs font-black transition-all hover:scale-[1.01] active:scale-95 cursor-pointer",
-              viewMode === 'autopilot'
-                ? "bg-indigo-600 border-indigo-650 text-white shadow-md shadow-indigo-650/10"
-                : "bg-white border-slate-200/80 text-indigo-950 hover:bg-slate-50"
-            )}
-          >
-            <div className="flex items-center gap-2">
-              <Zap className="w-4 h-4 text-amber-500 shrink-0 select-none" />
-              <span>KB Autopilot</span>
-            </div>
-            {viewMode === 'autopilot' ? (
-              <ChevronRight className="w-3.5 h-3.5 text-white" />
-            ) : (
-              <Badge className="bg-emerald-50 text-emerald-600 hover:bg-emerald-50 border-none px-1.5 text-[8px] font-black h-4.5">Active</Badge>
-            )}
-          </button>
-        </div>
-
-        {/* Knowledge Structure Categories Section */}
-        <div>
-          <div className="flex items-center justify-between mb-4 px-1">
-            <div className="flex items-center gap-2">
-              <Folder className="w-4 h-4 text-indigo-500" />
-              <h2 className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">{t('kb.structure', 'Knowledge Structure')}</h2>
-            </div>
-            <button 
-              onClick={() => setIsAddingCategory(true)}
-              className="text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 p-1.5 rounded-lg transition-all"
-              title={t('kb.addCategoryTooltip', 'Add Enterprise Category Parent/Child')}
-            >
-              <PlusCircle className="w-4 h-4" />
-            </button>
-          </div>
-
-          <nav className="space-y-1">
-            {categories.map((cat, i) => {
-              const catArticles = articles.filter(a => a.category === cat.name);
-              const drafts = catArticles.filter(a => a.status === 'Draft').length;
-              const pendingReviews = catArticles.filter(a => a.status === 'Needs Review' || a.status === 'Under Revision').length;
-              const catKey = cat.name.replace(/\s+/g, '_').toLowerCase();
-              
-              return (
-                <div key={i} className="group relative">
-                  <button 
-                    onClick={() => {
-                      setSelectedCategory(cat.name);
-                      setViewingArticle(null);
-                    }}
-                    className={cn(
-                      "w-full flex flex-col gap-1.5 px-3 py-3 rounded-xl text-left transition-all relative border",
-                      selectedCategory === cat.name 
-                        ? "bg-indigo-50/80 text-indigo-950 border-indigo-100 shadow-sm" 
-                        : "text-slate-600 hover:bg-slate-50 hover:text-slate-900 border-transparent"
-                    )}
-                  >
-                    <div className="flex items-center justify-between w-full">
-                      <div className="flex items-center gap-2.5">
-                        <div className={cn(
-                          "p-1.5 rounded-lg border",
-                          selectedCategory === cat.name 
-                            ? "bg-white text-indigo-600 border-indigo-100 shadow-sm" 
-                            : "bg-slate-100 text-slate-400 group-hover:text-slate-600 border-transparent"
-                        )}>
-                          <cat.icon className="w-3.5 h-3.5" />
-                        </div>
-                        <span className="text-xs font-bold tracking-tight">{t(`kb.categories.${catKey}.name`, cat.name)}</span>
-                      </div>
-                      
-                      <Badge variant="outline" className="text-[10px] font-extrabold bg-slate-50 text-slate-500 border-none px-2 py-0">
-                         {catArticles.length}
-                      </Badge>
-                    </div>
-
-                    {/* Subcategories visual breadcrumb count footer */}
-                    <div className="flex items-center justify-between text-[9px] text-slate-400 ml-8 font-semibold">
-                      <span>{t(`kb.categories.${catKey}.subCategory`, cat.subCategory || 'General Node')}</span>
-                      <div className="flex gap-2">
-                        {drafts > 0 && <span className="text-amber-500">{drafts}D</span>}
-                        {pendingReviews > 0 && <span className="text-blue-500">{pendingReviews}R</span>}
-                      </div>
-                    </div>
-                  </button>
-                </div>
-              );
-            })}
-          </nav>
-        </div>
-
-        {/* Content Health Widget */}
-        <div className="bg-slate-50 border border-slate-200/80 rounded-[16px] p-4 space-y-3 shadow-none">
-          <div className="flex items-center justify-between">
-            <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
-              <Activity className="w-3.5 h-3.5 text-emerald-500" /> {t('kb.contentHealth', 'Content Health')}
-            </h3>
-            <Badge className="bg-emerald-500/10 text-emerald-700 font-extrabold border-none text-[8px] h-4.5 px-1.5">
-              {t('kb.scoreLabel', 'SCORE: 92/100')}
-            </Badge>
-          </div>
-
-          <div className="grid grid-cols-2 gap-2 text-[11px] font-semibold text-slate-600">
-            <div className="bg-white border p-2 rounded-xl flex flex-col">
-              <span className="text-slate-400 text-[9px] uppercase">{t('kb.published', 'Published')}</span>
-              <span className="text-xs font-black text-slate-800">{publishedCount} {t('kb.articlesLabel', 'Articles')}</span>
-            </div>
-            <div className="bg-white border p-2 rounded-xl flex flex-col">
-              <span className="text-slate-400 text-[9px] uppercase">{t('kb.draftsPool', 'Drafts Pool')}</span>
-              <span className="text-xs font-black text-slate-800">{draftCount} {t('kb.pendingLabel', 'Pending')}</span>
-            </div>
-            <div className="bg-white border p-2 rounded-xl flex flex-col">
-              <span className="text-slate-400 text-[9px] uppercase">{t('kb.needsReview', 'Needs Review')}</span>
-              <span className="text-xs font-black text-slate-800">{needsReviewCount} {t('kb.queueLabel', 'Queue')}</span>
-            </div>
-            <div className="bg-white border p-2 rounded-xl flex flex-col">
-              <span className="text-slate-400 text-[9px] uppercase">{t('kb.outdatedArc', 'Outdated / Arc')}</span>
-              <span className="text-xs font-black text-slate-800">{outdatedCount + archivedCount} {t('kb.filesLabel', 'Files')}</span>
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <div className="flex justify-between text-[10px] font-bold text-slate-500 mb-1">
-              <span>{t('kb.knowledgeCoverage', 'Knowledge Coverage')}</span>
-              <span>{knowledgeCoveragePct}%</span>
-            </div>
-            <div className="w-full bg-slate-200/80 rounded-full h-1.5 overflow-hidden">
-               <div className="bg-indigo-600 h-1.5 rounded-full" style={{ width: `${knowledgeCoveragePct}%` }} />
-            </div>
-          </div>
-        </div>
-
-        {/* AI Knowledge Assistant persistent sidebar */}
-        <div className="bg-gradient-to-br from-indigo-900 to-slate-900 text-white rounded-[16px] p-4.5 space-y-3.5 relative overflow-hidden shadow-md">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/10 blur-[30px] rounded-full -mr-16 -mt-16" />
-          
-          <div className="flex items-center justify-between relative z-10">
-            <div className="flex items-center gap-1.5">
-              <Sparkles className="w-4 h-4 text-indigo-400" />
-              <h3 className="text-[12px] font-bold uppercase tracking-wider text-indigo-200">{t('kb.aiAssistant', 'AI ASSISTANT')}</h3>
-            </div>
-            <Badge className="bg-indigo-500/25 text-indigo-300 border border-indigo-400/30 text-[8px] font-extrabold uppercase tracking-widest px-1.5 h-4.5">{t('kb.geistLlm', 'GEIST-LLM')}</Badge>
-          </div>
-
-          <p className="text-[11px] text-slate-300 leading-relaxed font-medium relative z-10">{t('kb.aiAssistantDesc', 'Optimize libraries, generate SOP handbooks, merge duplicates, or scan content security.')}</p>
-          
-          <div className="space-y-1 relative z-10 text-[11px] font-bold text-slate-200">
-            <button 
-              onClick={() => simulateAIGeneration('vpn-ticket')}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-all text-left text-indigo-200 hover:text-white"
-            >
-              <Ticket className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{t('kb.generateFromTickets', 'Generate From Tickets')}</span>
-            </button>
-            <button 
-              onClick={() => simulateAIGeneration('faq')}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-all text-left text-indigo-200 hover:text-white"
-            >
-              <FileQuestion className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{t('kb.suggestMissingArticles', 'Suggest Missing Articles')}</span>
-            </button>
-            <button 
-              onClick={() => simulateAIGeneration('troubleshooting')}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-all text-left text-indigo-200 hover:text-white"
-            >
-              <AlertTriangle className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{t('kb.findContentGaps', 'Find Content Gaps')}</span>
-            </button>
-            <button 
-              onClick={() => {
-                toast.info("AI scanned database. Found duplicate: 'Inviting and Managing Team Members' and 'Onboard Agents SOP'. Triggered auto-merge protocols.");
-              }}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-all text-left text-indigo-200 hover:text-white"
-            >
-              <Split className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{t('kb.mergeDuplicateArticles', 'Merge Duplicate Articles')}</span>
-            </button>
-            <button 
-              onClick={() => simulateAIGeneration('sop')}
-              className="w-full flex items-center gap-2 px-2 py-1.5 rounded-lg hover:bg-white/10 transition-all text-left text-indigo-200 hover:text-white"
-            >
-              <Shield className="w-3.5 h-3.5 text-indigo-400" />
-              <span>{t('kb.generateSopDocument', 'Generate SOP Document')}</span>
-            </button>
-          </div>
-        </div>
-
-        {/* COLLAPSIBLE REGION: AI CONTENT CENTER */}
-        <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-3xs">
-          <button 
-            onClick={() => setIsAiContentCenterOpen(!isAiContentCenterOpen)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100/85 transition-all font-black text-slate-700 text-xs text-left cursor-pointer"
-          >
-            <span className="flex items-center gap-1.5 uppercase tracking-wide">
-              <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-pulse" /> 
-              {t('kb.aiContentCenter', 'AI CONTENT CENTER')}
-            </span>
-            <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform duration-200", isAiContentCenterOpen && "rotate-180")} />
-          </button>
-          {isAiContentCenterOpen && (
-            <div className="p-4 space-y-3 border-t border-slate-150 text-xs animate-in slide-in-from-top-1 duration-150 bg-slate-50/20">
-              <div className="p-3 bg-white border border-slate-150 rounded-xl space-y-1.5 shadow-2xs hover:border-slate-350 transition-all">
-                <div className="flex justify-between items-center text-[10px] uppercase font-black text-slate-400">
-                  <span>{t('kb.ticketExtractionQueue', 'Ticket extraction queue')}</span>
-                  <Badge className="bg-red-50 text-red-600 px-1 hover:bg-red-50 border-none h-4 text-[8px] font-extrabold">{t('kb.solvedLabel', '{{count}} solved').replace('{{count}}', '43')}</Badge>
-                </div>
-                <p className="font-extrabold text-[#1E293B] leading-tight text-[11px]">{t('kb.ticketExtractionDesc', '43 tickets solved for Enterprise VPN Tunnel issue.')}</p>
-                <button 
-                  onClick={() => simulateAIGeneration('vpn-ticket')}
-                  className="text-[10px] uppercase font-black text-indigo-650 hover:text-indigo-800 flex items-center gap-1 mt-1 text-left"
-                >
-                  {t('kb.draftTroubleshooting', 'Draft Troubleshooting Article ›')}
-                </button>
-              </div>
-
-              <div className="p-3 bg-white border border-slate-150 rounded-xl space-y-1.5 shadow-2xs hover:border-slate-350 transition-all animate-in zoom-in-95">
-                <div className="flex justify-between items-center text-[10px] uppercase font-black text-slate-400">
-                  <span>{t('kb.missingGapsIdentified', 'Missing gaps identified')}</span>
-                  <Badge className="bg-amber-50 text-amber-600 px-1 border-none h-4 text-[8px] font-extrabold">{t('kb.queriesLabel', '{{count}} queries').replace('{{count}}', '18')}</Badge>
-                </div>
-                <p className="font-extrabold text-[#1E293B] leading-tight text-[11px]">{t('kb.missingGapsDesc', 'Outlook calendar sync validation failures.')}</p>
-                <button 
-                  onClick={() => simulateAIGeneration('faq')}
-                  className="text-[10px] uppercase font-black text-indigo-650 hover:text-indigo-800 flex items-center gap-1 mt-1 text-left"
-                >
-                  {t('kb.autoGenerateFaq', 'Auto-Generate FAQ Guide ›')}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* COLLAPSIBLE REGION: ELITE ARTICLES */}
-        <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-3xs">
-          <button 
-            onClick={() => setIsEliteArticlesOpen(!isEliteArticlesOpen)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100/85 transition-all font-black text-slate-700 text-xs text-left cursor-pointer"
-          >
-            <span className="flex items-center gap-1.5 uppercase tracking-wide">
-              <TrendingUp className="w-3.5 h-3.5 text-indigo-500" />
-              {t('kb.eliteArticles', 'Elite Articles')}
-            </span>
-            <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform duration-200", isEliteArticlesOpen && "rotate-180")} />
-          </button>
-          {isEliteArticlesOpen && (
-            <div className="p-4 space-y-3 border-t border-slate-150 text-xs animate-in slide-in-from-top-1 duration-150 bg-slate-50/20">
-              <div className="space-y-3">
-                {articles.slice(0, 3).map((art, idx) => (
-                  <div key={idx} className="flex items-center justify-between text-xs font-semibold text-slate-700 gap-2">
-                    <div className="space-y-0.5 max-w-[150px]">
-                      <span className="font-black text-slate-800 line-clamp-1 hover:text-indigo-600 cursor-pointer text-xs block" onClick={() => setViewingArticle(art)}>
-                        {art.title}
-                      </span>
-                      <div className="flex gap-1.5 text-[9px] text-slate-400">
-                        <span className="flex items-center gap-0.5 text-slate-500"><Eye className="w-2.5 h-2.5" /> {art.views}</span>
-                        <span className="text-emerald-650 font-black">&#10003; 96%</span>
-                      </div>
-                    </div>
-
-                    {/* SVG mini trend sparkline */}
-                    <svg className="w-10 h-5 text-emerald-500 stroke-2 overflow-visible shrink-0" fill="none" viewBox="0 0 100 100">
-                      <path 
-                        d={idx === 0 ? "M 0 80 Q 25 30 50 50 T 100 20" : idx === 1 ? "M 0 60 Q 25 70 50 30 T 100 10" : "M 0 90 Q 25 40 50 60 T 100 15"} 
-                        stroke="currentColor" 
-                      />
-                    </svg>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* COLLAPSIBLE REGION: RELATIONSHIP GRAPH 2.0 */}
-        <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-3xs">
-          <button 
-            onClick={() => setIsGraphOpen(!isGraphOpen)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100/85 transition-all font-black text-slate-700 text-xs text-left cursor-pointer"
-          >
-            <span className="flex items-center gap-1.5 uppercase tracking-wide">
-              <Network className="w-3.5 h-3.5 text-indigo-500" />
-              {t('kb.knowledgeRelationshipsGraph', 'Knowledge Graph 2.0')}
-            </span>
-            <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform duration-200", isGraphOpen && "rotate-180")} />
-          </button>
-          {isGraphOpen && (
-            <div className="p-4 border-t border-slate-150 animate-in slide-in-from-top-1 duration-150 bg-slate-50/20">
-              <AIRelationshipGraph2 
-                currentArticle={viewingArticle}
-                onSelectArticle={handleSelectArticleByTitle}
-                miniMode={true}
-              />
-            </div>
-          )}
-        </div>
-
-        {/* COLLAPSIBLE REGION: TAGS CLOUD */}
-        <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-3xs">
-          <button 
-            onClick={() => setIsTagsOpen(!isTagsOpen)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100/85 transition-all font-black text-slate-700 text-xs text-left cursor-pointer"
-          >
-            <span className="flex items-center gap-1.5 uppercase tracking-wide">
-              <Tag className="w-3.5 h-3.5" />
-              {t('kb.tagsAndMetadataWeights', 'Tags Cloud')}
-            </span>
-            <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform duration-200", isTagsOpen && "rotate-180")} />
-          </button>
-          {isTagsOpen && (
-            <div className="p-4 border-t border-slate-150 animate-in slide-in-from-top-1 duration-150 bg-slate-50/20">
-              <div className="flex flex-wrap gap-1.5">
-                {Array.from(new Set(articles.flatMap(a => a.tags || []))).map((t: any, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setSearchQuery(t);
-                      toast.success(`Filter switched mapping tag #${t}`);
-                    }}
-                    className="text-[10.5px] font-black text-slate-600 hover:text-indigo-600 bg-white hover:bg-slate-100 px-2.5 py-1 rounded-lg border flex items-center gap-1 leading-none shadow-3xs text-left cursor-pointer"
-                  >
-                    #{t}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* COLLAPSIBLE REGION: AUDIT LOG & RECENT CHANGES */}
-        <div className="border border-slate-200 rounded-2xl overflow-hidden bg-white shadow-3xs">
-          <button 
-            onClick={() => setIsAuditLogOpen(!isAuditLogOpen)}
-            className="w-full flex items-center justify-between px-4 py-3 bg-slate-50 hover:bg-slate-100/85 transition-all font-black text-slate-700 text-xs text-left cursor-pointer"
-          >
-            <span className="flex items-center gap-1.5 uppercase tracking-wide">
-              <History className="w-3.5 h-3.5 text-indigo-500" />
-              {t('kb.auditLog', 'Audit log & recent changes')}
-            </span>
-            <ChevronDown className={cn("w-4 h-4 text-slate-400 transition-transform duration-200", isAuditLogOpen && "rotate-180")} />
-          </button>
-          {isAuditLogOpen && (
-            <div className="p-4 space-y-3.5 border-t border-slate-150 text-xs animate-in slide-in-from-top-1 duration-150 bg-slate-50/20">
-               <div className="flex gap-3">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
-                  <div className="flex flex-col">
-                     <strong className="text-slate-700">{t('kb.audit.sarah_updated', 'Sarah James updated "Getting Started Docs"')}</strong>
-                     <span className="text-[10px] text-slate-400 font-bold">{t('kb.audit.sarah_meta', '2 hours ago • Verified SOC2 Audit logs')}</span>
-                  </div>
-               </div>
-               
-               <div className="flex gap-3">
-                  <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
-                  <div className="flex flex-col">
-                     <strong className="text-slate-700">{t('kb.audit.anna_rotated', 'Anna Bell rotated Bearer Token specifications')}</strong>
-                     <span className="text-[10px] text-slate-400 font-bold">{t('kb.audit.anna_meta', 'Yesterday • API Authentication')}</span>
-                  </div>
-               </div>
-
-               <div className="flex gap-3">
-                  <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-                  <div className="flex flex-col">
-                     <strong className="text-slate-700">{t('kb.audit.will_submitted', 'Will Coyote submitted "MFA playbooks" for review')}</strong>
-                     <span className="text-[10px] text-slate-400 font-bold">{t('kb.audit.will_meta', 'In Draft pool queue • MFA Debugging')}</span>
-                  </div>
-               </div>
-            </div>
-          )}
-        </div>
-
-      </aside>
-
-      {/* ======================================================== */}
-      {/* COLUMN 2: CENTER WORKSPACE - CONTENT MANAGEMENT          */}
-      {/* ======================================================== */}
-      <section className="flex-1 flex flex-col min-w-0 bg-[#F8FAFC] overflow-y-auto custom-scroll">
-        
-        {/* VIEWING ARTICLE DETAILED VIEW PANEL */}
         {viewMode === 'coverage' ? (
           renderCoverageDashboard()
         ) : viewMode === 'autopilot' ? (
@@ -2099,63 +1623,132 @@ export default function KBPage() {
             </div>
           </div>
         ) : (
-          <>
-            <ModulePageHeader
-              title={t('kb.title', 'GeistKB Knowledge Base')}
-              description={t(`kb.categories.${selectedCategory.replace(/\s+/g, '_').toLowerCase()}.desc`, categories.find(c => c.name === selectedCategory)?.desc || t('kb.structure', 'Manage technical articles, FAQs, and operating procedure playbooks.'))}
-              trailing={
-                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-lg border border-slate-200/60">
-                  <button type="button" onClick={() => setViewLayout('table')} className={cn('p-1.5 rounded-md transition-colors', viewLayout === 'table' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400')} aria-label="Table view">
-                    <LayoutGrid className="w-4 h-4" />
-                  </button>
-                  <button type="button" onClick={() => setViewLayout('card')} className={cn('p-1.5 rounded-md transition-colors', viewLayout === 'card' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400')} aria-label="Card view">
-                    <LayoutGrid className="w-4 h-4 rotate-90" />
-                  </button>
-                  <button type="button" onClick={() => setViewLayout('tree')} className={cn('p-1.5 rounded-md transition-colors', viewLayout === 'tree' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400')} aria-label="Tree view">
-                    <GitBranch className="w-4 h-4" />
-                  </button>
-                </div>
-              }
+          <div className="flex-1 flex flex-col min-w-0 min-h-0">
+            <ModulePageCompactHeader
+              title={t('kb.headerMetaInline', 'GeistKB • {{published}} Published • {{drafts}} Drafts • {{review}} Needs Review')
+                .replace('{{published}}', String(publishedCount))
+                .replace('{{drafts}}', String(draftCount))
+                .replace('{{review}}', String(needsReviewCount))}
+            />
+            <ModulePageTabs
+              tabs={categoryTabItems}
+              activeId={selectedCategory}
+              onChange={(id) => {
+                setSelectedCategory(id);
+                setViewingArticle(null);
+              }}
             />
             <ModulePageTabs
               tabs={[
-                { id: 'All', label: t('common.statusAll', 'All') },
-                { id: 'Published', label: t('kb.published', 'Published') },
-                { id: 'Drafts', label: t('kb.drafts', 'Drafts') },
-                { id: 'Needs Review', label: t('kb.needsReview', 'Needs Review') },
-                { id: 'Outdated', label: t('kb.outdated', 'Outdated') },
-                { id: 'Internal Only', label: t('kb.internalOnly', 'Internal Only') },
+                { id: 'All', label: t('common.statusAll', 'All'), count: kbStatusCounts.all },
+                { id: 'Published', label: t('kb.published', 'Published'), count: kbStatusCounts.published },
+                { id: 'Drafts', label: t('kb.drafts', 'Drafts'), count: kbStatusCounts.drafts },
+                { id: 'Needs Review', label: t('kb.needsReview', 'Needs Review'), count: kbStatusCounts.needsReview },
+                { id: 'Outdated', label: t('kb.outdated', 'Outdated'), count: kbStatusCounts.outdated },
+                { id: 'Internal Only', label: t('kb.internalOnly', 'Internal Only'), count: kbStatusCounts.internal },
               ]}
               activeId={activeSubTab}
               onChange={setActiveSubTab}
-            />
-            <ModuleKpiGrid
-              items={[
-                { id: 'articles', label: t('kb.articlesNode', 'Articles'), value: totalArticlesInCategory },
-                { id: 'views', label: t('kb.totalViews', 'Total views'), value: totalViewsInCategory, hint: '+18%' },
-                { id: 'helpful', label: t('kb.helpfulScore', 'Helpful score'), value: `${helpRatingInCategory}%` },
-                { id: 'read', label: t('kb.avgReadTime', 'Avg read time'), value: '3m 24s' },
-                { id: 'searches', label: t('kb.relatedSearches', 'Related searches'), value: totalArticlesInCategory > 0 ? 134 : 0 },
-                { id: 'gaps', label: t('kb.unansweredGaps', 'Unanswered gaps'), value: totalArticlesInCategory > 3 ? 3 : 1 },
-              ]}
             />
             <ModuleToolbar
               searchPlaceholder={t('kb.searchPlaceholderAdvanced', 'Search articles, tags, topics...')}
               searchValue={searchQuery}
               onSearchChange={setSearchQuery}
+              sortControl={
+                <ModuleToolbarSelect
+                  value={sortBy}
+                  onChange={(v) => setSortBy(v as typeof sortBy)}
+                  aria-label={t('actions.sort', 'Sort')}
+                >
+                  <option value="date">{t('kb.sortDate', 'Date updated')}</option>
+                  <option value="views">{t('kb.sortViews', 'Most views')}</option>
+                  <option value="confidence">{t('kb.sortConfidence', 'Trust score')}</option>
+                </ModuleToolbarSelect>
+              }
               filtersSlot={
-                <div className="hidden lg:flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                  <select value={filterOwner} onChange={(e) => setFilterOwner(e.target.value)} className="h-9 text-xs border border-slate-200/80 rounded-lg px-2 bg-slate-50/80">
+                <div className="hidden md:flex items-center gap-1.5">
+                  <ModuleToolbarSelect
+                    value={filterOwner}
+                    onChange={setFilterOwner}
+                    aria-label={t('kb.owner', 'Owner')}
+                  >
                     <option value="All">{t('kb.allOwners', 'All owners')}</option>
-                    {Array.from(new Set(articles.map(a => a.owner).filter(Boolean))).map((ownerName: string, idx) => (
+                    {Array.from(new Set(articles.map((a) => a.owner).filter(Boolean))).map((ownerName: string, idx) => (
                       <option key={idx} value={ownerName}>{ownerName}</option>
                     ))}
-                  </select>
-                  <select value={filterVisibility} onChange={(e) => setFilterVisibility(e.target.value)} className="h-9 text-xs border border-slate-200/80 rounded-lg px-2 bg-slate-50/80">
+                  </ModuleToolbarSelect>
+                  <ModuleToolbarSelect
+                    value={filterVisibility}
+                    onChange={setFilterVisibility}
+                    aria-label={t('kb.allAccess', 'Access')}
+                  >
                     <option value="All">{t('kb.allAccess', 'All access')}</option>
                     <option value="Public">{t('kb.publicPortal', 'Public')}</option>
                     <option value="Private">{t('kb.internalSopsOnly', 'Internal')}</option>
-                  </select>
+                  </ModuleToolbarSelect>
+                </div>
+              }
+              viewsSlot={
+                <div className="flex items-center gap-1 shrink-0">
+                  <div className="hidden sm:flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-md border border-slate-200/60">
+                    <button
+                      type="button"
+                      onClick={() => setViewLayout('table')}
+                      className={cn('p-1 rounded transition-colors', viewLayout === 'table' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400')}
+                      aria-label={t('kb.layoutTable', 'Table view')}
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewLayout('card')}
+                      className={cn('p-1 rounded transition-colors', viewLayout === 'card' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400')}
+                      aria-label={t('kb.layoutCard', 'Card view')}
+                    >
+                      <LayoutGrid className="w-3.5 h-3.5 rotate-90" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setViewLayout('tree')}
+                      className={cn('p-1 rounded transition-colors', viewLayout === 'tree' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400')}
+                      aria-label={t('kb.layoutTree', 'Tree view')}
+                    >
+                      <GitBranch className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setViewMode('coverage');
+                      fetchCoverageData();
+                    }}
+                    className="h-8 gap-1 rounded-md border-slate-200/80 text-slate-600 font-medium shrink-0 px-2.5 text-xs"
+                  >
+                    <Network className="w-3.5 h-3.5" />
+                    <span className="hidden lg:inline">{t('kb.coverageMap', 'Coverage')}</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setViewMode('autopilot')}
+                    className="h-8 gap-1 rounded-md border-slate-200/80 text-slate-600 font-medium shrink-0 px-2.5 text-xs"
+                  >
+                    <Zap className="w-3.5 h-3.5" />
+                    <span className="hidden lg:inline">{t('kb.autopilot', 'Autopilot')}</span>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    onClick={() => setIsAddingCategory(true)}
+                    className="h-8 w-8 rounded-md border-slate-200/80 text-slate-600 shrink-0"
+                    aria-label={t('kb.addCategoryTooltip', 'Add category')}
+                  >
+                    <FolderPlus className="w-3.5 h-3.5" />
+                  </Button>
                 </div>
               }
               createAction={
@@ -2163,16 +1756,17 @@ export default function KBPage() {
                   ariaLabelKey="actions.createKBArticle"
                   ariaLabelDefault="Create GeistKB Article"
                   onClick={() => openCreateArticle()}
+                  iconOnly
                 />
               }
             />
 
-            <div className="px-6 py-2 border-b bg-white text-[11px] font-medium text-slate-400">
+            <div className="px-6 py-1.5 border-b bg-white text-[11px] font-medium text-slate-400 shrink-0">
               {t('kb.displayingCount', 'Displaying {{count}} matching entries').replace('{{count}}', String(processedArticles.length))}
             </div>
 
             {/* ARTICLES GRID CONTROL AREA */}
-            <div className="p-6 max-w-7xl mx-auto w-full pb-32">
+            <div className="flex-1 overflow-y-auto custom-scroll px-6 py-3 w-full">
               
               {processedArticles.length === 0 ? (
                 <div className="border border-slate-200/60 bg-white/60 rounded-[16px] p-12 text-center flex flex-col items-center justify-center space-y-4">
@@ -2465,196 +2059,9 @@ export default function KBPage() {
               )}
 
             </div>
-          </>
+          </div>
         )}
 
-      </section>
-
-      {/* ======================================================== */}
-      {/* COLUMN 3: RIGHT SIDEBAR - INSIGHTS & PERFORMANCE         */}
-      {/* ======================================================== */}
-      <aside className="hidden">
-        
-        {/* RECENTLY UPDATED TIMELINE METADATA */}
-        <div className="space-y-3">
-          <div className="pb-1 border-b">
-             <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-               <History className="w-3.5 h-3.5" /> {t('kb.auditLog', 'Audit log & recent changes')}
-             </h4>
-          </div>
-
-          <div className="space-y-3.5 text-xs">
-             <div className="flex gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
-                <div className="flex flex-col">
-                   <strong className="text-slate-700">{t('kb.audit.sarah_updated', 'Sarah James updated "Getting Started Docs"')}</strong>
-                   <span className="text-[10px] text-slate-400 font-bold">{t('kb.audit.sarah_meta', '2 hours ago • Verified SOC2 Audit logs')}</span>
-                </div>
-             </div>
-             
-             <div className="flex gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
-                <div className="flex flex-col">
-                   <strong className="text-slate-700">{t('kb.audit.anna_rotated', 'Anna Bell rotated Bearer Token specifications')}</strong>
-                   <span className="text-[10px] text-slate-400 font-bold">{t('kb.audit.anna_meta', 'Yesterday • API Authentication')}</span>
-                </div>
-             </div>
-
-             <div className="flex gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-                <div className="flex flex-col">
-                   <strong className="text-slate-700">{t('kb.audit.will_submitted', 'Will Coyote submitted "MFA playbooks" for review')}</strong>
-                   <span className="text-[10px] text-slate-400 font-bold">{t('kb.audit.will_meta', 'In Draft pool queue • MFA Debugging')}</span>
-                </div>
-             </div>
-          </div>
-        </div>
-
-        {/* OBSOLETE MERGED COMPONENT WRAPPER (HIDDEN) */}
-        <div className="hidden">
-        
-        {/* TOP PERFORMING ARTICLES - WITH SPARKLINE SIMULATIONS */}
-        <div className="space-y-3.5">
-          <div className="flex justify-between items-center pb-2 border-b">
-             <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-               <TrendingUp className="w-3.5 h-3.5 text-indigo-500" /> {t('kb.eliteArticles', 'Elite Articles')}
-             </h4>
-             <Badge className="border-none bg-indigo-50 text-indigo-600 font-black text-[9px]">LIVELOOP</Badge>
-          </div>
-
-          <div className="space-y-3">
-             {articles.slice(0, 3).map((art, idx) => (
-               <div key={idx} className="flex items-center justify-between text-xs font-semibold text-slate-700">
-                  <div className="space-y-0.5 max-w-[200px]">
-                     <span className="font-black text-slate-800 line-clamp-1 hover:text-indigo-600 cursor-pointer" onClick={() => setViewingArticle(art)}>
-                       {art.title}
-                     </span>
-                     <div className="flex gap-2 text-[10px] text-slate-400">
-                       <span className="flex items-center gap-1 text-slate-500"><Eye className="w-2.5 h-2.5" /> {art.views} views</span>
-                       <span className="text-emerald-600 font-bold">&#10003; 96% helpful</span>
-                     </div>
-                  </div>
-
-                  {/* SVG mini trend sparkline */}
-                  <svg className="w-14 h-7 text-emerald-500 stroke-2 overflow-visible" fill="none" viewBox="0 0 100 100">
-                     <path 
-                       d={idx === 0 ? "M 0 80 Q 25 30 50 50 T 100 20" : idx === 1 ? "M 0 60 Q 25 70 50 30 T 100 10" : "M 0 90 Q 25 40 50 60 T 100 15"} 
-                       stroke="currentColor" 
-                     />
-                  </svg>
-               </div>
-             ))}
-          </div>
-        </div>
-
-        {/* AI CONTENT CENTER DISPATCH AND REMEDIATIONS */}
-        <div className="bg-slate-50/60 p-4 border rounded-[16px] space-y-4">
-           <div className="flex justify-between items-center text-[10.5px] font-black uppercase tracking-widest text-[#4F46E5] pb-2 border-b">
-             <span className="flex items-center gap-1"><Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-pulse" /> {t('kb.aiContentCenter', 'AI CONTENT CENTER')}</span>
-           </div>
-
-           {/* Generate from Tickets suggestion */}
-           <div className="space-y-3 text-xs">
-              
-              <div className="p-3 bg-white border border-slate-150 rounded-xl space-y-1.5 shadow-2xs hover:border-slate-350 transition-all">
-                 <div className="flex justify-between items-center text-[10px] uppercase font-black text-slate-400">
-                    <span>{t('kb.ticketExtractionQueue', 'Ticket extraction queue')}</span>
-                    <Badge className="bg-red-50 text-red-600 px-1 hover:bg-red-50 text-[8px] font-extrabold border-none h-4">{t('kb.solvedLabel', '{{count}} solved').replace('{{count}}', '43')}</Badge>
-                 </div>
-                 <p className="font-extrabold text-[#1E293B] leading-tight">{t('kb.ticketExtractionDesc', '43 tickets solved for Enterprise VPN Tunnel issue.')}</p>
-                 <button 
-                   onClick={() => simulateAIGeneration('vpn-ticket')}
-                   className="text-[10px] uppercase font-black text-indigo-650 hover:text-indigo-800 flex items-center gap-1 mt-1"
-                 >
-                    {t('kb.draftTroubleshooting', 'Draft Troubleshooting Article ›')}
-                 </button>
-              </div>
-
-              <div className="p-3 bg-white border border-slate-150 rounded-xl space-y-1.5 shadow-2xs hover:border-slate-350 transition-all animate-in zoom-in-95">
-                 <div className="flex justify-between items-center text-[10px] uppercase font-black text-slate-400">
-                    <span>{t('kb.missingGapsIdentified', 'Missing gaps identified')}</span>
-                    <Badge className="bg-amber-50 text-amber-600 px-1 text-[8px] font-extrabold border-none h-4">{t('kb.queriesLabel', '{{count}} queries').replace('{{count}}', '18')}</Badge>
-                 </div>
-                 <p className="font-extrabold text-[#1E293B] leading-tight">{t('kb.missingGapsDesc', 'Outlook calendar sync validation failures.')}</p>
-                 <button 
-                   onClick={() => simulateAIGeneration('faq')}
-                   className="text-[10px] uppercase font-black text-indigo-650 hover:text-indigo-800 flex items-center gap-1 mt-1"
-                 >
-                    {t('kb.autoGenerateFaq', 'Auto-Generate FAQ Guide ›')}
-                 </button>
-              </div>
-
-           </div>
-        </div>
-
-        {/* KNOWLEDGE RELATIONSHIPS GRAPH 2.0 - D3-FORCE ENGINE */}
-        <AIRelationshipGraph2 
-          currentArticle={viewingArticle}
-          onSelectArticle={handleSelectArticleByTitle}
-          miniMode={true}
-        />
-
-        {/* RECENTLY UPDATED TIMELINE METADATA */}
-        <div className="space-y-3">
-          <div className="pb-1 border-b">
-             <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-               <History className="w-3.5 h-3.5" /> {t('kb.auditLog', 'Audit log & recent changes')}
-             </h4>
-          </div>
-
-          <div className="space-y-3.5 text-xs">
-             <div className="flex gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-1.5 shrink-0" />
-                <div className="flex flex-col">
-                   <strong className="text-slate-700">{t('kb.audit.sarah_updated', 'Sarah James updated "Getting Started Docs"')}</strong>
-                   <span className="text-[10px] text-slate-400 font-bold">{t('kb.audit.sarah_meta', '2 hours ago • Verified SOC2 Audit logs')}</span>
-                </div>
-             </div>
-             
-             <div className="flex gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-indigo-500 mt-1.5 shrink-0" />
-                <div className="flex flex-col">
-                   <strong className="text-slate-700">{t('kb.audit.anna_rotated', 'Anna Bell rotated Bearer Token specifications')}</strong>
-                   <span className="text-[10px] text-slate-400 font-bold">{t('kb.audit.anna_meta', 'Yesterday • API Authentication')}</span>
-                </div>
-             </div>
-
-             <div className="flex gap-3">
-                <div className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-1.5 shrink-0" />
-                <div className="flex flex-col">
-                   <strong className="text-slate-700">{t('kb.audit.will_submitted', 'Will Coyote submitted "MFA playbooks" for review')}</strong>
-                   <span className="text-[10px] text-slate-400 font-bold">{t('kb.audit.will_meta', 'In Draft pool queue • MFA Debugging')}</span>
-                </div>
-             </div>
-          </div>
-        </div>
-
-        {/* TAGS CLOUD MANAGEMENT PANEL */}
-        <div className="space-y-3">
-          <div className="pb-1 border-b">
-             <h4 className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
-               <Tag className="w-3.5 h-3.5" /> {t('kb.tagsAndMetadataWeights', 'Tags and metadata weights')}
-             </h4>
-          </div>
-
-          <div className="flex flex-wrap gap-1.5">
-             {Array.from(new Set(articles.flatMap(a => a.tags || []))).map((t: any, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => {
-                     setSearchQuery(t);
-                     toast.success(`Filter switched mapping tag #${t}`);
-                  }}
-                  className="text-[10.5px] font-black text-slate-600 hover:text-indigo-600 bg-slate-100 hover:bg-slate-200/65 px-2 py-1 rounded-lg border flex items-center gap-1 leading-none shadow-3xs"
-                >
-                   #{t}
-                </button>
-             ))}
-          </div>
-        </div>
-        </div>
-
-      </aside>
 
       {/* ======================================================== */}
       {/* ENTERPRISE EDITOR DIALOG MODAL                         */}

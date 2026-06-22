@@ -17,6 +17,8 @@ import {
   Building2,
   Ticket,
   Cpu,
+  Share2,
+  RefreshCw,
   Star
 } from 'lucide-react';
 import { motion } from 'motion/react';
@@ -230,7 +232,7 @@ export function CredentialDrawer({
             >
               <X className="w-5 h-5" />
             </button>
-            <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Asset Diagnostics</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Asset Details</span>
           </div>
 
           <div className="flex items-center gap-2">
@@ -449,6 +451,38 @@ export function CredentialDrawer({
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Quick Actions Footer */}
+        <div className="shrink-0 border-t border-slate-200/80 bg-white px-4 py-3 grid grid-cols-2 gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={handleCopyUsername} className="h-8 text-xs font-semibold rounded-md">
+            <Copy className="w-3.5 h-3.5 mr-1" />
+            Copy Username
+          </Button>
+          <Button type="button" variant="outline" size="sm" onClick={handleCopyPassword} className="h-8 text-xs font-semibold rounded-md">
+            <Copy className="w-3.5 h-3.5 mr-1" />
+            Copy Secret
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => toast.info('Credential rotation scheduled.')}
+            className="h-8 text-xs font-semibold rounded-md"
+          >
+            <RefreshCw className="w-3.5 h-3.5 mr-1" />
+            Rotate
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => toast.success('Share link generated.')}
+            className="h-8 text-xs font-semibold rounded-md"
+          >
+            <Share2 className="w-3.5 h-3.5 mr-1" />
+            Share Access
+          </Button>
         </div>
       </motion.div>
     </div>

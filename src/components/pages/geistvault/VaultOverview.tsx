@@ -1,12 +1,8 @@
 import React from 'react';
-import { 
-  FolderPlus, 
-  Share2, 
-  CheckCircle2, 
-} from 'lucide-react';
-import { Card } from '../../ui/card';
+import { FolderPlus, Share2, Upload, CheckCircle2 } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { useTranslation } from '../../../lib/context/I18nContext';
+import { cn } from '../../../lib/utils';
 
 interface VaultOverviewProps {
   weakCount: number;
@@ -21,100 +17,88 @@ export function VaultOverview({
   expiringCount,
   onNewFolder,
   onShareVault,
-  onImportDummyData
+  onImportDummyData,
 }: VaultOverviewProps) {
   const { t } = useTranslation();
-  
-  // Dynamic security score calculation
-  const getSecurityScore = () => {
-    let base = 100;
-    // Deduct 12 for every weak password (max 40)
-    base -= Math.min(40, weakCount * 12);
-    // Deduct 8 for every expiring password (max 20)
-    base -= Math.min(20, expiringCount * 8);
-    // Boundary checks
-    return Math.max(0, base);
-  };
 
-  const score = getSecurityScore();
-  
-  const getScoreClassification = (scoreVal: number) => {
-    if (scoreVal >= 90) return { text: t('vault.excellent', 'Excellent'), color: 'text-green-600', ring: 'border-green-500' };
-    if (scoreVal >= 75) return { text: t('vault.good', 'Good'), color: 'text-blue-500', ring: 'border-blue-500' };
-    if (scoreVal >= 55) return { text: t('vault.needsAttention', 'Needs Attention'), color: 'text-amber-500', ring: 'border-amber-500' };
-    return { text: t('vault.criticalRisk', 'Critical Risk'), color: 'text-red-500', ring: 'border-red-500' };
-  };
+  const score = Math.max(0, 100 - Math.min(40, weakCount * 12) - Math.min(20, expiringCount * 8));
+  const status =
+    score >= 90
+      ? { text: t('vault.excellent', 'Excellent'), color: 'text-emerald-600', ring: 'border-emerald-500' }
+      : score >= 75
+        ? { text: t('vault.good', 'Good'), color: 'text-blue-600', ring: 'border-blue-500' }
+        : score >= 55
+          ? { text: t('vault.needsAttention', 'Needs Attention'), color: 'text-amber-600', ring: 'border-amber-500' }
+          : { text: t('vault.criticalRisk', 'Critical Risk'), color: 'text-red-600', ring: 'border-red-500' };
 
-  const status = getScoreClassification(score);
+  const checks = [
+    t('vault.mfaEnabled', 'MFA Enabled'),
+    t('vault.aesGcmKeys', 'AES-GCM Keys'),
+    t('vault.noBreaches', 'No Breaches'),
+  ];
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 select-none">
-      <Card className="lg:col-span-7 border border-slate-200/80 rounded-xl bg-white p-5 shadow-none grid grid-cols-1 sm:grid-cols-12 gap-4 items-center">
-        {/* Progress Circle visualizer */}
-        <div className="sm:col-span-5 flex flex-col items-center justify-center sm:border-r border-[#F1F3F4] pb-3 sm:pb-0 sm:pr-2">
-          <div className={`h-16 w-16 rounded-full border-4 ${status.ring} flex flex-col items-center justify-center bg-[#F8F9FA] shadow-inner`}>
-            <span className="text-base font-black text-slate-800">{score}</span>
-          </div>
-          <span className={`text-[11px] font-extrabold mt-1.5 ${status.color}`}>{status.text}</span>
-          <span className="text-[8px] text-slate-400 uppercase font-bold">{t('vault.healthIndex', 'Health Index')}</span>
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-h-[160px] shrink-0">
+      {/* Vault Health */}
+      <div className="rounded-lg border border-slate-200/80 bg-white px-4 py-3 flex items-center gap-4 min-h-[88px] max-h-[120px]">
+        <div className={cn('h-12 w-12 rounded-full border-[3px] flex items-center justify-center shrink-0 bg-slate-50', status.ring)}>
+          <span className="text-sm font-bold text-slate-900 tabular-nums">{score}</span>
         </div>
-
-        {/* Security Checklist */}
-        <div className="col-span-7 space-y-1.5 pl-1">
-          <h4 className="text-[9px] font-black text-slate-400 uppercase tracking-wider mb-2 select-none">{t('vault.complianceChecks', 'Compliance Checks')}</h4>
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold select-none">
-            <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-            <span>{t('vault.mfaActive', 'MFA Authentication Active')}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold select-none">
-            <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-            <span>{t('vault.aesKeys', 'Sovereign AES-GCM local keys')}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[10px] text-slate-600 font-semibold select-none">
-            <CheckCircle2 className="w-3.5 h-3.5 text-green-500" />
-            <span>{t('vault.noBreached', 'No Breached Credentials')}</span>
-          </div>
+        <div className="min-w-0">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{t('vault.vaultHealth', 'Vault Health')}</p>
+          <p className={cn('text-sm font-semibold', status.color)}>{status.text}</p>
         </div>
-      </Card>
+      </div>
 
-      <Card className="lg:col-span-5 border border-slate-200/80 rounded-xl bg-white p-5 shadow-none flex flex-col justify-between">
-        <div>
-          <h3 className="text-sm font-bold text-slate-800 tracking-tight">{t('vault.quickActions', 'Quick Actions')}</h3>
-          <p className="text-[11px] text-slate-400 mt-0.5 font-medium">{t('vault.sovereignWorkspace', 'Sovereign workspace operations')}</p>
+      {/* Compliance */}
+      <div className="rounded-lg border border-slate-200/80 bg-white px-4 py-3 min-h-[88px] max-h-[120px]">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">{t('vault.complianceChecks', 'Compliance')}</p>
+        <div className="space-y-1">
+          {checks.map((label) => (
+            <div key={label} className="flex items-center gap-1.5 text-[11px] font-medium text-slate-600">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+              <span className="truncate">{label}</span>
+            </div>
+          ))}
         </div>
+      </div>
 
-        <div className="space-y-2 mt-4">
-          <div className="grid grid-cols-2 gap-2">
-            <Button 
-              onClick={onNewFolder}
-              variant="outline"
-              className="border-[#DADCE0] hover:bg-[#F8F9FA] text-slate-700 text-[10px] h-8 rounded-lg font-semibold flex items-center justify-center gap-1"
-            >
-              <FolderPlus className="w-3 h-3 text-slate-400" />
-              {t('vault.newFolder', 'New Folder')}
-            </Button>
-            <Button 
-              onClick={onShareVault}
-              variant="outline"
-              className="border-[#DADCE0] hover:bg-[#F8F9FA] text-slate-700 text-[10px] h-8 rounded-lg font-semibold flex items-center justify-center gap-1"
-            >
-              <Share2 className="w-3 h-3 text-slate-400" />
-              {t('vault.shareVault', 'Share Vault')}
-            </Button>
-          </div>
-
-          <Button 
-            onClick={onImportDummyData}
-            variant="ghost"
+      {/* Quick Actions */}
+      <div className="rounded-lg border border-slate-200/80 bg-white px-4 py-3 min-h-[88px] max-h-[120px] flex flex-col justify-between">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{t('vault.quickActions', 'Quick Actions')}</p>
+        <div className="grid grid-cols-3 gap-1.5 mt-1">
+          <Button
             type="button"
-            className="w-full border border-dashed border-[#DADCE0] hover:bg-green-50/50 hover:text-[#137333] hover:border-green-300 text-slate-500 text-[10px] h-7 rounded-lg font-semibold flex items-center justify-center gap-1 mt-1 shrink-0"
+            variant="outline"
+            size="sm"
+            onClick={onNewFolder}
+            className="h-7 text-[10px] font-semibold rounded-md border-slate-200/80 px-1 gap-1"
           >
-            <CheckCircle2 className="w-3 h-3 text-green-500 shrink-0" />
-            {t('vault.importSample', 'Import Sample Dataset')}
+            <FolderPlus className="w-3 h-3 shrink-0" />
+            <span className="truncate">{t('vault.newVault', 'New Vault')}</span>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onShareVault}
+            className="h-7 text-[10px] font-semibold rounded-md border-slate-200/80 px-1 gap-1"
+          >
+            <Share2 className="w-3 h-3 shrink-0" />
+            <span className="truncate">{t('vault.shareVault', 'Share')}</span>
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onImportDummyData}
+            className="h-7 text-[10px] font-semibold rounded-md border-slate-200/80 px-1 gap-1"
+          >
+            <Upload className="w-3 h-3 shrink-0" />
+            <span className="truncate">{t('vault.importAssets', 'Import')}</span>
           </Button>
         </div>
-      </Card>
-
+      </div>
     </div>
   );
 }

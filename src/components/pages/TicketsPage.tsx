@@ -180,6 +180,7 @@ import { TicketKindFieldsCard } from '../ticket-details/TicketKindFieldsCard';
 import { RedesignedSidebar } from '../ticket-details/RedesignedSidebar';
 import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
+import { WorkspaceSwitcher } from '../layout/WorkspaceSwitcher';
 import {
   ModulePageCompactHeader,
   ModulePageTabs,
@@ -2075,6 +2076,7 @@ export default function TicketsPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <WorkspaceSwitcher compact className="shrink-0" />
                       <Button 
                         variant="outline" 
                         size="sm" 
@@ -3826,15 +3828,18 @@ export default function TicketsPage() {
                       .replace('{{urgent}}', String(ticketQueueStats.urgent))
               }
               trailing={
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsMobileSidebarOpen(true)}
-                  className="flex lg:hidden h-8 w-8 rounded-md shrink-0"
-                  aria-label={t('tickets.detail.mobileMenu', 'Menu')}
-                >
-                  <List className="w-4 h-4" />
-                </Button>
+                <>
+                  <WorkspaceSwitcher compact className="shrink-0" />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => setIsMobileSidebarOpen(true)}
+                    className="flex lg:hidden h-8 w-8 rounded-md shrink-0"
+                    aria-label={t('tickets.detail.mobileMenu', 'Menu')}
+                  >
+                    <List className="w-4 h-4" />
+                  </Button>
+                </>
               }
             />
             <ModulePageTabs
