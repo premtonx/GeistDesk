@@ -16,6 +16,7 @@ import {
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import type { ExchangeNavId, ExchangeQuickFilter } from './exchange-utils';
+import type { ExchangeTemplate } from './exchange-template-utils';
 
 interface ExchangeLeftSidebarProps {
   activeNav: ExchangeNavId;
@@ -31,6 +32,8 @@ interface ExchangeLeftSidebarProps {
     archived: number;
   };
   onApplyTemplate: (type: 'logs' | 'db' | 'audit' | 'incident') => void;
+  customTemplates?: ExchangeTemplate[];
+  onApplyCustomTemplate?: (templateId: string) => void;
   className?: string;
 }
 
@@ -93,6 +96,8 @@ export function ExchangeLeftSidebar({
   onQuickFilter,
   counts,
   onApplyTemplate,
+  customTemplates = [],
+  onApplyCustomTemplate,
   className,
 }: ExchangeLeftSidebarProps) {
   const { t } = useTranslation();
@@ -178,6 +183,17 @@ export function ExchangeLeftSidebar({
               </button>
             );
           })}
+          {customTemplates.map((template) => (
+            <button
+              key={template.id}
+              type="button"
+              onClick={() => onApplyCustomTemplate?.(template.id)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 text-left transition-colors"
+            >
+              <FileStack className="w-4 h-4 shrink-0 opacity-70" />
+              <span className="truncate">{template.title}</span>
+            </button>
+          ))}
         </nav>
       </div>
 

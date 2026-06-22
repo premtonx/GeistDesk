@@ -26,6 +26,7 @@ export interface ExchangeItemRow {
   ticketId: string;
   status: string;
   expires: string;
+  expiresAt?: Date | null;
   views: number;
   type: string;
   size?: string;

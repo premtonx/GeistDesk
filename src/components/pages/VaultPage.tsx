@@ -66,6 +66,10 @@ import { ExchangeActiveTable } from '../exchange/ExchangeActiveTable';
 import { ExchangeRecentTransfers } from '../exchange/ExchangeRecentTransfers';
 import { ExchangeSecuritySidebar } from '../exchange/ExchangeSecuritySidebar';
 import { ExchangeTrustFooter } from '../exchange/ExchangeTrustFooter';
+import { ExchangeCreateTemplateModal } from '../exchange/ExchangeCreateTemplateModal';
+import { useExchangeFilters, useQuickFilterHandler } from '../exchange/useExchangeFilters';
+import { useExchangeTemplates } from '../exchange/useExchangeTemplates';
+import type { ExchangeItemRowSeed } from '../exchange/exchange-template-utils';
 import type { ExchangeNavId, ExchangeQuickFilter } from '../exchange/exchange-utils';
 import { ticketService } from '../../services/ticketService';
 import { customerService } from '../../services/customerService';
@@ -120,7 +124,7 @@ export default function VaultPage() {
   // Search / Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [tableFilter, setTableFilter] = useState<'all' | 'secrets' | 'uploads' | 'active' | 'burned' | 'expired'>('all');
-  const [tableTab, setTableTab] = useState<'active_links' | 'active_dropzones' | 'recent_uploads' | 'requests' | 'expiring_soon'>('active_links');
+  const [tableTab, setTableTab] = useState<'active_links' | 'active_dropzones' | 'recent_uploads' | 'requests' | 'expiring_soon'>('requests');
 
   // AI Insights State
   const [aiSelectedFile, setAiSelectedFile] = useState<string>('logs.zip');
@@ -132,7 +136,7 @@ export default function VaultPage() {
   const [emergencyPhone, setEmergencyPhone] = useState('');
 
   // Static/Initial mock data list to merge with real DB for richer UI
-  const [mockUploads, setMockUploads] = useState([
+  const [mockUploads, setMockUploads] = useState<ExchangeItemRowSeed[]>([
     {
       id: 'upload-mock-1',
       name: 'log_router_error_dump.zip',
@@ -141,10 +145,11 @@ export default function VaultPage() {
       ticketId: 'TKT-108',
       status: 'Uploaded',
       expires: '2 days ago',
+      expiresAt: null,
       views: 3,
       type: 'request',
       size: '142 MB',
-      createdAt: new Date(Date.now() - 3600000 * 5)
+      createdAt: new Date(Date.now() - 3600000 * 5),
     },
     {
       id: 'upload-mock-2',
@@ -154,10 +159,11 @@ export default function VaultPage() {
       ticketId: 'TKT-443',
       status: 'Completed',
       expires: 'Expired',
+      expiresAt: null,
       views: 1,
       type: 'request',
       size: '1.2 GB',
-      createdAt: new Date(Date.now() - 3600000 * 24)
+      createdAt: new Date(Date.now() - 3600000 * 24),
     },
     {
       id: 'upload-mock-3',
@@ -166,13 +172,42 @@ export default function VaultPage() {
       company: 'Intel Corp',
       ticketId: 'TKT-882',
       status: 'Active',
-      expires: 'Expires in 4d',
+      expires: 'in 10d',
+      expiresAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
       views: 0,
       type: 'request',
       size: '4.8 MB',
-      createdAt: new Date()
-    }
+      createdAt: new Date(),
+    },
   ]);
+
+  const {
+    customTemplates,
+    isCreateModalOpen,
+    setIsCreateModalOpen,
+    createTemplate,
+    getTemplateById,
+  } = useExchangeTemplates();
+
+  const { allExchangeItems, filteredExchangeItems, exchangeSidebarCounts } = useExchangeFilters({
+    history,
+    mockUploads,
+    tickets,
+    companies,
+    searchTerm,
+    quickFilter,
+    tableFilter,
+    tableTab,
+  });
+
+  const handleQuickFilter = useQuickFilterHandler({
+    quickFilter,
+    setQuickFilter,
+    setExchangeNav,
+    setActiveTab,
+    setTableFilter,
+    setTableTab,
+  });
 
   // Load Real Data
   useEffect(() => {
@@ -231,6 +266,28 @@ export default function VaultPage() {
       setUploadLimit('5GB');
     }
     toast.success(t('exchange.templates.applied', 'Template applied to secure dropzone workflow.'));
+  };
+
+  const handleApplyCustomTemplate = (templateId: string) => {
+    const template = getTemplateById(templateId);
+    if (!template) return;
+
+    setActiveTab('dropzones');
+    setExchangeNav('dropzones');
+    setRequestName(template.title);
+    setRequestDescription(template.description);
+    setAcceptedTypes(template.acceptedTypes);
+    setUploadLimit(template.uploadLimit);
+    toast.success(t('exchange.templates.applied', 'Template applied to secure dropzone workflow.'));
+  };
+
+  const handleCreateTemplateSubmit = (input: Parameters<typeof createTemplate>[0]) => {
+    const result = createTemplate(input);
+    if (result.ok === false) {
+      return { ok: false as const, errorKey: result.errorKey };
+    }
+    toast.success(t('exchange.templates.created', 'Custom template saved successfully.'));
+    return { ok: true as const };
   };
 
   // Generate Secret Handler
@@ -432,86 +489,6 @@ export default function VaultPage() {
     setEmergencyPhone('');
   };
 
-  // Unified items merger list (Firebase Data + Initial UX Mock items)
-  const allExchangeItems = React.useMemo(() => {
-    const formattedHistory = history.map(item => {
-      const isReq = item.type === 'request';
-      const name = isReq 
-        ? (item.metadata?.requestName || `Dropzone Diagnostic #${item.id.substring(0, 4)}`)
-        : (`Secure ${item.metadata?.secretType || 'Secret'} Payload`);
-      
-      const relatedTicketObj = tickets.find(t => t.id === item.metadata?.relatedTicketId);
-      const relatedCompanyObj = companies.find(c => c.id === item.metadata?.relatedCompanyId);
-
-      const status = item.isBurned 
-        ? 'Burned' 
-        : (item.expiresAt && new Date(item.expiresAt?.toDate ? item.expiresAt.toDate() : item.expiresAt) < new Date() ? 'Expired' : 'Active');
-
-      return {
-        id: item.id,
-        name,
-        recipient: item.metadata?.targetRecipient || 'john.doe@client.com',
-        company: relatedCompanyObj?.name || 'External Customer',
-        ticketId: relatedTicketObj?.subject ? `TKT-${item.metadata?.relatedTicketId?.substring(0, 4)}` : 'N/A',
-        status,
-        expires: item.expiresAt 
-          ? new Date(item.expiresAt?.toDate ? item.expiresAt.toDate() : item.expiresAt).toLocaleDateString()
-          : 'Once Read',
-        views: item.isBurned ? 1 : 0,
-        type: item.type,
-        createdAt: item.createdAt?.toDate ? item.createdAt.toDate() : new Date(),
-        rawItem: item
-      };
-    });
-
-    return [...formattedHistory, ...mockUploads];
-  }, [history, mockUploads, tickets, companies]);
-
-  // Apply Search + Filter on elements
-  const filteredExchangeItems = React.useMemo(() => {
-    return allExchangeItems.filter(item => {
-      // 1. Search filter
-      const matchesSearch = 
-        item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.recipient.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        item.ticketId.toLowerCase().includes(searchTerm.toLowerCase());
-
-      if (!matchesSearch) return false;
-
-      // 2. Table filters
-      if (tableFilter === 'secrets' && item.type !== 'secret') return false;
-      if (tableFilter === 'uploads' && item.type !== 'request') return false;
-      if (tableFilter === 'active' && item.status !== 'Active') return false;
-      if (tableFilter === 'burned' && item.status !== 'Burned') return false;
-      if (tableFilter === 'expired' && item.status !== 'Expired') return false;
-
-      // 3. Section sub-tabs
-      if (tableTab === 'active_links' && (item.type !== 'secret' || item.status !== 'Active')) return false;
-      if (tableTab === 'active_dropzones' && (item.type !== 'request' || item.status !== 'Active')) return false;
-      if (tableTab === 'recent_uploads' && item.status !== 'Uploaded' && item.status !== 'Completed') return false;
-      if (tableTab === 'requests' && item.type !== 'request') return false;
-      if (tableTab === 'expiring_soon') {
-        const isExpsoon = item.status === 'Active' && item.expires !== 'Once Read';
-        if (!isExpsoon) return false;
-      }
-
-      return true;
-    });
-  }, [allExchangeItems, searchTerm, tableFilter, tableTab]);
-
-  const exchangeSidebarCounts = React.useMemo(
-    () => ({
-      active: allExchangeItems.filter((i) => i.status === 'Active').length,
-      expiring: Math.max(allExchangeItems.filter((i) => i.status === 'Active' && i.expires !== 'Once Read').length, 7),
-      shared: allExchangeItems.filter((i) => i.type === 'secret').length,
-      received: allExchangeItems.filter((i) => i.type === 'request').length,
-      burned: allExchangeItems.filter((i) => i.status === 'Burned').length,
-      archived: allExchangeItems.filter((i) => i.status === 'Expired').length,
-    }),
-    [allExchangeItems],
-  );
-
   const exchangeKpiStats = React.useMemo(
     () => ({
       activeSecrets: allExchangeItems.filter((i) => i.type === 'secret' && i.status === 'Active').length || 42,
@@ -525,6 +502,8 @@ export default function VaultPage() {
   const handleExchangeNavigate = (nav: ExchangeNavId) => {
     setExchangeNav(nav);
     setQuickFilter(null);
+    setTableFilter('all');
+    setTableTab('requests');
     const tabMap: Record<ExchangeNavId, typeof activeTab> = {
       overview: 'dashboard',
       secrets: 'secrets',
@@ -537,24 +516,8 @@ export default function VaultPage() {
     setActiveTab(tabMap[nav]);
   };
 
-  const handleQuickFilter = (filter: ExchangeQuickFilter) => {
-    setQuickFilter(filter);
-    if (!filter) return;
-    setExchangeNav('overview');
-    setActiveTab('dashboard');
-    if (filter === 'active') setTableFilter('active');
-    if (filter === 'expiring') {
-      setTableFilter('all');
-      setTableTab('expiring_soon');
-    }
-    if (filter === 'burned') setTableFilter('burned');
-    if (filter === 'archived') setTableFilter('expired');
-    if (filter === 'received') setTableFilter('uploads');
-    if (filter === 'shared') setTableFilter('secrets');
-  };
-
   const handleDeleteExchangeItem = async (id: string) => {
-    if (id.startsWith('upload-mock')) {
+    if (id.startsWith('upload-mock') || id.startsWith('seed-expiring-')) {
       setMockUploads((prev) => prev.filter((p) => p.id !== id));
     } else {
       await vaultService.deleteItem(id);
@@ -581,6 +544,12 @@ export default function VaultPage() {
           onClick: () => handleExchangeNavigate('dropzones'),
           icon: <Upload className="w-4 h-4 text-[#1A73E8]" />,
         },
+        {
+          labelKey: 'exchange.templates.createMenu',
+          labelDefault: 'Create Template',
+          onClick: () => setIsCreateModalOpen(true),
+          icon: <FileText className="w-4 h-4 text-[#1A73E8]" />,
+        },
       ]}
     />
   );
@@ -603,6 +572,8 @@ export default function VaultPage() {
           onQuickFilter={handleQuickFilter}
           counts={exchangeSidebarCounts}
           onApplyTemplate={handleApplyTemplate}
+          customTemplates={customTemplates}
+          onApplyCustomTemplate={handleApplyCustomTemplate}
         />
 
         <div className="flex flex-1 min-w-0 min-h-0">
@@ -617,7 +588,11 @@ export default function VaultPage() {
                 sortControl={
                   <ModuleToolbarSelect
                     value={tableFilter}
-                    onChange={(v) => setTableFilter(v as typeof tableFilter)}
+                    onChange={(v) => {
+                      setQuickFilter(null);
+                      setTableFilter(v as typeof tableFilter);
+                      setTableTab('requests');
+                    }}
                     aria-label={t('actions.filter', 'Filter')}
                   >
                     <option value="all">{t('vault.activeTable.filterAll', 'All')}</option>
@@ -1276,6 +1251,26 @@ export default function VaultPage() {
                     <span className="text-[10px] font-black uppercase text-orange-600 tracking-widest mt-4">{t('vault.loadPreset', 'Load Preset Template →')}</span>
                   </button>
 
+                  {customTemplates.map((template) => (
+                    <button
+                      key={template.id}
+                      type="button"
+                      onClick={() => handleApplyCustomTemplate(template.id)}
+                      className="p-6 rounded-3xl border bg-white hover:border-[#1A73E8] hover:shadow-xs text-left transition-all group flex flex-col justify-between h-48"
+                    >
+                      <div className="space-y-2">
+                        <div className="h-10 w-10 bg-blue-50 text-[#1A73E8] rounded-2xl flex items-center justify-center shrink-0 border border-blue-100 font-bold group-hover:scale-105 transition-transform">
+                          <FileText className="w-5 h-5" />
+                        </div>
+                        <h4 className="font-bold text-slate-900 leading-tight">{template.title}</h4>
+                        <p className="text-xs text-slate-500 leading-relaxed font-sans mt-1 line-clamp-3">{template.description}</p>
+                      </div>
+                      <span className="text-[10px] font-black uppercase text-[#1A73E8] tracking-widest mt-4">
+                        {t('exchange.templates.loadCustom', 'Load Custom Template →')}
+                      </span>
+                    </button>
+                  ))}
+
                 </div>
 
               </motion.div>
@@ -1288,6 +1283,12 @@ export default function VaultPage() {
 
         <ExchangeSecuritySidebar className="hidden xl:flex" />
       </div>
+
+      <ExchangeCreateTemplateModal
+        open={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSubmit={handleCreateTemplateSubmit}
+      />
 
       {/* EMERGENCY BYPASS OPTIONAL MODAL */}
       <AnimatePresence>

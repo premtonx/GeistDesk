@@ -983,7 +983,25 @@
       "logCollection": "Log Collection",
       "sqlBackup": "SQL Backup Upload",
       "securityAudit": "Security Audit Package",
-      "incidentResponse": "Incident Response Package"
+      "incidentResponse": "Incident Response Package",
+      "applied": "Template applied to secure dropzone workflow.",
+      "created": "Custom template saved successfully.",
+      "createMenu": "Create Template",
+      "createTitle": "Create Exchange Template",
+      "createDesc": "Save a reusable dropzone layout. Use placeholders like {{customer_name}} and {{ticket_id}} in the description.",
+      "fieldTitle": "Template title",
+      "fieldTitlePlaceholder": "Log intake for {{customer_name}}",
+      "fieldTags": "Classification tags",
+      "fieldTagsPlaceholder": "diagnostics, compliance, urgent",
+      "fieldDescription": "Template body",
+      "fieldDescriptionPlaceholder": "Collect logs for ticket {{ticket_id}} from {{customer_name}}.",
+      "saveTemplate": "Save Template",
+      "loadCustom": "Load Custom Template →",
+      "errors": {
+        "titleRequired": "Template title is required.",
+        "descriptionRequired": "Template body is required.",
+        "invalidPlaceholder": "Placeholders must use the format {{variable_name}}."
+      }
     },
     "storage": {
       "title": "Storage",

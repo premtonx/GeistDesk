@@ -983,7 +983,25 @@
       "logCollection": "Log-Sammlung",
       "sqlBackup": "SQL-Backup-Upload",
       "securityAudit": "Sicherheitsaudit-Paket",
-      "incidentResponse": "Incident-Response-Paket"
+      "incidentResponse": "Incident-Response-Paket",
+      "applied": "Vorlage auf sicheren Dropzone-Workflow angewendet.",
+      "created": "Benutzerdefinierte Vorlage erfolgreich gespeichert.",
+      "createMenu": "Vorlage erstellen",
+      "createTitle": "Austausch-Vorlage erstellen",
+      "createDesc": "Speichern Sie ein wiederverwendbares Dropzone-Layout. Verwenden Sie Platzhalter wie {{customer_name}} und {{ticket_id}} in der Beschreibung.",
+      "fieldTitle": "Vorlagentitel",
+      "fieldTitlePlaceholder": "Log-Intake für {{customer_name}}",
+      "fieldTags": "Klassifizierungs-Tags",
+      "fieldTagsPlaceholder": "Diagnose, Compliance, dringend",
+      "fieldDescription": "Vorlageninhalt",
+      "fieldDescriptionPlaceholder": "Logs für Ticket {{ticket_id}} von {{customer_name}} sammeln.",
+      "saveTemplate": "Vorlage speichern",
+      "loadCustom": "Benutzerdefinierte Vorlage laden →",
+      "errors": {
+        "titleRequired": "Vorlagentitel ist erforderlich.",
+        "descriptionRequired": "Vorlageninhalt ist erforderlich.",
+        "invalidPlaceholder": "Platzhalter müssen das Format {{variable_name}} verwenden."
+      }
     },
     "storage": {
       "title": "Speicher",
