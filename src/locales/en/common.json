@@ -50,7 +50,8 @@
   "workspace": {
     "switcherLabel": "Workspace",
     "support": "Support Workspace",
-    "developer": "Developer Workspace"
+    "developer": "Developer Workspace",
+    "aiOps": "AI Operations"
   },
   "dashboard": {
     "title": "Enterprise Dashboard",
@@ -108,7 +109,9 @@
     "metaPillInProgress": "In Progress",
     "metaPillUrgent": "Urgent",
     "headerMetaInline": "Tickets • {{open}} Open • {{pending}} In Progress • {{urgent}} Urgent",
+    "headerMetaSupport": "Tickets • {{open}} Open • {{slaRisk}} SLA Risk",
     "headerMetaDev": "Tickets • {{open}} Open • {{bugs}} Bugs • {{unassigned}} Unassigned",
+    "headerMetaAiOps": "AI Operations • {{open}} Active • {{slaRisk}} SLA Risk",
     "bugsTab": "Bugs",
     "moduleDescription": "Manage support pipeline, SLA tracking, and AI-assisted resolution.",
     "searchPlaceholder": "Search tickets...",
@@ -246,7 +249,10 @@
       "lastUpdate": "Last Update",
       "affectedVersion": "Version",
       "environment": "Environment",
-      "stepsToReproduce": "Steps to Reproduce"
+      "stepsToReproduce": "Steps to Reproduce",
+      "bugId": "Bug ID",
+      "linkedSupportCount": "Linked Support",
+      "affectedCustomers": "Affected Customers"
     },
     "env": {
       "prod": "PROD",
@@ -256,6 +262,51 @@
     "today": "Today",
     "noTicketsInView": "No tickets in this view.",
     "noTicketsInViewDesc": "You've reached the end of this queue. Adjust your filters or select a different view from the sidebar to find more tickets.",
+    "emptyState": {
+      "title": "🎉 Queue Clear / Everything done in this view",
+      "subtitle": "No tickets currently require urgent human attention. Run automated audits or view recommendations.",
+      "viewUnassigned": "View Unassigned",
+      "openAiSuggestions": "Open AI Suggestions",
+      "statsTitle": "Today's Operational Stats",
+      "statsInline": "Resolved Today: 12 | SLA Met: 100% | CSAT Score: 96%",
+      "resolvedToday": "Resolved Today",
+      "slaMet": "SLA Met",
+      "csatScore": "CSAT Score"
+    },
+    "devTabs": {
+      "openBugs": "Open Bugs",
+      "linkedIncidents": "Linked Incidents",
+      "inDev": "In Dev",
+      "qa": "QA",
+      "merged": "Merged"
+    },
+    "aiOps": {
+      "incidentClusters": "Critical Incident Clusters",
+      "recommendedActions": "Recommended Actions",
+      "trendAlerts": "Trend Alerts",
+      "ticketCount": "{{count}} Tickets",
+      "clusterVpn": "VPN Outages",
+      "clusterEmail": "Email Sync",
+      "escalateTicket": "Escalate Ticket #{{id}}",
+      "escalateSample": "Escalate Ticket #2031",
+      "mergeDuplicates": "Merge Duplicates",
+      "mergeSample": "Merge Duplicates",
+      "assignUnassigned": "Auto-assign unassigned queue",
+      "trendVpn": "VPN category traffic +38%",
+      "trendAuth": "Auth failures +12%",
+      "trendBilling": "Billing inquiries −5%"
+    },
+    "drawer": {
+      "ariaLabel": "Ticket details",
+      "close": "Close",
+      "metaTray": "Meta Tray",
+      "aiInsights": "AI Insights",
+      "similarCount": "Similar Tickets Count",
+      "suggestedKb": "Suggested KB Articles",
+      "noKbSuggestions": "No matches yet",
+      "description": "Description",
+      "openFullView": "Open Full Ticket View"
+    },
     "resetAllFilters": "Reset All Filters",
     "peekView": "Peek View",
     "aiSentimentAnalysis": "AI Sentiment Analysis",
@@ -266,6 +317,10 @@
     "aiSupportOperations": "AI Support Operations",
     "awaitingTriage": "Awaiting Triage",
     "groups": {
+      "support": "Support",
+      "customers": "Customers",
+      "engineering": "Engineering",
+      "ai_labs": "AI Labs",
       "inbox": "Inbox",
       "my_work": "My Work",
       "team": "Team Queues",
@@ -275,6 +330,14 @@
       "maintenance": "Maintenance"
     },
     "items": {
+      "my_queue": "My Queue",
+      "waiting_review": "Waiting Review",
+      "linked_bugs": "Linked Bugs",
+      "bug_backlog": "Bug Backlog",
+      "incidents": "Incidents",
+      "ai_inbox": "AI Inbox",
+      "suggestions": "Suggestions",
+      "trend_analytics": "Trend Analytics",
       "unassigned": "Unassigned",
       "new_tickets": "New Tickets",
       "awaiting_triage": "Awaiting Triage",
@@ -310,10 +373,10 @@
       "spam": "Spam"
     },
     "indicators": {
-      "new": "New",
-      "urgent": "Urgent",
-      "pending": "Pending",
-      "help": "Help"
+      "new": "NEW",
+      "urgent": "URGENT",
+      "pending": "WAITING",
+      "help": "HELP"
     },
     "responseSla": "Response SLA",
     "replyBtn": "Reply",

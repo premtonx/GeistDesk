@@ -180,7 +180,6 @@ import { TicketKindFieldsCard } from '../ticket-details/TicketKindFieldsCard';
 import { RedesignedSidebar } from '../ticket-details/RedesignedSidebar';
 import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
-import { WorkspaceSwitcher } from '../layout/WorkspaceSwitcher';
 import {
   ModulePageTabs,
   ModuleToolbar,
@@ -188,14 +187,17 @@ import {
 } from '../ui/module-page';
 import { TicketsQueueAiChip } from '../tickets/TicketsQueueAiChip';
 import { TicketsPageHeader } from '../tickets/TicketsPageHeader';
+import { TicketsLeftSidebar } from '../tickets/TicketsLeftSidebar';
+import { TicketsEmptyState } from '../tickets/TicketsEmptyState';
+import { TicketsAiOpsPanel } from '../tickets/TicketsAiOpsPanel';
+import { TicketDetailDrawer } from '../tickets/TicketDetailDrawer';
+import { TICKETS_SIDEBAR_GROUPS } from '../tickets/ticketsSidebarConfig';
 import { TicketStatusChip, TicketPriorityChip, TicketAssigneeChip } from '../tickets/TicketTableCells';
 import { TicketsTableHeader } from '../tickets/TicketsTableHeader';
 import { getTicketTableGridClass, getTicketTableMinWidth, ticketTableRowClass } from '../tickets/ticketTableLayout';
 import { TicketsViewModeSelector, type TicketsLayoutMode } from '../tickets/TicketsViewModeSelector';
 import { TicketsKanbanBoard } from '../tickets/TicketsKanbanBoard';
 import { TicketsCardGrid } from '../tickets/TicketsCardGrid';
-import { TicketsAiQualityScore } from '../tickets/TicketsAiQualityScore';
-
 const matchStatus = (status: string | undefined, target: string): boolean => {
   if (!status) return false;
   return status.toLowerCase().trim() === target.toLowerCase().trim();
@@ -310,7 +312,7 @@ export default function TicketsPage() {
   const { user } = useAuth();
   const { hasPermission, role, loading: permsLoading } = usePermissions();
   const { isPipelineCollapsed, togglePipelineSidebar } = useSidebar();
-  const { workspace, isDeveloperWorkspace } = useWorkspace();
+  const { workspace, isDeveloperWorkspace, isAiOpsWorkspace, setWorkspace } = useWorkspace();
   const { ticketId } = useParams();
   const navigate = useNavigate();
   
@@ -339,15 +341,33 @@ export default function TicketsPage() {
   const [replyText, setReplyText] = useState('');
   const [isMobilePropertiesOpen, setIsMobilePropertiesOpen] = useState(false);
   const [activeView, setActiveView] = useState<string>(() => {
-    return localStorage.getItem('geistdesk_default_view') || 'unassigned';
+    return localStorage.getItem('geistdesk_default_view') || 'my_queue';
   });
-  const [topStatusFilter, setTopStatusFilter] = useState<'all' | 'open' | 'pending' | 'onhold' | 'urgent' | 'unassigned' | 'bugs'>('all');
+  const [topStatusFilter, setTopStatusFilter] = useState<
+    | 'all'
+    | 'open'
+    | 'pending'
+    | 'onhold'
+    | 'urgent'
+    | 'unassigned'
+    | 'bugs'
+    | 'open_bugs'
+    | 'linked_incidents'
+    | 'in_dev'
+    | 'qa'
+    | 'merged'
+  >('all');
+  const [drawerTicketId, setDrawerTicketId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<TicketsLayoutMode>('list');
   const [listSort, setListSort] = useState<'newest' | 'oldest' | 'priority'>('newest');
 
   useEffect(() => {
-    setTopStatusFilter('all');
-  }, [activeView, workspace]);
+    if (isDeveloperWorkspace) {
+      setTopStatusFilter('open_bugs');
+    } else {
+      setTopStatusFilter('all');
+    }
+  }, [activeView, workspace, isDeveloperWorkspace]);
 
   const workspaceTickets = useMemo(
     () => filterTicketsByWorkspace(allTickets, workspace),
@@ -366,20 +386,7 @@ export default function TicketsPage() {
   });
   const [isCustomizerExpanded, setIsCustomizerExpanded] = useState(false);
 
-  const dynamicCategories = useMemo(() => {
-    const visibleIds = ['inbox'];
-    if (additionalCategory) {
-      visibleIds.push(additionalCategory);
-    }
-    
-    return [...staticCategories]
-      .filter(cat => visibleIds.includes(cat.id))
-      .sort((a, b) => {
-        const idxA = categoryOrder.indexOf(a.id);
-        const idxB = categoryOrder.indexOf(b.id);
-        return (idxA !== -1 ? idxA : 99) - (idxB !== -1 ? idxB : 99);
-      });
-  }, [additionalCategory, categoryOrder]);
+  const dynamicCategories = useMemo(() => TICKETS_SIDEBAR_GROUPS, []);
 
   useEffect(() => {
     if (additionalCategory) {
@@ -430,13 +437,10 @@ export default function TicketsPage() {
     return saved ? JSON.parse(saved) : [];
   });
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({
-    inbox: false,
-    my_work: false,
-    team: false,
-    priority: false,
-    ai: false,
-    kb: false,
-    maintenance: false
+    support: false,
+    customers: false,
+    engineering: false,
+    ai_labs: false,
   });
   const [viewDensity, setViewDensity] = useState<'comfortable' | 'compact'>('compact');
   const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
@@ -668,6 +672,61 @@ export default function TicketsPage() {
     let filtered = [...workspaceTickets];
 
     switch (activeView) {
+      case 'my_queue':
+        filtered = filtered.filter(
+          (t) =>
+            t.agentId === user.uid &&
+            matchStatusNot(t.status, 'resolved') &&
+            matchStatusNot(t.status, 'closed') &&
+            matchStatusNot(t.status, 'trash') &&
+            matchStatusNot(t.status, 'spam'),
+        );
+        break;
+      case 'waiting_review':
+        filtered = filtered.filter(
+          (t) =>
+            (t.aiConfidence !== undefined && t.aiConfidence < 0.7) ||
+            matchStatus(t.status, 'pending') ||
+            ((!t.tags || t.tags.length === 0) &&
+              matchStatusNot(t.status, 'resolved') &&
+              matchStatusNot(t.status, 'closed')),
+        );
+        break;
+      case 'linked_bugs':
+        filtered = filtered.filter(
+          (t) => isBugTicket(t) && getLinkedSupportTickets(t, allTickets).length > 0,
+        );
+        break;
+      case 'bug_backlog':
+        filtered = filtered.filter(
+          (t) => isBugTicket(t) && (!t.devStatus || t.devStatus === 'backlog'),
+        );
+        break;
+      case 'incidents':
+        filtered = filtered.filter(
+          (t) =>
+            isBugTicket(t) &&
+            (t.priority === 'urgent' ||
+              hasTagCaseInsensitive(t.tags, 'incident') ||
+              hasTagCaseInsensitive(t.tags, 'Incident')),
+        );
+        break;
+      case 'ai_inbox':
+        filtered = filtered.filter(
+          (t) =>
+            t.aiConfidence !== undefined ||
+            t.sentiment === 'angry' ||
+            t.sentiment === 'negative',
+        );
+        break;
+      case 'suggestions':
+        filtered = filtered.filter(
+          (t) => isAiReady && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed'),
+        );
+        break;
+      case 'trend_analytics':
+        filtered = filtered.filter((t) => t.tags && t.tags.length > 1);
+        break;
       // INBOX
       case 'unassigned':
         filtered = filtered.filter(t => !t.agentId && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam') && matchStatusNot(t.status, 'merged'));
@@ -804,7 +863,7 @@ export default function TicketsPage() {
     }
 
     return filtered;
-  }, [workspaceTickets, activeView, user, watchedTicketIds, isAiReady]);
+  }, [workspaceTickets, activeView, user, watchedTicketIds, isAiReady, allTickets]);
 
   const ticketQueueStats = useMemo(() => {
     const pool = baseSidebarTickets.filter(
@@ -824,6 +883,12 @@ export default function TicketsPage() {
         (tk) => tk.tags?.includes('VIP') || tk.customerName?.toLowerCase().includes('sarah'),
       ).length,
       critical: pool.filter((tk) => tk.priority === 'urgent' || tk.priority === 'high').length,
+      slaRisk: pool.filter(
+        (tk) =>
+          tk.priority === 'urgent' ||
+          (typeof tk.aiConfidence === 'number' && tk.aiConfidence < 0.5) ||
+          hasTagCaseInsensitive(tk.tags, 'SLA_Risk'),
+      ).length,
     };
   }, [baseSidebarTickets]);
 
@@ -907,6 +972,31 @@ export default function TicketsPage() {
         break;
       case 'bugs':
         result = result.filter(t => isBugTicket(t));
+        break;
+      case 'open_bugs':
+        result = result.filter(
+          (t) =>
+            isBugTicket(t) &&
+            matchStatusNot(t.status, 'merged') &&
+            matchStatusNot(t.status, 'closed') &&
+            (!t.devStatus || t.devStatus === 'backlog'),
+        );
+        break;
+      case 'linked_incidents':
+        result = result.filter(
+          (t) => isBugTicket(t) && getLinkedSupportTickets(t, allTickets).length > 0,
+        );
+        break;
+      case 'in_dev':
+        result = result.filter((t) => isBugTicket(t) && t.devStatus === 'in_dev');
+        break;
+      case 'qa':
+        result = result.filter((t) => isBugTicket(t) && t.devStatus === 'qa');
+        break;
+      case 'merged':
+        result = result.filter(
+          (t) => isBugTicket(t) && (t.devStatus === 'merged' || matchStatus(t.status, 'merged')),
+        );
         break;
       case 'unassigned':
         result = result.filter(t => !t.agentName);
@@ -1054,7 +1144,7 @@ export default function TicketsPage() {
     });
 
     return result;
-  }, [baseSidebarTickets, topStatusFilter, searchQuery, filters, user, listSort]);
+  }, [baseSidebarTickets, topStatusFilter, searchQuery, filters, user, listSort, allTickets]);
 
   const getFilteredTickets = () => {
     return finalRenderedTickets;
@@ -1063,6 +1153,53 @@ export default function TicketsPage() {
   const getViewCount = (view: string) => {
     if (!user) return 0;
     switch (view) {
+      case 'my_queue':
+        return allTickets.filter(
+          (t) =>
+            t.agentId === user.uid &&
+            matchStatusNot(t.status, 'resolved') &&
+            matchStatusNot(t.status, 'closed') &&
+            matchStatusNot(t.status, 'trash') &&
+            matchStatusNot(t.status, 'spam'),
+        ).length;
+      case 'waiting_review':
+        return allTickets.filter(
+          (t) =>
+            (t.aiConfidence !== undefined && t.aiConfidence < 0.7) ||
+            matchStatus(t.status, 'pending') ||
+            ((!t.tags || t.tags.length === 0) &&
+              matchStatusNot(t.status, 'resolved') &&
+              matchStatusNot(t.status, 'closed')),
+        ).length;
+      case 'linked_bugs':
+        return allTickets.filter(
+          (t) => isBugTicket(t) && getLinkedSupportTickets(t, allTickets).length > 0,
+        ).length;
+      case 'bug_backlog':
+        return allTickets.filter(
+          (t) => isBugTicket(t) && (!t.devStatus || t.devStatus === 'backlog'),
+        ).length;
+      case 'incidents':
+        return allTickets.filter(
+          (t) =>
+            isBugTicket(t) &&
+            (t.priority === 'urgent' ||
+              hasTagCaseInsensitive(t.tags, 'incident') ||
+              hasTagCaseInsensitive(t.tags, 'Incident')),
+        ).length;
+      case 'ai_inbox':
+        return allTickets.filter(
+          (t) =>
+            t.aiConfidence !== undefined ||
+            t.sentiment === 'angry' ||
+            t.sentiment === 'negative',
+        ).length;
+      case 'suggestions':
+        return allTickets.filter(
+          (t) => isAiReady && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed'),
+        ).length;
+      case 'trend_analytics':
+        return allTickets.filter((t) => t.tags && t.tags.length > 1).length;
       // INBOX
       case 'unassigned':
         return allTickets.filter(t => !t.agentId && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam') && matchStatusNot(t.status, 'merged')).length;
@@ -1363,23 +1500,31 @@ export default function TicketsPage() {
       toggleTicketSelection(id);
       return;
     }
-    // Handle presence: leave old, join new
     if (selectedTicketId) {
       ticketService.setPresence(selectedTicketId, false);
     }
     if (id) {
       ticketService.setPresence(id, true);
     }
-    
-    setSelectedTicketId(id);
-    setActiveDetailTab('conversation');
+
     setHoveredTicketId(null);
     setPeekMessages([]);
     setReplyText('');
     setLegalViolation(null);
     setGhostDraft('');
     setAiSources([]);
-    
+
+    if (id && !isMobile) {
+      setDrawerTicketId(id);
+      setActiveDetailTab('conversation');
+      autoGenerateZeroDraft(id);
+      return;
+    }
+
+    setDrawerTicketId(null);
+    setSelectedTicketId(id);
+    setActiveDetailTab('conversation');
+
     if (id) {
       navigate(`/tickets/${id}`);
       autoGenerateZeroDraft(id);
@@ -1840,261 +1985,55 @@ export default function TicketsPage() {
 
   return (
     <div className="flex flex-1 min-h-0 w-full overflow-hidden bg-background">
-      {/* View Sidebar: Pipeline Navigator */}
-      <div className={cn(
-        "border-r bg-muted flex flex-col py-4 shrink-0 h-full transition-all duration-300 ease-in-out overflow-y-auto custom-scrollbar shadow-inner",
-        isMobileSidebarOpen ? "w-full flex" : "hidden md:flex",
-        effectiveCollapsed ? "md:w-20 overflow-hidden" : "md:w-64",
-        selectedTicketId ? "hidden md:flex" : ""
-      )}>
-         {!effectiveCollapsed && (
-           <div className="px-3 pb-3 border-b border-border/60 shrink-0">
-             <WorkspaceSwitcher className="w-full" />
-           </div>
-         )}
-
-         <div className={cn("px-4 mb-4 transition-opacity duration-200", effectiveCollapsed ? "opacity-0 invisible h-0" : "opacity-100 visible")}>
-            <div className="flex items-center gap-2 pl-2">
-              <Sparkles className="w-4 h-4 text-primary animate-pulse" />
-              <h2 className="text-[10px] font-black text-slate-800 dark:text-slate-100 uppercase tracking-[0.2em]">{t('tickets.aiSupportOperations', 'AI Support Operations')}</h2>
-            </div>
-         </div>
-
-         <div className="flex-1 space-y-4 px-2">
-            {dynamicCategories.map(cat => (
-              <div key={cat.id} className="space-y-1">
-                 {!effectiveCollapsed && (
-                   <button 
-                      onClick={() => toggleGroup(cat.id)}
-                      className="w-full flex items-center justify-between px-3 py-1.5 text-[10px] font-black text-muted-foreground uppercase tracking-widest hover:text-foreground transition-all"
-                   >
-                     <span>{t(`tickets.groups.${cat.id}`, cat.label)}</span>
-                     {collapsedGroups[cat.id] ? <ChevronRight className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                   </button>
-                 )}
-                 {(!collapsedGroups[cat.id] || effectiveCollapsed) && (
-                    <div className={cn("mt-1 space-y-0.5", effectiveCollapsed && "space-y-2")}>
-                       {cat.items.map(item => {
-                          const count = getViewCount(item.id);
-                          const isActive = activeView === item.id;
-                          return (
-                            <button
-                               key={item.id}
-                               onClick={() => handleViewChange(item.id)}
-                               title={effectiveCollapsed ? t(`tickets.items.${item.id}`, item.label) : undefined}
-                               className={cn(
-                                  "w-full flex items-center gap-2.5 px-3 py-1.5 text-xs font-medium rounded-lg transition-all group relative",
-                                  isActive 
-                                    ? "bg-primary text-primary-foreground shadow-sm font-semibold shadow-primary/10" 
-                                    : item.id === 'agent_seeking_help'
-                                      ? "text-red-600 hover:text-red-700 hover:bg-rose-50/80 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/30 bg-rose-500/5 dark:bg-rose-950/10 border border-red-200/50 dark:border-red-900/40 font-bold"
-                                      : "text-muted-foreground hover:bg-card hover:text-foreground hover:shadow-sm",
-                                  effectiveCollapsed && "justify-center px-0 h-10 w-10 mx-auto"
-                               )}
-                            >
-                               <item.icon className={cn(
-                                 "w-3.5 h-3.5 shrink-0 transition-transform group-hover:scale-110",
-                                 isActive 
-                                   ? "text-primary-foreground" 
-                                   : item.id === 'agent_seeking_help'
-                                     ? "text-red-500 animate-pulse dark:text-red-400 font-extrabold"
-                                     : "text-slate-600 dark:text-slate-300"
-                               )} />
-                               
-                               {!effectiveCollapsed && (
-                                 <>
-                                    <span className="truncate">{t(`tickets.items.${item.id}`, item.label)}</span>
-                                    {item.indicator && (
-                                      <span className={cn(
-                                        "px-1.5 py-0.5 rounded text-[8px] tracking-tight uppercase leading-none font-bold",
-                                        item.indicator.color
-                                      )}>
-                                         {t(`tickets.indicators.${item.indicator.label.toLowerCase()}`, item.indicator.label)}
-                                      </span>
-                                    )}
-                                    {count > 0 && (
-                                       <span className={cn(
-                                         "ml-auto text-[10px] font-bold px-1.5 py-0.5 rounded-full min-w-4 text-center",
-                                         isActive ? "bg-primary-foreground text-primary" : "bg-card border border-border text-muted-foreground"
-                                       )}>
-                                          {count}
-                                       </span>
-                                    )}
-                                 </>
-                               )}
-
-                               {effectiveCollapsed && count > 0 && (
-                                 <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-primary text-white text-[8px] font-bold flex items-center justify-center border-2 border-background">
-                                   {count}
-                                 </div>
-                               )}
-                            </button>
-                          );
-                       })}
-                    </div>
-                 )}
-              </div>
-            ))}
-         </div>
-
-             {/* Menü anpassen & Defaults */}
-             {!effectiveCollapsed && (
-               <div className="mt-4 border-t border-border/60 pt-4 pb-2">
-                 <button
-                   onClick={() => setIsCustomizerExpanded(!isCustomizerExpanded)}
-                   className="w-full flex items-center justify-between text-[10px] font-black text-muted-foreground uppercase tracking-[0.12em] hover:text-foreground transition-all duration-200"
-                 >
-                   <div className="flex items-center gap-2">
-                     <SlidersHorizontal className="w-3.5 h-3.5 text-primary" />
-                     <span>{t('tickets.customizeMenu', 'Menü anpassen')}</span>
-                   </div>
-                   {isCustomizerExpanded ? <ChevronDown className="w-3 h-3 text-muted-foreground" /> : <ChevronRight className="w-3 h-3 text-muted-foreground" />}
-                 </button>
-
-                 {isCustomizerExpanded && (
-                   <div className="mt-3 bg-white dark:bg-slate-900 border border-slate-200/50 dark:border-slate-800 rounded-2xl p-3.5 space-y-4 shadow-sm">
-                     {/* Selection of second menu view */}
-                     <div className="space-y-1.5">
-                       <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">
-                         {t('tickets.secondGroupLabel', 'Zusätzliche Menüansicht')}
-                       </label>
-                       <select
-                         value={additionalCategory || 'none'}
-                         onChange={(e) => {
-                           const val = e.target.value === 'none' ? null : e.target.value;
-                           setAdditionalCategory(val);
-                         }}
-                         className="w-full bg-slate-50 dark:bg-slate-950 border border-border rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:ring-1 focus:ring-primary outline-none text-foreground"
-                       >
-                         <option value="none">{t('tickets.noAdditionalGroup', 'Keine (Nur Posteingang)')}</option>
-                         {staticCategories.filter(c => c.id !== 'inbox').map(cat => (
-                           <option key={cat.id} value={cat.id}>
-                             {t(`tickets.groups.${cat.id}`, cat.label)}
-                           </option>
-                         ))}
-                       </select>
-                     </div>
-
-                     {/* Order Selection */}
-                     <div className="space-y-2">
-                       <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">
-                         {t('tickets.orderLabel', 'Reihenfolge der Gruppen')}
-                       </label>
-                       <div className="space-y-1 bg-slate-50 dark:bg-slate-950 p-2 rounded-xl border border-border/60 font-medium">
-                         {dynamicCategories.map((cat, idx) => {
-                           const canMoveUp = idx > 0;
-                           const canMoveDown = idx < dynamicCategories.length - 1;
-                           return (
-                             <div key={cat.id} className="flex items-center justify-between py-1 px-1 text-xs">
-                               <span className="font-semibold text-slate-700 dark:text-slate-300">
-                                 {t(`tickets.groups.${cat.id}`, cat.label)}
-                               </span>
-                               <div className="flex gap-1 shrink-0">
-                                 <button
-                                   onClick={() => moveCategory(cat.id, 'up')}
-                                   disabled={!canMoveUp}
-                                   className={cn(
-                                     "p-1 rounded hover:bg-white dark:hover:bg-slate-850 border border-transparent transition-all",
-                                     !canMoveUp ? "opacity-35 cursor-not-allowed text-muted-foreground" : "text-slate-600 dark:text-slate-400 hover:border-border hover:shadow-sm"
-                                   )}
-                                   title="Nach oben"
-                                 >
-                                   <ArrowUp className="w-3 h-3" />
-                                 </button>
-                                 <button
-                                   onClick={() => moveCategory(cat.id, 'down')}
-                                   disabled={!canMoveDown}
-                                   className={cn(
-                                     "p-1 rounded hover:bg-white dark:hover:bg-slate-850 border border-transparent transition-all",
-                                     !canMoveDown ? "opacity-35 cursor-not-allowed text-muted-foreground" : "text-slate-600 dark:text-slate-400 hover:border-border hover:shadow-sm"
-                                   )}
-                                   title="Nach unten"
-                                 >
-                                   <ArrowDown className="w-3 h-3" />
-                                 </button>
-                               </div>
-                             </div>
-                           );
-                         })}
-                       </div>
-                     </div>
-
-                     {/* Default Active view selection */}
-                     <div className="space-y-1.5">
-                       <label className="text-[9px] font-black text-muted-foreground uppercase tracking-wider block">
-                         {t('tickets.defaultViewLabel', 'Standard-Ansicht am Start')}
-                       </label>
-                       <select
-                         value={defaultViewSetting}
-                         onChange={(e) => {
-                           const val = e.target.value;
-                           setDefaultViewSetting(val);
-                           setActiveView(val);
-                         }}
-                         className="w-full bg-slate-50 dark:bg-slate-950 border border-border rounded-xl px-2.5 py-1.5 text-xs font-semibold focus:ring-1 focus:ring-primary outline-none text-foreground"
-                       >
-                         {dynamicCategories.flatMap(c => c.items).map(item => (
-                           <option key={item.id} value={item.id}>
-                             {t(`tickets.items.${item.id}`, item.label)}
-                           </option>
-                         ))}
-                       </select>
-                     </div>
-
-                     {/* Reset Button */}
-                     <button
-                       onClick={() => {
-                         setAdditionalCategory(null);
-                         setCategoryOrder(['inbox', 'my_work', 'team', 'priority', 'ai', 'kb', 'maintenance']);
-                         setDefaultViewSetting('unassigned');
-                         setActiveView('unassigned');
-                         toast.success("Standardeinstellungen zurückgesetzt!");
-                       }}
-                       className="w-full text-center text-[10px] font-black text-rose-500 hover:text-rose-600 dark:text-rose-400 dark:hover:text-rose-350 transition-colors pt-1.5 border-t border-border/45 block"
-                     >
-                       {t('tickets.resetSelection', 'Reset selection')}
-                     </button>
-                   </div>
-                 )}
-               </div>
-             )}
-
-         <TicketsAiQualityScore collapsed={effectiveCollapsed} className="mt-auto shrink-0" />
-
-         {/* Polyglot Language Picker moved to bottom of sidebar */}
-         {moduleConfig.polyglotEnabled && (
-           <div className={cn("mt-auto p-4 border-t border-border bg-card/50", effectiveCollapsed && "p-2")}>
+      <TicketsLeftSidebar
+        effectiveCollapsed={effectiveCollapsed}
+        collapsedGroups={collapsedGroups}
+        toggleGroup={toggleGroup}
+        activeView={activeView}
+        onViewChange={handleViewChange}
+        getViewCount={getViewCount}
+        selectedTicketId={selectedTicketId}
+        isMobileSidebarOpen={isMobileSidebarOpen}
+        footer={
+          moduleConfig.polyglotEnabled ? (
+            <div className={cn('mt-auto p-4 border-t border-border bg-card/50', effectiveCollapsed && 'p-2')}>
               {!effectiveCollapsed && (
                 <div className="flex items-center gap-2 mb-3">
-                   <Languages className="w-3.5 h-3.5 text-primary" />
-                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Polyglot Bridge</span>
+                  <Languages className="w-3.5 h-3.5 text-primary" />
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
+                    Polyglot Bridge
+                  </span>
                 </div>
               )}
-              <div className={cn("flex flex-wrap gap-2", effectiveCollapsed && "flex-col items-center")}>
-                 {moduleConfig.languages.filter(l => l.enabled).map(f => (
-                    <button 
-                       key={f.lang}
-                       onClick={() => setAgentLanguage(f.lang)}
-                       className={cn(
-                          "h-8 w-8 rounded-full border border-transparent hover:bg-card flex items-center justify-center text-sm shadow-none transition-all shrink-0",
-                          agentLanguage === f.lang && "border-primary bg-card shadow-sm scale-110"
-                       )}
-                       title={t('settings.polyglotBridge', 'Polyglot Bridge') + `: ${f.lang}`}
+              <div className={cn('flex flex-wrap gap-2', effectiveCollapsed && 'flex-col items-center')}>
+                {moduleConfig.languages
+                  .filter((l) => l.enabled)
+                  .map((f) => (
+                    <button
+                      key={f.lang}
+                      type="button"
+                      onClick={() => setAgentLanguage(f.lang)}
+                      className={cn(
+                        'h-8 w-8 rounded-full border border-transparent hover:bg-card flex items-center justify-center text-sm shadow-none transition-all shrink-0',
+                        agentLanguage === f.lang && 'border-primary bg-card shadow-sm scale-110',
+                      )}
+                      title={`${t('settings.polyglotBridge', 'Polyglot Bridge')}: ${f.lang}`}
                     >
-                       <FlagIcon code={f.flagCode || languageToFlagCode(f.lang)} className="w-5 h-3.5" />
+                      <FlagIcon code={f.flagCode || languageToFlagCode(f.lang)} className="w-5 h-3.5" />
                     </button>
-                 ))}
+                  ))}
               </div>
-           </div>
-         )}
-      </div>
+            </div>
+          ) : undefined
+        }
+      />
 
       {/* Main Content Area: Conditional Master-Detail */}
       <div className={cn(
         "min-h-0 bg-background text-foreground flex flex-col",
         isMobileSidebarOpen ? "hidden md:flex md:flex-1" : "w-full flex-1 flex flex-col min-h-0"
       )}>
-        {selectedTicketId ? (
+        {selectedTicketId && isMobile ? (
           /* Detail View */
           <div className="flex-1 flex flex-col min-w-0 min-h-0 relative">
             {selectedTicket ? (
@@ -3856,8 +3795,17 @@ export default function TicketsPage() {
       </div>
     ) : (
       /* List View: Expanded Full Width */
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#FAFBFC]">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#FAFBFC] relative">
             <TicketsPageHeader
+              workspace={workspace}
+              stats={{
+                open: ticketQueueStats.open,
+                slaRisk: ticketQueueStats.slaRisk,
+                pending: ticketQueueStats.pending,
+                urgent: ticketQueueStats.urgent,
+                bugs: ticketQueueStats.bugs,
+                unassigned: ticketQueueStats.unassigned,
+              }}
               trailing={
                 <Button
                   variant="ghost"
@@ -3873,12 +3821,19 @@ export default function TicketsPage() {
             <ModulePageTabs
               className="border-0 bg-transparent"
               tabs={
-                isDeveloperWorkspace
+                isAiOpsWorkspace
                   ? [
                       { id: 'all', label: `${t('tickets.allTickets', 'All')} ${ticketQueueStats.all}` },
-                      { id: 'open', label: `${t('tickets.open', 'Open')} ${ticketQueueStats.open}` },
-                      { id: 'bugs', label: `${t('tickets.bugsTab', 'Bugs')} ${ticketQueueStats.bugs}` },
+                      { id: 'urgent', label: `${t('tickets.priorityUrgent', 'Urgent')} ${ticketQueueStats.urgent}` },
                       { id: 'unassigned', label: `${t('tickets.unassigned', 'Unassigned')} ${ticketQueueStats.unassigned}` },
+                    ]
+                  : isDeveloperWorkspace
+                  ? [
+                      { id: 'open_bugs', label: `${t('tickets.devTabs.openBugs', 'Open Bugs')} ${ticketQueueStats.open}` },
+                      { id: 'linked_incidents', label: t('tickets.devTabs.linkedIncidents', 'Linked Incidents') },
+                      { id: 'in_dev', label: t('tickets.devTabs.inDev', 'In Dev') },
+                      { id: 'qa', label: t('tickets.devTabs.qa', 'QA') },
+                      { id: 'merged', label: t('tickets.devTabs.merged', 'Merged') },
                     ]
                   : [
                       { id: 'all', label: `${t('tickets.allTickets', 'All')} ${ticketQueueStats.all}` },
@@ -3892,6 +3847,15 @@ export default function TicketsPage() {
               activeId={topStatusFilter}
               onChange={(id) => setTopStatusFilter(id as typeof topStatusFilter)}
             />
+
+            {isAiOpsWorkspace ? (
+              <TicketsAiOpsPanel
+                tickets={baseSidebarTickets}
+                onActionClick={() => handleViewChange('suggestions')}
+                onClusterClick={() => handleViewChange('trend_analytics')}
+              />
+            ) : (
+            <>
             <ModuleToolbar
               searchPlaceholder={t('tickets.searchPlaceholderFull', 'Search tickets, customers, companies...')}
               searchValue={searchQuery}
@@ -4448,32 +4412,14 @@ export default function TicketsPage() {
             {/* List Content: List / Kanban / Card layouts */}
             <ScrollArea className="flex-1 bg-background min-h-0">
               {tickets.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-32 px-4 text-center bg-card">
-                  <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-8">
-                    <Ticket className="w-12 h-12 text-muted-foreground opacity-40 translate-y-1 -rotate-12" />
-                  </div>
-                  <h2 className="text-3xl font-bold text-foreground mb-3 tracking-tight">{t('tickets.noTicketsInView', 'No tickets in this view.')}</h2>
-                  <p className="text-muted-foreground max-w-md mx-auto mb-10 text-base leading-relaxed">
-                    {t('tickets.noTicketsInViewDesc', "You've reached the end of this queue. Adjust your filters or select a different view from the sidebar to find more tickets.")}
-                  </p>
-                  <div className="flex flex-wrap justify-center gap-4">
-                    <Button 
-                      variant="outline" 
-                      onClick={() => setFilters({
-                        agent: 'any', group: 'any', sentiment: 'any', created: 'any', closedAt: 'any', resolvedAt: 'any', resolutionDue: 'any', firstResponseDue: 'any', nextResponseDue: 'any', skills: 'any', status: 'any', priority: 'any', type: 'any', source: 'any', sourceInfo: '', tags: 'any', company: 'any', contacts: 'any', product: 'any', language: 'any', aiConfidence: 'any', slaDue: 'any'
-                      })}
-                      className="rounded-full px-8 h-12 font-bold border-border hover:bg-muted transition-all"
-                    >
-                      {t('tickets.resetAllFilters', 'Reset All Filters')}
-                    </Button>
-                    <ModuleCreateButton
-                      ariaLabelKey="actions.createTicket"
-                      ariaLabelDefault="Create Ticket"
-                      onClick={() => setIsCreateTicketOpen(true)}
-                      className="h-12 sm:h-12 sm:px-5"
-                    />
-                  </div>
-                </div>
+                <TicketsEmptyState
+                  onViewUnassigned={() => handleViewChange('unassigned')}
+                  onOpenAiSuggestions={() => {
+                    setWorkspace('ai_ops');
+                    handleViewChange('suggestions');
+                  }}
+                  onCreateTicket={() => setIsCreateTicketOpen(true)}
+                />
               ) : layoutMode === 'kanban' ? (
                 <TicketsKanbanBoard
                   tickets={tickets}
@@ -4566,6 +4512,34 @@ export default function TicketsPage() {
                             />
                           </div>
 
+                          {isDeveloperWorkspace ? (
+                            <>
+                              <div className="min-w-0 text-[11px] font-bold text-slate-800 font-mono truncate">
+                                {formatTicketRef(ticket.id)}
+                              </div>
+                              <div className="min-w-0 text-[11px] font-semibold text-slate-700">
+                                {getLinkedSupportTickets(ticket, allTickets).length}
+                              </div>
+                              <div className="min-w-0 text-[11px] font-semibold text-slate-700">
+                                {new Set(getLinkedSupportTickets(ticket, allTickets).map((st) => st.customerName)).size ||
+                                  Math.max(1, ticket.id.charCodeAt(3) % 4)}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="inline-flex text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-700">
+                                  {devEnvironment}
+                                </span>
+                              </div>
+                              <div className="min-w-0 text-[11px] font-semibold text-slate-700 truncate font-mono">
+                                {devVersion}
+                              </div>
+                              <div className="min-w-0">
+                                <Badge variant="outline" className="text-[10px] h-5 font-semibold capitalize">
+                                  {t(devStatusLabelKey(ticket.devStatus), ticket.devStatus ?? 'backlog')}
+                                </Badge>
+                              </div>
+                            </>
+                          ) : (
+                            <>
                           {/* Customer Column */}
                           <div className="min-w-0 flex items-center gap-2 pr-1" onClick={(e) => e.stopPropagation()}>
                              <Avatar className={cn(
@@ -4666,22 +4640,6 @@ export default function TicketsPage() {
                              )}
                           </div>
 
-                          {isDeveloperWorkspace ? (
-                            <>
-                              <div className="min-w-0 text-[11px] font-semibold text-slate-700 truncate font-mono">
-                                {devVersion}
-                              </div>
-                              <div className="min-w-0">
-                                <span className="inline-flex text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-700">
-                                  {devEnvironment}
-                                </span>
-                              </div>
-                              <div className="min-w-0 text-[10px] text-muted-foreground line-clamp-2 leading-snug font-medium">
-                                {devStepsPreview || t('tickets.noStepsProvided', 'No steps provided')}
-                              </div>
-                            </>
-                          ) : null}
-
                           {/* Status Column */}
                           <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
                             <TicketStatusChip
@@ -4713,6 +4671,8 @@ export default function TicketsPage() {
                           <div className="min-w-0 text-xs text-muted-foreground font-semibold text-left truncate">
                              {ticket.updatedAt?.toDate ? ticket.updatedAt.toDate().toLocaleDateString([], { month: 'short', day: 'numeric' }) : t('tickets.today', 'Today')}
                           </div>
+                            </>
+                          )}
 
                           {/* Actions Menu Column */}
                           <div className="justify-self-center" onClick={(e) => e.stopPropagation()}>
@@ -4890,6 +4850,7 @@ export default function TicketsPage() {
             </ScrollArea>
 
             {/* Data Table Pagination Footer (Sticky / Locked at the bottom) */}
+            {!isAiOpsWorkspace && (
             <div className="h-14 border-t border-border bg-card px-6 flex items-center justify-between shrink-0 select-none">
               {/* Left Side: Status display */}
               <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
@@ -4966,6 +4927,31 @@ export default function TicketsPage() {
                 </div>
               </div>
             </div>
+            )}
+
+            </>
+            )}
+
+            <TicketDetailDrawer
+              ticket={drawerTicketId ? allTickets.find((tk) => tk.id === drawerTicketId) ?? null : null}
+              allTickets={allTickets}
+              kbArticles={kbArticles}
+              onClose={() => {
+                if (drawerTicketId) ticketService.setPresence(drawerTicketId, false);
+                setDrawerTicketId(null);
+              }}
+              onOpenFullView={() => {
+                if (!drawerTicketId) return;
+                setSelectedTicketId(drawerTicketId);
+                navigate(`/tickets/${drawerTicketId}`);
+                setDrawerTicketId(null);
+              }}
+              onLinkToBug={linkToBug}
+              onCreateBugLink={() => {
+                setIsCreateTicketOpen(true);
+                toast.info(t('tickets.relations.createBugHint', 'Create a bug ticket, then link it here.'));
+              }}
+            />
           </div>
         )}
       </div>

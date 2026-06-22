@@ -6,17 +6,24 @@ interface WorkspaceContextType {
   setWorkspace: (workspace: AppWorkspace) => void;
   isSupportWorkspace: boolean;
   isDeveloperWorkspace: boolean;
+  isAiOpsWorkspace: boolean;
 }
 
 const STORAGE_KEY = 'geistdesk_active_workspace';
 
+function parseStoredWorkspace(value: string | null): AppWorkspace {
+  if (value === 'developer' || value === 'ai_ops' || value === 'support') {
+    return value;
+  }
+  return 'support';
+}
+
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
 export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
-  const [workspace, setWorkspaceState] = useState<AppWorkspace>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved === 'developer' ? 'developer' : 'support';
-  });
+  const [workspace, setWorkspaceState] = useState<AppWorkspace>(() =>
+    parseStoredWorkspace(localStorage.getItem(STORAGE_KEY)),
+  );
 
   const setWorkspace = (next: AppWorkspace) => {
     setWorkspaceState(next);
@@ -34,6 +41,7 @@ export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
         setWorkspace,
         isSupportWorkspace: workspace === 'support',
         isDeveloperWorkspace: workspace === 'developer',
+        isAiOpsWorkspace: workspace === 'ai_ops',
       }}
     >
       {children}

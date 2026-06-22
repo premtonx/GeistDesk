@@ -50,7 +50,8 @@
   "workspace": {
     "switcherLabel": "Arbeitsbereich",
     "support": "Support-Arbeitsbereich",
-    "developer": "Entwickler-Arbeitsbereich"
+    "developer": "Entwickler-Arbeitsbereich",
+    "aiOps": "KI-Operationen"
   },
   "dashboard": {
     "title": "Unternehmens-Dashboard",
@@ -108,7 +109,9 @@
     "metaPillInProgress": "In Bearbeitung",
     "metaPillUrgent": "Dringend",
     "headerMetaInline": "Tickets • {{open}} Offen • {{pending}} In Bearbeitung • {{urgent}} Dringend",
+    "headerMetaSupport": "Tickets • {{open}} Offen • {{slaRisk}} SLA-Risiko",
     "headerMetaDev": "Tickets • {{open}} Offen • {{bugs}} Bugs • {{unassigned}} Nicht zugewiesen",
+    "headerMetaAiOps": "KI-Operationen • {{open}} Aktiv • {{slaRisk}} SLA-Risiko",
     "bugsTab": "Bugs",
     "moduleDescription": "Support-Pipeline, SLA-Tracking und KI-gestützte Bearbeitung verwalten.",
     "searchPlaceholder": "Tickets durchsuchen...",
@@ -246,7 +249,10 @@
       "lastUpdate": "Zuletzt aktualisiert",
       "affectedVersion": "Version",
       "environment": "Umgebung",
-      "stepsToReproduce": "Reproduktionsschritte"
+      "stepsToReproduce": "Reproduktionsschritte",
+      "bugId": "Bug-ID",
+      "linkedSupportCount": "Verknüpfter Support",
+      "affectedCustomers": "Betroffene Kunden"
     },
     "env": {
       "prod": "PROD",
@@ -256,6 +262,51 @@
     "today": "Heute",
     "noTicketsInView": "Keine Tickets in dieser Ansicht.",
     "noTicketsInViewDesc": "Sie haben das Ende dieser Warteschlange erreicht. Passen Sie Ihre Filter an oder wählen Sie eine andere Ansicht aus der Seitenleiste, um mehr Tickets zu finden.",
+    "emptyState": {
+      "title": "🎉 Warteschlange leer / In dieser Ansicht ist alles erledigt",
+      "subtitle": "Keine Tickets erfordern derzeit dringende menschliche Aufmerksamkeit. Führen Sie automatisierte Audits aus oder sehen Sie Empfehlungen ein.",
+      "viewUnassigned": "Nicht zugewiesen anzeigen",
+      "openAiSuggestions": "KI-Vorschläge öffnen",
+      "statsTitle": "Heutige Betriebsstatistik",
+      "statsInline": "Heute gelöst: 12 | SLA erfüllt: 100% | CSAT: 96%",
+      "resolvedToday": "Heute gelöst",
+      "slaMet": "SLA erfüllt",
+      "csatScore": "CSAT-Wert"
+    },
+    "devTabs": {
+      "openBugs": "Offene Bugs",
+      "linkedIncidents": "Verknüpfte Vorfälle",
+      "inDev": "In Entwicklung",
+      "qa": "QA",
+      "merged": "Merged"
+    },
+    "aiOps": {
+      "incidentClusters": "Kritische Vorfall-Cluster",
+      "recommendedActions": "Empfohlene Aktionen",
+      "trendAlerts": "Trend-Warnungen",
+      "ticketCount": "{{count}} Tickets",
+      "clusterVpn": "VPN-Ausfälle",
+      "clusterEmail": "E-Mail-Sync",
+      "escalateTicket": "Ticket #{{id}} eskalieren",
+      "escalateSample": "Ticket #2031 eskalieren",
+      "mergeDuplicates": "Duplikate zusammenführen",
+      "mergeSample": "Duplikate zusammenführen",
+      "assignUnassigned": "Nicht zugewiesene Warteschlange auto-zuweisen",
+      "trendVpn": "VPN-Kategorie-Verkehr +38%",
+      "trendAuth": "Auth-Fehler +12%",
+      "trendBilling": "Abrechnungsanfragen −5%"
+    },
+    "drawer": {
+      "ariaLabel": "Ticket-Details",
+      "close": "Schließen",
+      "metaTray": "Meta-Tray",
+      "aiInsights": "KI-Erkenntnisse",
+      "similarCount": "Anzahl ähnlicher Tickets",
+      "suggestedKb": "Empfohlene KB-Artikel",
+      "noKbSuggestions": "Noch keine Treffer",
+      "description": "Beschreibung",
+      "openFullView": "Vollständige Ticket-Ansicht öffnen"
+    },
     "resetAllFilters": "Alle Filter zurücksetzen",
     "peekView": "Schnellansicht",
     "aiSentimentAnalysis": "KI-Stimmungsanalyse",
@@ -266,6 +317,10 @@
     "aiSupportOperations": "KI-Support-Operationen",
     "awaitingTriage": "Wartet auf Sichtung",
     "groups": {
+      "support": "Support",
+      "customers": "Kunden",
+      "engineering": "Engineering",
+      "ai_labs": "KI-Lab",
       "inbox": "Posteingang",
       "my_work": "Meine Arbeit",
       "team": "Team-Warteschlangen",
@@ -275,6 +330,14 @@
       "maintenance": "Wartung"
     },
     "items": {
+      "my_queue": "Meine Warteschlange",
+      "waiting_review": "Wartet auf Prüfung",
+      "linked_bugs": "Verknüpfte Bugs",
+      "bug_backlog": "Bug-Backlog",
+      "incidents": "Vorfälle",
+      "ai_inbox": "KI-Posteingang",
+      "suggestions": "Vorschläge",
+      "trend_analytics": "Trend-Analysen",
       "unassigned": "Nicht zugewiesen",
       "new_tickets": "Neue Tickets",
       "awaiting_triage": "Sichtung ausstehend",
@@ -310,10 +373,10 @@
       "spam": "Spam"
     },
     "indicators": {
-      "new": "Neu",
-      "urgent": "Dringend",
-      "pending": "Wartend",
-      "help": "Hilfe"
+      "new": "NEU",
+      "urgent": "DRINGEND",
+      "pending": "WARTEND",
+      "help": "HILFE"
     },
     "responseSla": "Antwort-SLA",
     "replyBtn": "Antworten",
