@@ -1120,6 +1120,17 @@
     },
     "delete": {
       "success": "Exchange item removed."
+    },
+    "focusedFilter": {
+      "empty": "No entries found for this filter.",
+      "titles": {
+        "active": "Active Exchanges",
+        "expiring": "Expiring Soon",
+        "shared": "Shared By Me",
+        "received": "Received",
+        "burned": "Burned",
+        "archived": "Archived"
+      }
     }
   },
   "vault": {

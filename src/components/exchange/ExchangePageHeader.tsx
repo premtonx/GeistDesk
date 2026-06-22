@@ -4,13 +4,30 @@ import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
 
+import type { ExchangeQuickFilter } from './exchange-utils';
+import {
+  EXCHANGE_QUICK_FILTER_DEFAULT_TITLES,
+  EXCHANGE_QUICK_FILTER_TITLE_KEYS,
+} from './exchange-utils';
+
 interface ExchangePageHeaderProps {
   onCustomize?: () => void;
+  quickFilter?: ExchangeQuickFilter;
   className?: string;
 }
 
-export function ExchangePageHeader({ onCustomize, className }: ExchangePageHeaderProps) {
+export function ExchangePageHeader({ onCustomize, quickFilter, className }: ExchangePageHeaderProps) {
   const { t } = useTranslation();
+
+  const subtitle = quickFilter
+    ? t(
+        EXCHANGE_QUICK_FILTER_TITLE_KEYS[quickFilter],
+        EXCHANGE_QUICK_FILTER_DEFAULT_TITLES[quickFilter],
+      )
+    : t(
+        'exchange.pageSubtitle',
+        'Securely exchange credentials, diagnostics, files and secrets with enterprise-grade protection.',
+      );
 
   return (
     <header className={cn('flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4', className)}>
@@ -22,13 +39,10 @@ export function ExchangePageHeader({ onCustomize, className }: ExchangePageHeade
           <BadgeCheck className="w-5 h-5 text-emerald-500 shrink-0" />
         </div>
         <p className="text-sm text-slate-500 mt-1 max-w-2xl leading-relaxed">
-          {t(
-            'exchange.pageSubtitle',
-            'Securely exchange credentials, diagnostics, files and secrets with enterprise-grade protection.',
-          )}
+          {subtitle}
         </p>
       </div>
-      {onCustomize ? (
+      {onCustomize && !quickFilter ? (
         <Button
           type="button"
           variant="outline"

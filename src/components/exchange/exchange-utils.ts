@@ -18,6 +18,45 @@ export type ExchangeQuickFilter =
   | 'archived'
   | null;
 
+export const EXCHANGE_QUICK_FILTER_TITLE_KEYS: Record<
+  Exclude<ExchangeQuickFilter, null>,
+  string
+> = {
+  active: 'exchange.focusedFilter.titles.active',
+  expiring: 'exchange.focusedFilter.titles.expiring',
+  shared: 'exchange.focusedFilter.titles.shared',
+  received: 'exchange.focusedFilter.titles.received',
+  burned: 'exchange.focusedFilter.titles.burned',
+  archived: 'exchange.focusedFilter.titles.archived',
+};
+
+export const EXCHANGE_QUICK_FILTER_DEFAULT_TITLES: Record<
+  Exclude<ExchangeQuickFilter, null>,
+  string
+> = {
+  active: 'Active Exchanges',
+  expiring: 'Expiring Soon',
+  shared: 'Shared By Me',
+  received: 'Received',
+  burned: 'Burned',
+  archived: 'Archived',
+};
+
+export function isExchangeOverviewMode(
+  activeTab: string,
+  exchangeNav: ExchangeNavId,
+  quickFilter: ExchangeQuickFilter,
+): boolean {
+  return activeTab === 'dashboard' && exchangeNav === 'overview' && quickFilter === null;
+}
+
+export function isExchangeFocusedFilterMode(
+  activeTab: string,
+  quickFilter: ExchangeQuickFilter,
+): boolean {
+  return activeTab === 'dashboard' && quickFilter !== null;
+}
+
 export interface ExchangeItemRow {
   id: string;
   name: string;

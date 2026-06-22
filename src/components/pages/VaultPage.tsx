@@ -71,6 +71,10 @@ import { useExchangeFilters, useQuickFilterHandler } from '../exchange/useExchan
 import { useExchangeTemplates } from '../exchange/useExchangeTemplates';
 import type { ExchangeItemRowSeed } from '../exchange/exchange-template-utils';
 import type { ExchangeNavId, ExchangeQuickFilter } from '../exchange/exchange-utils';
+import {
+  isExchangeFocusedFilterMode,
+  isExchangeOverviewMode,
+} from '../exchange/exchange-utils';
 import { ticketService } from '../../services/ticketService';
 import { customerService } from '../../services/customerService';
 import { VaultItem, Ticket as TicketType, Company } from '../../types';
@@ -562,6 +566,9 @@ export default function VaultPage() {
         : t('exchange.recentTransfers.aiPending', 'AI analysis pending'),
   }));
 
+  const isOverviewMode = isExchangeOverviewMode(activeTab, exchangeNav, quickFilter);
+  const isFocusedFilterMode = isExchangeFocusedFilterMode(activeTab, quickFilter);
+
   return (
     <ModulePageShell scrollable={false} className="bg-[#FAFBFC]">
       <div className="flex flex-1 min-h-0 overflow-hidden w-full">
@@ -579,7 +586,7 @@ export default function VaultPage() {
         <div className="flex flex-1 min-w-0 min-h-0">
           <ScrollArea className="flex-1 min-w-0">
             <div className="px-4 sm:px-6 py-5 space-y-5 pb-10">
-              <ExchangePageHeader />
+              <ExchangePageHeader quickFilter={isFocusedFilterMode ? quickFilter : null} />
 
               <ModuleToolbar
                 searchPlaceholder={t('exchange.searchPlaceholder', 'Search exchanges, recipients, files...')}
@@ -614,22 +621,27 @@ export default function VaultPage() {
                 exit={{ opacity: 0, y: -10 }}
                 className="space-y-5"
               >
-                <ExchangeKpiCards
-                  activeSecrets={exchangeKpiStats.activeSecrets}
-                  activeDropzones={exchangeKpiStats.activeDropzones}
-                  filesReceived={exchangeKpiStats.filesReceived}
-                  securityScore={exchangeKpiStats.securityScore}
-                />
-                <ExchangeAiInsightsBanner />
-                <ExchangeQuickActions
-                  onSendSecret={() => handleExchangeNavigate('secrets')}
-                  onCreateDropzone={() => handleExchangeNavigate('dropzones')}
-                  onAnalyzeUpload={() => handleExchangeNavigate('analysis')}
-                  onEmergencyShare={() => setIsEmergencyModalOpen(true)}
-                  onImportPackage={() => toast.info(t('exchange.actions.importSoon', 'Package import opening soon.'))}
-                />
+                {isOverviewMode ? (
+                  <>
+                    <ExchangeKpiCards
+                      activeSecrets={exchangeKpiStats.activeSecrets}
+                      activeDropzones={exchangeKpiStats.activeDropzones}
+                      filesReceived={exchangeKpiStats.filesReceived}
+                      securityScore={exchangeKpiStats.securityScore}
+                    />
+                    <ExchangeAiInsightsBanner />
+                    <ExchangeQuickActions
+                      onSendSecret={() => handleExchangeNavigate('secrets')}
+                      onCreateDropzone={() => handleExchangeNavigate('dropzones')}
+                      onAnalyzeUpload={() => handleExchangeNavigate('analysis')}
+                      onEmergencyShare={() => setIsEmergencyModalOpen(true)}
+                      onImportPackage={() => toast.info(t('exchange.actions.importSoon', 'Package import opening soon.'))}
+                    />
+                  </>
+                ) : null}
                 <ExchangeActiveTable
                   items={filteredExchangeItems}
+                  quickFilter={isFocusedFilterMode ? quickFilter : null}
                   onCopyLink={(id) => copyToClipboard(`${window.location.origin}/v/${id}`)}
                   onBurn={async (id) => {
                     await vaultService.burnItem(id);
@@ -637,8 +649,14 @@ export default function VaultPage() {
                   }}
                   onDelete={handleDeleteExchangeItem}
                 />
-                <ExchangeRecentTransfers items={transferItems} />
-                <ExchangeTrustFooter />
+                {isOverviewMode ? (
+                  <>
+                    <ExchangeRecentTransfers items={transferItems} />
+                    <ExchangeTrustFooter />
+                  </>
+                ) : (
+                  <ExchangeRecentTransfers items={transferItems} />
+                )}
               </motion.div>
             )}
 

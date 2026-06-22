@@ -4,25 +4,48 @@ import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { exchangePanelClass, exchangeStatusClass, type ExchangeItemRow } from './exchange-utils';
+import { exchangePanelClass, exchangeStatusClass, type ExchangeItemRow, type ExchangeQuickFilter } from './exchange-utils';
+import {
+  EXCHANGE_QUICK_FILTER_DEFAULT_TITLES,
+  EXCHANGE_QUICK_FILTER_TITLE_KEYS,
+} from './exchange-utils';
 
 interface ExchangeActiveTableProps {
   items: ExchangeItemRow[];
   onCopyLink?: (id: string) => void;
   onBurn?: (id: string) => void;
   onDelete?: (id: string) => void;
+  quickFilter?: ExchangeQuickFilter;
   className?: string;
 }
 
-export function ExchangeActiveTable({ items, onCopyLink, onBurn, onDelete, className }: ExchangeActiveTableProps) {
+export function ExchangeActiveTable({
+  items,
+  onCopyLink,
+  onBurn,
+  onDelete,
+  quickFilter,
+  className,
+}: ExchangeActiveTableProps) {
   const { t } = useTranslation();
+
+  const sectionTitle = quickFilter
+    ? t(
+        EXCHANGE_QUICK_FILTER_TITLE_KEYS[quickFilter],
+        EXCHANGE_QUICK_FILTER_DEFAULT_TITLES[quickFilter],
+      )
+    : t('exchange.activeExchanges.title', 'Active Exchanges');
+
+  const emptyMessage = quickFilter
+    ? t('exchange.focusedFilter.empty', 'No entries found for this filter.')
+    : t('exchange.activeExchanges.empty', 'No active exchanges match your filters.');
 
   return (
     <section className={cn(exchangePanelClass(), 'overflow-hidden', className)}>
       <header className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
         <div>
           <h2 className="text-sm font-semibold text-slate-900">
-            {t('exchange.activeExchanges.title', 'Active Exchanges')}
+            {sectionTitle}
           </h2>
           <p className="text-[11px] text-slate-400 mt-0.5">
             {t('exchange.activeExchanges.subtitle', '{{count}} records in workspace').replace('{{count}}', String(items.length))}
@@ -119,7 +142,7 @@ export function ExchangeActiveTable({ items, onCopyLink, onBurn, onDelete, class
             ) : (
               <tr>
                 <td colSpan={8} className="px-5 py-12 text-center text-slate-400 text-sm">
-                  {t('exchange.activeExchanges.empty', 'No active exchanges match your filters.')}
+                  {emptyMessage}
                 </td>
               </tr>
             )}
