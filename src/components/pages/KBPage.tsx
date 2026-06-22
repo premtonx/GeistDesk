@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { 
   Search, 
@@ -61,7 +61,8 @@ import {
   Folder,
   FolderPlus,
   Split,
-  RefreshCw
+  RefreshCw,
+  Wand2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
@@ -95,14 +96,13 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
 import { ModuleToolbarSelect } from '../ui/module-page';
 import { KBPageHeader } from '../kb/KBPageHeader';
-import { KBKpiCards } from '../kb/KBKpiCards';
-import { KBSearchSection } from '../kb/KBSearchSection';
-import { KBCategoryGrid } from '../kb/KBCategoryGrid';
-import { KBFeaturedArticles } from '../kb/KBFeaturedArticles';
 import { KBAiInsightsBanner } from '../kb/KBAiInsightsBanner';
-import { KBActivitySidebar, buildRecentActivity } from '../kb/KBActivitySidebar';
 import { KBViewModeSelector, type KBArticleViewMode } from '../kb/KBViewModeSelector';
 import { KBArticleViews } from '../kb/KBArticleViews';
+import { KBToolbar } from '../kb/KBToolbar';
+import { filterArticlesByWorkspace } from '../kb/kb-utils';
+import { ModulePageTabs } from '../ui/module-page/ModulePageTabs';
+import { useWorkspace } from '../../lib/context/WorkspaceContext';
 import { KBImporter } from '../KBImporter';
 import { RichTextEditor } from '../RichTextEditor';
 import { KBAutopilotDashboard } from '../KBAutopilotDashboard';
@@ -311,6 +311,7 @@ const ENTERPRISE_SEED_ARTICLES: any[] = [
 export default function KBPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
+  const { workspace, isDeveloperWorkspace } = useWorkspace();
   const [searchParams, setSearchParams] = useSearchParams();
   
   // States
@@ -527,9 +528,9 @@ export default function KBPage() {
     }
   }, [searchParams, setSearchParams, selectedCategory]);
   const [activeSubTab, setActiveSubTab] = useState<string>('All');
-  const [viewLayout, setViewLayout] = useState<KBArticleViewMode>('card');
+  const [viewLayout, setViewLayout] = useState<KBArticleViewMode>('list');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [sortBy, setSortBy] = useState<'date' | 'views' | 'confidence'>('date');
+  const [sortBy, setSortBy] = useState<'date' | 'views' | 'confidence' | 'popular'>('popular');
   const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
   const [isImportOpen, setIsImportOpen] = useState(false);
   
@@ -573,6 +574,11 @@ export default function KBPage() {
     avgReadTime: '3m 00s'
   });
   const [tagInput, setTagInput] = useState('');
+
+  useEffect(() => {
+    setSelectedCategory('All');
+    setActiveSubTab('All');
+  }, [workspace]);
 
   // Default internal structures
   const [categories, setCategories] = useState([
@@ -824,7 +830,12 @@ export default function KBPage() {
     };
   });
 
-  const processedArticles = withConfidence.filter((art) => {
+  const workspaceArticles = useMemo(
+    () => filterArticlesByWorkspace(withConfidence, workspace),
+    [withConfidence, workspace],
+  );
+
+  const processedArticles = workspaceArticles.filter((art) => {
     // 1. Category check
     if (selectedCategory !== 'All' && art.category !== selectedCategory) return false;
 
@@ -860,7 +871,7 @@ export default function KBPage() {
   processedArticles.sort((a, b) => {
     if (sortBy === 'confidence') {
       return (b.trustScore || 0) - (a.trustScore || 0);
-    } else if (sortBy === 'views') {
+    } else if (sortBy === 'views' || sortBy === 'popular') {
       return (b.views || 0) - (a.views || 0);
     } else {
       const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : (a.createdAt ? new Date(a.createdAt) : new Date(0));
@@ -870,21 +881,20 @@ export default function KBPage() {
   });
 
   // Library stats for compact header and tab counts
-  const publishedCount = articles.filter(a => a.status === 'Published').length;
-  const draftCount = articles.filter(a => a.status === 'Draft').length;
-  const needsReviewCount = articles.filter(a => a.status === 'Needs Review' || a.status === 'Under Revision').length;
-  const outdatedCount = articles.filter(a => a.status === 'Outdated').length;
+  const publishedCount = workspaceArticles.filter(a => a.status === 'Published').length;
+  const draftCount = workspaceArticles.filter(a => a.status === 'Draft').length;
+  const needsReviewCount = workspaceArticles.filter(a => a.status === 'Needs Review' || a.status === 'Under Revision').length;
+  const outdatedCount = workspaceArticles.filter(a => a.status === 'Outdated').length;
+  const categoryCount = new Set(workspaceArticles.map((a) => a.category).filter(Boolean)).size;
 
   const healthScore = Math.round(
-    withConfidence.reduce((sum, a) => sum + (a.trustScore || 0), 0) / Math.max(withConfidence.length, 1),
+    workspaceArticles.reduce((sum, a) => sum + (a.trustScore || 0), 0) / Math.max(workspaceArticles.length, 1),
   );
-  const monthlyViews = withConfidence.reduce((sum, a) => sum + (a.views || 0), 0);
-  const missingTagsCount = withConfidence.filter((a) => !a.tags || a.tags.length === 0).length;
-  const featuredArticles = [...withConfidence]
+  const missingTagsCount = workspaceArticles.filter((a) => !a.tags || a.tags.length === 0).length;
+  const featuredArticles = [...workspaceArticles]
     .filter((a) => a.status === 'Published')
     .sort((a, b) => (b.views || 0) - (a.views || 0))
     .slice(0, 2);
-  const recentActivity = buildRecentActivity(withConfidence, t);
 
   const resetFilters = () => {
     setFilterOwner('All');
@@ -896,12 +906,11 @@ export default function KBPage() {
     setSelectedCategory('All');
   };
 
-  const statusFilters = [
-    { id: 'All', label: t('common.statusAll', 'All') },
-    { id: 'Published', label: t('kb.published', 'Published') },
-    { id: 'Drafts', label: t('kb.drafts', 'Drafts') },
-    { id: 'Needs Review', label: t('kb.needsReview', 'Needs Review') },
-    { id: 'Archived', label: t('kb.status.archived', 'Archived') },
+  const statusTabs = [
+    { id: 'All', label: `${t('kb.tabAll', 'All')} (${workspaceArticles.length})` },
+    { id: 'Published', label: `${t('kb.published', 'Published')} (${publishedCount})` },
+    { id: 'Drafts', label: `${t('kb.drafts', 'Drafts')} (${draftCount})` },
+    { id: 'Needs Review', label: `${t('kb.underReview', 'Under Review')} (${needsReviewCount})` },
   ];
 
   // Helper translations for preview reading
@@ -1638,161 +1647,144 @@ export default function KBPage() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+          <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden bg-slate-50/30">
+            <KBPageHeader
+              articleCount={workspaceArticles.length}
+              categoryCount={categoryCount}
+              healthScore={healthScore}
+              trailing={
+                <div className="hidden sm:flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setViewMode('coverage');
+                      fetchCoverageData();
+                    }}
+                    className="h-8 rounded-lg text-xs font-medium"
+                  >
+                    <Network className="w-3.5 h-3.5 mr-1.5" />
+                    {t('kb.coverageMap', 'Coverage')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setViewMode('autopilot')}
+                    className="h-8 rounded-lg text-xs font-medium"
+                  >
+                    <Zap className="w-3.5 h-3.5 mr-1.5" />
+                    {t('kb.autopilot', 'Autopilot')}
+                  </Button>
+                </div>
+              }
+            />
+
+            <ModulePageTabs
+              tabs={statusTabs}
+              activeId={activeSubTab}
+              onChange={setActiveSubTab}
+            />
+
+            <KBToolbar
+              searchQuery={searchQuery}
+              onSearchChange={setSearchQuery}
+              onFilterClick={() => setShowAdvancedFilters((v) => !v)}
+              filterActive={showAdvancedFilters}
+              sortControl={
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="hidden sm:inline text-[11px] font-medium text-slate-500">
+                    {t('modulePage.sort', 'Sort')}:
+                  </span>
+                  <ModuleToolbarSelect
+                    value={sortBy}
+                    onChange={(v) => setSortBy(v as typeof sortBy)}
+                    aria-label={t('actions.sort', 'Sort')}
+                  >
+                    <option value="popular">{t('kb.sortPopular', 'Popular')}</option>
+                    <option value="date">{t('kb.sortDate', 'Date updated')}</option>
+                    <option value="views">{t('kb.sortViews', 'Most views')}</option>
+                    <option value="confidence">{t('kb.sortConfidence', 'Trust score')}</option>
+                  </ModuleToolbarSelect>
+                </div>
+              }
+              viewsSlot={<KBViewModeSelector value={viewLayout} onChange={setViewLayout} />}
+              createAction={
+                <ModuleCreateButton
+                  ariaLabelKey="actions.createKBArticle"
+                  ariaLabelDefault="Create GeistKB Article"
+                  iconOnly
+                  menuItems={[
+                    {
+                      labelKey: 'kb.actions.newArticle',
+                      labelDefault: 'New Article',
+                      icon: <Plus className="w-3.5 h-3.5" />,
+                      onClick: () => openCreateArticle(),
+                    },
+                    {
+                      labelKey: 'kb.actions.newCategory',
+                      labelDefault: 'New Category',
+                      icon: <FolderPlus className="w-3.5 h-3.5" />,
+                      onClick: () => setIsAddingCategory(true),
+                    },
+                    {
+                      labelKey: 'kb.actions.aiGenerate',
+                      labelDefault: 'AI Generate Article',
+                      icon: <Wand2 className="w-3.5 h-3.5" />,
+                      onClick: () => setViewMode('autopilot'),
+                    },
+                  ]}
+                />
+              }
+            />
+
+            {showAdvancedFilters ? (
+              <div className={cn('flex flex-wrap items-center gap-2 px-6 py-2 border-b border-slate-200/80 bg-white shrink-0')}>
+                <ModuleToolbarSelect value={filterOwner} onChange={setFilterOwner} aria-label={t('kb.owner', 'Owner')}>
+                  <option value="All">{t('kb.allOwners', 'All owners')}</option>
+                  {Array.from(new Set(workspaceArticles.map((a) => a.owner).filter(Boolean))).map((ownerName: string, idx) => (
+                    <option key={idx} value={ownerName}>{ownerName}</option>
+                  ))}
+                </ModuleToolbarSelect>
+                <ModuleToolbarSelect value={filterVisibility} onChange={setFilterVisibility} aria-label={t('kb.allAccess', 'Access')}>
+                  <option value="All">{t('kb.allAccess', 'All access')}</option>
+                  <option value="Public">{t('kb.publicPortal', 'Public')}</option>
+                  <option value="Private">{t('kb.internalSopsOnly', 'Internal')}</option>
+                </ModuleToolbarSelect>
+                {isDeveloperWorkspace ? (
+                  <span className="text-[11px] text-violet-600 font-medium px-2 py-1 rounded-lg bg-violet-50 border border-violet-100">
+                    {t('kb.workspaceDeveloperHint', 'Developer workspace — internal docs & runbooks')}
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-blue-600 font-medium px-2 py-1 rounded-lg bg-blue-50 border border-blue-100">
+                    {t('kb.workspaceSupportHint', 'Support workspace — public customer FAQs')}
+                  </span>
+                )}
+              </div>
+            ) : null}
+
+            <KBAiInsightsBanner
+              reviewCount={needsReviewCount}
+              missingTagsCount={missingTagsCount}
+              outdatedCount={outdatedCount}
+            />
+
             <ScrollArea className="flex-1">
-              <div className="flex flex-col xl:flex-row gap-0 min-h-full">
-                {/* Main column */}
-                <div className="flex-1 min-w-0 px-6 pb-8 space-y-6">
-                  <KBPageHeader
-                    trailing={
-                      <div className="hidden sm:flex items-center gap-2">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setViewMode('coverage');
-                            fetchCoverageData();
-                          }}
-                          className="h-9 rounded-xl text-xs font-medium"
-                        >
-                          <Network className="w-3.5 h-3.5 mr-1.5" />
-                          {t('kb.coverageMap', 'Coverage')}
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setViewMode('autopilot')}
-                          className="h-9 rounded-xl text-xs font-medium"
-                        >
-                          <Zap className="w-3.5 h-3.5 mr-1.5" />
-                          {t('kb.autopilot', 'Autopilot')}
-                        </Button>
-                      </div>
-                    }
-                  />
-
-                  <KBKpiCards
-                    publishedCount={publishedCount}
-                    draftCount={draftCount}
-                    healthScore={healthScore}
-                    monthlyViews={monthlyViews}
-                  />
-
-                  <KBAiInsightsBanner
-                    reviewCount={needsReviewCount}
-                    missingTagsCount={missingTagsCount}
-                    outdatedCount={outdatedCount}
-                  />
-
-                  <KBSearchSection
-                    searchQuery={searchQuery}
-                    onSearchChange={setSearchQuery}
-                    onNewArticle={() => openCreateArticle()}
-                    onNewCategory={() => setIsAddingCategory(true)}
-                    onImportDocs={() => setIsImportOpen(true)}
-                    onAiGenerate={() => setViewMode('autopilot')}
-                    onAdvancedFilters={() => setShowAdvancedFilters((v) => !v)}
-                    showFilters={showAdvancedFilters}
-                  />
-
-                  {showAdvancedFilters ? (
-                    <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl border border-slate-200/80 bg-white/80">
-                      <ModuleToolbarSelect value={sortBy} onChange={(v) => setSortBy(v as typeof sortBy)} aria-label={t('actions.sort', 'Sort')}>
-                        <option value="date">{t('kb.sortDate', 'Date updated')}</option>
-                        <option value="views">{t('kb.sortViews', 'Most views')}</option>
-                        <option value="confidence">{t('kb.sortConfidence', 'Trust score')}</option>
-                      </ModuleToolbarSelect>
-                      <ModuleToolbarSelect value={filterOwner} onChange={setFilterOwner} aria-label={t('kb.owner', 'Owner')}>
-                        <option value="All">{t('kb.allOwners', 'All owners')}</option>
-                        {Array.from(new Set(articles.map((a) => a.owner).filter(Boolean))).map((ownerName: string, idx) => (
-                          <option key={idx} value={ownerName}>{ownerName}</option>
-                        ))}
-                      </ModuleToolbarSelect>
-                      <ModuleToolbarSelect value={filterVisibility} onChange={setFilterVisibility} aria-label={t('kb.allAccess', 'Access')}>
-                        <option value="All">{t('kb.allAccess', 'All access')}</option>
-                        <option value="Public">{t('kb.publicPortal', 'Public')}</option>
-                        <option value="Private">{t('kb.internalSopsOnly', 'Internal')}</option>
-                      </ModuleToolbarSelect>
-                    </div>
-                  ) : null}
-
-                  <KBCategoryGrid
-                    categories={categories}
-                    articles={articles}
-                    selectedCategory={selectedCategory}
-                    onSelect={setSelectedCategory}
-                  />
-
-                  <KBFeaturedArticles
-                    articles={featuredArticles}
-                    onSelect={(art) => setViewingArticle(art)}
-                  />
-
-                  <section>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-                      <div>
-                        <h2 className="text-sm font-semibold text-slate-900">
-                          {t('kb.articlesSection', 'Articles')}
-                        </h2>
-                        <p className="text-[11px] text-slate-400 mt-0.5">
-                          {t('kb.displayingCount', 'Displaying {{count}} matching entries').replace(
-                            '{{count}}',
-                            String(processedArticles.length),
-                          )}
-                        </p>
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex flex-wrap gap-1">
-                          {statusFilters.map((chip) => (
-                            <button
-                              key={chip.id}
-                              type="button"
-                              onClick={() => setActiveSubTab(chip.id)}
-                              className={cn(
-                                'h-7 px-2.5 rounded-full text-[11px] font-medium transition-colors border',
-                                activeSubTab === chip.id
-                                  ? 'bg-blue-600 text-white border-blue-600'
-                                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300',
-                              )}
-                            >
-                              {chip.label}
-                            </button>
-                          ))}
-                        </div>
-                        <KBViewModeSelector value={viewLayout} onChange={setViewLayout} />
-                        <ModuleCreateButton
-                          ariaLabelKey="actions.createKBArticle"
-                          ariaLabelDefault="Create GeistKB Article"
-                          onClick={() => openCreateArticle()}
-                          iconOnly
-                        />
-                      </div>
-                    </div>
-
-                    <KBArticleViews
-                      articles={processedArticles}
-                      viewMode={viewLayout}
-                      onSelect={(art) => setViewingArticle(art)}
-                      onEdit={handleEditArticle}
-                      onDuplicate={handleDuplicateArticle}
-                      onDelete={handleDeleteArticle}
-                      onResetFilters={resetFilters}
-                    />
-                  </section>
-                </div>
-
-                {/* Right sidebar */}
-                <div className="xl:w-[280px] shrink-0 border-t xl:border-t-0 xl:border-l border-slate-200/80 bg-white/50 px-4 py-6 xl:sticky xl:top-0 xl:self-start xl:max-h-[calc(100vh-4rem)] xl:overflow-y-auto">
-                  <KBActivitySidebar
-                    recentActivity={recentActivity}
-                    missingDocs={coverageData?.totalMissing ?? 4}
-                    outdatedArticles={outdatedCount}
-                    reviewRequired={needsReviewCount}
-                    aiOpportunities={coverageData?.aiSuggestions?.length ?? 5}
-                  />
-                </div>
+              <div className="px-6 py-3 pb-8">
+                <KBArticleViews
+                  articles={processedArticles}
+                  viewMode={viewLayout}
+                  categories={categories}
+                  selectedCategory={selectedCategory}
+                  onCategorySelect={setSelectedCategory}
+                  featuredArticles={featuredArticles}
+                  onSelect={(art) => setViewingArticle(art)}
+                  onEdit={handleEditArticle}
+                  onDuplicate={handleDuplicateArticle}
+                  onDelete={handleDeleteArticle}
+                  onResetFilters={resetFilters}
+                />
               </div>
             </ScrollArea>
           </div>

@@ -243,8 +243,17 @@
       "status": "Status",
       "priority": "Priority",
       "assignee": "Assignee",
-      "lastUpdate": "Last Update"
+      "lastUpdate": "Last Update",
+      "affectedVersion": "Version",
+      "environment": "Environment",
+      "stepsToReproduce": "Steps to Reproduce"
     },
+    "env": {
+      "prod": "PROD",
+      "staging": "STAGING"
+    },
+    "noStepsProvided": "No steps provided",
+    "today": "Today",
     "noTicketsInView": "No tickets in this view.",
     "noTicketsInViewDesc": "You've reached the end of this queue. Adjust your filters or select a different view from the sidebar to find more tickets.",
     "resetAllFilters": "Reset All Filters",
@@ -621,6 +630,7 @@
     "title": "GeistKB Knowledge Base",
     "pageTitle": "Knowledge Base",
     "pageSubtitle": "Centralized documentation, SOPs, onboarding guides, and AI-powered company knowledge",
+    "headerMetaSummary": "{{articles}} Articles • {{categories}} Categories • {{health}}% Health Score",
     "headerMetaInline": "GeistKB • {{published}} Published • {{drafts}} Drafts • {{review}} Needs Review",
     "aiSearchPlaceholder": "Ask Geist AI or search documentation...",
     "voiceSearch": "Voice search",
@@ -647,8 +657,11 @@
       "aiGenerate": "AI Generate Article"
     },
     "layout": {
-      "card": "Card",
+      "list": "List",
+      "tree": "Tree",
       "grid": "Grid",
+      "wiki": "Wiki",
+      "card": "Card",
       "table": "Table"
     },
     "status": {
@@ -661,6 +674,7 @@
       "engagement": "Your knowledge base gained {{percent}}% more engagement this month."
     },
     "insights": {
+      "inlineSummary": "AI Insights: Knowledge engagement is up {{percent}}% | {{review}} articles need review | {{outdated}} outdated SOPs",
       "reviewNeeded": "{{count}} articles need review",
       "missingTags": "{{count}} articles missing tags",
       "outdatedSops": "{{count}} outdated SOPs"
@@ -678,6 +692,12 @@
       "aiOpportunities": "AI optimization opportunities"
     },
     "drafts": "Drafts",
+    "tabAll": "All",
+    "underReview": "Under Review",
+    "sortPopular": "Popular",
+    "aiQualityScore": "AI Quality Score",
+    "workspaceSupportHint": "Support workspace — public customer FAQs",
+    "workspaceDeveloperHint": "Developer workspace — internal docs & runbooks",
     "outdated": "Outdated",
     "internalOnly": "Internal Only",
     "sortDate": "Date updated",

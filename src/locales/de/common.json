@@ -243,8 +243,17 @@
       "status": "Status",
       "priority": "Priorität",
       "assignee": "Zuständiger",
-      "lastUpdate": "Zuletzt aktualisiert"
+      "lastUpdate": "Zuletzt aktualisiert",
+      "affectedVersion": "Version",
+      "environment": "Umgebung",
+      "stepsToReproduce": "Reproduktionsschritte"
     },
+    "env": {
+      "prod": "PROD",
+      "staging": "STAGING"
+    },
+    "noStepsProvided": "Keine Schritte angegeben",
+    "today": "Heute",
     "noTicketsInView": "Keine Tickets in dieser Ansicht.",
     "noTicketsInViewDesc": "Sie haben das Ende dieser Warteschlange erreicht. Passen Sie Ihre Filter an oder wählen Sie eine andere Ansicht aus der Seitenleiste, um mehr Tickets zu finden.",
     "resetAllFilters": "Alle Filter zurücksetzen",
@@ -621,6 +630,7 @@
     "title": "GeistKB Wissensdatenbank",
     "pageTitle": "Wissensdatenbank",
     "pageSubtitle": "Zentralisierte Dokumentation, SOPs, Onboarding-Leitfäden und KI-gestütztes Unternehmenswissen",
+    "headerMetaSummary": "{{articles}} Artikel • {{categories}} Kategorien • {{health}}% Gesundheitswert",
     "headerMetaInline": "GeistKB • {{published}} Veröffentlicht • {{drafts}} Entwürfe • {{review}} Prüfung erforderlich",
     "aiSearchPlaceholder": "Geist AI fragen oder Dokumentation durchsuchen...",
     "voiceSearch": "Sprachsuche",
@@ -647,8 +657,11 @@
       "aiGenerate": "Artikel mit KI generieren"
     },
     "layout": {
-      "card": "Karte",
+      "list": "Liste",
+      "tree": "Baum",
       "grid": "Raster",
+      "wiki": "Wiki",
+      "card": "Karte",
       "table": "Tabelle"
     },
     "status": {
@@ -661,6 +674,7 @@
       "engagement": "Ihre Wissensdatenbank verzeichnet diesen Monat {{percent}}% mehr Engagement."
     },
     "insights": {
+      "inlineSummary": "KI-Einblicke: Wissens-Engagement +{{percent}}% | {{review}} Artikel benötigen Prüfung | {{outdated}} veraltete SOPs",
       "reviewNeeded": "{{count}} Artikel benötigen Prüfung",
       "missingTags": "{{count}} Artikel ohne Tags",
       "outdatedSops": "{{count}} veraltete SOPs"
@@ -678,6 +692,12 @@
       "aiOpportunities": "KI-Optimierungsmöglichkeiten"
     },
     "drafts": "Entwürfe",
+    "tabAll": "Alle",
+    "underReview": "In Prüfung",
+    "sortPopular": "Beliebt",
+    "aiQualityScore": "KI-Qualitätswert",
+    "workspaceSupportHint": "Support-Arbeitsbereich — öffentliche Kunden-FAQs",
+    "workspaceDeveloperHint": "Entwickler-Arbeitsbereich — interne Docs & Runbooks",
     "outdated": "Veraltet",
     "internalOnly": "Nur intern",
     "sortDate": "Aktualisierungsdatum",

@@ -9,6 +9,7 @@ export interface KBArticleItem {
   title: string;
   content?: string;
   category?: string;
+  subCategory?: string;
   status?: string;
   owner?: string;
   views?: number;
@@ -41,7 +42,7 @@ export function KBFeaturedArticles({ articles, onSelect, className }: KBFeatured
             type="button"
             onClick={() => onSelect(art)}
             className={cn(
-              'text-left rounded-2xl border border-slate-200/80 bg-white p-5 shadow-sm',
+              'text-left rounded-xl border border-slate-200/80 bg-white p-5 shadow-sm',
               'hover:shadow-md hover:border-blue-200 transition-all group',
             )}
           >

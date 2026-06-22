@@ -189,6 +189,8 @@ import {
 import { TicketsQueueAiChip } from '../tickets/TicketsQueueAiChip';
 import { TicketsPageHeader } from '../tickets/TicketsPageHeader';
 import { TicketStatusChip, TicketPriorityChip, TicketAssigneeChip } from '../tickets/TicketTableCells';
+import { TicketsTableHeader } from '../tickets/TicketsTableHeader';
+import { getTicketTableGridClass, getTicketTableMinWidth, ticketTableRowClass } from '../tickets/ticketTableLayout';
 import { TicketsViewModeSelector, type TicketsLayoutMode } from '../tickets/TicketsViewModeSelector';
 import { TicketsKanbanBoard } from '../tickets/TicketsKanbanBoard';
 import { TicketsCardGrid } from '../tickets/TicketsCardGrid';
@@ -4494,24 +4496,12 @@ export default function TicketsPage() {
               <>
               {/* Desktop Table Layout (lg and up) */}
               <div className="hidden lg:block w-full overflow-x-auto">
-                <div className="min-w-[920px] border-collapse bg-card">
-                {/* Table Header */}
-                <div className="flex items-center px-4 h-9 bg-muted/80 border-b border-border sticky top-0 z-10">
-                   <div className="w-[36px] flex items-center justify-center shrink-0">
-                      <Checkbox 
-                        checked={headerCheckboxActive}
-                        onCheckedChange={toggleSelectAll}
-                        className="bg-card border-border"
-                      />
-                   </div>
-                   <div className="w-[150px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.customer', 'Customer').toUpperCase()}</div>
-                   <div className="flex-1 min-w-[240px] font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.subjectPreview', 'Subject & Preview').toUpperCase()}</div>
-                   <div className="w-[120px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.status', 'Status').toUpperCase()}</div>
-                   <div className="w-[100px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.priority', 'Priority').toUpperCase()}</div>
-                   <div className="w-[140px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.assignee', 'Assignee').toUpperCase()}</div>
-                   <div className="w-[120px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.lastUpdate', 'Last Update').toUpperCase()}</div>
-                   <div className="w-[50px] shrink-0 flex items-center justify-center font-extrabold text-[11px] text-muted-foreground"></div>
-                </div>
+                <div className={cn('border-collapse bg-card', getTicketTableMinWidth(isDeveloperWorkspace))}>
+                <TicketsTableHeader
+                  isDeveloperWorkspace={isDeveloperWorkspace}
+                  headerCheckboxActive={headerCheckboxActive}
+                  onToggleSelectAll={toggleSelectAll}
+                />
 
                   <div className="divide-y divide-border">
                     {paginatedTickets.map(ticket => {
@@ -4542,6 +4532,18 @@ export default function TicketsPage() {
                         return <span title="Email Channel"><Mail className="w-3.5 h-3.5 text-slate-500 animate-none shrink-0" /></span>;
                       })();
 
+                      const devVersion =
+                        ticket.affectedVersion ??
+                        `v2.${(ticket.id.charCodeAt(0) % 4) + 1}.${(ticket.id.charCodeAt(1) % 9) + 1}`;
+                      const devEnvironment =
+                        ticket.environment ??
+                        ((ticket.id.charCodeAt(2) % 2) === 0
+                          ? t('tickets.env.prod', 'PROD')
+                          : t('tickets.env.staging', 'STAGING'));
+                      const devStepsPreview = stripHtml(
+                        ticket.stepsToReproduce ?? ticket.description ?? '',
+                      ).slice(0, 100);
+
                       return (
                         <motion.div 
                           key={ticket.id}
@@ -4549,24 +4551,23 @@ export default function TicketsPage() {
                           animate={{ opacity: 1 }}
                           onClick={() => handleTicketSelect(ticket.id)}
                           className={cn(
-                            "flex items-center px-4 hover:bg-muted/60 cursor-pointer group transition-colors duration-150 overflow-hidden border-l-2 border-transparent",
-                            "py-1.5 min-h-[36px]",
-                            selectedTicketIds.includes(ticket.id) && "bg-primary/5 hover:bg-primary/10 border-l-primary"
+                            getTicketTableGridClass(isDeveloperWorkspace),
+                            'px-4 overflow-hidden',
+                            ticketTableRowClass(selectedTicketIds.includes(ticket.id)),
                           )}
                         >
                           {/* Checkbox Column */}
-                          <div className="w-[36px] flex items-center justify-center shrink-0">
+                          <div className="justify-self-center" onClick={(e) => e.stopPropagation()}>
                             <Checkbox 
                               checked={selectedTicketIds.includes(ticket.id)}
                               onCheckedChange={() => toggleTicketSelection(ticket.id)}
-                              onClick={(e) => e.stopPropagation()}
                               disabled={!headerCheckboxActive}
                               className="bg-card border-border h-4 w-4 rounded-sm"
                             />
                           </div>
 
                           {/* Customer Column */}
-                          <div className="w-[150px] shrink-0 flex items-center gap-3 pr-2" onClick={(e) => e.stopPropagation()}>
+                          <div className="min-w-0 flex items-center gap-2 pr-1" onClick={(e) => e.stopPropagation()}>
                              <Avatar className={cn(
                                "border border-border shrink-0 shadow-sm",
                                viewDensity === 'comfortable' ? "h-8 w-8" : "h-7 w-7"
@@ -4588,7 +4589,7 @@ export default function TicketsPage() {
 
                           {/* Subject Column */}
                           <div 
-                             className="flex-1 min-w-[240px] pr-4 relative flex flex-col justify-center gap-0.5"
+                             className="min-w-0 pr-2 relative flex flex-col justify-center gap-0.5"
                              onMouseEnter={(e) => {
                                  setHoveredTicketId(ticket.id);
                                  setMousePos({ x: e.clientX, y: e.clientY });
@@ -4665,8 +4666,24 @@ export default function TicketsPage() {
                              )}
                           </div>
 
+                          {isDeveloperWorkspace ? (
+                            <>
+                              <div className="min-w-0 text-[11px] font-semibold text-slate-700 truncate font-mono">
+                                {devVersion}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="inline-flex text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-700">
+                                  {devEnvironment}
+                                </span>
+                              </div>
+                              <div className="min-w-0 text-[10px] text-muted-foreground line-clamp-2 leading-snug font-medium">
+                                {devStepsPreview || t('tickets.noStepsProvided', 'No steps provided')}
+                              </div>
+                            </>
+                          ) : null}
+
                           {/* Status Column */}
-                          <div className="w-[120px] shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
                             <TicketStatusChip
                               status={ticket.status ?? 'open'}
                               onChange={(val) => handleInlineUpdate(ticket.id, { status: val })}
@@ -4674,7 +4691,7 @@ export default function TicketsPage() {
                           </div>
 
                           {/* Priority Column */}
-                          <div className="w-[100px] shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
                             <TicketPriorityChip
                               priority={ticket.priority ?? 'medium'}
                               onChange={(val) => handleInlineUpdate(ticket.id, { priority: val })}
@@ -4682,7 +4699,7 @@ export default function TicketsPage() {
                           </div>
 
                           {/* Assignee Column */}
-                          <div className="w-[140px] shrink-0" onClick={(e) => e.stopPropagation()}>
+                          <div className="min-w-0" onClick={(e) => e.stopPropagation()}>
                             <TicketAssigneeChip
                               agentId={ticket.agentId}
                               agentName={ticket.agentName}
@@ -4693,12 +4710,12 @@ export default function TicketsPage() {
                           </div>
 
                           {/* Last Update Column */}
-                          <div className="w-[140px] shrink-0 text-xs text-muted-foreground font-semibold">
-                             {ticket.updatedAt?.toDate ? ticket.updatedAt.toDate().toLocaleDateString([], { month: 'short', day: 'numeric' }) : 'Today'}
+                          <div className="min-w-0 text-xs text-muted-foreground font-semibold text-left truncate">
+                             {ticket.updatedAt?.toDate ? ticket.updatedAt.toDate().toLocaleDateString([], { month: 'short', day: 'numeric' }) : t('tickets.today', 'Today')}
                           </div>
 
                           {/* Actions Menu Column */}
-                          <div className="w-[50px] shrink-0 flex items-center justify-center" onClick={(e) => e.stopPropagation()}>
+                          <div className="justify-self-center" onClick={(e) => e.stopPropagation()}>
                             <DropdownMenu>
                               <DropdownMenuTrigger className="h-8 w-8 p-0 rounded-full hover:bg-muted cursor-pointer flex items-center justify-center animate-none border-none bg-transparent outline-none ring-0">
                                 <MoreVertical className="w-4 h-4 text-slate-400 group-hover:text-slate-650 shrink-0" />

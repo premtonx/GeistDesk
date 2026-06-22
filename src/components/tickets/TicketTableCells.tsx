@@ -49,11 +49,12 @@ export function TicketStatusChip({ status, onChange }: TicketStatusChipProps) {
             aria-label={label}
             title={label}
             className={cn(
-              'inline-flex items-center justify-center gap-1 rounded-full border p-1.5 transition-colors hover:opacity-90',
+              'inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-semibold transition-colors hover:opacity-90 max-w-full',
               style.pill,
             )}
           >
-            <span className={cn('h-2 w-2 rounded-full shrink-0', style.dot)} aria-hidden />
+            <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', style.dot)} aria-hidden />
+            <span className="truncate">+ {label}</span>
             <ChevronDown className="w-3 h-3 opacity-40 shrink-0" aria-hidden />
           </button>
         }
@@ -86,11 +87,12 @@ export function TicketPriorityChip({ priority, onChange }: TicketPriorityChipPro
         render={
           <button
             type="button"
-            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 hover:text-slate-900 transition-colors px-1"
+            aria-label={label}
+            className="inline-flex items-center gap-1.5 text-[11px] font-medium text-slate-600 hover:text-slate-900 transition-colors rounded-md px-1 py-0.5 max-w-full"
           >
-            <span className={cn('h-1.5 w-1.5 rounded-full shrink-0', dot)} />
-            {label}
-            <ChevronDown className="w-3 h-3 opacity-40" />
+            <span className={cn('h-2 w-2 rounded-full shrink-0', dot)} aria-hidden />
+            <span className="truncate">{label}</span>
+            <ChevronDown className="w-3 h-3 opacity-40 shrink-0" aria-hidden />
           </button>
         }
       />

@@ -1,4 +1,10 @@
 import { cn } from '../../lib/utils';
+import type { AppWorkspace } from '../../lib/ticketWorkspace';
+
+export const KB_RADIUS = 'rounded-xl';
+
+const DEVELOPER_CATEGORIES = new Set(['API Documentation', 'Internal SOPs', 'Integrations']);
+const SUPPORT_CATEGORIES = new Set(['Getting Started', 'Billing', 'Troubleshooting']);
 
 export function stripHtml(html: string): string {
   if (typeof document === 'undefined') {
@@ -22,15 +28,15 @@ export function formatArticleDate(art: { updatedAt?: { toDate?: () => Date } | D
 export function getStatusBadgeClass(status?: string): string {
   switch (status) {
     case 'Published':
-      return 'bg-emerald-50 text-emerald-700 border-emerald-100';
+      return 'bg-emerald-50 text-emerald-800 border-emerald-100';
     case 'Draft':
-      return 'bg-orange-50 text-orange-700 border-orange-100';
+      return 'bg-orange-50 text-orange-800 border-orange-100';
     case 'Needs Review':
     case 'Under Revision':
-      return 'bg-violet-50 text-violet-700 border-violet-100';
+      return 'bg-violet-50 text-violet-800 border-violet-100';
     case 'Archived':
     case 'Outdated':
-      return 'bg-slate-100 text-slate-600 border-slate-200';
+      return 'bg-slate-100 text-slate-700 border-slate-200';
     default:
       return 'bg-slate-100 text-slate-600 border-slate-200';
   }
@@ -50,4 +56,76 @@ export function statusLabelKey(status?: string): string {
 
 export function categoryI18nKey(name: string): string {
   return `kb.categories.${name.replace(/\s+/g, '_').toLowerCase()}.name`;
+}
+
+export function filterArticlesByWorkspace<
+  T extends { category?: string; visibility?: string; tags?: string[] },
+>(articles: T[], workspace: AppWorkspace): T[] {
+  if (workspace === 'developer') {
+    return articles.filter(
+      (a) =>
+        a.visibility === 'Private' ||
+        DEVELOPER_CATEGORIES.has(a.category ?? '') ||
+        (a.tags ?? []).some((tag) => /api|developer|sop|internal|runbook|engineering/i.test(tag)),
+    );
+  }
+  return articles.filter(
+    (a) =>
+      a.visibility === 'Public' ||
+      SUPPORT_CATEGORIES.has(a.category ?? '') ||
+      !(DEVELOPER_CATEGORIES.has(a.category ?? '') && a.visibility === 'Private'),
+  );
+}
+
+export interface KBTreeNode {
+  id: string;
+  label: string;
+  count: number;
+  category?: string;
+  subCategory?: string;
+  children?: KBTreeNode[];
+}
+
+export function buildCategoryTree(
+  articles: { category?: string; subCategory?: string }[],
+): KBTreeNode[] {
+  const byCat = new Map<string, Map<string, number>>();
+  for (const a of articles) {
+    const cat = a.category ?? 'Uncategorized';
+    const sub = a.subCategory ?? 'General';
+    if (!byCat.has(cat)) byCat.set(cat, new Map());
+    const subs = byCat.get(cat)!;
+    subs.set(sub, (subs.get(sub) ?? 0) + 1);
+  }
+  return Array.from(byCat.entries()).map(([cat, subs]) => ({
+    id: cat,
+    label: cat,
+    category: cat,
+    count: Array.from(subs.values()).reduce((s, n) => s + n, 0),
+    children: Array.from(subs.entries()).map(([sub, count]) => ({
+      id: `${cat}::${sub}`,
+      label: sub,
+      category: cat,
+      subCategory: sub,
+      count,
+    })),
+  }));
+}
+
+export function estimateReadTime(content?: string, fallback?: string): string {
+  if (fallback) return fallback;
+  const words = stripHtml(content ?? '').split(/\s+/).filter(Boolean).length;
+  const mins = Math.max(1, Math.ceil(words / 200));
+  return `${mins}m`;
+}
+
+export function qualityBarClass(score: number): string {
+  if (score >= 85) return 'bg-emerald-500';
+  if (score >= 70) return 'bg-blue-500';
+  if (score >= 50) return 'bg-amber-500';
+  return 'bg-rose-500';
+}
+
+export function kbPanelClass(className?: string): string {
+  return cn(KB_RADIUS, 'border border-slate-200/80 bg-white overflow-hidden', className);
 }
