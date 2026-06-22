@@ -4826,19 +4826,10 @@ export default function TicketsPage() {
                         <div className="border-t pt-2.5 flex items-center justify-between gap-2 flex-wrap">
                           {/* Left badges: status & priority */}
                           <div className="flex items-center gap-1.5">
-                            {/* Status Pill */}
-                            <span className={cn(
-                              "text-[9px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full border",
-                              ticket.status === 'open' ? "bg-blue-50/50 text-blue-600 border-blue-200" :
-                              ticket.status === 'pending' ? "bg-amber-50/50 text-amber-600 border-amber-200" :
-                              ticket.status === 'resolved' ? "bg-emerald-50/50 text-emerald-600 border-emerald-200" :
-                              ticket.status === 'closed' ? "bg-slate-55 text-slate-500 border-slate-200" :
-                              "bg-slate-100 text-slate-600"
-                            )}>
-                              {ticket.status}
-                            </span>
-
-                            {/* Priority badge */}
+                            <TicketStatusChip
+                              status={ticket.status ?? 'open'}
+                              onChange={(val) => handleInlineUpdate(ticket.id, { status: val })}
+                            />
                             <span className={cn(
                               "text-[9px] font-semibold flex items-center gap-1.5 px-1.5 py-0.5 rounded-full border",
                               ticket.priority === 'urgent' ? "bg-rose-50/50 text-rose-600 border-rose-200 font-extrabold" :
