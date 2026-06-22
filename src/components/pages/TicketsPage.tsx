@@ -351,23 +351,30 @@ export default function TicketsPage() {
     | 'urgent'
     | 'unassigned'
     | 'bugs'
-    | 'open_bugs'
-    | 'linked_incidents'
+    | 'all_bugs'
     | 'in_dev'
     | 'qa'
     | 'merged'
+    | 'released'
   >('all');
   const [drawerTicketId, setDrawerTicketId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<TicketsLayoutMode>('list');
   const [listSort, setListSort] = useState<'newest' | 'oldest' | 'priority'>('newest');
 
   useEffect(() => {
+    setWorkspace('support');
+    setTopStatusFilter('all');
+  }, [setWorkspace]);
+
+  useEffect(() => {
     if (isDeveloperWorkspace) {
-      setTopStatusFilter('open_bugs');
+      setTopStatusFilter('all_bugs');
+    } else if (isAiOpsWorkspace) {
+      setTopStatusFilter('all');
     } else {
       setTopStatusFilter('all');
     }
-  }, [activeView, workspace, isDeveloperWorkspace]);
+  }, [activeView, workspace, isDeveloperWorkspace, isAiOpsWorkspace]);
 
   const workspaceTickets = useMemo(
     () => filterTicketsByWorkspace(allTickets, workspace),
@@ -957,7 +964,17 @@ export default function TicketsPage() {
     // Filter by the selected top sub-navigation status state
     switch (topStatusFilter) {
       case 'open':
-        result = result.filter(t => matchStatus(t.status, 'open'));
+        if (isDeveloperWorkspace) {
+          result = result.filter(
+            (t) =>
+              isBugTicket(t) &&
+              matchStatus(t.status, 'open') &&
+              matchStatusNot(t.status, 'merged') &&
+              matchStatusNot(t.status, 'closed'),
+          );
+        } else {
+          result = result.filter(t => matchStatus(t.status, 'open'));
+        }
         break;
       case 'pending':
         result = result.filter(t => matchStatus(t.status, 'pending'));
@@ -973,19 +990,8 @@ export default function TicketsPage() {
       case 'bugs':
         result = result.filter(t => isBugTicket(t));
         break;
-      case 'open_bugs':
-        result = result.filter(
-          (t) =>
-            isBugTicket(t) &&
-            matchStatusNot(t.status, 'merged') &&
-            matchStatusNot(t.status, 'closed') &&
-            (!t.devStatus || t.devStatus === 'backlog'),
-        );
-        break;
-      case 'linked_incidents':
-        result = result.filter(
-          (t) => isBugTicket(t) && getLinkedSupportTickets(t, allTickets).length > 0,
-        );
+      case 'all_bugs':
+        result = result.filter((t) => isBugTicket(t));
         break;
       case 'in_dev':
         result = result.filter((t) => isBugTicket(t) && t.devStatus === 'in_dev');
@@ -995,7 +1001,16 @@ export default function TicketsPage() {
         break;
       case 'merged':
         result = result.filter(
-          (t) => isBugTicket(t) && (t.devStatus === 'merged' || matchStatus(t.status, 'merged')),
+          (t) => isBugTicket(t) && t.devStatus === 'merged',
+        );
+        break;
+      case 'released':
+        result = result.filter(
+          (t) =>
+            isBugTicket(t) &&
+            (matchStatus(t.status, 'closed') ||
+              matchStatus(t.status, 'resolved') ||
+              t.devStatus === 'merged'),
         );
         break;
       case 'unassigned':
@@ -1144,7 +1159,7 @@ export default function TicketsPage() {
     });
 
     return result;
-  }, [baseSidebarTickets, topStatusFilter, searchQuery, filters, user, listSort, allTickets]);
+  }, [baseSidebarTickets, topStatusFilter, searchQuery, filters, user, listSort, allTickets, isDeveloperWorkspace]);
 
   const getFilteredTickets = () => {
     return finalRenderedTickets;
@@ -1495,6 +1510,34 @@ export default function TicketsPage() {
     }
   };
 
+  const openFullTicketView = (id: string) => {
+    if (selectedTicketId && selectedTicketId !== id) {
+      ticketService.setPresence(selectedTicketId, false);
+    }
+    setDrawerTicketId(null);
+    setSelectedTicketId(id);
+    setActiveDetailTab('conversation');
+    setIsMobileSidebarOpen(false);
+    setHoveredTicketId(null);
+    setPeekMessages([]);
+    setReplyText('');
+    setLegalViolation(null);
+    setGhostDraft('');
+    setAiSources([]);
+    ticketService.setPresence(id, true);
+    navigate(`/tickets/${id}`);
+    autoGenerateZeroDraft(id);
+  };
+
+  const closeFullTicketView = () => {
+    if (selectedTicketId) {
+      ticketService.setPresence(selectedTicketId, false);
+    }
+    setDrawerTicketId(null);
+    setSelectedTicketId(null);
+    navigate('/tickets');
+  };
+
   const handleTicketSelect = (id: string) => {
     if (selectedTicketIds.length > 0) {
       toggleTicketSelection(id);
@@ -1521,15 +1564,10 @@ export default function TicketsPage() {
       return;
     }
 
-    setDrawerTicketId(null);
-    setSelectedTicketId(id);
-    setActiveDetailTab('conversation');
-
     if (id) {
-      navigate(`/tickets/${id}`);
-      autoGenerateZeroDraft(id);
+      openFullTicketView(id);
     } else {
-      navigate('/tickets');
+      closeFullTicketView();
     }
   };
 
@@ -2033,7 +2071,7 @@ export default function TicketsPage() {
         "min-h-0 bg-background text-foreground flex flex-col",
         isMobileSidebarOpen ? "hidden md:flex md:flex-1" : "w-full flex-1 flex flex-col min-h-0"
       )}>
-        {selectedTicketId && isMobile ? (
+        {selectedTicketId ? (
           /* Detail View */
           <div className="flex-1 flex flex-col min-w-0 min-h-0 relative">
             {selectedTicket ? (
@@ -2042,7 +2080,8 @@ export default function TicketsPage() {
                   {/* 1. Header component */}
                 <div className="px-4 md:px-6 pt-4 md:pt-5 pb-3 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shrink-0">
                   <button 
-                    onClick={() => setSelectedTicketId(null)}
+                    type="button"
+                    onClick={closeFullTicketView}
                     className="flex items-center gap-1 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-extrabold text-xs cursor-pointer mb-2 transition-colors select-none group"
                   >
                     <ChevronLeft className="w-3.5 h-3.5 text-slate-450 group-hover:text-slate-650 transition-colors" /> {t('tickets.detail.backToList', 'Back to tickets')}
@@ -3829,11 +3868,12 @@ export default function TicketsPage() {
                     ]
                   : isDeveloperWorkspace
                   ? [
-                      { id: 'open_bugs', label: `${t('tickets.devTabs.openBugs', 'Open Bugs')} ${ticketQueueStats.open}` },
-                      { id: 'linked_incidents', label: t('tickets.devTabs.linkedIncidents', 'Linked Incidents') },
+                      { id: 'all_bugs', label: t('tickets.devTabs.allBugs', 'All Bugs') },
+                      { id: 'open', label: `${t('tickets.devTabs.open', 'Open')} ${ticketQueueStats.open}` },
                       { id: 'in_dev', label: t('tickets.devTabs.inDev', 'In Dev') },
                       { id: 'qa', label: t('tickets.devTabs.qa', 'QA') },
                       { id: 'merged', label: t('tickets.devTabs.merged', 'Merged') },
+                      { id: 'released', label: t('tickets.devTabs.released', 'Released') },
                     ]
                   : [
                       { id: 'all', label: `${t('tickets.allTickets', 'All')} ${ticketQueueStats.all}` },
@@ -4942,9 +4982,7 @@ export default function TicketsPage() {
               }}
               onOpenFullView={() => {
                 if (!drawerTicketId) return;
-                setSelectedTicketId(drawerTicketId);
-                navigate(`/tickets/${drawerTicketId}`);
-                setDrawerTicketId(null);
+                openFullTicketView(drawerTicketId);
               }}
               onLinkToBug={linkToBug}
               onCreateBugLink={() => {

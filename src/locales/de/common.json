@@ -274,11 +274,14 @@
       "csatScore": "CSAT-Wert"
     },
     "devTabs": {
+      "allBugs": "Alle Bugs",
+      "open": "Offen",
       "openBugs": "Offene Bugs",
       "linkedIncidents": "Verknüpfte Vorfälle",
       "inDev": "In Entwicklung",
       "qa": "QA",
-      "merged": "Merged"
+      "merged": "Gemerged",
+      "released": "Released"
     },
     "aiOps": {
       "incidentClusters": "Kritische Vorfall-Cluster",

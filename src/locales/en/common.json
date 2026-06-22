@@ -274,11 +274,14 @@
       "csatScore": "CSAT Score"
     },
     "devTabs": {
+      "allBugs": "All Bugs",
+      "open": "Open",
       "openBugs": "Open Bugs",
       "linkedIncidents": "Linked Incidents",
       "inDev": "In Dev",
       "qa": "QA",
-      "merged": "Merged"
+      "merged": "Merged",
+      "released": "Released"
     },
     "aiOps": {
       "incidentClusters": "Critical Incident Clusters",

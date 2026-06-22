@@ -202,6 +202,7 @@ export function TicketDetailDrawer({
 
             <footer className="px-5 py-3 border-t border-slate-100 bg-white shrink-0">
               <Button
+                type="button"
                 onClick={onOpenFullView}
                 className="w-full h-9 text-xs font-bold gap-2"
               >
