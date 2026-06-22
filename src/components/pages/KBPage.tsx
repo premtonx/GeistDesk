@@ -93,13 +93,17 @@ import { kbService } from '../../services/kbService';
 import { useAuth } from '../../lib/hooks';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
-import {
-  ModulePageCompactHeader,
-  ModulePageTabs,
-  ModuleToolbar,
-  ModuleToolbarSelect,
-  type ModuleTabItem,
-} from '../ui/module-page';
+import { ModuleToolbarSelect } from '../ui/module-page';
+import { KBPageHeader } from '../kb/KBPageHeader';
+import { KBKpiCards } from '../kb/KBKpiCards';
+import { KBSearchSection } from '../kb/KBSearchSection';
+import { KBCategoryGrid } from '../kb/KBCategoryGrid';
+import { KBFeaturedArticles } from '../kb/KBFeaturedArticles';
+import { KBAiInsightsBanner } from '../kb/KBAiInsightsBanner';
+import { KBActivitySidebar, buildRecentActivity } from '../kb/KBActivitySidebar';
+import { KBViewModeSelector, type KBArticleViewMode } from '../kb/KBViewModeSelector';
+import { KBArticleViews } from '../kb/KBArticleViews';
+import { KBImporter } from '../KBImporter';
 import { RichTextEditor } from '../RichTextEditor';
 import { KBAutopilotDashboard } from '../KBAutopilotDashboard';
 import { KBArticle } from '../../types';
@@ -312,7 +316,7 @@ export default function KBPage() {
   // States
   const [firestoreArticles, setFirestoreArticles] = useState<KBArticle[]>([]);
   const [articles, setArticles] = useState<any[]>(ENTERPRISE_SEED_ARTICLES);
-  const [selectedCategory, setSelectedCategory] = useState<string>('Getting Started');
+  const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   // AI Knowledge Coverage Map states
   const [viewMode, setViewMode] = useState<'standard' | 'coverage' | 'autopilot'>('standard');
@@ -522,10 +526,12 @@ export default function KBPage() {
       setIsAddingArticle(true);
     }
   }, [searchParams, setSearchParams, selectedCategory]);
-  const [activeSubTab, setActiveSubTab] = useState<string>('All'); // All, Published, Drafts, Needs Review, Archived, Outdated, Internal Only
-  const [viewLayout, setViewLayout] = useState<'table' | 'card' | 'tree'>('table');
+  const [activeSubTab, setActiveSubTab] = useState<string>('All');
+  const [viewLayout, setViewLayout] = useState<KBArticleViewMode>('card');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortBy, setSortBy] = useState<'date' | 'views' | 'confidence'>('date');
+  const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+  const [isImportOpen, setIsImportOpen] = useState(false);
   
   // Custom interactive layout filters
   const [filterOwner, setFilterOwner] = useState<string>('All');
@@ -820,7 +826,7 @@ export default function KBPage() {
 
   const processedArticles = withConfidence.filter((art) => {
     // 1. Category check
-    if (art.category !== selectedCategory) return false;
+    if (selectedCategory !== 'All' && art.category !== selectedCategory) return false;
 
     // 2. Tab Filter check (Active workflows mapping)
     if (activeSubTab === 'Published' && art.status !== 'Published') return false;
@@ -828,6 +834,7 @@ export default function KBPage() {
     if (activeSubTab === 'Needs Review' && art.status !== 'Needs Review') return false;
     if (activeSubTab === 'Archived' && art.status !== 'Archived') return false;
     if (activeSubTab === 'Outdated' && art.status !== 'Outdated') return false;
+    if (activeSubTab === 'Archived' && art.status !== 'Archived') return false;
     if (activeSubTab === 'Internal Only' && art.visibility !== 'Private') return false;
 
     // 3. Custom selectors
@@ -868,26 +875,34 @@ export default function KBPage() {
   const needsReviewCount = articles.filter(a => a.status === 'Needs Review' || a.status === 'Under Revision').length;
   const outdatedCount = articles.filter(a => a.status === 'Outdated').length;
 
-  const categoryArticles = articles.filter((a) => a.category === selectedCategory);
-  const kbStatusCounts = {
-    all: categoryArticles.length,
-    published: categoryArticles.filter((a) => a.status === 'Published').length,
-    drafts: categoryArticles.filter((a) => a.status === 'Draft').length,
-    needsReview: categoryArticles.filter(
-      (a) => a.status === 'Needs Review' || a.status === 'Under Revision',
-    ).length,
-    outdated: categoryArticles.filter((a) => a.status === 'Outdated').length,
-    internal: categoryArticles.filter((a) => a.visibility === 'Private').length,
+  const healthScore = Math.round(
+    withConfidence.reduce((sum, a) => sum + (a.trustScore || 0), 0) / Math.max(withConfidence.length, 1),
+  );
+  const monthlyViews = withConfidence.reduce((sum, a) => sum + (a.views || 0), 0);
+  const missingTagsCount = withConfidence.filter((a) => !a.tags || a.tags.length === 0).length;
+  const featuredArticles = [...withConfidence]
+    .filter((a) => a.status === 'Published')
+    .sort((a, b) => (b.views || 0) - (a.views || 0))
+    .slice(0, 2);
+  const recentActivity = buildRecentActivity(withConfidence, t);
+
+  const resetFilters = () => {
+    setFilterOwner('All');
+    setFilterVisibility('All');
+    setFilterTag('All');
+    setFilterLanguage('All');
+    setSearchQuery('');
+    setActiveSubTab('All');
+    setSelectedCategory('All');
   };
 
-  const categoryTabItems: ModuleTabItem[] = categories.map((cat) => {
-    const catKey = cat.name.replace(/\s+/g, '_').toLowerCase();
-    return {
-      id: cat.name,
-      label: t(`kb.categories.${catKey}.name`, cat.name),
-      count: articles.filter((a) => a.category === cat.name).length,
-    };
-  });
+  const statusFilters = [
+    { id: 'All', label: t('common.statusAll', 'All') },
+    { id: 'Published', label: t('kb.published', 'Published') },
+    { id: 'Drafts', label: t('kb.drafts', 'Drafts') },
+    { id: 'Needs Review', label: t('kb.needsReview', 'Needs Review') },
+    { id: 'Archived', label: t('kb.status.archived', 'Archived') },
+  ];
 
   // Helper translations for preview reading
   const getLocalizedTitle = (art: any, lang: string) => {
@@ -1623,445 +1638,176 @@ export default function KBPage() {
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col min-w-0 min-h-0">
-            <ModulePageCompactHeader
-              title={t('kb.headerMetaInline', 'GeistKB • {{published}} Published • {{drafts}} Drafts • {{review}} Needs Review')
-                .replace('{{published}}', String(publishedCount))
-                .replace('{{drafts}}', String(draftCount))
-                .replace('{{review}}', String(needsReviewCount))}
-            />
-            <ModulePageTabs
-              tabs={categoryTabItems}
-              activeId={selectedCategory}
-              onChange={(id) => {
-                setSelectedCategory(id);
-                setViewingArticle(null);
-              }}
-            />
-            <ModulePageTabs
-              tabs={[
-                { id: 'All', label: t('common.statusAll', 'All'), count: kbStatusCounts.all },
-                { id: 'Published', label: t('kb.published', 'Published'), count: kbStatusCounts.published },
-                { id: 'Drafts', label: t('kb.drafts', 'Drafts'), count: kbStatusCounts.drafts },
-                { id: 'Needs Review', label: t('kb.needsReview', 'Needs Review'), count: kbStatusCounts.needsReview },
-                { id: 'Outdated', label: t('kb.outdated', 'Outdated'), count: kbStatusCounts.outdated },
-                { id: 'Internal Only', label: t('kb.internalOnly', 'Internal Only'), count: kbStatusCounts.internal },
-              ]}
-              activeId={activeSubTab}
-              onChange={setActiveSubTab}
-            />
-            <ModuleToolbar
-              searchPlaceholder={t('kb.searchPlaceholderAdvanced', 'Search articles, tags, topics...')}
-              searchValue={searchQuery}
-              onSearchChange={setSearchQuery}
-              sortControl={
-                <ModuleToolbarSelect
-                  value={sortBy}
-                  onChange={(v) => setSortBy(v as typeof sortBy)}
-                  aria-label={t('actions.sort', 'Sort')}
-                >
-                  <option value="date">{t('kb.sortDate', 'Date updated')}</option>
-                  <option value="views">{t('kb.sortViews', 'Most views')}</option>
-                  <option value="confidence">{t('kb.sortConfidence', 'Trust score')}</option>
-                </ModuleToolbarSelect>
-              }
-              filtersSlot={
-                <div className="hidden md:flex items-center gap-1.5">
-                  <ModuleToolbarSelect
-                    value={filterOwner}
-                    onChange={setFilterOwner}
-                    aria-label={t('kb.owner', 'Owner')}
-                  >
-                    <option value="All">{t('kb.allOwners', 'All owners')}</option>
-                    {Array.from(new Set(articles.map((a) => a.owner).filter(Boolean))).map((ownerName: string, idx) => (
-                      <option key={idx} value={ownerName}>{ownerName}</option>
-                    ))}
-                  </ModuleToolbarSelect>
-                  <ModuleToolbarSelect
-                    value={filterVisibility}
-                    onChange={setFilterVisibility}
-                    aria-label={t('kb.allAccess', 'Access')}
-                  >
-                    <option value="All">{t('kb.allAccess', 'All access')}</option>
-                    <option value="Public">{t('kb.publicPortal', 'Public')}</option>
-                    <option value="Private">{t('kb.internalSopsOnly', 'Internal')}</option>
-                  </ModuleToolbarSelect>
-                </div>
-              }
-              viewsSlot={
-                <div className="flex items-center gap-1 shrink-0">
-                  <div className="hidden sm:flex items-center gap-0.5 bg-slate-100 p-0.5 rounded-md border border-slate-200/60">
-                    <button
-                      type="button"
-                      onClick={() => setViewLayout('table')}
-                      className={cn('p-1 rounded transition-colors', viewLayout === 'table' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400')}
-                      aria-label={t('kb.layoutTable', 'Table view')}
-                    >
-                      <LayoutGrid className="w-3.5 h-3.5" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setViewLayout('card')}
-                      className={cn('p-1 rounded transition-colors', viewLayout === 'card' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400')}
-                      aria-label={t('kb.layoutCard', 'Card view')}
-                    >
-                      <LayoutGrid className="w-3.5 h-3.5 rotate-90" />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setViewLayout('tree')}
-                      className={cn('p-1 rounded transition-colors', viewLayout === 'tree' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400')}
-                      aria-label={t('kb.layoutTree', 'Tree view')}
-                    >
-                      <GitBranch className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setViewMode('coverage');
-                      fetchCoverageData();
-                    }}
-                    className="h-8 gap-1 rounded-md border-slate-200/80 text-slate-600 font-medium shrink-0 px-2.5 text-xs"
-                  >
-                    <Network className="w-3.5 h-3.5" />
-                    <span className="hidden lg:inline">{t('kb.coverageMap', 'Coverage')}</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setViewMode('autopilot')}
-                    className="h-8 gap-1 rounded-md border-slate-200/80 text-slate-600 font-medium shrink-0 px-2.5 text-xs"
-                  >
-                    <Zap className="w-3.5 h-3.5" />
-                    <span className="hidden lg:inline">{t('kb.autopilot', 'Autopilot')}</span>
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon"
-                    onClick={() => setIsAddingCategory(true)}
-                    className="h-8 w-8 rounded-md border-slate-200/80 text-slate-600 shrink-0"
-                    aria-label={t('kb.addCategoryTooltip', 'Add category')}
-                  >
-                    <FolderPlus className="w-3.5 h-3.5" />
-                  </Button>
-                </div>
-              }
-              createAction={
-                <ModuleCreateButton
-                  ariaLabelKey="actions.createKBArticle"
-                  ariaLabelDefault="Create GeistKB Article"
-                  onClick={() => openCreateArticle()}
-                  iconOnly
-                />
-              }
-            />
+          <div className="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden">
+            <ScrollArea className="flex-1">
+              <div className="flex flex-col xl:flex-row gap-0 min-h-full">
+                {/* Main column */}
+                <div className="flex-1 min-w-0 px-6 pb-8 space-y-6">
+                  <KBPageHeader
+                    trailing={
+                      <div className="hidden sm:flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setViewMode('coverage');
+                            fetchCoverageData();
+                          }}
+                          className="h-9 rounded-xl text-xs font-medium"
+                        >
+                          <Network className="w-3.5 h-3.5 mr-1.5" />
+                          {t('kb.coverageMap', 'Coverage')}
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setViewMode('autopilot')}
+                          className="h-9 rounded-xl text-xs font-medium"
+                        >
+                          <Zap className="w-3.5 h-3.5 mr-1.5" />
+                          {t('kb.autopilot', 'Autopilot')}
+                        </Button>
+                      </div>
+                    }
+                  />
 
-            <div className="px-6 py-1.5 border-b bg-white text-[11px] font-medium text-slate-400 shrink-0">
-              {t('kb.displayingCount', 'Displaying {{count}} matching entries').replace('{{count}}', String(processedArticles.length))}
-            </div>
+                  <KBKpiCards
+                    publishedCount={publishedCount}
+                    draftCount={draftCount}
+                    healthScore={healthScore}
+                    monthlyViews={monthlyViews}
+                  />
 
-            {/* ARTICLES GRID CONTROL AREA */}
-            <div className="flex-1 overflow-y-auto custom-scroll px-6 py-3 w-full">
-              
-              {processedArticles.length === 0 ? (
-                <div className="border border-slate-200/60 bg-white/60 rounded-[16px] p-12 text-center flex flex-col items-center justify-center space-y-4">
-                  <div className="w-12 h-12 rounded-xl bg-slate-100 flex items-center justify-center border text-slate-400 mb-1">
-                     <FileText className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h3 className="font-extrabold text-slate-700 uppercase text-sm">{t('kb.noArticlesMatched', 'No articles matched in active criteria')}</h3>
-                    <p className="text-slate-400 text-xs mt-1">{t('kb.tryResetting', 'Try resetting the custom filters or matching another category.')}</p>
-                  </div>
-                  <Button 
-                    className="bg-indigo-650 inline-flex items-center gap-1 h-9.5 text-xs text-white"
-                    onClick={() => {
-                      setFilterOwner('All');
-                      setFilterVisibility('All');
-                      setFilterTag('All');
-                      setFilterLanguage('All');
-                      setSearchQuery('');
-                      setActiveSubTab('All');
-                    }}
-                  >
-                     {t('kb.resetWorkspaceFilter', 'Reset Workspace Filter State')}
-                  </Button>
-                </div>
-              ) : viewLayout === 'table' ? (
-                
-                /* ENTERPRISE TABLE DEFAULT VIEW */
-                <div className="bg-white border border-slate-200/80 rounded-[16px] overflow-hidden shadow-xs">
-                   <div className="overflow-x-auto">
-                     <table className="w-full text-left text-xs border-collapse font-semibold">
-                       <thead>
-                         <tr className="bg-slate-50/80 border-b border-slate-150 text-[10px] uppercase font-black tracking-widest text-slate-400">
-                            <th className="px-5 py-4">{t('kb.table.title', 'Title')}</th>
-                            <th className="px-4 py-4">{t('kb.table.workflowStatus', 'Workflow Status')}</th>
-                            <th className="px-4 py-4">Confidence</th>
-                            <th className="px-4 py-4">{t('kb.table.metadataOwner', 'Metadata Owner')}</th>
-                            <th className="px-4 py-4">{t('kb.table.author', 'Author')}</th>
-                            <th className="px-4 py-4">{t('kb.table.views', 'Views')}</th>
-                            <th className="px-4 py-4">{t('kb.table.helpfulRating', 'Helpful Rating')}</th>
-                            <th className="px-4 py-4">{t('kb.table.updated', 'Updated')}</th>
-                            <th className="px-5 py-4 text-right">{t('kb.table.actions', 'Actions')}</th>
-                         </tr>
-                       </thead>
-                       <tbody className="divide-y divide-slate-100 text-slate-700">
-                         {processedArticles.map((art) => (
-                           <tr 
-                             key={art.id} 
-                             onClick={() => setViewingArticle(art)}
-                             className="hover:bg-slate-50/50 cursor-pointer transition-colors"
-                           >
-                              <td className="px-5 py-3.5 max-w-[280px]">
-                                <div className="space-y-1">
-                                  <span className="font-black text-slate-900 group-hover:text-indigo-600 truncate block">
-                                    {art.title}
-                                  </span>
-                                  {art.tags && art.tags.length > 0 && (
-                                    <div className="flex flex-wrap gap-1">
-                                      {art.tags.slice(0, 3).map((t: string, i: number) => (
-                                        <span key={i} className="text-[9px] font-extrabold text-indigo-500 bg-indigo-50/50 border border-indigo-100/50 px-1 py-0.2 rounded-md">
-                                          #{t}
-                                        </span>
-                                      ))}
-                                      {art.tags.length > 3 && (
-                                        <span className="text-[9px] font-black text-slate-400">+{art.tags.length - 3}</span>
-                                      )}
-                                    </div>
-                                  )}
-                                </div>
-                              </td>
-                              
-                              <td className="px-4 py-3.5">
-                                <Badge className={cn(
-                                  "text-[10px] font-extrabold uppercase px-2 py-0 border-none rounded-lg",
-                                  art.status === 'Published' && 'bg-emerald-500/10 text-emerald-700',
-                                  art.status === 'Draft' && 'bg-amber-500/10 text-amber-700',
-                                  art.status === 'Needs Review' && 'bg-blue-500/10 text-blue-700',
-                                  art.status === 'Outdated' && 'bg-slate-300/15 text-slate-600',
-                                  art.status === 'Archived' && 'bg-red-500/10 text-red-700',
-                                  art.status === 'AI Generated' && 'bg-indigo-500/10 text-indigo-700',
-                                  art.status === 'Under Revision' && 'bg-cyan-500/10 text-cyan-700'
-                                )}>
-                                  {art.status || 'Draft'}
-                                </Badge>
-                              </td>
+                  <KBAiInsightsBanner
+                    reviewCount={needsReviewCount}
+                    missingTagsCount={missingTagsCount}
+                    outdatedCount={outdatedCount}
+                  />
 
-                              <td className="px-4 py-3.5">
-                                <span className={cn(
-                                  "px-2 py-0.5 rounded text-[10.5px] font-black tracking-tight border",
-                                  art.trustScore >= 90 ? "bg-emerald-50 text-emerald-700 border-emerald-150" :
-                                  art.trustScore >= 70 ? "bg-amber-50 text-amber-700 border-amber-150" :
-                                  "bg-rose-50 text-rose-700 border-rose-150 animate-pulse"
-                                )}>
-                                  {art.trustScore}%
-                                </span>
-                              </td>
+                  <KBSearchSection
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                    onNewArticle={() => openCreateArticle()}
+                    onNewCategory={() => setIsAddingCategory(true)}
+                    onImportDocs={() => setIsImportOpen(true)}
+                    onAiGenerate={() => setViewMode('autopilot')}
+                    onAdvancedFilters={() => setShowAdvancedFilters((v) => !v)}
+                    showFilters={showAdvancedFilters}
+                  />
 
-                              <td className="px-4 py-3.5">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-5.5 h-5.5 rounded-full bg-slate-100 text-slate-600 text-[9px] font-bold border flex items-center justify-center">
-                                    {art.owner ? art.owner.charAt(0) : 'O'}
-                                  </div>
-                                  <span className="text-slate-600 text-[11px] font-extrabold">{art.owner || 'Sarah James'}</span>
-                                </div>
-                              </td>
+                  {showAdvancedFilters ? (
+                    <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl border border-slate-200/80 bg-white/80">
+                      <ModuleToolbarSelect value={sortBy} onChange={(v) => setSortBy(v as typeof sortBy)} aria-label={t('actions.sort', 'Sort')}>
+                        <option value="date">{t('kb.sortDate', 'Date updated')}</option>
+                        <option value="views">{t('kb.sortViews', 'Most views')}</option>
+                        <option value="confidence">{t('kb.sortConfidence', 'Trust score')}</option>
+                      </ModuleToolbarSelect>
+                      <ModuleToolbarSelect value={filterOwner} onChange={setFilterOwner} aria-label={t('kb.owner', 'Owner')}>
+                        <option value="All">{t('kb.allOwners', 'All owners')}</option>
+                        {Array.from(new Set(articles.map((a) => a.owner).filter(Boolean))).map((ownerName: string, idx) => (
+                          <option key={idx} value={ownerName}>{ownerName}</option>
+                        ))}
+                      </ModuleToolbarSelect>
+                      <ModuleToolbarSelect value={filterVisibility} onChange={setFilterVisibility} aria-label={t('kb.allAccess', 'Access')}>
+                        <option value="All">{t('kb.allAccess', 'All access')}</option>
+                        <option value="Public">{t('kb.publicPortal', 'Public')}</option>
+                        <option value="Private">{t('kb.internalSopsOnly', 'Internal')}</option>
+                      </ModuleToolbarSelect>
+                    </div>
+                  ) : null}
 
-                              <td className="px-4 py-3.5 text-slate-400 text-[11px]">
-                                Administrator
-                              </td>
+                  <KBCategoryGrid
+                    categories={categories}
+                    articles={articles}
+                    selectedCategory={selectedCategory}
+                    onSelect={setSelectedCategory}
+                  />
 
-                              <td className="px-4 py-3.5 font-bold font-mono text-slate-600 text-[11px]">
-                                {art.views || 0}
-                              </td>
+                  <KBFeaturedArticles
+                    articles={featuredArticles}
+                    onSelect={(art) => setViewingArticle(art)}
+                  />
 
-                              <td className="px-4 py-3.5 text-slate-600 font-bold">
-                                <div className="flex items-center gap-1.5">
-                                  <ThumbsUp className="w-3 h-3 text-emerald-500" />
-                                  <span>
-                                    {art.helpfulCount && (art.helpfulCount + art.unhelpfulCount) > 0
-                                      ? `${Math.round((art.helpfulCount / (art.helpfulCount + art.unhelpfulCount)) * 100)}%`
-                                      : '94%'}
-                                  </span>
-                                </div>
-                              </td>
+                  <section>
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+                      <div>
+                        <h2 className="text-sm font-semibold text-slate-900">
+                          {t('kb.articlesSection', 'Articles')}
+                        </h2>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {t('kb.displayingCount', 'Displaying {{count}} matching entries').replace(
+                            '{{count}}',
+                            String(processedArticles.length),
+                          )}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap gap-1">
+                          {statusFilters.map((chip) => (
+                            <button
+                              key={chip.id}
+                              type="button"
+                              onClick={() => setActiveSubTab(chip.id)}
+                              className={cn(
+                                'h-7 px-2.5 rounded-full text-[11px] font-medium transition-colors border',
+                                activeSubTab === chip.id
+                                  ? 'bg-blue-600 text-white border-blue-600'
+                                  : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300',
+                              )}
+                            >
+                              {chip.label}
+                            </button>
+                          ))}
+                        </div>
+                        <KBViewModeSelector value={viewLayout} onChange={setViewLayout} />
+                        <ModuleCreateButton
+                          ariaLabelKey="actions.createKBArticle"
+                          ariaLabelDefault="Create GeistKB Article"
+                          onClick={() => openCreateArticle()}
+                          iconOnly
+                        />
+                      </div>
+                    </div>
 
-                              <td className="px-4 py-3.5 text-slate-400 text-[11px]">
-                                {art.updatedAt?.toDate ? art.updatedAt.toDate().toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) : 'June 2'}
-                              </td>
-
-                              <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                                <div className="flex justify-end items-center gap-1.5" onClick={(e) => e.stopPropagation()}>
-                                   <Button 
-                                     variant="ghost" 
-                                     size="icon" 
-                                     className="h-8 w-8 text-indigo-650 hover:bg-slate-100"
-                                     onClick={() => setViewingArticle(art)}
-                                     title="View Article"
-                                   >
-                                      <Eye className="w-3.5 h-3.5" />
-                                   </Button>
-                                   <Button 
-                                     variant="ghost" 
-                                     size="icon" 
-                                     className="h-8 w-8 text-amber-600 hover:bg-amber-50"
-                                     onClick={() => handleEditArticle(art)}
-                                     title="Edit"
-                                   >
-                                      <PenLine className="w-3.5 h-3.5" />
-                                   </Button>
-                                   <Button 
-                                     variant="ghost" 
-                                     size="icon" 
-                                     className="h-8 w-8 text-emerald-600"
-                                     onClick={() => handleDuplicateArticle(art)}
-                                     title="Duplicate"
-                                   >
-                                      <Bookmark className="w-3.5 h-3.5" />
-                                   </Button>
-                                   <Button 
-                                     variant="ghost" 
-                                     size="icon" 
-                                     className="h-8 w-8 text-[#E11D48] hover:bg-red-50"
-                                     onClick={() => handleDeleteArticle(art.id)}
-                                     title="Delete Article"
-                                   >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                   </Button>
-                                </div>
-                              </td>
-                           </tr>
-                         ))}
-                       </tbody>
-                     </table>
-                   </div>
+                    <KBArticleViews
+                      articles={processedArticles}
+                      viewMode={viewLayout}
+                      onSelect={(art) => setViewingArticle(art)}
+                      onEdit={handleEditArticle}
+                      onDuplicate={handleDuplicateArticle}
+                      onDelete={handleDeleteArticle}
+                      onResetFilters={resetFilters}
+                    />
+                  </section>
                 </div>
 
-              ) : viewLayout === 'card' ? (
-
-                /* IMPROVED MODERN GRID CARD VIEW */
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                   {processedArticles.map((art) => (
-                     <div 
-                       key={art.id}
-                       onClick={() => setViewingArticle(art)}
-                       className="border border-slate-200/80 hover:border-slate-300 rounded-[16px] p-5 bg-white flex flex-col justify-between hover:shadow-md transition-all h-[190px] cursor-pointer group"
-                     >
-                       <div className="space-y-2">
-                         <div className="flex justify-between items-center">
-                           <Badge variant="outline" className="text-[10px] font-black uppercase text-indigo-600 bg-indigo-50/50 border-none">
-                              {art.subCategory || 'General Setup'}
-                           </Badge>
-                           <Badge className="bg-slate-100 text-slate-500 text-[8px] font-black tracking-widest leading-none px-1.5 h-4 border-none">
-                              {art.status}
-                           </Badge>
-                         </div>
-                         
-                         <h3 className="font-extrabold text-slate-800 leading-tight group-hover:text-indigo-600 transition-colors line-clamp-2">
-                           {art.title}
-                         </h3>
-                         
-                         <p className="text-[11.5px] text-slate-400 font-semibold line-clamp-2">
-                            {stripHtml(art.content)}
-                         </p>
-                       </div>
-
-                       <div className="flex items-center justify-between pt-3 border-t border-slate-50">
-                         <div className="flex items-center gap-2">
-                           <div className="w-5.5 h-5.5 rounded-full bg-slate-100 flex items-center justify-center font-bold text-[9px]">
-                             {art.owner ? art.owner.charAt(0) : 'S'}
-                           </div>
-                           <span className="text-[11px] text-slate-500 font-bold">{art.owner || 'Sarah James'}</span>
-                         </div>
-
-                         <div className="flex items-center gap-3 text-[10.5px] text-slate-400" onClick={(e) => e.stopPropagation()}>
-                           <button 
-                             onClick={() => handleCopyUrl(art.title)}
-                             className="hover:text-indigo-600 transition-colors"
-                           >
-                             <Copy className="w-3.5 h-3.5" />
-                           </button>
-                           <button 
-                             onClick={() => handleArchiveArticle(art.id)}
-                             className="hover:text-slate-600"
-                             title="Shift to Archive"
-                           >
-                             <History className="w-3.5 h-3.5" />
-                           </button>
-                         </div>
-                       </div>
-                     </div>
-                   ))}
+                {/* Right sidebar */}
+                <div className="xl:w-[280px] shrink-0 border-t xl:border-t-0 xl:border-l border-slate-200/80 bg-white/50 px-4 py-6 xl:sticky xl:top-0 xl:self-start xl:max-h-[calc(100vh-4rem)] xl:overflow-y-auto">
+                  <KBActivitySidebar
+                    recentActivity={recentActivity}
+                    missingDocs={coverageData?.totalMissing ?? 4}
+                    outdatedArticles={outdatedCount}
+                    reviewRequired={needsReviewCount}
+                    aiOpportunities={coverageData?.aiSuggestions?.length ?? 5}
+                  />
                 </div>
-
-              ) : (
-
-                /* Collapsible Category Node Knowledge Tree View */
-                <div className="space-y-4 bg-white border border-slate-200/80 rounded-[16px] p-6 shadow-xs">
-                   <div className="border-b pb-3 mb-3">
-                     <span className="text-xs uppercase font-extrabold tracking-wider text-slate-400">Hierarchical Workspace Tree Map</span>
-                   </div>
-
-                   <div className="space-y-2 text-xs font-semibold text-slate-600">
-                     <div className="flex items-center gap-1.5 p-2 bg-slate-100 text-slate-700 rounded-lg">
-                        <Folder className="w-4 h-4 text-indigo-500" />
-                        <span className="font-extrabold">{selectedCategory} Category Root</span>
-                     </div>
-
-                     <div className="pl-6 space-y-4 pt-1">
-                        {/* Group articles per subcategory fold */}
-                        {Array.from(new Set(processedArticles.map(a => a.subCategory || 'General Setup'))).map((subKey, sidx) => {
-                          const subArticles = processedArticles.filter(a => (a.subCategory || 'General Setup') === subKey);
-                          
-                          return (
-                            <div key={sidx} className="space-y-2">
-                              <div className="flex items-center gap-2 text-slate-500">
-                                 <PlusCircle className="w-3.5 h-3.5 text-slate-400" />
-                                 <strong className="text-slate-700 text-[11px] tracking-wide font-black uppercase text-slate-500">{subKey} Folder</strong>
-                                 <Badge className="bg-slate-100 text-slate-400 py-0 text-[9px] border-none">{subArticles.length} files</Badge>
-                              </div>
-
-                              <div className="pl-6 space-y-1.5 border-l-2 border-slate-100">
-                                 {subArticles.map((art) => (
-                                   <div 
-                                     key={art.id} 
-                                     onClick={() => setViewingArticle(art)}
-                                     className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 cursor-pointer transition-all border border-transparent hover:border-slate-150"
-                                   >
-                                      <div className="flex items-center gap-2">
-                                         <FileText className="w-3.5 h-3.5 text-indigo-400" />
-                                         <span className="font-extrabold text-[#1E293B]">{art.title}</span>
-                                      </div>
-                                      <div className="flex items-center gap-2 text-[10px]" onClick={(e) => e.stopPropagation()}>
-                                         <Badge className="bg-slate-50 text-slate-500 text-[9px] border-none">{art.status}</Badge>
-                                         <button 
-                                           onClick={() => handleEditArticle(art)}
-                                           className="text-amber-500 hover:text-amber-700"
-                                         >
-                                            Edit
-                                         </button>
-                                      </div>
-                                   </div>
-                                 ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                     </div>
-                   </div>
-                </div>
-
-              )}
-
-            </div>
+              </div>
+            </ScrollArea>
           </div>
         )}
 
+
+      <Dialog open={isImportOpen} onOpenChange={setIsImportOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{t('kb.actions.importDocs', 'Import Docs')}</DialogTitle>
+            <DialogDescription>{t('kb.importDesc', 'Import documentation from URLs or files with AI-assisted parsing.')}</DialogDescription>
+          </DialogHeader>
+          <KBImporter />
+        </DialogContent>
+      </Dialog>
 
       {/* ======================================================== */}
       {/* ENTERPRISE EDITOR DIALOG MODAL                         */}

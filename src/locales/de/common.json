@@ -619,7 +619,64 @@
   },
   "kb": {
     "title": "GeistKB Wissensdatenbank",
+    "pageTitle": "Wissensdatenbank",
+    "pageSubtitle": "Zentralisierte Dokumentation, SOPs, Onboarding-Leitfäden und KI-gestütztes Unternehmenswissen",
     "headerMetaInline": "GeistKB • {{published}} Veröffentlicht • {{drafts}} Entwürfe • {{review}} Prüfung erforderlich",
+    "aiSearchPlaceholder": "Geist AI fragen oder Dokumentation durchsuchen...",
+    "voiceSearch": "Sprachsuche",
+    "advancedFilters": "Erweiterte Filter",
+    "views": "Ansichten",
+    "categoriesTitle": "Kategorien",
+    "articleCount": "{{count}} Artikel",
+    "featuredTitle": "Empfohlene Artikel",
+    "articlesSection": "Artikel",
+    "unassignedOwner": "Nicht zugewiesen",
+    "recentlyUpdated": "Kürzlich aktualisiert",
+    "viewsLabel": "Aufrufe",
+    "importDesc": "Dokumentation aus URLs oder Dateien mit KI-gestützter Analyse importieren.",
+    "kpi": {
+      "publishedArticles": "Veröffentlichte Artikel",
+      "draftArticles": "Entwürfe",
+      "healthScore": "Wissens-Gesundheitswert",
+      "monthlyViews": "Monatliche Aufrufe"
+    },
+    "actions": {
+      "newArticle": "Neuer Artikel",
+      "newCategory": "Neue Kategorie",
+      "importDocs": "Dokumente importieren",
+      "aiGenerate": "Artikel mit KI generieren"
+    },
+    "layout": {
+      "card": "Karte",
+      "grid": "Raster",
+      "table": "Tabelle"
+    },
+    "status": {
+      "published": "Veröffentlicht",
+      "draft": "Entwurf",
+      "review": "Prüfung",
+      "archived": "Archiviert"
+    },
+    "aiSummary": {
+      "engagement": "Ihre Wissensdatenbank verzeichnet diesen Monat {{percent}}% mehr Engagement."
+    },
+    "insights": {
+      "reviewNeeded": "{{count}} Artikel benötigen Prüfung",
+      "missingTags": "{{count}} Artikel ohne Tags",
+      "outdatedSops": "{{count}} veraltete SOPs"
+    },
+    "activity": {
+      "title": "Kürzliche Aktivität",
+      "published": "Veröffentlicht · {{date}}",
+      "edited": "Bearbeitet von {{owner}} · {{date}}"
+    },
+    "health": {
+      "title": "Wissens-Gesundheit",
+      "missingDocs": "Fehlende Dokumentation",
+      "outdated": "Veraltete Artikel",
+      "reviewRequired": "Prüfung erforderlich",
+      "aiOpportunities": "KI-Optimierungsmöglichkeiten"
+    },
     "drafts": "Entwürfe",
     "outdated": "Veraltet",
     "internalOnly": "Nur intern",
@@ -672,12 +729,14 @@
     "resetWorkspaceFilter": "Filter-Zustand des Arbeitsbereichs zurücksetzen",
     "table": {
       "title": "Titel",
+      "category": "Kategorie",
       "workflowStatus": "Workflow-Status",
       "metadataOwner": "Metadaten-Besitzer",
       "author": "Autor",
       "views": "Aufrufe",
       "helpfulRating": "Hilfreich",
       "updated": "Zuletzt aktualisiert",
+      "likes": "Likes",
       "actions": "Aktionen"
     },
     "eliteArticles": "Elite-Artikel",
@@ -919,6 +978,109 @@
     "cancel": "Abbrechen",
     "title": "GeistVault Enterprise Vault",
     "titleShort": "GeistVault",
+    "pageTitle": "GeistVault",
+    "pageSubtitle": "Sichere Verwaltung von Zugangsdaten, Secrets und Zugriffsrechten.",
+    "globalSearchPlaceholder": "Assets, Zugangsdaten, Hosts, API-Schlüssel durchsuchen...",
+    "advancedFilters": "Erweiterte Filter",
+    "securityDashboard": "Sicherheits-Dashboard",
+    "mfaCoverage": "MFA-Abdeckung",
+    "rotationStatus": "Secret-Rotation",
+    "rotationDue": "{{count}} zur Rotation fällig",
+    "accessAuditLog": "Zugriffs-Audit-Protokoll",
+    "auditRecent": "12 Ereignisse in den letzten 24 Std.",
+    "recentlyViewed": "Kürzlich angesehen",
+    "recentlyModified": "Kürzlich geändert",
+    "sharedCredentials": "Geteilte Zugangsdaten",
+    "noRecentActivity": "Keine kürzliche Aktivität",
+    "defaultOwner": "Sie",
+    "revealSecret": "Secret anzeigen",
+    "shareAsset": "Teilen",
+    "colVault": "Vault",
+    "colOwner": "Besitzer",
+    "colLastUsed": "Zuletzt genutzt",
+    "kpi": {
+      "totalAssets": "Assets gesamt",
+      "vaultHealth": "Vault-Gesundheit",
+      "sharedSecrets": "Geteilte Secrets",
+      "securityScore": "Sicherheitswert"
+    },
+    "aiBanner": {
+      "title": "Ihr Vault-Sicherheitswert stieg diesen Monat um 12%."
+    },
+    "insights": {
+      "rotatePasswords": "{{count}} Passwörter sollten rotiert werden",
+      "expiringKeys": "{{count}} API-Schlüssel laufen bald ab",
+      "mfaCoverage": "MFA bei {{percent}}% der Konten aktiv",
+      "noBreaches": "Keine Sicherheitsverletzungen erkannt"
+    },
+    "sections": {
+      "vaults": "Vaults",
+      "categories": "Zugriffskategorien",
+      "authorities": "Vault-Autoritäten",
+      "smartFilters": "Smart Filter"
+    },
+    "vaults": {
+      "personal": "Persönlicher Vault",
+      "sharedCompany": "Unternehmens-Vault",
+      "itDept": "IT-Abteilungs-Vault",
+      "infrastructure": "Infrastruktur-Vault",
+      "devops": "DevOps-Vault",
+      "support": "Support-Team-Vault"
+    },
+    "permissions": {
+      "owner": "Besitzer",
+      "admin": "Admin",
+      "editor": "Bearbeiter",
+      "viewer": "Betrachter"
+    },
+    "categories": {
+      "webLogins": "Web-Logins",
+      "servers": "Server",
+      "apiKeys": "API-Schlüssel",
+      "email": "E-Mail-Konten",
+      "cloud": "Cloud-Plattformen",
+      "databases": "Datenbanken",
+      "licenses": "Lizenzen",
+      "sshKeys": "SSH-Schlüssel",
+      "billing": "Abrechnungskonten",
+      "applications": "Anwendungen"
+    },
+    "authorities": {
+      "personal": "Persönlich",
+      "department": "Abteilung",
+      "team": "Geteiltes Team",
+      "global": "Unternehmensweit",
+      "vaultCount": "{{count}} Vaults · {{permission}}",
+      "secure": "Sicher"
+    },
+    "filters": {
+      "favorites": "Favoriten",
+      "recentlyUsed": "Kürzlich genutzt",
+      "pinned": "Angepinnt",
+      "expiringSoon": "Läuft bald ab",
+      "securityAlerts": "Sicherheitswarnungen",
+      "archived": "Archiviert"
+    },
+    "layout": {
+      "table": "Tabelle",
+      "grid": "Raster",
+      "card": "Karte"
+    },
+    "status": {
+      "healthy": "Gesund",
+      "warning": "Warnung",
+      "expired": "Abgelaufen",
+      "reviewRequired": "Prüfung erforderlich"
+    },
+    "fab": {
+      "newAsset": "Neues Asset",
+      "newLogin": "Neuer Login",
+      "newServer": "Neuer Server",
+      "newApiKey": "Neuer API-Schlüssel",
+      "newDatabase": "Neue Datenbank",
+      "newLicense": "Neue Lizenz",
+      "newSecret": "Neues Secret"
+    },
     "headerMetaInline": "Vault • {{assets}} Assets • {{pinned}} Angepinnt • {{expiring}} Laufen bald ab",
     "headerMeta": "{{total}} Einträge • {{weak}} schwach • {{expiring}} laufen ab",
     "pinned": "Angepinnt",
