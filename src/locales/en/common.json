@@ -1115,6 +1115,7 @@
       "importPackageCta": "Import Now",
       "importSoon": "Package import opening soon.",
       "copySuccess": "Link copied successfully.",
+      "demoLinkHint": "This is a demo row — create a live secret link to generate a working /v/ URL.",
       "copyError": "Unable to copy link to clipboard.",
       "copyLink": "Copy link",
       "quickAction": "Quick action",

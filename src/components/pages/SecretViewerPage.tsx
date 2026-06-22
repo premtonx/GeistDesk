@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { vaultService } from '../../services/vaultService';
 import { VaultItem } from '../../types';
+import { isDemoExchangeId } from '../../components/exchange/exchange-status-utils';
 import { 
   ShieldCheck, 
   Lock, 
@@ -37,6 +38,11 @@ export default function SecretViewerPage() {
 
   const loadItem = async () => {
     setLoading(true);
+    if (id && isDemoExchangeId(id)) {
+      setItem(null);
+      setLoading(false);
+      return;
+    }
     const data = await vaultService.getItem(id!);
     setItem(data);
     setLoading(false);
@@ -50,7 +56,7 @@ export default function SecretViewerPage() {
     // Fetch decrypted material from the server exactly once. Read-once secrets
     // are burned server-side as part of this call.
     const revealed = await vaultService.revealItem(item.id);
-    if (!revealed) {
+    if (!revealed || revealed.preview) {
       toast.error("This secret has already been burned or has expired.");
       setItem({ ...item, isBurned: true });
       return;
@@ -102,15 +108,23 @@ export default function SecretViewerPage() {
     );
   }
 
-  if (!item) {
+  if (!item || item.isBurned) {
     return (
       <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4 text-center">
         <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-6">
           <ShieldAlert className="w-10 h-10 text-red-500" />
         </div>
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">Phantom Link Expired</h1>
-        <p className="text-slate-500 max-w-md mb-8">This data has already been burned or the link was invalid. Phantom links self-destruct immediately after viewing.</p>
-        <Badge variant="outline" className="bg-white border-red-200 text-red-600 px-4 py-1">Code 410: Gone</Badge>
+        <h1 className="text-2xl font-bold text-slate-900 mb-2">
+          {id && isDemoExchangeId(id) ? 'Demo Link — Not Live' : 'Phantom Link Expired'}
+        </h1>
+        <p className="text-slate-500 max-w-md mb-8">
+          {id && isDemoExchangeId(id)
+            ? 'This dashboard row is seeded for Schnellfilter demos and has no vault payload. Create a real secret link to test burn-after-read.'
+            : 'This data has already been burned or the link was invalid. Phantom links self-destruct immediately after viewing.'}
+        </p>
+        {!isDemoExchangeId(id ?? '') && (
+          <Badge variant="outline" className="bg-white border-red-200 text-red-600 px-4 py-1">Code 410: Gone</Badge>
+        )}
       </div>
     );
   }

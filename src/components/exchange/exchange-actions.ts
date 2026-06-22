@@ -1,10 +1,19 @@
 import { toast } from 'sonner';
-import { buildExchangeSecureUrl } from './exchange-status-utils';
+import { buildExchangeSecureUrl, isDemoExchangeId } from './exchange-status-utils';
 
 export async function copyExchangeLinkToClipboard(
   id: string,
   t: (key: string, defaultValue: string) => string,
 ): Promise<boolean> {
+  if (isDemoExchangeId(id)) {
+    toast.info(
+      t(
+        'exchange.actions.demoLinkHint',
+        'This is a demo row — create a live secret link to generate a working /v/ URL.',
+      ),
+    );
+    return false;
+  }
   const url = buildExchangeSecureUrl(id);
   try {
     await navigator.clipboard.writeText(url);

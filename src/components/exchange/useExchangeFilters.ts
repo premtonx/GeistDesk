@@ -44,8 +44,12 @@ function formatVaultHistoryItem(
     company: relatedCompanyObj?.name || 'External Customer',
     ticketId: relatedTicketObj?.subject ? `TKT-${item.metadata?.relatedTicketId?.substring(0, 4)}` : 'N/A',
     status: item.isBurned ? 'Burned' : 'Active',
-    expires: expiresAt ? expiresAt.toLocaleDateString() : 'Once Read',
-    expiresAt,
+    expires: item.isBurned
+      ? '__expired__'
+      : expiresAt
+        ? expiresAt.toLocaleDateString()
+        : 'Once Read',
+    expiresAt: item.isBurned ? null : expiresAt,
     views: item.isBurned ? 1 : 0,
     type: item.type,
     createdAt: item.createdAt?.toDate ? item.createdAt.toDate() : new Date(),

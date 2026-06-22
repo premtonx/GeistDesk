@@ -1,17 +1,7 @@
-import {
-  collection,
-  query,
-  where,
-  orderBy,
-  onSnapshot
-} from 'firebase/firestore';
-import { db, auth } from '../lib/firebase';
 import { getSessionToken } from 'firebase/auth';
-import { VaultItem, OperationType } from '../types';
-import { handleFirestoreError } from '../lib/firebase';
+import { auth } from '../lib/firebase';
+import { VaultItem } from '../types';
 import { logAudit } from './auditService';
-
-const VAULT_COLLECTION = 'vault_items';
 
 function authHeaders(): Record<string, string> {
   const token = getSessionToken();
@@ -67,8 +57,15 @@ export const vaultService = {
   /** Fetch non-sensitive metadata for a share link (no secret material). */
   getItem: async (id: string): Promise<VaultItem | null> => {
     try {
-      const res = await fetch(`/api/vault/secrets/${encodeURIComponent(id)}`);
+      const res = await fetch(`/api/vault/secrets/${encodeURIComponent(id)}`, {
+        method: 'GET',
+        headers: { Accept: 'application/json' },
+      });
       if (res.status === 404) return null;
+      if (res.status === 410) {
+        const data = await res.json().catch(() => ({}));
+        return { ...(data as VaultItem), id, isBurned: true };
+      }
       const data = await parse(res);
       return data as VaultItem;
     } catch (error) {
@@ -77,15 +74,37 @@ export const vaultService = {
     }
   },
 
+  /** List vault metadata for the signed-in user (PostgreSQL source of truth). */
+  fetchHistory: async (): Promise<VaultItem[]> => {
+    try {
+      const res = await fetch('/api/vault/history', { headers: authHeaders() });
+      if (!res.ok) return [];
+      const data = await parse(res);
+      return (data.items ?? []) as VaultItem[];
+    } catch (error) {
+      console.error('[vaultService.fetchHistory]', error);
+      return [];
+    }
+  },
+
   /**
    * Reveal a secret once. The server returns decrypted shares (and content for
    * dropzones) and burns read-once secrets immediately.
    */
-  revealItem: async (id: string): Promise<{ shares: string[]; content: string | null } | null> => {
+  revealItem: async (id: string): Promise<{ shares: string[]; content: string | null; preview?: boolean } | null> => {
     try {
-      const res = await fetch(`/api/vault/secrets/${encodeURIComponent(id)}/reveal`, { method: 'POST' });
+      const res = await fetch(`/api/vault/secrets/${encodeURIComponent(id)}/reveal`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-GeistDesk-Read-Intent': 'commit',
+        },
+      });
       if (res.status === 410 || res.status === 404) return null;
       const data = await parse(res);
+      if (data.preview) {
+        return { shares: [], content: null, preview: true };
+      }
       await logAudit({ module: 'vault', action: 'VAULT_ITEM_ACCESSED', severity: 'low', details: { itemId: id } });
       return { shares: data.shares || [], content: data.content ?? null };
     } catch (error) {
@@ -134,22 +153,36 @@ export const vaultService = {
     await logAudit({ module: 'vault', action: 'VAULT_ITEM_MODIFIED', severity: 'medium', details: { itemId: id } });
   },
 
-  /** List the current user's vault items (metadata only; no secret material). */
+  /** Subscribe to vault history via PostgreSQL-backed API polling. */
   subscribeToHistory: (callback: (items: VaultItem[]) => void) => {
-    const user = auth.currentUser;
-    if (!user) return () => {};
+    let cancelled = false;
+    let timer: ReturnType<typeof setInterval> | null = null;
 
-    const q = query(
-      collection(db, VAULT_COLLECTION),
-      where('createdBy', '==', user.uid),
-      orderBy('createdAt', 'desc')
-    );
+    const refresh = async () => {
+      if (cancelled) return;
+      const user = auth.currentUser;
+      if (!user) {
+        callback([]);
+        return;
+      }
+      const items = await vaultService.fetchHistory();
+      if (!cancelled) callback(items);
+    };
 
-    return onSnapshot(q, (snap) => {
-      const items = snap.docs.map(doc => ({ id: doc.id, ...doc.data() }) as VaultItem);
-      callback(items);
-    }, (error) => {
-      handleFirestoreError(error, OperationType.LIST, VAULT_COLLECTION);
-    });
+    void refresh();
+    timer = setInterval(() => void refresh(), 15000);
+
+    const onFocus = () => void refresh();
+    if (typeof window !== 'undefined') {
+      window.addEventListener('focus', onFocus);
+    }
+
+    return () => {
+      cancelled = true;
+      if (timer) clearInterval(timer);
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('focus', onFocus);
+      }
+    };
   }
 };

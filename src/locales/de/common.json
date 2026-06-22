@@ -1115,6 +1115,7 @@
       "importPackageCta": "Jetzt importieren",
       "importSoon": "Paketimport wird bald verfügbar.",
       "copySuccess": "Link erfolgreich kopiert.",
+      "demoLinkHint": "Demo-Zeile — erstellen Sie einen echten Secret-Link für eine funktionierende /v/-URL.",
       "copyError": "Link konnte nicht in die Zwischenablage kopiert werden.",
       "copyLink": "Link kopieren",
       "quickAction": "Schnellaktion",
