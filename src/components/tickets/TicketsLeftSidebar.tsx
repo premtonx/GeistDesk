@@ -91,7 +91,7 @@ export function TicketsLeftSidebar({
                         'w-full flex items-center gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-all group relative',
                         isActive
                           ? 'bg-primary text-primary-foreground shadow-sm font-semibold shadow-primary/10'
-                          : item.id === 'unassigned'
+                          : item.id === 'help_requested'
                             ? 'text-red-600 hover:text-red-700 hover:bg-rose-50/80 dark:text-red-400 dark:hover:text-red-300 dark:hover:bg-red-950/30 bg-rose-500/5 dark:bg-rose-950/10 border border-red-200/50 dark:border-red-900/40 font-bold'
                             : 'text-muted-foreground hover:bg-card hover:text-foreground hover:shadow-sm',
                         effectiveCollapsed && 'justify-center px-0 h-10 w-10 mx-auto',
@@ -102,7 +102,7 @@ export function TicketsLeftSidebar({
                           'w-3.5 h-3.5 shrink-0 transition-transform group-hover:scale-110',
                           isActive
                             ? 'text-primary-foreground'
-                            : item.id === 'unassigned'
+                            : item.id === 'help_requested'
                               ? 'text-red-500 animate-pulse dark:text-red-400 font-extrabold'
                               : 'text-slate-600 dark:text-slate-300',
                         )}

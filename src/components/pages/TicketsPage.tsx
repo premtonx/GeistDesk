@@ -157,6 +157,13 @@ import {
   isBugTicket,
   devStatusLabelKey,
 } from '../../lib/ticketWorkspace';
+import {
+  computeTicketQueueStats,
+  countTicketsByView,
+  filterTicketsByTopStatus,
+  filterTicketsByView,
+  type TopStatusFilterId,
+} from '../../lib/ticketViewFilters';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useTranslation } from '../../lib/context/I18nContext';
 
@@ -340,9 +347,7 @@ export default function TicketsPage() {
   const [activeView, setActiveView] = useState<string>(() => {
     return localStorage.getItem('geistdesk_default_view') || 'team_all_open';
   });
-  const [topStatusFilter, setTopStatusFilter] = useState<
-    'all' | 'open' | 'pending' | 'onhold' | 'urgent' | 'unassigned'
-  >('all');
+  const [topStatusFilter, setTopStatusFilter] = useState<TopStatusFilterId>('all');
   const [drawerTicketId, setDrawerTicketId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<TicketsLayoutMode>('list');
   const [listSort, setListSort] = useState<'newest' | 'oldest' | 'priority'>('newest');
@@ -641,232 +646,26 @@ export default function TicketsPage() {
   const ai = useMemo(() => new AIAdapter(), [moduleConfig.ai]);
   const isAiReady = useMemo(() => ai.isConfigured, [ai]);
 
+  const viewFilterContext = useMemo(
+    () => ({
+      userId: user?.uid ?? '',
+      watchedTicketIds,
+      allTickets,
+      isAiReady,
+    }),
+    [user?.uid, watchedTicketIds, allTickets, isAiReady],
+  );
+
   // Compute tickets filtered ONLY by the current active sidebar view category
   const baseSidebarTickets = useMemo(() => {
     if (!user) return [];
-    
-    let filtered = [...supportTickets];
+    return filterTicketsByView(supportTickets, activeView, viewFilterContext);
+  }, [supportTickets, activeView, user, viewFilterContext]);
 
-    switch (activeView) {
-      case 'my_queue':
-        filtered = filtered.filter(
-          (t) =>
-            t.agentId === user.uid &&
-            matchStatusNot(t.status, 'resolved') &&
-            matchStatusNot(t.status, 'closed') &&
-            matchStatusNot(t.status, 'trash') &&
-            matchStatusNot(t.status, 'spam'),
-        );
-        break;
-      case 'waiting_review':
-        filtered = filtered.filter(
-          (t) =>
-            (t.aiConfidence !== undefined && t.aiConfidence < 0.7) ||
-            matchStatus(t.status, 'pending') ||
-            ((!t.tags || t.tags.length === 0) &&
-              matchStatusNot(t.status, 'resolved') &&
-              matchStatusNot(t.status, 'closed')),
-        );
-        break;
-      case 'linked_bugs':
-        filtered = filtered.filter(
-          (t) => isBugTicket(t) && getLinkedSupportTickets(t, allTickets).length > 0,
-        );
-        break;
-      case 'bug_backlog':
-        filtered = filtered.filter(
-          (t) => isBugTicket(t) && (!t.devStatus || t.devStatus === 'backlog'),
-        );
-        break;
-      case 'incidents':
-        filtered = filtered.filter(
-          (t) =>
-            isBugTicket(t) &&
-            (t.priority === 'urgent' ||
-              hasTagCaseInsensitive(t.tags, 'incident') ||
-              hasTagCaseInsensitive(t.tags, 'Incident')),
-        );
-        break;
-      case 'ai_inbox':
-        filtered = filtered.filter(
-          (t) =>
-            t.aiConfidence !== undefined ||
-            t.sentiment === 'angry' ||
-            t.sentiment === 'negative',
-        );
-        break;
-      case 'suggestions':
-        filtered = filtered.filter(
-          (t) => isAiReady && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed'),
-        );
-        break;
-      case 'trend_analytics':
-        filtered = filtered.filter((t) => t.tags && t.tags.length > 1);
-        break;
-      // INBOX
-      case 'unassigned':
-        filtered = filtered.filter(t => !t.agentId && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam') && matchStatusNot(t.status, 'merged'));
-        break;
-      case 'new_tickets':
-        filtered = filtered.filter(t => matchStatus(t.status, 'open') && !t.agentId);
-        break;
-      case 'awaiting_triage':
-        filtered = filtered.filter(t => (!t.tags || t.tags.length === 0) && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam'));
-        break;
-      case 'undelivered_msg':
-        filtered = filtered.filter(t => t.isUndelivered && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'merged'));
-        break;
-      case 'sla_risk':
-        filtered = filtered.filter(t => matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam') && (t.priority === 'urgent' || (t as any).aiConfidence === 'low' || hasTagCaseInsensitive(t.tags, 'SLA_Risk')));
-        break;
-      case 'escalations':
-        filtered = filtered.filter(t => matchStatus(t.status, 'open') && (t.priority === 'urgent' || t.priority === 'high' || hasTagCaseInsensitive(t.tags, 'Escalation')));
-        break;
-
-      // MY WORK
-      case 'my_open':
-        filtered = filtered.filter(t => t.agentId === user.uid && (matchStatus(t.status, 'open') || matchStatus(t.status, 'pending')));
-        break;
-      case 'assigned_me':
-        filtered = filtered.filter(t => t.agentId === user.uid && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam'));
-        break;
-      case 'mentioned_me':
-        filtered = filtered.filter(t => t.mentions?.includes(user.uid));
-        break;
-      case 'watching':
-        filtered = filtered.filter(t => watchedTicketIds.includes(t.id));
-        break;
-      case 'waiting_customer':
-        filtered = filtered.filter(t => t.agentId === user.uid && matchStatus(t.status, 'pending'));
-        break;
-      case 'recently_updated': {
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        filtered = filtered.filter(t => {
-          const updatedAt = t.updatedAt?.toDate ? t.updatedAt.toDate() : new Date(t.updatedAt);
-          return updatedAt > oneDayAgo;
-        });
-        break;
-      }
-
-      // TEAM QUEUES
-      case 'team_all_open':
-        filtered = filtered.filter(t => matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam') && matchStatusNot(t.status, 'merged'));
-        break;
-      case 'team_pending':
-        filtered = filtered.filter(t => matchStatus(t.status, 'pending'));
-        break;
-      case 'team_on_hold':
-        filtered = filtered.filter(t => matchStatus(t.status, 'pending') || matchStatus((t as any).status, 'on-hold'));
-        break;
-      case 'agent_seeking_help':
-        filtered = filtered.filter(t => t.isHelpRequested === true && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam') && matchStatusNot(t.status, 'merged'));
-        break;
-      case 'resolved_today': {
-        const todayStr = new Date().toDateString();
-        filtered = filtered.filter(t => {
-          if (!t.resolvedAt) return false;
-          const resolvedAt = t.resolvedAt.toDate ? t.resolvedAt.toDate() : new Date(t.resolvedAt);
-          return resolvedAt.toDateString() === todayStr;
-        });
-        break;
-      }
-      case 'closed_week': {
-        const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        filtered = filtered.filter(t => {
-          if (!t.closedAt) return false;
-          const closedAt = t.closedAt.toDate ? t.closedAt.toDate() : new Date(t.closedAt);
-          return closedAt > oneWeekAgo;
-        });
-        break;
-      }
-
-      // PRIORITY VIEWS
-      case 'urgent_priority':
-        filtered = filtered.filter(t => t.priority === 'urgent' && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed'));
-        break;
-      case 'high_priority':
-        filtered = filtered.filter(t => t.priority === 'high' && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed'));
-        break;
-      case 'vip_customers':
-        filtered = filtered.filter(t => (t as any).customerTier === 'VIP' || t.priority === 'urgent' || hasTagCaseInsensitive(t.tags, 'VIP') || t.customerName?.toLowerCase().includes('sarah'));
-        break;
-      case 'enterprise_accounts':
-        filtered = filtered.filter(t => t.company?.toLowerCase().includes('advanced') || t.company?.toLowerCase().includes('global') || hasTagCaseInsensitive(t.tags, 'Enterprise'));
-        break;
-      case 'escalated_tickets':
-        filtered = filtered.filter(t => matchStatus(t.status, 'open') && (t.priority === 'urgent' || hasTagCaseInsensitive(t.tags, 'Escalation')));
-        break;
-
-      // AI WORKSPACE
-      case 'ai_actions':
-        filtered = filtered.filter(t => isAiReady && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed'));
-        break;
-      case 'ai_review':
-        filtered = filtered.filter(t => (t.aiConfidence !== undefined && t.aiConfidence < 0.7) || t.priority === 'urgent');
-        break;
-      case 'sentiment_alerts':
-        filtered = filtered.filter(t => t.sentiment === 'angry' || t.sentiment === 'negative');
-        break;
-      case 'churn_risk':
-        filtered = filtered.filter(t => t.sentiment === 'angry' || (t.priority === 'urgent' && t.sentiment === 'negative'));
-        break;
-      case 'similar_clusters':
-        filtered = filtered.filter(t => t.tags && t.tags.length > 1);
-        break;
-
-      // KNOWLEDGE & AUTOMATION
-      case 'kb_opportunities':
-        filtered = filtered.filter(t => matchStatus(t.status, 'resolved') && t.tags && t.tags.length > 0);
-        break;
-      case 'missing_docs':
-        filtered = filtered.filter(t => !t.tags || t.tags.length === 0);
-        break;
-      case 'automation_candidates':
-        filtered = filtered.filter(t => t.channel === 'chat' || hasTagCaseInsensitive(t.tags, 'login') || hasTagCaseInsensitive(t.tags, 'auth'));
-        break;
-
-      // MAINTENANCE
-      case 'trash':
-        filtered = filtered.filter(t => matchStatus(t.status, 'trash') || matchStatus(t.status, 'deleted'));
-        break;
-      case 'spam':
-        filtered = filtered.filter(t => matchStatus(t.status, 'spam'));
-        break;
-
-      default:
-        filtered = filtered.filter(t => matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam') && matchStatusNot(t.status, 'merged'));
-        break;
-    }
-
-    return filtered;
-  }, [supportTickets, activeView, user, watchedTicketIds, isAiReady, allTickets]);
-
-  const ticketQueueStats = useMemo(() => {
-    const pool = baseSidebarTickets.filter(
-      (tk) => matchStatusNot(tk.status, 'trash') && matchStatusNot(tk.status, 'spam'),
-    );
-    return {
-      all: pool.length,
-      open: pool.filter((tk) => matchStatus(tk.status, 'open')).length,
-      pending: pool.filter((tk) => matchStatus(tk.status, 'pending')).length,
-      onhold: pool.filter(
-        (tk) => matchStatus(tk.status, 'on-hold') || matchStatus((tk as { status?: string }).status, 'on_hold'),
-      ).length,
-      urgent: pool.filter((tk) => tk.priority === 'urgent' || tk.priority === 'high').length,
-      bugs: pool.filter((tk) => isBugTicket(tk)).length,
-      unassigned: pool.filter((tk) => !tk.agentName).length,
-      vip: pool.filter(
-        (tk) => tk.tags?.includes('VIP') || tk.customerName?.toLowerCase().includes('sarah'),
-      ).length,
-      critical: pool.filter((tk) => tk.priority === 'urgent' || tk.priority === 'high').length,
-      slaRisk: pool.filter(
-        (tk) =>
-          tk.priority === 'urgent' ||
-          (typeof tk.aiConfidence === 'number' && tk.aiConfidence < 0.5) ||
-          hasTagCaseInsensitive(tk.tags, 'SLA_Risk'),
-      ).length,
-    };
-  }, [baseSidebarTickets]);
+  const ticketQueueStats = useMemo(
+    () => computeTicketQueueStats(baseSidebarTickets),
+    [baseSidebarTickets],
+  );
 
   // Subscribe to all tickets
   useEffect(() => {
@@ -928,31 +727,7 @@ export default function TicketsPage() {
   const finalRenderedTickets = useMemo(() => {
     if (!user) return [];
     
-    let result = [...baseSidebarTickets];
-
-    // Filter by the selected top sub-navigation status state
-    switch (topStatusFilter) {
-      case 'open':
-        result = result.filter(t => matchStatus(t.status, 'open'));
-        break;
-      case 'pending':
-        result = result.filter(t => matchStatus(t.status, 'pending'));
-        break;
-      case 'onhold':
-        result = result.filter(
-          t => matchStatus(t.status, 'on-hold') || matchStatus(t.status, 'on_hold'),
-        );
-        break;
-      case 'urgent':
-        result = result.filter(t => t.priority === 'urgent' || t.priority === 'high');
-        break;
-      case 'unassigned':
-        result = result.filter(t => !t.agentName);
-        break;
-      case 'all':
-      default:
-        break;
-    }
+    let result = filterTicketsByTopStatus([...baseSidebarTickets], topStatusFilter);
 
     // Live search filtering
     if (searchQuery.trim()) {
@@ -1100,154 +875,7 @@ export default function TicketsPage() {
 
   const getViewCount = (view: string) => {
     if (!user) return 0;
-    switch (view) {
-      case 'my_queue':
-        return allTickets.filter(
-          (t) =>
-            t.agentId === user.uid &&
-            matchStatusNot(t.status, 'resolved') &&
-            matchStatusNot(t.status, 'closed') &&
-            matchStatusNot(t.status, 'trash') &&
-            matchStatusNot(t.status, 'spam'),
-        ).length;
-      case 'waiting_review':
-        return allTickets.filter(
-          (t) =>
-            (t.aiConfidence !== undefined && t.aiConfidence < 0.7) ||
-            matchStatus(t.status, 'pending') ||
-            ((!t.tags || t.tags.length === 0) &&
-              matchStatusNot(t.status, 'resolved') &&
-              matchStatusNot(t.status, 'closed')),
-        ).length;
-      case 'linked_bugs':
-        return allTickets.filter(
-          (t) => isBugTicket(t) && getLinkedSupportTickets(t, allTickets).length > 0,
-        ).length;
-      case 'bug_backlog':
-        return allTickets.filter(
-          (t) => isBugTicket(t) && (!t.devStatus || t.devStatus === 'backlog'),
-        ).length;
-      case 'incidents':
-        return allTickets.filter(
-          (t) =>
-            isBugTicket(t) &&
-            (t.priority === 'urgent' ||
-              hasTagCaseInsensitive(t.tags, 'incident') ||
-              hasTagCaseInsensitive(t.tags, 'Incident')),
-        ).length;
-      case 'ai_inbox':
-        return allTickets.filter(
-          (t) =>
-            t.aiConfidence !== undefined ||
-            t.sentiment === 'angry' ||
-            t.sentiment === 'negative',
-        ).length;
-      case 'suggestions':
-        return allTickets.filter(
-          (t) => isAiReady && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed'),
-        ).length;
-      case 'trend_analytics':
-        return allTickets.filter((t) => t.tags && t.tags.length > 1).length;
-      // INBOX
-      case 'unassigned':
-        return allTickets.filter(t => !t.agentId && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam') && matchStatusNot(t.status, 'merged')).length;
-      case 'new_tickets':
-        return allTickets.filter(t => matchStatus(t.status, 'open') && !t.agentId).length;
-      case 'awaiting_triage':
-        return allTickets.filter(t => (!t.tags || t.tags.length === 0) && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam')).length;
-      case 'undelivered_msg':
-        return allTickets.filter(t => t.isUndelivered && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'merged')).length;
-      case 'sla_risk':
-        return allTickets.filter(t => matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam') && (t.priority === 'urgent' || (t as any).aiConfidence === 'low' || hasTagCaseInsensitive(t.tags, 'SLA_Risk'))).length;
-      case 'escalations':
-        return allTickets.filter(t => matchStatus(t.status, 'open') && (t.priority === 'urgent' || t.priority === 'high' || hasTagCaseInsensitive(t.tags, 'Escalation'))).length;
-
-      // MY WORK
-      case 'my_open':
-        return allTickets.filter(t => t.agentId === user.uid && (matchStatus(t.status, 'open') || matchStatus(t.status, 'pending'))).length;
-      case 'assigned_me':
-        return allTickets.filter(t => t.agentId === user.uid && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam')).length;
-      case 'mentioned_me':
-        return allTickets.filter(t => t.mentions?.includes(user.uid)).length;
-      case 'watching':
-        return allTickets.filter(t => watchedTicketIds.includes(t.id)).length;
-      case 'waiting_customer':
-        return allTickets.filter(t => t.agentId === user.uid && matchStatus(t.status, 'pending')).length;
-      case 'recently_updated': {
-        const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-        return allTickets.filter(t => {
-          const updatedAt = t.updatedAt?.toDate ? t.updatedAt.toDate() : new Date(t.updatedAt);
-          return updatedAt > oneDayAgo;
-        }).length;
-      }
-
-      // TEAM QUEUES
-      case 'team_all_open':
-        return allTickets.filter(t => matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam') && matchStatusNot(t.status, 'merged')).length;
-      case 'team_pending':
-        return allTickets.filter(t => matchStatus(t.status, 'pending')).length;
-      case 'team_on_hold':
-        return allTickets.filter(t => matchStatus(t.status, 'pending') || matchStatus((t as any).status, 'on-hold')).length;
-      case 'agent_seeking_help':
-        return allTickets.filter(t => t.isHelpRequested === true && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam') && matchStatusNot(t.status, 'merged')).length;
-      case 'resolved_today': {
-        const todayStr = new Date().toDateString();
-        return allTickets.filter(t => {
-          if (!t.resolvedAt) return false;
-          const resolvedAt = t.resolvedAt.toDate ? t.resolvedAt.toDate() : new Date(t.resolvedAt);
-          return resolvedAt.toDateString() === todayStr;
-        }).length;
-      }
-      case 'closed_week': {
-        const oneWeekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-        return allTickets.filter(t => {
-          if (!t.closedAt) return false;
-          const closedAt = t.closedAt.toDate ? t.closedAt.toDate() : new Date(t.closedAt);
-          return closedAt > oneWeekAgo;
-        }).length;
-      }
-
-      // PRIORITY VIEWS
-      case 'urgent_priority':
-        return allTickets.filter(t => t.priority === 'urgent' && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed')).length;
-      case 'high_priority':
-        return allTickets.filter(t => t.priority === 'high' && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed')).length;
-      case 'vip_customers':
-        return allTickets.filter(t => (t as any).customerTier === 'VIP' || t.priority === 'urgent' || hasTagCaseInsensitive(t.tags, 'VIP') || t.customerName?.toLowerCase().includes('sarah')).length;
-      case 'enterprise_accounts':
-        return allTickets.filter(t => t.company?.toLowerCase().includes('advanced') || t.company?.toLowerCase().includes('global') || hasTagCaseInsensitive(t.tags, 'Enterprise')).length;
-      case 'escalated_tickets':
-        return allTickets.filter(t => matchStatus(t.status, 'open') && (t.priority === 'urgent' || hasTagCaseInsensitive(t.tags, 'Escalation'))).length;
-
-      // AI WORKSPACE
-      case 'ai_actions':
-        return allTickets.filter(t => isAiReady && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed')).length;
-      case 'ai_review':
-        return allTickets.filter(t => (t.aiConfidence !== undefined && t.aiConfidence < 0.7) || t.priority === 'urgent').length;
-      case 'sentiment_alerts':
-        return allTickets.filter(t => t.sentiment === 'angry' || t.sentiment === 'negative').length;
-      case 'churn_risk':
-        return allTickets.filter(t => t.sentiment === 'angry' || (t.priority === 'urgent' && t.sentiment === 'negative')).length;
-      case 'similar_clusters':
-        return allTickets.filter(t => t.tags && t.tags.length > 1).length;
-
-      // KNOWLEDGE & AUTOMATION
-      case 'kb_opportunities':
-        return allTickets.filter(t => matchStatus(t.status, 'resolved') && t.tags && t.tags.length > 0).length;
-      case 'missing_docs':
-        return allTickets.filter(t => !t.tags || t.tags.length === 0).length;
-      case 'automation_candidates':
-        return allTickets.filter(t => t.channel === 'chat' || hasTagCaseInsensitive(t.tags, 'login') || hasTagCaseInsensitive(t.tags, 'auth')).length;
-
-      // MAINTENANCE
-      case 'trash':
-        return allTickets.filter(t => matchStatus(t.status, 'trash') || matchStatus(t.status, 'deleted')).length;
-      case 'spam':
-        return allTickets.filter(t => matchStatus(t.status, 'spam')).length;
-
-      default:
-        return 0;
-    }
+    return countTicketsByView(supportTickets, view, viewFilterContext);
   };
 
   const tickets = getFilteredTickets();

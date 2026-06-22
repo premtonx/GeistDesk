@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   AlertCircle,
   List,
+  HelpCircle,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -37,6 +38,11 @@ export const TICKETS_SIDEBAR_GROUPS: SidebarGroupConfig[] = [
         id: 'unassigned',
         label: 'Unassigned',
         icon: UserPlus,
+      },
+      {
+        id: 'help_requested',
+        label: 'Help Requested',
+        icon: HelpCircle,
         indicator: { label: 'help', color: 'bg-red-500 text-white font-black animate-pulse shadow shadow-red-500/50' },
       },
       {
