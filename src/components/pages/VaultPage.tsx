@@ -63,6 +63,7 @@ import { ExchangeKpiCards } from '../exchange/ExchangeKpiCards';
 import { ExchangeAiInsightsBanner } from '../exchange/ExchangeAiInsightsBanner';
 import { ExchangeQuickActions } from '../exchange/ExchangeQuickActions';
 import { ExchangeActiveTable } from '../exchange/ExchangeActiveTable';
+import { ExchangeDetailDrawer } from '../exchange/ExchangeDetailDrawer';
 import { ExchangeRecentTransfers } from '../exchange/ExchangeRecentTransfers';
 import { ExchangeSecuritySidebar } from '../exchange/ExchangeSecuritySidebar';
 import { ExchangeTrustFooter } from '../exchange/ExchangeTrustFooter';
@@ -70,7 +71,7 @@ import { ExchangeCreateTemplateModal } from '../exchange/ExchangeCreateTemplateM
 import { useExchangeFilters, useQuickFilterHandler } from '../exchange/useExchangeFilters';
 import { useExchangeTemplates } from '../exchange/useExchangeTemplates';
 import type { ExchangeItemRowSeed } from '../exchange/exchange-template-utils';
-import type { ExchangeNavId, ExchangeQuickFilter } from '../exchange/exchange-utils';
+import type { ExchangeNavId, ExchangeQuickFilter, ExchangeItemRow } from '../exchange/exchange-utils';
 import {
   isExchangeFocusedFilterMode,
   isExchangeOverviewMode,
@@ -86,6 +87,7 @@ export default function VaultPage() {
   const [activeTab, setActiveTab] = useState<'dashboard' | 'secrets' | 'dropzones' | 'analysis' | 'templates'>('dashboard');
   const [exchangeNav, setExchangeNav] = useState<ExchangeNavId>('overview');
   const [quickFilter, setQuickFilter] = useState<ExchangeQuickFilter>(null);
+  const [selectedExchangeItem, setSelectedExchangeItem] = useState<ExchangeItemRow | null>(null);
   
   // Real DB Data
   const [history, setHistory] = useState<VaultItem[]>([]);
@@ -204,7 +206,7 @@ export default function VaultPage() {
     tableTab,
   });
 
-  const handleQuickFilter = useQuickFilterHandler({
+  const applyQuickFilter = useQuickFilterHandler({
     quickFilter,
     setQuickFilter,
     setExchangeNav,
@@ -212,6 +214,14 @@ export default function VaultPage() {
     setTableFilter,
     setTableTab,
   });
+
+  const handleQuickFilter = React.useCallback(
+    (filter: ExchangeQuickFilter) => {
+      setSelectedExchangeItem(null);
+      applyQuickFilter(filter);
+    },
+    [applyQuickFilter],
+  );
 
   // Load Real Data
   useEffect(() => {
@@ -506,6 +516,7 @@ export default function VaultPage() {
   const handleExchangeNavigate = (nav: ExchangeNavId) => {
     setExchangeNav(nav);
     setQuickFilter(null);
+    setSelectedExchangeItem(null);
     setTableFilter('all');
     setTableTab('requests');
     const tabMap: Record<ExchangeNavId, typeof activeTab> = {
@@ -521,6 +532,9 @@ export default function VaultPage() {
   };
 
   const handleDeleteExchangeItem = async (id: string) => {
+    if (selectedExchangeItem?.id === id) {
+      setSelectedExchangeItem(null);
+    }
     if (id.startsWith('upload-mock') || id.startsWith('seed-expiring-')) {
       setMockUploads((prev) => prev.filter((p) => p.id !== id));
     } else {
@@ -583,7 +597,7 @@ export default function VaultPage() {
           onApplyCustomTemplate={handleApplyCustomTemplate}
         />
 
-        <div className="flex flex-1 min-w-0 min-h-0">
+        <div className="flex flex-1 min-w-0 min-h-0 relative">
           <ScrollArea className="flex-1 min-w-0">
             <div className="px-4 sm:px-6 py-5 space-y-5 pb-10">
               <ExchangePageHeader quickFilter={isFocusedFilterMode ? quickFilter : null} />
@@ -597,6 +611,7 @@ export default function VaultPage() {
                     value={tableFilter}
                     onChange={(v) => {
                       setQuickFilter(null);
+                      setSelectedExchangeItem(null);
                       setTableFilter(v as typeof tableFilter);
                       setTableTab('requests');
                     }}
@@ -641,6 +656,8 @@ export default function VaultPage() {
                 ) : null}
                 <ExchangeActiveTable
                   items={filteredExchangeItems}
+                  selectedItemId={selectedExchangeItem?.id ?? null}
+                  onRowSelect={setSelectedExchangeItem}
                   quickFilter={isFocusedFilterMode ? quickFilter : null}
                   onCopyLink={(id) => copyToClipboard(`${window.location.origin}/v/${id}`)}
                   onBurn={async (id) => {
@@ -1297,6 +1314,11 @@ export default function VaultPage() {
           </AnimatePresence>
             </div>
           </ScrollArea>
+
+          <ExchangeDetailDrawer
+            item={selectedExchangeItem}
+            onClose={() => setSelectedExchangeItem(null)}
+          />
         </div>
 
         <ExchangeSecuritySidebar className="hidden xl:flex" />

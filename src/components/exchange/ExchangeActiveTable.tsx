@@ -12,6 +12,8 @@ import {
 
 interface ExchangeActiveTableProps {
   items: ExchangeItemRow[];
+  selectedItemId?: string | null;
+  onRowSelect?: (item: ExchangeItemRow) => void;
   onCopyLink?: (id: string) => void;
   onBurn?: (id: string) => void;
   onDelete?: (id: string) => void;
@@ -21,6 +23,8 @@ interface ExchangeActiveTableProps {
 
 export function ExchangeActiveTable({
   items,
+  selectedItemId,
+  onRowSelect,
   onCopyLink,
   onBurn,
   onDelete,
@@ -73,7 +77,16 @@ export function ExchangeActiveTable({
           <tbody className="divide-y divide-slate-100">
             {items.length > 0 ? (
               items.map((item) => (
-                <tr key={item.id} className="hover:bg-slate-50/50 transition-colors group">
+                <tr
+                  key={item.id}
+                  onClick={() => onRowSelect?.(item)}
+                  className={cn(
+                    'transition-colors group cursor-pointer',
+                    selectedItemId === item.id
+                      ? 'bg-[#E8F0FE]/70 hover:bg-[#E8F0FE]/80'
+                      : 'hover:bg-slate-50/50',
+                  )}
+                >
                   <td className="px-5 py-3">
                     <div
                       className={cn(
@@ -115,10 +128,15 @@ export function ExchangeActiveTable({
                         : t('exchange.policy.malwareScan', 'Malware scan + 48h')}
                     </span>
                   </td>
-                  <td className="px-5 py-3 text-right">
+                  <td className="px-5 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                     <div className="flex justify-end gap-1 opacity-80 group-hover:opacity-100">
                       {onCopyLink ? (
-                        <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onCopyLink(item.id)}>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => onCopyLink(item.id)}
+                        >
                           <Copy className="w-3.5 h-3.5" />
                         </Button>
                       ) : null}

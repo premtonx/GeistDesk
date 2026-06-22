@@ -1131,6 +1131,28 @@
         "burned": "Vernichtet",
         "archived": "Archiviert"
       }
+    },
+    "drawer": {
+      "ariaLabel": "Austausch-Element-Details",
+      "close": "Schließen",
+      "diagnostics": "Diagnose & Sicherheit",
+      "securityPolicy": "Sicherheitsrichtlinie",
+      "views": "Aufrufe / Downloads",
+      "expiration": "Ablauf",
+      "authorizedRecipients": "Autorisierte Empfänger",
+      "linkedTicket": "Verknüpftes Ticket",
+      "rotateToken": "Token-Schlüssel rotieren",
+      "revokeAccess": "Zugriff sofort widerrufen",
+      "downloadSecure": "Datei sicher herunterladen",
+      "aiAnalysis": "KI-Analyse",
+      "rotateSuccess": "Token-Rotation in Warteschlange.",
+      "revokeSuccess": "Zugriffswiderruf eingeleitet.",
+      "downloadSuccess": "Sicherer Download-Kanal geöffnet.",
+      "aiSummarySql": "SQL-Dump analysiert: Index-Fragmentierungswarnungen erkannt. Schema-Review vor Produktions-Restore empfohlen.",
+      "aiSummaryLogs": "Log-Archiv gescannt: Connection-Pool-Timeout-Muster erkannt. Keine Malware-Signaturen.",
+      "aiSummaryImage": "Visuelle Diagnose geprüft: Firewall-Richtlinienfehler erfasst. Compliance-Status: akzeptabel.",
+      "aiSummarySecret": "Geheimnis-Payload als hochsensibles Credential-Material klassifiziert. Keine Klartext-Exposition.",
+      "aiSummaryGeneric": "Automatisierter Scan abgeschlossen. Keine kritischen Compliance-Verstöße für dieses Austausch-Artefakt."
     }
   },
   "vault": {

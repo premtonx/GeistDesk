@@ -1131,6 +1131,28 @@
         "burned": "Burned",
         "archived": "Archived"
       }
+    },
+    "drawer": {
+      "ariaLabel": "Exchange item details",
+      "close": "Close",
+      "diagnostics": "Diagnostics & Security",
+      "securityPolicy": "Security policy",
+      "views": "Views / downloads",
+      "expiration": "Expiration",
+      "authorizedRecipients": "Authorized recipients",
+      "linkedTicket": "Linked ticket",
+      "rotateToken": "Rotate Token Key",
+      "revokeAccess": "Revoke Access immediately",
+      "downloadSecure": "Download File Securely",
+      "aiAnalysis": "AI Analysis",
+      "rotateSuccess": "Token rotation queued.",
+      "revokeSuccess": "Access revocation initiated.",
+      "downloadSuccess": "Secure download channel opened.",
+      "aiSummarySql": "SQL dump analyzed: index fragmentation warnings detected. Recommend schema review before production restore.",
+      "aiSummaryLogs": "Log archive scanned: connection pool timeout patterns identified. No malware signatures detected.",
+      "aiSummaryImage": "Visual diagnostic reviewed: firewall policy error state captured. Compliance posture: acceptable.",
+      "aiSummarySecret": "Secret payload classified as high-sensitivity credential material. Zero plaintext exposure detected.",
+      "aiSummaryGeneric": "Automated scan complete. No critical compliance violations flagged for this exchange artifact."
     }
   },
   "vault": {
