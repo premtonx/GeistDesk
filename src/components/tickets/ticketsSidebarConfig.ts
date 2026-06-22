@@ -1,18 +1,11 @@
 import {
-  UserRound,
   UserPlus,
   PlusCircle,
   Clock,
   GraduationCap,
   AlertTriangle,
   AlertCircle,
-  Bug,
   List,
-  Zap,
-  Sparkles,
-  Lightbulb,
-  TrendingUp,
-  Inbox,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -36,16 +29,16 @@ export interface SidebarGroupConfig {
 
 export const TICKETS_SIDEBAR_GROUPS: SidebarGroupConfig[] = [
   {
-    id: 'support',
-    label: 'Support',
+    id: 'inbox',
+    label: 'Inbox',
     items: [
+      { id: 'team_all_open', label: 'All', icon: List },
       {
-        id: 'my_queue',
-        label: 'My Queue',
-        icon: UserRound,
+        id: 'unassigned',
+        label: 'Unassigned',
+        icon: UserPlus,
         indicator: { label: 'help', color: 'bg-red-500 text-white font-black animate-pulse shadow shadow-red-500/50' },
       },
-      { id: 'unassigned', label: 'Unassigned', icon: UserPlus },
       {
         id: 'new_tickets',
         label: 'New Tickets',
@@ -61,8 +54,8 @@ export const TICKETS_SIDEBAR_GROUPS: SidebarGroupConfig[] = [
     ],
   },
   {
-    id: 'customers',
-    label: 'Customers',
+    id: 'customers_sla',
+    label: 'Customers / SLA',
     items: [
       { id: 'vip_customers', label: 'VIP Customers', icon: GraduationCap },
       { id: 'escalations', label: 'Escalations', icon: AlertTriangle },
@@ -74,24 +67,6 @@ export const TICKETS_SIDEBAR_GROUPS: SidebarGroupConfig[] = [
       },
     ],
   },
-  {
-    id: 'engineering',
-    label: 'Engineering',
-    items: [
-      { id: 'linked_bugs', label: 'Linked Bugs', icon: Bug },
-      { id: 'bug_backlog', label: 'Bug Backlog', icon: List },
-      { id: 'incidents', label: 'Incidents', icon: Zap },
-    ],
-  },
-  {
-    id: 'ai_labs',
-    label: 'AI Labs',
-    items: [
-      { id: 'ai_inbox', label: 'AI Inbox', icon: Inbox },
-      { id: 'suggestions', label: 'Suggestions', icon: Sparkles },
-      { id: 'trend_analytics', label: 'Trend Analytics', icon: TrendingUp },
-    ],
-  },
 ];
 
-export const TICKETS_SIDEBAR_GROUP_ORDER = ['support', 'customers', 'engineering', 'ai_labs'];
+export const TICKETS_SIDEBAR_GROUP_ORDER = ['inbox', 'customers_sla'];

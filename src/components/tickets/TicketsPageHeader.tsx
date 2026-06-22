@@ -2,7 +2,6 @@ import React from 'react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { MODULE_PAGE_PX } from '../ui/module-page/styles';
-import { AppWorkspace } from '../../lib/ticketWorkspace';
 
 interface MetaPillProps {
   dotClass: string;
@@ -23,42 +22,23 @@ export interface TicketsHeaderStats {
   slaRisk?: number;
   pending?: number;
   urgent?: number;
-  bugs?: number;
   unassigned?: number;
 }
 
 interface TicketsPageHeaderProps {
   trailing?: React.ReactNode;
   className?: string;
-  workspace?: AppWorkspace;
   stats?: TicketsHeaderStats;
 }
 
-export function TicketsPageHeader({
-  trailing,
-  className,
-  workspace = 'support',
-  stats,
-}: TicketsPageHeaderProps) {
+export function TicketsPageHeader({ trailing, className, stats }: TicketsPageHeaderProps) {
   const { t } = useTranslation();
 
-  const metaLine = (() => {
-    if (!stats) return null;
-    if (workspace === 'developer') {
-      return t('tickets.headerMetaDev', 'Tickets • {{open}} Open • {{bugs}} Bugs • {{unassigned}} Unassigned')
+  const metaLine = stats
+    ? t('tickets.headerMetaSupport', 'Tickets • {{open}} Open • {{slaRisk}} SLA Risk')
         .replace('{{open}}', String(stats.open))
-        .replace('{{bugs}}', String(stats.bugs ?? 0))
-        .replace('{{unassigned}}', String(stats.unassigned ?? 0));
-    }
-    if (workspace === 'ai_ops') {
-      return t('tickets.headerMetaAiOps', 'AI Operations • {{open}} Active • {{slaRisk}} SLA Risk')
-        .replace('{{open}}', String(stats.open))
-        .replace('{{slaRisk}}', String(stats.slaRisk ?? 0));
-    }
-    return t('tickets.headerMetaSupport', 'Tickets • {{open}} Open • {{slaRisk}} SLA Risk')
-      .replace('{{open}}', String(stats.open))
-      .replace('{{slaRisk}}', String(stats.slaRisk ?? 0));
-  })();
+        .replace('{{slaRisk}}', String(stats.slaRisk ?? 0))
+    : null;
 
   return (
     <header

@@ -149,7 +149,6 @@ import { customerService } from '../../services/customerService';
 import { schemaService, CustomField } from '../../services/schemaService';
 import { useAuth } from '../../lib/hooks';
 import { useSidebar } from '../../lib/context/SidebarContext';
-import { useWorkspace } from '../../lib/context/WorkspaceContext';
 import {
   filterTicketsByWorkspace,
   getLinkedBugTicket,
@@ -189,7 +188,6 @@ import { TicketsQueueAiChip } from '../tickets/TicketsQueueAiChip';
 import { TicketsPageHeader } from '../tickets/TicketsPageHeader';
 import { TicketsLeftSidebar } from '../tickets/TicketsLeftSidebar';
 import { TicketsEmptyState } from '../tickets/TicketsEmptyState';
-import { TicketsAiOpsPanel } from '../tickets/TicketsAiOpsPanel';
 import { TicketDetailDrawer } from '../tickets/TicketDetailDrawer';
 import { TICKETS_SIDEBAR_GROUPS } from '../tickets/ticketsSidebarConfig';
 import { TicketStatusChip, TicketPriorityChip, TicketAssigneeChip } from '../tickets/TicketTableCells';
@@ -312,7 +310,6 @@ export default function TicketsPage() {
   const { user } = useAuth();
   const { hasPermission, role, loading: permsLoading } = usePermissions();
   const { isPipelineCollapsed, togglePipelineSidebar } = useSidebar();
-  const { workspace, isDeveloperWorkspace, isAiOpsWorkspace, setWorkspace } = useWorkspace();
   const { ticketId } = useParams();
   const navigate = useNavigate();
   
@@ -341,44 +338,18 @@ export default function TicketsPage() {
   const [replyText, setReplyText] = useState('');
   const [isMobilePropertiesOpen, setIsMobilePropertiesOpen] = useState(false);
   const [activeView, setActiveView] = useState<string>(() => {
-    return localStorage.getItem('geistdesk_default_view') || 'my_queue';
+    return localStorage.getItem('geistdesk_default_view') || 'team_all_open';
   });
   const [topStatusFilter, setTopStatusFilter] = useState<
-    | 'all'
-    | 'open'
-    | 'pending'
-    | 'onhold'
-    | 'urgent'
-    | 'unassigned'
-    | 'bugs'
-    | 'all_bugs'
-    | 'in_dev'
-    | 'qa'
-    | 'merged'
-    | 'released'
+    'all' | 'open' | 'pending' | 'onhold' | 'urgent' | 'unassigned'
   >('all');
   const [drawerTicketId, setDrawerTicketId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<TicketsLayoutMode>('list');
   const [listSort, setListSort] = useState<'newest' | 'oldest' | 'priority'>('newest');
 
-  useEffect(() => {
-    setWorkspace('support');
-    setTopStatusFilter('all');
-  }, [setWorkspace]);
-
-  useEffect(() => {
-    if (isDeveloperWorkspace) {
-      setTopStatusFilter('all_bugs');
-    } else if (isAiOpsWorkspace) {
-      setTopStatusFilter('all');
-    } else {
-      setTopStatusFilter('all');
-    }
-  }, [activeView, workspace, isDeveloperWorkspace, isAiOpsWorkspace]);
-
-  const workspaceTickets = useMemo(
-    () => filterTicketsByWorkspace(allTickets, workspace),
-    [allTickets, workspace],
+  const supportTickets = useMemo(
+    () => filterTicketsByWorkspace(allTickets, 'support'),
+    [allTickets],
   );
 
   const [additionalCategory, setAdditionalCategory] = useState<string | null>(() => {
@@ -444,10 +415,8 @@ export default function TicketsPage() {
     return saved ? JSON.parse(saved) : [];
   });
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({
-    support: false,
-    customers: false,
-    engineering: false,
-    ai_labs: false,
+    inbox: false,
+    customers_sla: false,
   });
   const [viewDensity, setViewDensity] = useState<'comfortable' | 'compact'>('compact');
   const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
@@ -676,7 +645,7 @@ export default function TicketsPage() {
   const baseSidebarTickets = useMemo(() => {
     if (!user) return [];
     
-    let filtered = [...workspaceTickets];
+    let filtered = [...supportTickets];
 
     switch (activeView) {
       case 'my_queue':
@@ -870,7 +839,7 @@ export default function TicketsPage() {
     }
 
     return filtered;
-  }, [workspaceTickets, activeView, user, watchedTicketIds, isAiReady, allTickets]);
+  }, [supportTickets, activeView, user, watchedTicketIds, isAiReady, allTickets]);
 
   const ticketQueueStats = useMemo(() => {
     const pool = baseSidebarTickets.filter(
@@ -964,17 +933,7 @@ export default function TicketsPage() {
     // Filter by the selected top sub-navigation status state
     switch (topStatusFilter) {
       case 'open':
-        if (isDeveloperWorkspace) {
-          result = result.filter(
-            (t) =>
-              isBugTicket(t) &&
-              matchStatus(t.status, 'open') &&
-              matchStatusNot(t.status, 'merged') &&
-              matchStatusNot(t.status, 'closed'),
-          );
-        } else {
-          result = result.filter(t => matchStatus(t.status, 'open'));
-        }
+        result = result.filter(t => matchStatus(t.status, 'open'));
         break;
       case 'pending':
         result = result.filter(t => matchStatus(t.status, 'pending'));
@@ -986,32 +945,6 @@ export default function TicketsPage() {
         break;
       case 'urgent':
         result = result.filter(t => t.priority === 'urgent' || t.priority === 'high');
-        break;
-      case 'bugs':
-        result = result.filter(t => isBugTicket(t));
-        break;
-      case 'all_bugs':
-        result = result.filter((t) => isBugTicket(t));
-        break;
-      case 'in_dev':
-        result = result.filter((t) => isBugTicket(t) && t.devStatus === 'in_dev');
-        break;
-      case 'qa':
-        result = result.filter((t) => isBugTicket(t) && t.devStatus === 'qa');
-        break;
-      case 'merged':
-        result = result.filter(
-          (t) => isBugTicket(t) && t.devStatus === 'merged',
-        );
-        break;
-      case 'released':
-        result = result.filter(
-          (t) =>
-            isBugTicket(t) &&
-            (matchStatus(t.status, 'closed') ||
-              matchStatus(t.status, 'resolved') ||
-              t.devStatus === 'merged'),
-        );
         break;
       case 'unassigned':
         result = result.filter(t => !t.agentName);
@@ -1159,7 +1092,7 @@ export default function TicketsPage() {
     });
 
     return result;
-  }, [baseSidebarTickets, topStatusFilter, searchQuery, filters, user, listSort, allTickets, isDeveloperWorkspace]);
+  }, [baseSidebarTickets, topStatusFilter, searchQuery, filters, user, listSort, allTickets]);
 
   const getFilteredTickets = () => {
     return finalRenderedTickets;
@@ -3836,13 +3769,11 @@ export default function TicketsPage() {
       /* List View: Expanded Full Width */
       <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#FAFBFC] relative">
             <TicketsPageHeader
-              workspace={workspace}
               stats={{
                 open: ticketQueueStats.open,
                 slaRisk: ticketQueueStats.slaRisk,
                 pending: ticketQueueStats.pending,
                 urgent: ticketQueueStats.urgent,
-                bugs: ticketQueueStats.bugs,
                 unassigned: ticketQueueStats.unassigned,
               }}
               trailing={
@@ -3859,43 +3790,18 @@ export default function TicketsPage() {
             />
             <ModulePageTabs
               className="border-0 bg-transparent"
-              tabs={
-                isAiOpsWorkspace
-                  ? [
-                      { id: 'all', label: `${t('tickets.allTickets', 'All')} ${ticketQueueStats.all}` },
-                      { id: 'urgent', label: `${t('tickets.priorityUrgent', 'Urgent')} ${ticketQueueStats.urgent}` },
-                      { id: 'unassigned', label: `${t('tickets.unassigned', 'Unassigned')} ${ticketQueueStats.unassigned}` },
-                    ]
-                  : isDeveloperWorkspace
-                  ? [
-                      { id: 'all_bugs', label: t('tickets.devTabs.allBugs', 'All Bugs') },
-                      { id: 'open', label: `${t('tickets.devTabs.open', 'Open')} ${ticketQueueStats.open}` },
-                      { id: 'in_dev', label: t('tickets.devTabs.inDev', 'In Dev') },
-                      { id: 'qa', label: t('tickets.devTabs.qa', 'QA') },
-                      { id: 'merged', label: t('tickets.devTabs.merged', 'Merged') },
-                      { id: 'released', label: t('tickets.devTabs.released', 'Released') },
-                    ]
-                  : [
-                      { id: 'all', label: `${t('tickets.allTickets', 'All')} ${ticketQueueStats.all}` },
-                      { id: 'open', label: `${t('tickets.open', 'Open')} ${ticketQueueStats.open}` },
-                      { id: 'pending', label: `${t('tickets.inProgress', 'In Progress')} ${ticketQueueStats.pending}` },
-                      { id: 'onhold', label: `${t('tickets.pendingOnHold', 'Pending')} ${ticketQueueStats.onhold}` },
-                      { id: 'urgent', label: `${t('tickets.priorityUrgent', 'Urgent')} ${ticketQueueStats.urgent}` },
-                      { id: 'unassigned', label: `${t('tickets.unassigned', 'Unassigned')} ${ticketQueueStats.unassigned}` },
-                    ]
-              }
+              tabs={[
+                { id: 'all', label: `${t('tickets.allTickets', 'All')} ${ticketQueueStats.all}` },
+                { id: 'open', label: `${t('tickets.open', 'Open')} ${ticketQueueStats.open}` },
+                { id: 'pending', label: `${t('tickets.inProgress', 'In Progress')} ${ticketQueueStats.pending}` },
+                { id: 'onhold', label: `${t('tickets.pendingOnHold', 'Pending')} ${ticketQueueStats.onhold}` },
+                { id: 'urgent', label: `${t('tickets.priorityUrgent', 'Urgent')} ${ticketQueueStats.urgent}` },
+                { id: 'unassigned', label: `${t('tickets.unassigned', 'Unassigned')} ${ticketQueueStats.unassigned}` },
+              ]}
               activeId={topStatusFilter}
               onChange={(id) => setTopStatusFilter(id as typeof topStatusFilter)}
             />
 
-            {isAiOpsWorkspace ? (
-              <TicketsAiOpsPanel
-                tickets={baseSidebarTickets}
-                onActionClick={() => handleViewChange('suggestions')}
-                onClusterClick={() => handleViewChange('trend_analytics')}
-              />
-            ) : (
-            <>
             <ModuleToolbar
               searchPlaceholder={t('tickets.searchPlaceholderFull', 'Search tickets, customers, companies...')}
               searchValue={searchQuery}
@@ -3931,6 +3837,7 @@ export default function TicketsPage() {
               }
             />
             <TicketsQueueAiChip
+              id="tickets-ai-chip"
               ticketCount={tickets.length}
               criticalCount={ticketQueueStats.critical}
               vipCount={ticketQueueStats.vip}
@@ -4455,8 +4362,7 @@ export default function TicketsPage() {
                 <TicketsEmptyState
                   onViewUnassigned={() => handleViewChange('unassigned')}
                   onOpenAiSuggestions={() => {
-                    setWorkspace('ai_ops');
-                    handleViewChange('suggestions');
+                    document.getElementById('tickets-ai-chip')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                   }}
                   onCreateTicket={() => setIsCreateTicketOpen(true)}
                 />
@@ -4482,9 +4388,8 @@ export default function TicketsPage() {
               <>
               {/* Desktop Table Layout (lg and up) */}
               <div className="hidden lg:block w-full overflow-x-auto">
-                <div className={cn('border-collapse bg-card', getTicketTableMinWidth(isDeveloperWorkspace))}>
+                <div className={cn('border-collapse bg-card', getTicketTableMinWidth())}>
                 <TicketsTableHeader
-                  isDeveloperWorkspace={isDeveloperWorkspace}
                   headerCheckboxActive={headerCheckboxActive}
                   onToggleSelectAll={toggleSelectAll}
                 />
@@ -4518,18 +4423,6 @@ export default function TicketsPage() {
                         return <span title="Email Channel"><Mail className="w-3.5 h-3.5 text-slate-500 animate-none shrink-0" /></span>;
                       })();
 
-                      const devVersion =
-                        ticket.affectedVersion ??
-                        `v2.${(ticket.id.charCodeAt(0) % 4) + 1}.${(ticket.id.charCodeAt(1) % 9) + 1}`;
-                      const devEnvironment =
-                        ticket.environment ??
-                        ((ticket.id.charCodeAt(2) % 2) === 0
-                          ? t('tickets.env.prod', 'PROD')
-                          : t('tickets.env.staging', 'STAGING'));
-                      const devStepsPreview = stripHtml(
-                        ticket.stepsToReproduce ?? ticket.description ?? '',
-                      ).slice(0, 100);
-
                       return (
                         <motion.div 
                           key={ticket.id}
@@ -4537,7 +4430,7 @@ export default function TicketsPage() {
                           animate={{ opacity: 1 }}
                           onClick={() => handleTicketSelect(ticket.id)}
                           className={cn(
-                            getTicketTableGridClass(isDeveloperWorkspace),
+                            getTicketTableGridClass(),
                             'px-4 overflow-hidden',
                             ticketTableRowClass(selectedTicketIds.includes(ticket.id)),
                           )}
@@ -4552,34 +4445,6 @@ export default function TicketsPage() {
                             />
                           </div>
 
-                          {isDeveloperWorkspace ? (
-                            <>
-                              <div className="min-w-0 text-[11px] font-bold text-slate-800 font-mono truncate">
-                                {formatTicketRef(ticket.id)}
-                              </div>
-                              <div className="min-w-0 text-[11px] font-semibold text-slate-700">
-                                {getLinkedSupportTickets(ticket, allTickets).length}
-                              </div>
-                              <div className="min-w-0 text-[11px] font-semibold text-slate-700">
-                                {new Set(getLinkedSupportTickets(ticket, allTickets).map((st) => st.customerName)).size ||
-                                  Math.max(1, ticket.id.charCodeAt(3) % 4)}
-                              </div>
-                              <div className="min-w-0">
-                                <span className="inline-flex text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border border-slate-200 bg-slate-50 text-slate-700">
-                                  {devEnvironment}
-                                </span>
-                              </div>
-                              <div className="min-w-0 text-[11px] font-semibold text-slate-700 truncate font-mono">
-                                {devVersion}
-                              </div>
-                              <div className="min-w-0">
-                                <Badge variant="outline" className="text-[10px] h-5 font-semibold capitalize">
-                                  {t(devStatusLabelKey(ticket.devStatus), ticket.devStatus ?? 'backlog')}
-                                </Badge>
-                              </div>
-                            </>
-                          ) : (
-                            <>
                           {/* Customer Column */}
                           <div className="min-w-0 flex items-center gap-2 pr-1" onClick={(e) => e.stopPropagation()}>
                              <Avatar className={cn(
@@ -4711,8 +4576,6 @@ export default function TicketsPage() {
                           <div className="min-w-0 text-xs text-muted-foreground font-semibold text-left truncate">
                              {ticket.updatedAt?.toDate ? ticket.updatedAt.toDate().toLocaleDateString([], { month: 'short', day: 'numeric' }) : t('tickets.today', 'Today')}
                           </div>
-                            </>
-                          )}
 
                           {/* Actions Menu Column */}
                           <div className="justify-self-center" onClick={(e) => e.stopPropagation()}>
@@ -4890,7 +4753,6 @@ export default function TicketsPage() {
             </ScrollArea>
 
             {/* Data Table Pagination Footer (Sticky / Locked at the bottom) */}
-            {!isAiOpsWorkspace && (
             <div className="h-14 border-t border-border bg-card px-6 flex items-center justify-between shrink-0 select-none">
               {/* Left Side: Status display */}
               <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400">
@@ -4967,10 +4829,6 @@ export default function TicketsPage() {
                 </div>
               </div>
             </div>
-            )}
-
-            </>
-            )}
 
             <TicketDetailDrawer
               ticket={drawerTicketId ? allTickets.find((tk) => tk.id === drawerTicketId) ?? null : null}

@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { useTranslation } from '../../lib/context/I18nContext';
 
 interface TicketsQueueAiChipProps {
+  id?: string;
   ticketCount: number;
   criticalCount: number;
   vipCount: number;
@@ -14,6 +15,7 @@ interface TicketsQueueAiChipProps {
 }
 
 export function TicketsQueueAiChip({
+  id,
   ticketCount,
   criticalCount,
   vipCount,
@@ -25,7 +27,7 @@ export function TicketsQueueAiChip({
   const sentiment = sentimentLabel ?? t('tickets.aiChip.sentimentPositive', 'Positive');
 
   return (
-    <div className={cn('relative shrink-0', className)}>
+    <div id={id} className={cn('relative shrink-0', className)}>
       <div
         className={cn(
           'mx-6 flex items-center gap-2 h-10 min-h-10 max-h-10 px-3',

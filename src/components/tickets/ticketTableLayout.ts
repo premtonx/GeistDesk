@@ -4,16 +4,12 @@ import { cn } from '../../lib/utils';
 export const TICKET_TABLE_GRID_SUPPORT =
   'grid items-center gap-x-3 grid-cols-[36px_150px_minmax(240px,1fr)_120px_100px_140px_120px_50px]';
 
-/** Developer workspace — bug tracker columns */
-export const TICKET_TABLE_GRID_DEVELOPER =
-  'grid items-center gap-x-3 grid-cols-[36px_100px_120px_120px_100px_100px_128px_48px]';
-
-export function getTicketTableGridClass(isDeveloperWorkspace: boolean): string {
-  return isDeveloperWorkspace ? TICKET_TABLE_GRID_DEVELOPER : TICKET_TABLE_GRID_SUPPORT;
+export function getTicketTableGridClass(): string {
+  return TICKET_TABLE_GRID_SUPPORT;
 }
 
-export function getTicketTableMinWidth(isDeveloperWorkspace: boolean): string {
-  return isDeveloperWorkspace ? 'min-w-[860px]' : 'min-w-[920px]';
+export function getTicketTableMinWidth(): string {
+  return 'min-w-[920px]';
 }
 
 export const TICKET_TABLE_HEADER_CELL =
