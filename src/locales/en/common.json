@@ -103,11 +103,53 @@
   "tickets": {
     "title": "Sovereign Tickets",
     "titleShort": "Tickets",
+    "pageTitle": "Tickets",
+    "metaPillOpen": "Open",
+    "metaPillInProgress": "In Progress",
+    "metaPillUrgent": "Urgent",
     "headerMetaInline": "Tickets • {{open}} Open • {{pending}} In Progress • {{urgent}} Urgent",
     "headerMetaDev": "Tickets • {{open}} Open • {{bugs}} Bugs • {{unassigned}} Unassigned",
     "bugsTab": "Bugs",
     "moduleDescription": "Manage support pipeline, SLA tracking, and AI-assisted resolution.",
     "searchPlaceholder": "Search tickets...",
+    "searchPlaceholderFull": "Search tickets, customers, companies...",
+    "pendingOnHold": "Pending",
+    "sortNewest": "Newest",
+    "sortOldest": "Oldest",
+    "sortPriority": "Priority",
+    "ticketIdShort": "#{{id}}",
+    "privateCustomer": "Private",
+    "aiQualityScore": "AI Quality Score",
+    "aiQuality": {
+      "excellent": "Excellent",
+      "good": "Good",
+      "needsWork": "Needs attention"
+    },
+    "layout": {
+      "list": "List",
+      "kanban": "Kanban",
+      "cards": "Cards"
+    },
+    "status": {
+      "open": "Open",
+      "pending": "In Progress",
+      "resolved": "Resolved",
+      "closed": "Closed",
+      "merged": "Merged",
+      "trash": "Deleted",
+      "deleted": "Deleted",
+      "on-hold": "Pending"
+    },
+    "priority": {
+      "low": "Low",
+      "medium": "Medium",
+      "high": "High",
+      "urgent": "Urgent"
+    },
+    "rowActions": {
+      "open": "Open",
+      "delete": "Delete"
+    },
     "allTickets": "All",
     "open": "Open",
     "inProgress": "In Progress",

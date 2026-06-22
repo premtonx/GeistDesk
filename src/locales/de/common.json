@@ -103,11 +103,53 @@
   "tickets": {
     "title": "Sovereign-Tickets",
     "titleShort": "Tickets",
+    "pageTitle": "Tickets",
+    "metaPillOpen": "Offen",
+    "metaPillInProgress": "In Bearbeitung",
+    "metaPillUrgent": "Dringend",
     "headerMetaInline": "Tickets • {{open}} Offen • {{pending}} In Bearbeitung • {{urgent}} Dringend",
     "headerMetaDev": "Tickets • {{open}} Offen • {{bugs}} Bugs • {{unassigned}} Nicht zugewiesen",
     "bugsTab": "Bugs",
     "moduleDescription": "Support-Pipeline, SLA-Tracking und KI-gestützte Bearbeitung verwalten.",
     "searchPlaceholder": "Tickets durchsuchen...",
+    "searchPlaceholderFull": "Tickets, Kunden, Unternehmen durchsuchen...",
+    "pendingOnHold": "Wartend",
+    "sortNewest": "Neueste",
+    "sortOldest": "Älteste",
+    "sortPriority": "Priorität",
+    "ticketIdShort": "#{{id}}",
+    "privateCustomer": "Privat",
+    "aiQualityScore": "KI-Qualitätswert",
+    "aiQuality": {
+      "excellent": "Ausgezeichnet",
+      "good": "Gut",
+      "needsWork": "Verbesserungsbedarf"
+    },
+    "layout": {
+      "list": "Liste",
+      "kanban": "Kanban",
+      "cards": "Karten"
+    },
+    "status": {
+      "open": "Offen",
+      "pending": "In Bearbeitung",
+      "resolved": "Gelöst",
+      "closed": "Geschlossen",
+      "merged": "Zusammengeführt",
+      "trash": "Gelöscht",
+      "deleted": "Gelöscht",
+      "on-hold": "Wartend"
+    },
+    "priority": {
+      "low": "Niedrig",
+      "medium": "Mittel",
+      "high": "Hoch",
+      "urgent": "Dringend"
+    },
+    "rowActions": {
+      "open": "Öffnen",
+      "delete": "Löschen"
+    },
     "allTickets": "Alle",
     "open": "Offen",
     "inProgress": "In Bearbeitung",

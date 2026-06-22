@@ -182,11 +182,17 @@ import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
 import { WorkspaceSwitcher } from '../layout/WorkspaceSwitcher';
 import {
-  ModulePageCompactHeader,
   ModulePageTabs,
   ModuleToolbar,
+  ModuleToolbarSelect,
 } from '../ui/module-page';
 import { TicketsQueueAiChip } from '../tickets/TicketsQueueAiChip';
+import { TicketsPageHeader } from '../tickets/TicketsPageHeader';
+import { TicketStatusChip, TicketPriorityChip, TicketAssigneeChip } from '../tickets/TicketTableCells';
+import { TicketsViewModeSelector, type TicketsLayoutMode } from '../tickets/TicketsViewModeSelector';
+import { TicketsKanbanBoard } from '../tickets/TicketsKanbanBoard';
+import { TicketsCardGrid } from '../tickets/TicketsCardGrid';
+import { TicketsAiQualityScore } from '../tickets/TicketsAiQualityScore';
 
 const matchStatus = (status: string | undefined, target: string): boolean => {
   if (!status) return false;
@@ -202,6 +208,12 @@ const hasTagCaseInsensitive = (tags: string[] | undefined, target: string): bool
   if (!tags) return false;
   return tags.some(tag => tag.toLowerCase().trim() === target.toLowerCase().trim());
 };
+
+function formatTicketRef(id: string): string {
+  const upper = id.toUpperCase();
+  if (upper.startsWith('TKT')) return `#${upper}`;
+  return `#TKT-${id.slice(-4).toUpperCase()}`;
+}
 
 const staticCategories = [
   {
@@ -327,7 +339,9 @@ export default function TicketsPage() {
   const [activeView, setActiveView] = useState<string>(() => {
     return localStorage.getItem('geistdesk_default_view') || 'unassigned';
   });
-  const [topStatusFilter, setTopStatusFilter] = useState<'all' | 'open' | 'pending' | 'urgent' | 'unassigned' | 'bugs'>('all');
+  const [topStatusFilter, setTopStatusFilter] = useState<'all' | 'open' | 'pending' | 'onhold' | 'urgent' | 'unassigned' | 'bugs'>('all');
+  const [layoutMode, setLayoutMode] = useState<TicketsLayoutMode>('list');
+  const [listSort, setListSort] = useState<'newest' | 'oldest' | 'priority'>('newest');
 
   useEffect(() => {
     setTopStatusFilter('all');
@@ -798,6 +812,9 @@ export default function TicketsPage() {
       all: pool.length,
       open: pool.filter((tk) => matchStatus(tk.status, 'open')).length,
       pending: pool.filter((tk) => matchStatus(tk.status, 'pending')).length,
+      onhold: pool.filter(
+        (tk) => matchStatus(tk.status, 'on-hold') || matchStatus((tk as { status?: string }).status, 'on_hold'),
+      ).length,
       urgent: pool.filter((tk) => tk.priority === 'urgent' || tk.priority === 'high').length,
       bugs: pool.filter((tk) => isBugTicket(tk)).length,
       unassigned: pool.filter((tk) => !tk.agentName).length,
@@ -877,6 +894,11 @@ export default function TicketsPage() {
         break;
       case 'pending':
         result = result.filter(t => matchStatus(t.status, 'pending'));
+        break;
+      case 'onhold':
+        result = result.filter(
+          t => matchStatus(t.status, 'on-hold') || matchStatus(t.status, 'on_hold'),
+        );
         break;
       case 'urgent':
         result = result.filter(t => t.priority === 'urgent' || t.priority === 'high');
@@ -1018,8 +1040,19 @@ export default function TicketsPage() {
       );
     }
 
+    result.sort((a, b) => {
+      if (listSort === 'priority') {
+        const rank = (p?: string) =>
+          p === 'urgent' ? 4 : p === 'high' ? 3 : p === 'medium' ? 2 : 1;
+        return rank(b.priority) - rank(a.priority);
+      }
+      const aTime = a.updatedAt?.toDate ? a.updatedAt.toDate().getTime() : 0;
+      const bTime = b.updatedAt?.toDate ? b.updatedAt.toDate().getTime() : 0;
+      return listSort === 'oldest' ? aTime - bTime : bTime - aTime;
+    });
+
     return result;
-  }, [baseSidebarTickets, topStatusFilter, searchQuery, filters, user]);
+  }, [baseSidebarTickets, topStatusFilter, searchQuery, filters, user, listSort]);
 
   const getFilteredTickets = () => {
     return finalRenderedTickets;
@@ -1812,6 +1845,12 @@ export default function TicketsPage() {
         effectiveCollapsed ? "md:w-20 overflow-hidden" : "md:w-64",
         selectedTicketId ? "hidden md:flex" : ""
       )}>
+         {!effectiveCollapsed && (
+           <div className="px-3 pb-3 border-b border-border/60 shrink-0">
+             <WorkspaceSwitcher className="w-full" />
+           </div>
+         )}
+
          <div className={cn("px-4 mb-4 transition-opacity duration-200", effectiveCollapsed ? "opacity-0 invisible h-0" : "opacity-100 visible")}>
             <div className="flex items-center gap-2 pl-2">
               <Sparkles className="w-4 h-4 text-primary animate-pulse" />
@@ -2018,6 +2057,8 @@ export default function TicketsPage() {
                </div>
              )}
 
+         <TicketsAiQualityScore collapsed={effectiveCollapsed} className="mt-auto shrink-0" />
+
          {/* Polyglot Language Picker moved to bottom of sidebar */}
          {moduleConfig.polyglotEnabled && (
            <div className={cn("mt-auto p-4 border-t border-border bg-card/50", effectiveCollapsed && "p-2")}>
@@ -2076,7 +2117,6 @@ export default function TicketsPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <WorkspaceSwitcher compact className="shrink-0" />
                       <Button 
                         variant="outline" 
                         size="sm" 
@@ -3815,70 +3855,65 @@ export default function TicketsPage() {
     ) : (
       /* List View: Expanded Full Width */
       <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#FAFBFC]">
-            <ModulePageCompactHeader
-              title={
-                isDeveloperWorkspace
-                  ? t('tickets.headerMetaDev', 'Tickets • {{open}} Open • {{bugs}} Bugs • {{unassigned}} Unassigned')
-                      .replace('{{open}}', String(ticketQueueStats.open))
-                      .replace('{{bugs}}', String(ticketQueueStats.bugs))
-                      .replace('{{unassigned}}', String(ticketQueueStats.unassigned))
-                  : t('tickets.headerMetaInline', 'Tickets • {{open}} Open • {{pending}} In Progress • {{urgent}} Urgent')
-                      .replace('{{open}}', String(ticketQueueStats.open))
-                      .replace('{{pending}}', String(ticketQueueStats.pending))
-                      .replace('{{urgent}}', String(ticketQueueStats.urgent))
-              }
+            <TicketsPageHeader
               trailing={
-                <>
-                  <WorkspaceSwitcher compact className="shrink-0" />
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setIsMobileSidebarOpen(true)}
-                    className="flex lg:hidden h-8 w-8 rounded-md shrink-0"
-                    aria-label={t('tickets.detail.mobileMenu', 'Menu')}
-                  >
-                    <List className="w-4 h-4" />
-                  </Button>
-                </>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsMobileSidebarOpen(true)}
+                  className="flex lg:hidden h-8 w-8 rounded-md shrink-0"
+                  aria-label={t('tickets.detail.mobileMenu', 'Menu')}
+                >
+                  <List className="w-4 h-4" />
+                </Button>
               }
             />
             <ModulePageTabs
+              className="border-0 bg-transparent"
               tabs={
                 isDeveloperWorkspace
                   ? [
-                      { id: 'all', label: t('tickets.allTickets', 'All'), count: ticketQueueStats.all },
-                      { id: 'open', label: t('tickets.open', 'Open'), count: ticketQueueStats.open },
-                      { id: 'bugs', label: t('tickets.bugsTab', 'Bugs'), count: ticketQueueStats.bugs },
-                      { id: 'unassigned', label: t('tickets.unassigned', 'Unassigned'), count: ticketQueueStats.unassigned },
+                      { id: 'all', label: `${t('tickets.allTickets', 'All')} ${ticketQueueStats.all}` },
+                      { id: 'open', label: `${t('tickets.open', 'Open')} ${ticketQueueStats.open}` },
+                      { id: 'bugs', label: `${t('tickets.bugsTab', 'Bugs')} ${ticketQueueStats.bugs}` },
+                      { id: 'unassigned', label: `${t('tickets.unassigned', 'Unassigned')} ${ticketQueueStats.unassigned}` },
                     ]
                   : [
-                      { id: 'all', label: t('tickets.allTickets', 'All'), count: ticketQueueStats.all },
-                      { id: 'open', label: t('tickets.open', 'Open'), count: ticketQueueStats.open },
-                      { id: 'pending', label: t('tickets.inProgress', 'In Progress'), count: ticketQueueStats.pending },
-                      { id: 'urgent', label: t('tickets.priorityUrgent', 'Urgent'), count: ticketQueueStats.urgent },
-                      { id: 'unassigned', label: t('tickets.unassigned', 'Unassigned'), count: ticketQueueStats.unassigned },
+                      { id: 'all', label: `${t('tickets.allTickets', 'All')} ${ticketQueueStats.all}` },
+                      { id: 'open', label: `${t('tickets.open', 'Open')} ${ticketQueueStats.open}` },
+                      { id: 'pending', label: `${t('tickets.inProgress', 'In Progress')} ${ticketQueueStats.pending}` },
+                      { id: 'onhold', label: `${t('tickets.pendingOnHold', 'Pending')} ${ticketQueueStats.onhold}` },
+                      { id: 'urgent', label: `${t('tickets.priorityUrgent', 'Urgent')} ${ticketQueueStats.urgent}` },
+                      { id: 'unassigned', label: `${t('tickets.unassigned', 'Unassigned')} ${ticketQueueStats.unassigned}` },
                     ]
               }
               activeId={topStatusFilter}
               onChange={(id) => setTopStatusFilter(id as typeof topStatusFilter)}
             />
             <ModuleToolbar
-              searchPlaceholder={t('tickets.searchPlaceholder', 'Search tickets...')}
+              searchPlaceholder={t('tickets.searchPlaceholderFull', 'Search tickets, customers, companies...')}
               searchValue={searchQuery}
               onSearchChange={setSearchQuery}
               onFilterClick={() => setIsFilterDrawerOpen(true)}
               filterActive={isFilterDrawerOpen}
+              sortControl={
+                <div className="flex items-center gap-1 shrink-0">
+                  <span className="hidden sm:inline text-[11px] font-medium text-slate-500">
+                    {t('modulePage.sort', 'Sort')}:
+                  </span>
+                  <ModuleToolbarSelect
+                    value={listSort}
+                    onChange={(v) => setListSort(v as typeof listSort)}
+                    aria-label={t('actions.sort', 'Sort')}
+                  >
+                    <option value="newest">{t('tickets.sortNewest', 'Newest')}</option>
+                    <option value="oldest">{t('tickets.sortOldest', 'Oldest')}</option>
+                    <option value="priority">{t('tickets.sortPriority', 'Priority')}</option>
+                  </ModuleToolbarSelect>
+                </div>
+              }
               viewsSlot={
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setIsMobileSidebarOpen(true)}
-                  className="h-8 gap-1 rounded-md border-slate-200/80 text-slate-600 font-medium shrink-0 px-2.5"
-                >
-                  <Layout className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline text-xs">{t('tickets.views', 'Views')}</span>
-                </Button>
+                <TicketsViewModeSelector value={layoutMode} onChange={setLayoutMode} />
               }
               createAction={
                 <ModuleCreateButton
@@ -4408,13 +4443,58 @@ export default function TicketsPage() {
               )}
             </AnimatePresence>
 
-            {/* List Content: Horizontal Table Layout (Desktop) & Responsive Cards (Mobile) */}
+            {/* List Content: List / Kanban / Card layouts */}
             <ScrollArea className="flex-1 bg-background min-h-0">
-              {/* Desktop Table Layout (lg and up). The horizontal-scroll wrapper
-                  contains the table's min-width so narrow desktop viewports scroll
-                  the columns instead of clipping them off-screen. */}
+              {tickets.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-32 px-4 text-center bg-card">
+                  <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-8">
+                    <Ticket className="w-12 h-12 text-muted-foreground opacity-40 translate-y-1 -rotate-12" />
+                  </div>
+                  <h2 className="text-3xl font-bold text-foreground mb-3 tracking-tight">{t('tickets.noTicketsInView', 'No tickets in this view.')}</h2>
+                  <p className="text-muted-foreground max-w-md mx-auto mb-10 text-base leading-relaxed">
+                    {t('tickets.noTicketsInViewDesc', "You've reached the end of this queue. Adjust your filters or select a different view from the sidebar to find more tickets.")}
+                  </p>
+                  <div className="flex flex-wrap justify-center gap-4">
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setFilters({
+                        agent: 'any', group: 'any', sentiment: 'any', created: 'any', closedAt: 'any', resolvedAt: 'any', resolutionDue: 'any', firstResponseDue: 'any', nextResponseDue: 'any', skills: 'any', status: 'any', priority: 'any', type: 'any', source: 'any', sourceInfo: '', tags: 'any', company: 'any', contacts: 'any', product: 'any', language: 'any', aiConfidence: 'any', slaDue: 'any'
+                      })}
+                      className="rounded-full px-8 h-12 font-bold border-border hover:bg-muted transition-all"
+                    >
+                      {t('tickets.resetAllFilters', 'Reset All Filters')}
+                    </Button>
+                    <ModuleCreateButton
+                      ariaLabelKey="actions.createTicket"
+                      ariaLabelDefault="Create Ticket"
+                      onClick={() => setIsCreateTicketOpen(true)}
+                      className="h-12 sm:h-12 sm:px-5"
+                    />
+                  </div>
+                </div>
+              ) : layoutMode === 'kanban' ? (
+                <TicketsKanbanBoard
+                  tickets={tickets}
+                  onSelect={handleTicketSelect}
+                  onStatusChange={(id, status) => handleInlineUpdate(id, { status })}
+                  onPriorityChange={(id, priority) => handleInlineUpdate(id, { priority })}
+                />
+              ) : layoutMode === 'cards' ? (
+                <TicketsCardGrid
+                  tickets={tickets}
+                  onSelect={handleTicketSelect}
+                  onStatusChange={(id, status) => handleInlineUpdate(id, { status })}
+                  onPriorityChange={(id, priority) => handleInlineUpdate(id, { priority })}
+                  onAssigneeChange={(id, agentId, agentName) => handleInlineUpdate(id, { agentId, agentName })}
+                  currentUserId={user?.uid}
+                  currentUserLabel={user?.displayName || user?.email || t('tickets.assigneeYourself', 'Yourself')}
+                  formatTicketRef={formatTicketRef}
+                />
+              ) : (
+              <>
+              {/* Desktop Table Layout (lg and up) */}
               <div className="hidden lg:block w-full overflow-x-auto">
-                <div className="min-w-[1000px] border-collapse bg-card">
+                <div className="min-w-[920px] border-collapse bg-card">
                 {/* Table Header */}
                 <div className="flex items-center px-4 h-9 bg-muted/80 border-b border-border sticky top-0 z-10">
                    <div className="w-[36px] flex items-center justify-center shrink-0">
@@ -4424,58 +4504,17 @@ export default function TicketsPage() {
                         className="bg-card border-border"
                       />
                    </div>
-                   <div className="w-[50px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider flex items-center gap-1 justify-center" title="KI / AI Stimmung">
-                     <Smile className="w-4 h-4 text-muted-foreground/60" />
-                   </div>
                    <div className="w-[150px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.customer', 'Customer').toUpperCase()}</div>
                    <div className="flex-1 min-w-[240px] font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.subjectPreview', 'Subject & Preview').toUpperCase()}</div>
-                   <div className="w-[110px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.status', 'Status').toUpperCase()}</div>
-                   <div className="w-[110px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.priority', 'Priority').toUpperCase()}</div>
-                   <div className="w-[150px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.assignee', 'Assignee').toUpperCase()}</div>
+                   <div className="w-[120px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.status', 'Status').toUpperCase()}</div>
+                   <div className="w-[100px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.priority', 'Priority').toUpperCase()}</div>
+                   <div className="w-[140px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.assignee', 'Assignee').toUpperCase()}</div>
                    <div className="w-[120px] shrink-0 font-extrabold text-[11px] text-muted-foreground uppercase tracking-wider">{t('tickets.table.lastUpdate', 'Last Update').toUpperCase()}</div>
                    <div className="w-[50px] shrink-0 flex items-center justify-center font-extrabold text-[11px] text-muted-foreground"></div>
                 </div>
 
-                {tickets.length === 0 ? (
-                  <div className="flex flex-col items-center justify-center py-32 px-4 text-center bg-card">
-                    <div className="w-24 h-24 bg-muted rounded-full flex items-center justify-center mb-8">
-                      <Ticket className="w-12 h-12 text-muted-foreground opacity-40 translate-y-1 -rotate-12" />
-                    </div>
-                    <h2 className="text-3xl font-bold text-foreground mb-3 tracking-tight">{t('tickets.noTicketsInView', 'No tickets in this view.')}</h2>
-                    <p className="text-muted-foreground max-w-md mx-auto mb-10 text-base leading-relaxed">
-                      {t('tickets.noTicketsInViewDesc', "You've reached the end of this queue. Adjust your filters or select a different view from the sidebar to find more tickets.")}
-                    </p>
-                    <div className="flex flex-wrap justify-center gap-4">
-                      <Button 
-                        variant="outline" 
-                        onClick={() => setFilters({
-                          agent: 'any', group: 'any', sentiment: 'any', created: 'any', closedAt: 'any', resolvedAt: 'any', resolutionDue: 'any', firstResponseDue: 'any', nextResponseDue: 'any', skills: 'any', status: 'any', priority: 'any', type: 'any', source: 'any', sourceInfo: '', tags: 'any', company: 'any', contacts: 'any', product: 'any', language: 'any', aiConfidence: 'any', slaDue: 'any'
-                        })}
-                        className="rounded-full px-8 h-12 font-bold border-border hover:bg-muted transition-all"
-                      >
-                        {t('tickets.resetAllFilters', 'Reset All Filters')}
-                      </Button>
-                      <ModuleCreateButton
-                        ariaLabelKey="actions.createTicket"
-                        ariaLabelDefault="Create Ticket"
-                        onClick={() => setIsCreateTicketOpen(true)}
-                        className="h-12 sm:h-12 sm:px-5"
-                      />
-                    </div>
-                  </div>
-                ) : (
                   <div className="divide-y divide-border">
                     {paginatedTickets.map(ticket => {
-                      const tier = (() => {
-                        if (ticket.priority === 'urgent' || ticket.tags?.includes('VIP') || ticket.customerName?.toLowerCase().includes('sarah')) {
-                          return { label: t('tickets.tiers.vip', 'VIP'), style: 'bg-amber-500/10 text-amber-600 border-amber-500/20 font-bold' };
-                        }
-                        if (ticket.company?.toLowerCase().includes('advanced') || ticket.company?.toLowerCase().includes('global') || ticket.tags?.includes('Enterprise')) {
-                          return { label: t('tickets.tiers.enterprise', 'Enterprise'), style: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20 font-bold' };
-                        }
-                        return { label: t('tickets.tiers.standard', 'Standard'), style: 'bg-slate-100 text-slate-500 border-slate-200' };
-                      })();
-
                       const sla = (() => {
                         if (ticket.status === 'resolved' || ticket.status === 'closed') return null;
                         const now = new Date();
@@ -4503,30 +4542,6 @@ export default function TicketsPage() {
                         return <span title="Email Channel"><Mail className="w-3.5 h-3.5 text-slate-500 animate-none shrink-0" /></span>;
                       })();
 
-                      {/* Map AI Sentiment style details */}
-                      const sentimentDetails = (() => {
-                        const s = (ticket.sentiment || 'neutral').toLowerCase();
-                        if (s === 'calm' || s === 'positive' || s === 'neutral' && ticket.id.charCodeAt(0) % 2 === 0) {
-                          return {
-                            label: t('tickets.sentimentLabels.calm', 'CALM'),
-                            classes: 'bg-emerald-50 text-emerald-700 border-emerald-100/80 dark:bg-emerald-950/20 dark:text-emerald-400 dark:border-emerald-950/50',
-                            icon: <Smile className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-                          };
-                        }
-                        if (s === 'frustrated' || s === 'angry' || s === 'negative') {
-                          return {
-                            label: t('tickets.sentimentLabels.frustrated', 'FRUSTRATED'),
-                            classes: 'bg-rose-50 text-rose-700 border-rose-100/80 dark:bg-rose-950/20 dark:text-rose-400 dark:border-rose-955/50',
-                            icon: <Frown className="w-3.5 h-3.5 text-rose-500 shrink-0 animate-pulse" />
-                          };
-                        }
-                        return {
-                          label: t('tickets.sentimentLabels.escalating', 'ESCALATING'),
-                          classes: 'bg-amber-50 text-amber-700 border-amber-100/80 dark:bg-amber-950/20 dark:text-amber-400 dark:border-amber-955/50',
-                          icon: <Meh className="w-3.5 h-3.5 text-amber-500 shrink-0" />
-                        };
-                      })();
-
                       return (
                         <motion.div 
                           key={ticket.id}
@@ -4550,20 +4565,6 @@ export default function TicketsPage() {
                             />
                           </div>
 
-                          {/* KI / AI STIMMUNG Column */}
-                          <div className="w-[50px] shrink-0 flex items-center justify-center p-1" onClick={(e) => {
-                            e.stopPropagation();
-                            setSentimentTicketId(ticket.id);
-                            setIsSentimentBreakdownOpen(true);
-                          }}>
-                            <div 
-                              className="p-1 rounded-full hover:bg-muted dark:hover:bg-slate-850 cursor-pointer select-none transition-all hover:scale-110 flex items-center justify-center font-bold"
-                              title={`${sentimentDetails.label} Stimmung (Click for breakdown)`}
-                            >
-                              {sentimentDetails.icon}
-                            </div>
-                          </div>
-
                           {/* Customer Column */}
                           <div className="w-[150px] shrink-0 flex items-center gap-3 pr-2" onClick={(e) => e.stopPropagation()}>
                              <Avatar className={cn(
@@ -4580,14 +4581,14 @@ export default function TicketsPage() {
                                   viewDensity === 'comfortable' ? "text-xs" : "text-[11px]"
                                 )}>{ticket.customerName}</span>
                                 <div className="flex items-center gap-1 mt-0.5">
-                                  <span className="text-[10px] text-slate-500 truncate">{ticket.company || 'Private'}</span>
+                                  <span className="text-[10px] text-slate-500 truncate">{ticket.company || t('tickets.privateCustomer', 'Private')}</span>
                                 </div>
                              </div>
                           </div>
 
-                          {/* Subject & Preview Column */}
+                          {/* Subject Column */}
                           <div 
-                             className="flex-1 min-w-[240px] pr-4 relative flex flex-col justify-center"
+                             className="flex-1 min-w-[240px] pr-4 relative flex flex-col justify-center gap-0.5"
                              onMouseEnter={(e) => {
                                  setHoveredTicketId(ticket.id);
                                  setMousePos({ x: e.clientX, y: e.clientY });
@@ -4595,14 +4596,21 @@ export default function TicketsPage() {
                              onMouseLeave={() => setHoveredTicketId(null)}
                              onMouseMove={handleMouseMove}
                           >
-                             <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                                <h3 className={cn(
-                                  "font-extrabold text-slate-900 dark:text-slate-100 truncate group-hover:text-primary transition-colors max-w-[200px] md:max-w-xs",
-                                  viewDensity === 'comfortable' ? "text-xs" : "text-[11px]"
-                                )}>
-                                   {ticket.subject}
-                                </h3>
-                                <span className="text-[9px] text-muted-foreground font-semibold shrink-0">#{ticket.id.slice(0, 4)}</span>
+                             <h3 className={cn(
+                               "font-bold text-slate-900 dark:text-slate-100 truncate group-hover:text-primary transition-colors",
+                               viewDensity === 'comfortable' ? "text-xs" : "text-[11px]"
+                             )}>
+                               {ticket.subject}
+                             </h3>
+                             <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-[10px] text-slate-400 font-medium font-mono shrink-0">
+                                  {formatTicketRef(ticket.id)}
+                                </span>
+                                {sla && (
+                                  <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-blue-100 bg-blue-50 text-blue-700 shrink-0">
+                                    SLA
+                                  </span>
+                                )}
                                 {(() => {
                                   const kind = getTicketKind(ticket);
                                   if (kind === 'support') {
@@ -4622,156 +4630,66 @@ export default function TicketsPage() {
                                     </Badge>
                                   );
                                 })()}
-                                
-                                {/* AI Signals inside Preview */}
-                                {viewDensity === 'comfortable' && (
-                                  <div className="flex items-center gap-1.5 ml-2">
-                                     {sla && (
-                                        <Badge variant="outline" className={cn("text-[8px] font-black uppercase tracking-wider px-1 px-1.5 py-0 h-4 border", sla.color)}>
-                                          {sla.label}
-                                        </Badge>
-                                     )}
-                                     {duplicatesCount > 0 && (
-                                        <Badge variant="outline" className="text-[8px] font-semibold bg-blue-50/50 border-blue-100 text-blue-700 h-4 flex items-center gap-0.5">
-                                           <Link2 className="w-2.5 h-2.5" />
-                                           <span>{duplicatesCount === 1 ? t('tickets.dup', '1 dup') : t('tickets.dups', '{{count}} dups').replace('{{count}}', String(duplicatesCount))}</span>
-                                        </Badge>
-                                     )}
-                                     <div className="flex items-center gap-1 shrink-0">
-                                        {channelIcon}
-                                        <span className="text-[9.5px] text-muted-foreground font-medium flex items-center gap-0.5">
-                                          {replies === 1 ? t('tickets.reply', '1 reply') : t('tickets.replies', '{{count}} replies').replace('{{count}}', String(replies))}
-                                        </span>
-                                     </div>
-                                  </div>
+                                {viewDensity === 'comfortable' && duplicatesCount > 0 && (
+                                  <Badge variant="outline" className="text-[8px] font-semibold bg-blue-50/50 border-blue-100 text-blue-700 h-4 flex items-center gap-0.5 shrink-0">
+                                    <Link2 className="w-2.5 h-2.5" />
+                                    <span>{duplicatesCount === 1 ? t('tickets.dup', '1 dup') : t('tickets.dups', '{{count}} dups').replace('{{count}}', String(duplicatesCount))}</span>
+                                  </Badge>
                                 )}
-
-                                {/* Presence indicators */}
-                                <div className="flex -space-x-1.5 overflow-hidden ml-auto shrink-0">
-                                   {ticket.activeAgents && ticket.activeAgents
-                                      .filter(a => a.uid !== user?.uid)
-                                      .map(agent => (
-                                         <motion.div 
-                                            key={agent.uid}
-                                            initial={{ scale: 0, opacity: 0 }}
-                                            animate={{ scale: 1, opacity: 1 }}
-                                            className="relative group h-5 w-5 animate-none shrink-0"
-                                         >
-                                            <div className="absolute inset-0 rounded-full bg-primary/40 animate-ping opacity-75" />
-                                            <Avatar className="h-5 w-5 border border-background relative z-10">
-                                               <AvatarImage src={agent.avatar} alt={agent.name} />
-                                               <AvatarFallback className="text-[7px] bg-primary/10 text-primary font-bold">
-                                                  {agent.name.charAt(0)}
-                                               </AvatarFallback>
-                                            </Avatar>
-                                            <div className="absolute -top-10 left-1/2 -translate-x-1/2 px-2.5 py-1.5 bg-gray-900 text-white text-[9px] rounded-lg shadow-xl opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-[100] transition-opacity flex items-center gap-2 border border-gray-800">
-                                               <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                               <span className="font-bold">{agent.name}</span>
-                                               <span className="text-gray-400">is viewing</span>
-                                            </div>
-                                         </motion.div>
-                                      ))
-                                   }
+                                <div className="flex items-center gap-1 shrink-0 ml-auto">
+                                  {channelIcon}
+                                  {viewDensity === 'comfortable' && (
+                                    <span className="text-[9.5px] text-muted-foreground font-medium">
+                                      {replies === 1 ? t('tickets.reply', '1 reply') : t('tickets.replies', '{{count}} replies').replace('{{count}}', String(replies))}
+                                    </span>
+                                  )}
+                                  {ticket.activeAgents && ticket.activeAgents
+                                    .filter(a => a.uid !== user?.uid)
+                                    .slice(0, 2)
+                                    .map(agent => (
+                                      <Avatar key={agent.uid} className="h-4 w-4 border border-background shrink-0">
+                                        <AvatarImage src={agent.avatar} alt={agent.name} />
+                                        <AvatarFallback className="text-[6px] bg-primary/10 text-primary font-bold">
+                                          {agent.name.charAt(0)}
+                                        </AvatarFallback>
+                                      </Avatar>
+                                    ))
+                                  }
                                 </div>
                              </div>
 
                              {viewDensity === 'comfortable' && (
-                               <p className="text-[11px] text-muted-foreground truncate opacity-75 font-medium mt-1">
+                               <p className="text-[11px] text-muted-foreground truncate opacity-75 font-medium">
                                   {redactPII(stripHtml(ticket.description))}
                                 </p>
                              )}
                           </div>
 
                           {/* Status Column */}
-                          <div className="w-[130px] shrink-0" onClick={(e) => e.stopPropagation()}>
-                            <Select
-                              value={ticket.status}
-                              onValueChange={(val) => handleInlineUpdate(ticket.id, { status: val as TicketStatus })}
-                            >
-                              <SelectTrigger className="h-7 border-none bg-transparent hover:bg-muted-foreground/10 transition-colors cursor-pointer outline-none focus:ring-0 text-[11px] text-slate-850 dark:text-slate-200">
-                                <div className="flex items-center gap-2">
-                                  <span className={cn(
-                                    "w-2 h-2 rounded-full shrink-0",
-                                    ticket.status === 'open' ? "bg-blue-500" :
-                                    ticket.status === 'pending' ? "bg-amber-500" :
-                                    ticket.status === 'resolved' ? "bg-emerald-500" : "bg-slate-400"
-                                  )} />
-                                  <SelectValue />
-                                </div>
-                              </SelectTrigger>
-                              <SelectContent className="rounded-xl">
-                                <SelectItem value="open">open</SelectItem>
-                                <SelectItem value="pending">pending</SelectItem>
-                                <SelectItem value="resolved">resolved</SelectItem>
-                                <SelectItem value="closed">closed</SelectItem>
-                                <SelectItem value="merged">merged</SelectItem>
-                                <SelectItem value="trash">deleted</SelectItem>
-                              </SelectContent>
-                            </Select>
+                          <div className="w-[120px] shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <TicketStatusChip
+                              status={ticket.status ?? 'open'}
+                              onChange={(val) => handleInlineUpdate(ticket.id, { status: val })}
+                            />
                           </div>
 
                           {/* Priority Column */}
-                          <div className="w-[130px] shrink-0" onClick={(e) => e.stopPropagation()}>
-                            <Select
-                              value={ticket.priority}
-                              onValueChange={(val) => handleInlineUpdate(ticket.id, { priority: val as TicketPriority })}
-                            >
-                              <SelectTrigger className="h-8 border-none bg-transparent hover:bg-muted-foreground/10 transition-colors cursor-pointer outline-none focus:ring-0 w-full text-xs text-slate-850 dark:text-slate-200">
-                                <div className="flex items-center gap-2">
-                                  <div className={cn(
-                                     "rounded-full shrink-0",
-                                     viewDensity === 'comfortable' ? "w-2 h-2" : "w-1.5 h-1.5",
-                                     ticket.priority === 'urgent' ? "bg-rose-500" :
-                                     ticket.priority === 'high' ? "bg-amber-500" :
-                                     ticket.priority === 'medium' ? "bg-blue-500" : "bg-slate-400"
-                                  )} />
-                                  <SelectValue />
-                                </div>
-                              </SelectTrigger>
-                              <SelectContent className="rounded-xl">
-                                <SelectItem value="low">low</SelectItem>
-                                <SelectItem value="medium">medium</SelectItem>
-                                <SelectItem value="high">high</SelectItem>
-                                <SelectItem value="urgent">urgent</SelectItem>
-                              </SelectContent>
-                            </Select>
+                          <div className="w-[100px] shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <TicketPriorityChip
+                              priority={ticket.priority ?? 'medium'}
+                              onChange={(val) => handleInlineUpdate(ticket.id, { priority: val })}
+                            />
                           </div>
 
                           {/* Assignee Column */}
-                          <div className="w-[160px] shrink-0" onClick={(e) => e.stopPropagation()}>
-                            <Select
-                              value={ticket.agentId || 'unassigned'}
-                              onValueChange={(val) => {
-                                if (val === 'unassigned') {
-                                  handleInlineUpdate(ticket.id, { agentId: undefined, agentName: undefined });
-                                } else if (val === user?.uid) {
-                                  handleInlineUpdate(ticket.id, { agentId: user.uid, agentName: user.displayName || user.email || 'Me' });
-                                } else {
-                                  const nameMap: Record<string, string> = {
-                                    'agent-sarah-james': 'Sarah James',
-                                    'agent-mike-chen': 'Mike Chen',
-                                    'agent-sarah-connor': 'Sarah Connor'
-                                  };
-                                  handleInlineUpdate(ticket.id, { agentId: val, agentName: nameMap[val] });
-                                }
-                              }}
-                            >
-                              <SelectTrigger className="h-8 border-none bg-transparent hover:bg-muted-foreground/10 transition-colors cursor-pointer outline-none focus:ring-0 w-full text-xs text-slate-850 dark:text-slate-200">
-                                <div className="flex items-center gap-2 truncate">
-                                  <Avatar className="h-5 w-5 border border-muted shrink-0 shadow-xs">
-                                    <AvatarFallback className="text-[7.5px] font-black">{ticket.agentName?.charAt(0) || '?'}</AvatarFallback>
-                                  </Avatar>
-                                  <SelectValue />
-                                </div>
-                              </SelectTrigger>
-                              <SelectContent className="rounded-xl">
-                                <SelectItem value="unassigned font-bold">Unassigned</SelectItem>
-                                {user && <SelectItem value={user.uid}>Me</SelectItem>}
-                                <SelectItem value="agent-sarah-james">Sarah James</SelectItem>
-                                <SelectItem value="agent-mike-chen">Mike Chen</SelectItem>
-                                <SelectItem value="agent-sarah-connor">Sarah Connor</SelectItem>
-                              </SelectContent>
-                            </Select>
+                          <div className="w-[140px] shrink-0" onClick={(e) => e.stopPropagation()}>
+                            <TicketAssigneeChip
+                              agentId={ticket.agentId}
+                              agentName={ticket.agentName}
+                              currentUserId={user?.uid}
+                              currentUserLabel={user?.displayName || user?.email || t('tickets.assigneeYourself', 'Yourself')}
+                              onChange={(agentId, agentName) => handleInlineUpdate(ticket.id, { agentId, agentName })}
+                            />
                           </div>
 
                           {/* Last Update Column */}
@@ -4787,10 +4705,10 @@ export default function TicketsPage() {
                               </DropdownMenuTrigger>
                               <DropdownMenuContent align="end" className="w-40 rounded-xl">
                                 <DropdownMenuItem className="text-xs cursor-pointer py-2 font-bold" onClick={() => handleTicketSelect(ticket.id)}>
-                                  Öffnen
+                                  {t('tickets.rowActions.open', 'Open')}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem className="text-xs cursor-pointer py-2 text-rose-600 focus:text-rose-650" onClick={() => handleInlineUpdate(ticket.id, { status: 'trash' })}>
-                                  Löschen
+                                  {t('tickets.rowActions.delete', 'Delete')}
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -4799,7 +4717,6 @@ export default function TicketsPage() {
                       );
                     })}
                   </div>
-                )}
                 </div>
               </div>
 
@@ -4810,7 +4727,7 @@ export default function TicketsPage() {
                     <Ticket className="w-10 h-10 text-muted-foreground opacity-40 mb-4" />
                     <h3 className="font-bold text-lg text-foreground">{t('tickets.noTicketsInView', 'No tickets in this view.')}</h3>
                     <p className="text-xs text-muted-foreground max-w-xs mx-auto mt-1">
-                      Adjust your filters or select a different view from the sidebar to find more tickets.
+                      {t('tickets.noTicketsInViewDesc', "You've reached the end of this queue. Adjust your filters or select a different view from the sidebar to find more tickets.")}
                     </p>
                   </div>
                 ) : (
@@ -4862,7 +4779,7 @@ export default function TicketsPage() {
                             <div className="flex flex-col min-w-0">
                               <span className="font-extrabold text-xs text-foreground truncate">{ticket.customerName}</span>
                               <div className="flex items-center gap-1">
-                                <span className="text-[10px] text-muted-foreground truncate">{ticket.company || 'Private'}</span>
+                                <span className="text-[10px] text-muted-foreground truncate">{ticket.company || t('tickets.privateCustomer', 'Private')}</span>
                                 <Badge variant="outline" className={cn("text-[8px] h-3.5 px-1.5 pb-0 scale-90 select-none font-bold", tier.style)}>
                                   {tier.label}
                                 </Badge>
@@ -4960,6 +4877,8 @@ export default function TicketsPage() {
                   })
                 )}
               </div>
+              </>
+              )}
             </ScrollArea>
 
             {/* Data Table Pagination Footer (Sticky / Locked at the bottom) */}
