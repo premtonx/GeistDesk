@@ -51,12 +51,22 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
 import {
   ModulePageShell,
-  ModulePageCompactHeader,
-  ModulePageTabs,
   ModuleToolbar,
   ModuleToolbarSelect,
-  type ModuleTabItem,
 } from '../ui/module-page';
+import { ScrollArea } from '../../components/ui/scroll-area';
+import {
+  ExchangeLeftSidebar,
+} from '../exchange/ExchangeLeftSidebar';
+import { ExchangePageHeader } from '../exchange/ExchangePageHeader';
+import { ExchangeKpiCards } from '../exchange/ExchangeKpiCards';
+import { ExchangeAiInsightsBanner } from '../exchange/ExchangeAiInsightsBanner';
+import { ExchangeQuickActions } from '../exchange/ExchangeQuickActions';
+import { ExchangeActiveTable } from '../exchange/ExchangeActiveTable';
+import { ExchangeRecentTransfers } from '../exchange/ExchangeRecentTransfers';
+import { ExchangeSecuritySidebar } from '../exchange/ExchangeSecuritySidebar';
+import { ExchangeTrustFooter } from '../exchange/ExchangeTrustFooter';
+import type { ExchangeNavId, ExchangeQuickFilter } from '../exchange/exchange-utils';
 import { ticketService } from '../../services/ticketService';
 import { customerService } from '../../services/customerService';
 import { VaultItem, Ticket as TicketType, Company } from '../../types';
@@ -66,6 +76,8 @@ export default function VaultPage() {
   const { t } = useTranslation();
   // Navigation State
   const [activeTab, setActiveTab] = useState<'dashboard' | 'secrets' | 'dropzones' | 'analysis' | 'templates'>('dashboard');
+  const [exchangeNav, setExchangeNav] = useState<ExchangeNavId>('overview');
+  const [quickFilter, setQuickFilter] = useState<ExchangeQuickFilter>(null);
   
   // Real DB Data
   const [history, setHistory] = useState<VaultItem[]>([]);
@@ -184,8 +196,9 @@ export default function VaultPage() {
   }, []);
 
   // Pre-fill Template Handler
-  const handleApplyTemplate = (type: 'logs' | 'db' | 'ssl' | 'screenshots') => {
+  const handleApplyTemplate = (type: 'logs' | 'db' | 'ssl' | 'screenshots' | 'audit' | 'incident') => {
     setActiveTab('dropzones');
+    setExchangeNav('dropzones');
     if (type === 'logs') {
       setRequestName('Standard System Logs request');
       setRequestDescription('Please upload system.log files and configuration archives relative to diagnostic investigation.');
@@ -206,8 +219,18 @@ export default function VaultPage() {
       setRequestDescription('Upload PNG/JPG visual dumps capturing the precise error rendering.');
       setAcceptedTypes(['PNG', 'JPG', 'PDF']);
       setUploadLimit('100MB');
+    } else if (type === 'audit') {
+      setRequestName('Security Audit Package');
+      setRequestDescription('Collect compliance artifacts, access logs, and configuration exports for audit review.');
+      setAcceptedTypes(['ZIP', 'PDF', 'LOG', 'CSV']);
+      setUploadLimit('2GB');
+    } else if (type === 'incident') {
+      setRequestName('Incident Response Package');
+      setRequestDescription('Secure intake for forensic dumps, memory captures, and incident timeline evidence.');
+      setAcceptedTypes(['ZIP', 'LOG', 'IMG', 'JSON']);
+      setUploadLimit('5GB');
     }
-    toast.success(`Template applied: pre-populated secure dropzone workflow.`);
+    toast.success(t('exchange.templates.applied', 'Template applied to secure dropzone workflow.'));
   };
 
   // Generate Secret Handler
@@ -477,22 +500,67 @@ export default function VaultPage() {
     });
   }, [allExchangeItems, searchTerm, tableFilter, tableTab]);
 
-  const exchangeTabs: ModuleTabItem[] = [
-    { id: 'dashboard', label: t('vault.navOverview', 'Overview') },
-    { id: 'secrets', label: t('vault.navSecrets', 'Secret Links') },
-    { id: 'dropzones', label: t('vault.navDropzones', 'Secure Dropzones') },
-    { id: 'analysis', label: t('vault.navInsights', 'AI Insights') },
-    { id: 'templates', label: t('vault.navTemplates', 'Templates') },
-  ];
+  const exchangeSidebarCounts = React.useMemo(
+    () => ({
+      active: allExchangeItems.filter((i) => i.status === 'Active').length,
+      expiring: Math.max(allExchangeItems.filter((i) => i.status === 'Active' && i.expires !== 'Once Read').length, 7),
+      shared: allExchangeItems.filter((i) => i.type === 'secret').length,
+      received: allExchangeItems.filter((i) => i.type === 'request').length,
+      burned: allExchangeItems.filter((i) => i.status === 'Burned').length,
+      archived: allExchangeItems.filter((i) => i.status === 'Expired').length,
+    }),
+    [allExchangeItems],
+  );
 
-  const exchangeKpis = [
-    { id: 'secrets', label: t('vault.secretLinks', 'Secret Links'), value: '124', hint: t('companies.trendUsers', '↑ 8 this month') },
-    { id: 'dropzones', label: t('vault.dropzones', 'Dropzones'), value: '42', hint: t('companies.trendAssets', '↑ 5 this month') },
-    { id: 'uploads', label: t('vault.uploadsReceived', 'Uploads Received'), value: '861', hint: t('vault.trendUploads', '↑ 24% this month') },
-    { id: 'pending', label: t('vault.requestsPending', 'Requests Pending'), value: '7', hint: t('vault.trendRequests', '↓ 12% this month') },
-    { id: 'burned', label: t('vault.burnedSecrets', 'Burned Secrets'), value: '385', hint: t('vault.trendBurned', '↑ 31% this month') },
-    { id: 'score', label: t('vault.securityScore', 'Security Score'), value: '98/100', hint: t('vault.excellent', 'Excellent') },
-  ];
+  const exchangeKpiStats = React.useMemo(
+    () => ({
+      activeSecrets: allExchangeItems.filter((i) => i.type === 'secret' && i.status === 'Active').length || 42,
+      activeDropzones: allExchangeItems.filter((i) => i.type === 'request' && i.status === 'Active').length || 18,
+      filesReceived: allExchangeItems.filter((i) => i.type === 'request').length || 247,
+      securityScore: 94,
+    }),
+    [allExchangeItems],
+  );
+
+  const handleExchangeNavigate = (nav: ExchangeNavId) => {
+    setExchangeNav(nav);
+    setQuickFilter(null);
+    const tabMap: Record<ExchangeNavId, typeof activeTab> = {
+      overview: 'dashboard',
+      secrets: 'secrets',
+      dropzones: 'dropzones',
+      analysis: 'analysis',
+      templates: 'templates',
+      activity: 'dashboard',
+      security: 'dashboard',
+    };
+    setActiveTab(tabMap[nav]);
+  };
+
+  const handleQuickFilter = (filter: ExchangeQuickFilter) => {
+    setQuickFilter(filter);
+    if (!filter) return;
+    setExchangeNav('overview');
+    setActiveTab('dashboard');
+    if (filter === 'active') setTableFilter('active');
+    if (filter === 'expiring') {
+      setTableFilter('all');
+      setTableTab('expiring_soon');
+    }
+    if (filter === 'burned') setTableFilter('burned');
+    if (filter === 'archived') setTableFilter('expired');
+    if (filter === 'received') setTableFilter('uploads');
+    if (filter === 'shared') setTableFilter('secrets');
+  };
+
+  const handleDeleteExchangeItem = async (id: string) => {
+    if (id.startsWith('upload-mock')) {
+      setMockUploads((prev) => prev.filter((p) => p.id !== id));
+    } else {
+      await vaultService.deleteItem(id);
+    }
+    toast.success(t('exchange.delete.success', 'Exchange item removed.'));
+  };
 
   const exchangeCreateAction = (
     <ModuleCreateButton
@@ -504,405 +572,98 @@ export default function VaultPage() {
         {
           labelKey: 'vault.createSecretLink',
           labelDefault: 'Create Secret Link',
-          onClick: () => setActiveTab('secrets'),
+          onClick: () => handleExchangeNavigate('secrets'),
           icon: <Send className="w-4 h-4 text-[#1A73E8]" />,
         },
         {
           labelKey: 'vault.createDropzone',
           labelDefault: 'Create Secure Dropzone',
-          onClick: () => setActiveTab('dropzones'),
+          onClick: () => handleExchangeNavigate('dropzones'),
           icon: <Upload className="w-4 h-4 text-[#1A73E8]" />,
         },
       ]}
     />
   );
 
+  const transferItems = filteredExchangeItems.map((item) => ({
+    ...item,
+    aiStatus:
+      item.status === 'Completed'
+        ? t('exchange.recentTransfers.aiComplete', 'AI analysis complete')
+        : t('exchange.recentTransfers.aiPending', 'AI analysis pending'),
+  }));
+
   return (
     <ModulePageShell scrollable={false} className="bg-[#FAFBFC]">
-      <ModulePageCompactHeader title={t('vault.workspaceTitle', 'GeistExchange')} />
-      <ModulePageTabs
-        tabs={exchangeTabs}
-        activeId={activeTab}
-        onChange={(id) => setActiveTab(id as typeof activeTab)}
-      />
-      <ModuleToolbar
-        searchPlaceholder={t('vault.activeTable.searchPlaceholder', 'Search workspace...')}
-        searchValue={searchTerm}
-        onSearchChange={setSearchTerm}
-        sortControl={
-          <ModuleToolbarSelect
-            value={tableFilter}
-            onChange={(v) => setTableFilter(v as typeof tableFilter)}
-            aria-label={t('actions.filter', 'Filter')}
-          >
-            <option value="all">{t('vault.activeTable.filterAll', 'All')}</option>
-            <option value="secrets">{t('vault.activeTable.filterSecrets', 'Secrets only')}</option>
-            <option value="uploads">{t('vault.activeTable.filterUploads', 'Uploads only')}</option>
-            <option value="active">{t('vault.activeTable.filterActive', 'Active')}</option>
-            <option value="burned">{t('vault.activeTable.filterBurned', 'Burned')}</option>
-            <option value="expired">{t('vault.activeTable.filterExpired', 'Expired')}</option>
-          </ModuleToolbarSelect>
-        }
-        createAction={exchangeCreateAction}
-      />
-
       <div className="flex flex-1 min-h-0 overflow-hidden w-full">
-        <main className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+        <ExchangeLeftSidebar
+          activeNav={exchangeNav}
+          onNavigate={handleExchangeNavigate}
+          quickFilter={quickFilter}
+          onQuickFilter={handleQuickFilter}
+          counts={exchangeSidebarCounts}
+          onApplyTemplate={handleApplyTemplate}
+        />
+
+        <div className="flex flex-1 min-w-0 min-h-0">
+          <ScrollArea className="flex-1 min-w-0">
+            <div className="px-4 sm:px-6 py-5 space-y-5 pb-10">
+              <ExchangePageHeader />
+
+              <ModuleToolbar
+                searchPlaceholder={t('exchange.searchPlaceholder', 'Search exchanges, recipients, files...')}
+                searchValue={searchTerm}
+                onSearchChange={setSearchTerm}
+                sortControl={
+                  <ModuleToolbarSelect
+                    value={tableFilter}
+                    onChange={(v) => setTableFilter(v as typeof tableFilter)}
+                    aria-label={t('actions.filter', 'Filter')}
+                  >
+                    <option value="all">{t('vault.activeTable.filterAll', 'All')}</option>
+                    <option value="secrets">{t('vault.activeTable.filterSecrets', 'Secrets only')}</option>
+                    <option value="uploads">{t('vault.activeTable.filterUploads', 'Uploads only')}</option>
+                    <option value="active">{t('vault.activeTable.filterActive', 'Active')}</option>
+                    <option value="burned">{t('vault.activeTable.filterBurned', 'Burned')}</option>
+                    <option value="expired">{t('vault.activeTable.filterExpired', 'Expired')}</option>
+                  </ModuleToolbarSelect>
+                }
+                createAction={exchangeCreateAction}
+              />
+
           <AnimatePresence mode="wait">
             {activeTab === 'dashboard' && (
               <motion.div 
                 initial={{ opacity: 0, y: 10 }}
                 animate={{ opacity: 1, y: 0 }}
                 exit={{ opacity: 0, y: -10 }}
-                className="space-y-6"
+                className="space-y-5"
               >
-                {/* Quick Action Cards */}
-                <div>
-                  <h3 className="text-xs font-bold uppercase tracking-widest text-[#5F6368] mb-3">{t('vault.quickWorkflows', 'Quick Workflows')}</h3>
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    
-                    <button 
-                      onClick={() => setActiveTab('secrets')}
-                      className="group p-5 rounded-3xl border bg-[#E8F0FE] hover:bg-[#D5E3FC] text-left transition-all hover:shadow-md hover:scale-[1.01]"
-                    >
-                      <div className="h-10 w-10 bg-blue-100 rounded-2xl flex items-center justify-center text-[#1A73E8] mb-4 group-hover:scale-110 transition-transform">
-                        <Lock className="w-5 h-5" />
-                      </div>
-                      <h4 className="font-bold text-[#1A73E8] text-sm">{t('vault.sendSecret', 'Send Secret')}</h4>
-                      <p className="text-[11px] text-slate-500 mt-1 leading-snug">{t('vault.sendSecretDesc', 'Share credentials, passwords & API keys safely. Once read or timed burns.')}</p>
-                      <div className="mt-4 flex items-center gap-1.5 text-xs text-[#1A73E8] font-bold">
-                        {t('vault.configurePayload', 'Configure Payload')} <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-
-                    <button 
-                      onClick={() => setActiveTab('dropzones')}
-                      className="group p-5 rounded-3xl border bg-[#E3F2FD] hover:bg-[#BBDEFB] text-left transition-all hover:shadow-md hover:scale-[1.01]"
-                    >
-                      <div className="h-10 w-10 bg-sky-100 rounded-2xl flex items-center justify-center text-[#0288D1] mb-4 group-hover:scale-110 transition-transform">
-                        <Upload className="w-5 h-5" />
-                      </div>
-                      <h4 className="font-bold text-[#0288D1] text-sm">{t('vault.requestUpload', 'Request Upload')}</h4>
-                      <p className="text-[11px] text-slate-500 mt-1 leading-snug">{t('vault.requestUploadDesc', 'Ask your clients to securely transmit structured diagnostic files, databases, screenshots.')}</p>
-                      <div className="mt-4 flex items-center gap-1.5 text-xs text-[#0288D1] font-bold">
-                        {t('vault.buildDropzone', 'Build Dropzone')} <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-
-                    <button 
-                      onClick={() => setActiveTab('analysis')}
-                      className="group p-5 rounded-3xl border bg-indigo-55/40 hover:bg-indigo-100 text-left transition-all hover:shadow-md hover:scale-[1.01]"
-                    >
-                      <div className="h-10 w-10 bg-indigo-100 rounded-2xl flex items-center justify-center text-indigo-600 mb-4 group-hover:scale-110 transition-transform">
-                        <Sparkles className="w-5 h-5 fill-indigo-200" />
-                      </div>
-                      <h4 className="font-bold text-indigo-700 text-sm">{t('vault.aiAnalyzePayload', 'AI Analyze Payload')}</h4>
-                      <p className="text-[11px] text-slate-500 mt-1 leading-snug">{t('vault.aiAnalyzePayloadDesc', 'Scan received SQL dumps & operational server logs. Unveil connection errors & risks instantly.')}</p>
-                      <div className="mt-4 flex items-center gap-1.5 text-xs text-indigo-700 font-bold">
-                        {t('vault.triggerAnalysis', 'Trigger Analysis')} <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-
-                    <button 
-                      onClick={() => setIsEmergencyModalOpen(true)}
-                      className="group p-5 rounded-3xl border bg-[#FFE0B2] hover:bg-[#FFCC80] text-left transition-all hover:shadow-md hover:scale-[1.01]"
-                    >
-                      <div className="h-10 w-10 bg-orange-150 rounded-2xl flex items-center justify-center text-orange-700 mb-4 group-hover:scale-110 transition-transform">
-                        <AlertTriangle className="w-5 h-5" />
-                      </div>
-                      <h4 className="font-bold text-orange-800 text-sm">{t('vault.emergencyShare', 'Emergency Share')}</h4>
-                      <p className="text-[11px] text-slate-500 mt-1 leading-snug">{t('vault.emergencyShareDesc', 'Urgent break-glass key sharing linked directly to mobile OTP verification protocol.')}</p>
-                      <div className="mt-4 flex items-center gap-1.5 text-xs text-orange-800 font-bold">
-                        {t('vault.emergencyBypass', 'Bypass protocol')} <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
-                      </div>
-                    </button>
-
-                  </div>
-                </div>
-
-                {/* Sub Tab Segment controls for Active Table */}
-                <div className="bg-white rounded-lg border border-slate-200/80 p-2 flex flex-wrap gap-1.5">
-                  <button 
-                    onClick={() => setTableTab('active_links')}
-                    className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", tableTab === 'active_links' ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50")}
-                  >
-                    {t('vault.activeTable.activeSecrets', 'Active Secret Links')}
-                  </button>
-                  <button 
-                    onClick={() => setTableTab('active_dropzones')}
-                    className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", tableTab === 'active_dropzones' ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50")}
-                  >
-                    {t('vault.activeTable.activeDropzones', 'Active Dropzones')}
-                  </button>
-                  <button 
-                    onClick={() => setTableTab('recent_uploads')}
-                    className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", tableTab === 'recent_uploads' ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50")}
-                  >
-                    {t('vault.activeTable.recentUploads', 'Recent Uploads Received')}
-                  </button>
-                  <button 
-                    onClick={() => setTableTab('requests')}
-                    className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", tableTab === 'requests' ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50")}
-                  >
-                    {t('vault.activeTable.totalRequests', 'Total Requests Log')} ({allExchangeItems.length})
-                  </button>
-                  <button 
-                    onClick={() => setTableTab('expiring_soon')}
-                    className={cn("px-3 py-1.5 text-xs font-medium rounded-md transition-colors", tableTab === 'expiring_soon' ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-50")}
-                  >
-                    {t('vault.activeTable.expiringSoon', 'Expiring Soon (24h)')}
-                  </button>
-                </div>
-
-                {/* Active Items Table */}
-                <Card className="border border-slate-200/80 rounded-lg overflow-hidden bg-white shadow-none">
-                  <header className="px-6 py-4 border-b flex justify-between items-center bg-white">
-                    <h3 className="font-bold text-sm text-slate-800 flex items-center gap-2">
-                      <Lock className="w-4 h-4 text-[#1A73E8]" /> 
-                      {tableTab === 'active_links' ? t('vault.activeTable.activeSecNonBurned', 'Active Non-Burned Secrets') : tableTab === 'active_dropzones' ? t('vault.activeTable.activeDropzones', 'Active Workspace Dropzones') : t('vault.activeTable.unifiedExchange', 'Unified Exchange Registry')}
-                    </h3>
-                    <Badge variant="outline" className="border-indigo-100 bg-indigo-50 text-indigo-700 text-[10px] font-bold">
-                      {filteredExchangeItems.length} {t('vault.activeTable.matchingRecords', 'records matching filters')}
-                    </Badge>
-                  </header>
-                  <CardContent className="p-0">
-                    <div className="overflow-x-auto text-xs">
-                      <table className="w-full text-left border-collapse">
-                        <thead>
-                          <tr className="bg-slate-50 border-b text-[10px] font-black text-slate-400 uppercase tracking-widest leading-none">
-                            <th className="px-5 py-4">{t('vault.activeTable.tableType', 'Type')}</th>
-                            <th className="px-5 py-4 whitespace-nowrap">{t('vault.activeTable.tableName', 'Name / Description')}</th>
-                            <th className="px-5 py-4 whitespace-nowrap">{t('vault.activeTable.tableRecipient', 'Recipient / Creator')}</th>
-                            <th className="px-5 py-4">{t('vault.activeTable.tableStatus', 'Status')}</th>
-                            <th className="px-5 py-4">{t('vault.activeTable.tableExpires', 'Expires At')}</th>
-                            <th className="px-5 py-4 text-center">{t('vault.activeTable.tableViews', 'Views / Uploads')}</th>
-                            <th className="px-5 py-4 text-right">{t('vault.activeTable.tableActions', 'Actions')}</th>
-                          </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-100 text-slate-700 font-semibold uppercase">
-                          {filteredExchangeItems.length > 0 ? (
-                            filteredExchangeItems.map((item) => (
-                              <tr key={item.id} className="hover:bg-slate-55/35 transition-colors group">
-                                <td className="px-5 py-3.5">
-                                  <div className={cn(
-                                    "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 border",
-                                    item.type === 'secret' ? "bg-blue-50 border-blue-100 text-blue-600" : "bg-purple-50 border-purple-100 text-purple-600"
-                                  )}>
-                                    {item.type === 'secret' ? <Lock className="w-3.5 h-3.5" /> : <Upload className="w-3.5 h-3.5" />}
-                                  </div>
-                                </td>
-                                <td className="px-5 py-3.5 font-bold text-slate-900 group-hover:text-[#1A73E8] transition-colors">
-                                  <div>
-                                    <p className="text-sm font-bold text-slate-900 leading-tight normal-case">{item.name}</p>
-                                    <p className="text-[10px] text-slate-400 mt-1 uppercase font-semibold flex items-center gap-2">
-                                      <Building2 className="w-3 h-3 text-slate-300" /> {item.company}
-                                    </p>
-                                  </div>
-                                </td>
-                                <td className="px-5 py-3.5 normal-case text-slate-500 text-xs">
-                                  <div className="flex flex-col">
-                                    <span className="font-bold text-slate-700">{item.recipient}</span>
-                                    {item.ticketId !== 'N/A' && (
-                                      <span className="text-[10px] text-[#1A73E8] font-bold mt-1 inline-flex items-center gap-1">
-                                        <Ticket className="w-2.5 h-2.5" /> {item.ticketId}
-                                      </span>
-                                    )}
-                                  </div>
-                                </td>
-                                <td className="px-5 py-3.5">
-                                  <Badge className={cn(
-                                    "text-[9px] px-2 py-0.5 rounded-full border border-none",
-                                    item.status === 'Active' ? "bg-emerald-100 text-[#137333]" :
-                                    item.status === 'Uploaded' ? "bg-[#E8F0FE] text-[#1A73E8]" :
-                                    item.status === 'Completed' ? "bg-indigo-100 text-indigo-700" :
-                                    item.status === 'Burned' ? "bg-red-100 text-red-700" : "bg-slate-100 text-slate-500"
-                                  )}>
-                                    {item.status}
-                                  </Badge>
-                                </td>
-                                <td className="px-5 py-3.5 text-slate-500 whitespace-nowrap text-xs">
-                                  <div className="flex items-center gap-1.5">
-                                    <Clock className="w-3.5 h-3.5 opacity-60" />
-                                    <span>{item.expires}</span>
-                                  </div>
-                                </td>
-                                <td className="px-5 py-3.5 text-center font-mono font-bold text-xs">
-                                  {item.views} / {item.type === 'secret' ? '1' : '∞'}
-                                </td>
-                                <td className="px-5 py-3.5 text-right whitespace-nowrap">
-                                  <div className="flex gap-2 justify-end opacity-90 group-hover:opacity-100 transition-opacity">
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon" 
-                                      onClick={() => copyToClipboard(`${window.location.origin}/v/${item.id}`)}
-                                      title="Copy secure link"
-                                      className="h-8 w-8 text-[#1A73E8] rounded-lg bg-blue-50/50 hover:bg-blue-100 border border-blue-100"
-                                    >
-                                      <Copy className="w-3.5 h-3.5" />
-                                    </Button>
-                                    
-                                    {item.type === 'secret' && item.status === 'Active' && (
-                                      <Button 
-                                        variant="ghost" 
-                                        size="icon" 
-                                        onClick={async () => {
-                                          await vaultService.burnItem(item.id);
-                                          toast.success("Secret link manual burn command triggered.");
-                                        }}
-                                        title="Self-Destruct (Burn) Link"
-                                        className="h-8 w-8 text-red-600 rounded-lg bg-red-50/50 hover:bg-red-100 border border-red-100"
-                                      >
-                                        <Zap className="w-3.5 h-3.5" />
-                                      </Button>
-                                    )}
-
-                                    <Button 
-                                      variant="ghost" 
-                                      size="icon" 
-                                      onClick={async () => {
-                                        if (item.id.startsWith('upload-mock')) {
-                                          setMockUploads(prev => prev.filter(p => p.id !== item.id));
-                                        } else {
-                                          await vaultService.deleteItem(item.id);
-                                        }
-                                        toast.success("Workspace item purged permanently.");
-                                      }}
-                                      title="Delete record"
-                                      className="h-8 w-8 text-slate-500 hover:text-slate-900 rounded-lg hover:bg-slate-100"
-                                    >
-                                      <Trash2 className="w-3.5 h-3.5" />
-                                    </Button>
-                                  </div>
-                                </td>
-                              </tr>
-                            ))
-                          ) : (
-                            <tr>
-                              <td colSpan={7} className="text-center py-12 text-slate-400 normal-case">
-                                <div className="h-full flex flex-col items-center justify-center space-y-2 opacity-50 scale-95">
-                                  <ShieldAlert className="w-10 h-10 text-slate-300" />
-                                  <p className="font-bold text-xs">{t('vault.activeTable.noActiveLinks', 'No Secure Links are Active')}</p>
-                                  <p className="text-[10px] text-slate-400">{t('vault.activeTable.noActiveLinksDesc', 'Configure a Secret Link or Secure upload requests in the sidebar tabs.')}</p>
-                                </div>
-                              </td>
-                            </tr>
-                          )}
-                        </tbody>
-                      </table>
-                    </div>
-                  </CardContent>
-                </Card>
-
-                {/* Third Section: Visual Side widgets */}
-                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                  
-                  {/* Visual AI Insights Panel summary */}
-                  <div className="bg-white p-5 rounded-3xl border shadow-sm space-y-4">
-                    <header className="flex justify-between items-center pb-2 border-b border-slate-100">
-                      <h4 className="text-xs font-bold uppercase tracking-widest text-indigo-700 flex items-center gap-1.5">
-                        <Sparkles className="w-4 h-4 fill-indigo-100" /> {t('vault.aiPayloadInsights', 'AI Payload Insights')}
-                      </h4>
-                      <Badge className="bg-indigo-50 text-indigo-700 border-none text-[8px] font-black uppercase">{t('vault.newInsights', 'NEW INSIGHTS')}</Badge>
-                    </header>
-                    <div className="space-y-3">
-                      <div className="p-3 bg-red-50 border border-red-100 rounded-2xl flex gap-3">
-                        <div className="p-2 bg-red-100 text-red-700 rounded-xl h-9 w-9 flex items-center justify-center shrink-0">
-                          <AlertTriangle className="w-5 h-5 animate-pulse" />
-                        </div>
-                        <div className="text-xs">
-                          <p className="font-bold text-red-900 leading-tight">{t('vault.criticalFlaws', '3 critical flaws in logs.zip')}</p>
-                          <p className="text-slate-500 mt-0.5 leading-snug">{t('vault.criticalFlawsDesc', 'Connection pool timeouts detected on Azure WebApp socket mapping.')}</p>
-                          <button onClick={() => { setActiveTab('analysis'); setAiSelectedFile('logs.zip'); handleRunAIAnalysis('logs.zip'); }} className="text-[#1A73E8] font-bold mt-1 uppercase text-[10px] flex items-center gap-1">
-                            {t('vault.analyzeFile', 'Analyze File')} <ChevronRight className="w-3" />
-                          </button>
-                        </div>
-                      </div>
-
-                      <div className="p-3 bg-amber-50 border border-amber-100 rounded-2xl flex gap-3">
-                        <div className="p-2 bg-amber-100 text-amber-700 rounded-xl h-9 w-9 flex items-center justify-center shrink-0">
-                          <Sliders className="w-5 h-5" />
-                        </div>
-                        <div className="text-xs">
-                          <p className="font-bold text-amber-900 leading-tight">{t('vault.dbPerfWarnings', 'Database performance warnings')}</p>
-                          <p className="text-slate-500 mt-0.5 leading-snug">{t('vault.dbPerfWarningsDesc', 'Missing Index markers found inside backup.sql query profiles.')}</p>
-                          <button onClick={() => { setActiveTab('analysis'); setAiSelectedFile('backup.sql'); handleRunAIAnalysis('backup.sql'); }} className="text-[#1A73E8] font-bold mt-1 uppercase text-[10px] flex items-center gap-1 animate-pulse">
-                            {t('vault.inspectDbDump', 'Inspect database dump')} <ChevronRight className="w-3" />
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Expiring soon panel */}
-                  <div className="bg-white p-5 rounded-3xl border shadow-sm space-y-4">
-                    <header className="flex justify-between items-center pb-2 border-b border-slate-100">
-                      <h4 className="text-xs font-bold uppercase tracking-widest text-[#5F6368] flex items-center gap-1.5">
-                        <Clock className="w-4 h-4" /> {t('vault.selfDestructSoon', 'Self-Destruct Expiring Soon')}
-                      </h4>
-                      <button onClick={() => { setTableTab('expiring_soon'); }} className="text-[#1A73E8] text-[10px] font-bold hover:underline font-sans uppercase">{t('vault.viewAll', 'VIEW ALL')}</button>
-                    </header>
-                    <div className="space-y-3">
-                      <div className="flex items-center justify-between text-xs p-1">
-                        <div>
-                          <p className="font-bold text-slate-900">Prod Firewall Credentials</p>
-                          <p className="text-[10px] text-slate-400">Sarah@acme.com • Expire in 23h</p>
-                        </div>
-                        <Badge className="bg-red-100 text-red-700 uppercase text-[9px] border-none">Expiring</Badge>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs p-1">
-                        <div>
-                          <p className="font-bold text-slate-900">ACME Customer Log Dropzone</p>
-                          <p className="text-[10px] text-slate-400">CyberDyne Corp • Expire in 2d</p>
-                        </div>
-                        <Badge className="bg-amber-100 text-amber-700 uppercase text-[9px] border-none">Active</Badge>
-                      </div>
-
-                      <div className="flex items-center justify-between text-xs p-1">
-                        <div>
-                          <p className="font-bold text-slate-900">SQL Server Backup link</p>
-                          <p className="text-[10px] text-slate-400">ticket-443 • Expires in 1d</p>
-                        </div>
-                        <Badge className="bg-amber-100 text-amber-700 uppercase text-[9px] border-none">Active</Badge>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Reusable Templates shortcut */}
-                  <div className="bg-white p-5 rounded-3xl border shadow-sm space-y-4">
-                    <header className="flex justify-between items-center pb-2 border-b border-slate-100">
-                      <h4 className="text-xs font-bold uppercase tracking-widest text-purple-700 flex items-center gap-1.5">
-                        <FileText className="w-4 h-4" /> {t('vault.popDropzoneTemplates', 'Popular Dropzone Templates')}
-                      </h4>
-                      <button onClick={() => setActiveTab('templates')} className="text-purple-700 text-[10px] font-bold hover:underline font-sans uppercase">{t('vault.templates', 'TEMPLATES')}</button>
-                    </header>
-                    <div className="space-y-2 text-xs">
-                      <button 
-                        onClick={() => handleApplyTemplate('logs')} 
-                        className="w-full text-left p-2.5 rounded-2xl border border-dashed border-slate-200 hover:border-[#1A73E8] flex justify-between items-center group transition-all"
-                      >
-                        <div>
-                          <p className="font-bold text-slate-800">{t('vault.stdLogRequest', 'Standard Log Request')}</p>
-                          <p className="text-[10px] text-slate-400">{t('vault.stdLogRequestDesc', 'Collects ZIP, LOG, TXT files')}</p>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-[#1A73E8] group-hover:translate-x-0.5 transition-all animate-none" />
-                      </button>
-
-                      <button 
-                        onClick={() => handleApplyTemplate('db')} 
-                        className="w-full text-left p-2.5 rounded-2xl border border-dashed border-slate-200 hover:border-purple-600 flex justify-between items-center group transition-all"
-                      >
-                        <div>
-                          <p className="font-bold text-slate-800">{t('vault.dbDumpCollect', 'Database Dump Collect')}</p>
-                          <p className="text-[10px] text-slate-400">{t('vault.dbDumpCollectDesc', 'Collects SQL, BAK dumps up to 10GB')}</p>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-slate-300 group-hover:text-purple-600 group-hover:translate-x-0.5 transition-all" />
-                      </button>
-                    </div>
-                  </div>
-
-                </div>
-
+                <ExchangeKpiCards
+                  activeSecrets={exchangeKpiStats.activeSecrets}
+                  activeDropzones={exchangeKpiStats.activeDropzones}
+                  filesReceived={exchangeKpiStats.filesReceived}
+                  securityScore={exchangeKpiStats.securityScore}
+                />
+                <ExchangeAiInsightsBanner />
+                <ExchangeQuickActions
+                  onSendSecret={() => handleExchangeNavigate('secrets')}
+                  onCreateDropzone={() => handleExchangeNavigate('dropzones')}
+                  onAnalyzeUpload={() => handleExchangeNavigate('analysis')}
+                  onEmergencyShare={() => setIsEmergencyModalOpen(true)}
+                  onImportPackage={() => toast.info(t('exchange.actions.importSoon', 'Package import opening soon.'))}
+                />
+                <ExchangeActiveTable
+                  items={filteredExchangeItems}
+                  onCopyLink={(id) => copyToClipboard(`${window.location.origin}/v/${id}`)}
+                  onBurn={async (id) => {
+                    await vaultService.burnItem(id);
+                    toast.success(t('exchange.burn.success', 'Burn command queued.'));
+                  }}
+                  onDelete={handleDeleteExchangeItem}
+                />
+                <ExchangeRecentTransfers items={transferItems} />
+                <ExchangeTrustFooter />
               </motion.div>
             )}
 
@@ -1521,111 +1282,11 @@ export default function VaultPage() {
             )}
 
           </AnimatePresence>
-        </main>
-
-        {/* Right Sidebar Column - Activity and Security overview */}
-        <aside className="w-80 border-l bg-white flex flex-col p-5 space-y-6 shrink-0 overflow-y-auto hidden lg:flex">
-          
-          {/* Active timeline logs */}
-          <div className="space-y-3.5">
-            <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
-              <Clock className="w-4 h-4 text-slate-300" /> {t('vault.recentActivities', 'Recent Vault Activities')}
-            </h4>
-            
-            <div className="space-y-3.5 relative pl-4 border-l border-slate-100 py-1 text-xs">
-              <div className="relative">
-                <span className="absolute -left-[21.5px] top-1.5 h-2.5 w-2.5 rounded-full bg-blue-500 border-2 border-white ring-4 ring-blue-50" />
-                <p className="font-bold text-slate-800">{t('vault.actPqcCreated', 'Post-Quantum Secret Created')}</p>
-                <p className="text-[10px] text-slate-400 font-medium whitespace-nowrap">Sarah@acme.com • 3m ago</p>
-              </div>
-
-              <div className="relative">
-                <span className="absolute -left-[21.5px] top-1.5 h-2.5 w-2.5 rounded-full bg-[#1A73E8] border-2 border-white ring-4 ring-blue-50 animate-pulse" />
-                <p className="font-bold text-slate-800">{t('vault.actLinkViewed', 'Secure link "Prod SQL Key" viewed')}</p>
-                <p className="text-[10px] text-slate-400 font-medium whitespace-nowrap">john.doe@client.com • 15m ago</p>
-              </div>
-
-              <div className="relative">
-                <span className="absolute -left-[21.5px] top-1.5 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-white ring-4 ring-red-50" />
-                <p className="font-bold text-slate-800">{t('vault.actCredsBurned', 'AWS Credentials Burned')}</p>
-                <p className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{t('vault.actSelfDestructTrigger', 'Auto self-destruct trigger • 1h ago')}</p>
-              </div>
-
-              <div className="relative">
-                <span className="absolute -left-[21.5px] top-1.5 h-2.5 w-2.5 rounded-full bg-purple-500 border-2 border-white ring-4 ring-purple-50" />
-                <p className="font-bold text-slate-800">{t('vault.actDropzoneUploaded', 'Secure Dropzone "logs.zip" uploaded')}</p>
-                <p className="text-[10px] text-slate-400 font-medium whitespace-nowrap">Acme Systems operator • 2h ago</p>
-              </div>
-
-              <div className="relative">
-                <span className="absolute -left-[21.5px] top-1.5 h-2.5 w-2.5 rounded-full bg-indigo-500 border-2 border-white ring-4 ring-indigo-50" />
-                <p className="font-bold text-slate-800">{t('vault.actAiCompleted', 'AI analysis completed: backup.sql')}</p>
-                <p className="text-[10px] text-slate-400 font-medium whitespace-nowrap">{t('vault.sollmAuditScan', 'Sovereign LLM audit scan • Just now')}</p>
-              </div>
             </div>
-          </div>
+          </ScrollArea>
+        </div>
 
-          {/* Security Status Card list */}
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-3.5">
-            <h4 className="text-[10px] font-black uppercase text-slate-400 tracking-wider flex items-center gap-1.5">
-              <ShieldCheck className="w-4 h-4 text-emerald-500" /> {t('vault.activeSecurityShields', 'Active Security Shields')}
-            </h4>
-            <div className="space-y-2 text-[10.5px] font-bold text-slate-600">
-              <div className="flex items-center justify-between">
-                <span>{t('vault.e2eEncryption', 'End-to-End Encryption')}</span>
-                <span className="text-emerald-500 uppercase font-extrabold text-[9px] tracking-tight">{t('vault.activeShieldStatus', 'ACTIVE')}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>{t('vault.zeroKnowledgeStorage', 'Zero-Knowledge Storage')}</span>
-                <span className="text-emerald-500 uppercase font-extrabold text-[9px] tracking-tight">{t('vault.activeShieldStatus', 'ACTIVE')}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>{t('vault.shamirDivisionPolicy', 'Shamir Division Policy')}</span>
-                <span className="text-emerald-500 uppercase font-extrabold text-[9px] tracking-tight">{t('vault.activeShieldStatus', 'ACTIVE')}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>{t('vault.antivirusMalwareScan', 'Antivirus Malware Scan (ICAP)')}</span>
-                <span className="text-emerald-500 uppercase font-extrabold text-[9px] tracking-tight">{t('vault.activeShieldStatus', 'ACTIVE')}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>{t('vault.securityAuditLogs', 'Security Audit logs')}</span>
-                <span className="text-emerald-500 uppercase font-extrabold text-[9px] tracking-tight">{t('vault.activeShieldStatus', 'ACTIVE')}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>{t('vault.autoBurnViewPolicies', 'Auto-burn view policies')}</span>
-                <span className="text-emerald-500 uppercase font-extrabold text-[9px] tracking-tight">{t('vault.activeShieldStatus', 'ACTIVE')}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Capacity storage view */}
-          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black uppercase text-slate-400 tracking-wider">{t('vault.storageAllocation', 'Storage Allocation')}</span>
-              <span className="text-[10px] font-bold text-slate-500">286.7 GB Used / 2 TB</span>
-            </div>
-            
-            <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden flex">
-              <div className="bg-blue-500 h-full w-[14%]" title="Secrets storage (28.6 GB)" />
-              <div className="bg-purple-500 h-full w-[45%]" title="Received system logs (90 GB)" />
-              <div className="bg-orange-500 h-full w-[15%]" title="Database backup dumps (30 GB)" />
-            </div>
-
-            <div className="text-[9px] font-extrabold text-slate-400 uppercase flex flex-col gap-1">
-              <div className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 bg-blue-500 rounded-full" /> {t('vault.secretsDataLabel', 'Secrets Data (12.4 GB)')}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 bg-purple-500 rounded-full" /> {t('vault.receivedFilesLabel', 'Received Dropzone Files (186.3 GB)')}
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="h-1.5 w-1.5 bg-orange-500 rounded-full" /> {t('vault.otherDiagnosticLabel', 'Other Diagnostic elements (88.0 GB)')}
-              </div>
-            </div>
-          </div>
-
-        </aside>
-
+        <ExchangeSecuritySidebar className="hidden xl:flex" />
       </div>
 
       {/* EMERGENCY BYPASS OPTIONAL MODAL */}

@@ -953,6 +953,157 @@
       "will_meta": "In Draft pool queue • MFA Debugging"
     }
   },
+  "exchange": {
+    "pageTitle": "GeistExchange",
+    "pageSubtitle": "Securely exchange credentials, diagnostics, files and secrets with enterprise-grade protection.",
+    "customizeDashboard": "Customize Dashboard",
+    "searchPlaceholder": "Search exchanges, recipients, files...",
+    "sidebar": {
+      "workspace": "Workspace",
+      "overview": "Overview",
+      "secureLinks": "Secure Links",
+      "dropzones": "Secure Dropzones",
+      "aiEngine": "AI Analysis Engine",
+      "templates": "Templates",
+      "activity": "Activity",
+      "securityCenter": "Security Center",
+      "quickFilters": "Quick Filters",
+      "templatesSection": "Templates",
+      "settings": "Settings"
+    },
+    "filters": {
+      "active": "Active",
+      "expiring": "Expiring Soon",
+      "sharedByMe": "Shared By Me",
+      "received": "Received",
+      "burned": "Burned",
+      "archived": "Archived"
+    },
+    "templates": {
+      "logCollection": "Log Collection",
+      "sqlBackup": "SQL Backup Upload",
+      "securityAudit": "Security Audit Package",
+      "incidentResponse": "Incident Response Package"
+    },
+    "storage": {
+      "title": "Storage",
+      "ofTotal": "of 2 TB",
+      "secrets": "Secrets",
+      "dropzoneFiles": "Dropzone Files",
+      "diagnostics": "Diagnostics",
+      "total": "Total",
+      "uploads": "Uploads"
+    },
+    "kpi": {
+      "activeSecrets": "Total Active Secrets",
+      "activeDropzones": "Active Dropzones",
+      "filesReceived": "Files Received",
+      "securityScore": "Security Score",
+      "vsLastMonth": "vs last month"
+    },
+    "aiInsights": {
+      "badge": "AI Security Insights",
+      "headline": "AI detected 2 potential risks and 4 optimization opportunities.",
+      "criticalLogs": "Critical log errors detected",
+      "criticalLogsDesc": "Azure socket pool timeouts in logs.zip",
+      "sqlWarnings": "SQL dump warnings",
+      "sqlWarningsDesc": "Missing index markers in backup.sql",
+      "expiringCreds": "Expiring credentials",
+      "expiringCredsDesc": "Rotate within 48 hours",
+      "malwareScan": "Malware scan results",
+      "malwareScanDesc": "All uploads passed ICAP scan"
+    },
+    "quickActions": {
+      "title": "Quick Actions"
+    },
+    "actions": {
+      "sendSecret": "Send Secret",
+      "sendSecretDesc": "Share credentials, passwords and API keys with burn-after-read protection.",
+      "sendSecretCta": "Configure Secret",
+      "createDropzone": "Create Dropzone",
+      "createDropzoneDesc": "Request diagnostic files, database dumps, logs and screenshots securely.",
+      "createDropzoneCta": "Build Dropzone",
+      "analyzeUpload": "Analyze Upload",
+      "analyzeUploadDesc": "Run AI analysis on SQL dumps, logs and diagnostic payloads instantly.",
+      "analyzeUploadCta": "Start Analysis",
+      "emergencyShare": "Emergency Share",
+      "emergencyShareDesc": "Break-glass credential sharing with OTP verification protocol.",
+      "emergencyShareCta": "Initiate Bypass",
+      "importPackage": "Import Package",
+      "importPackageDesc": "Import encrypted exchange packages from partners or legacy systems.",
+      "importPackageCta": "Import Now",
+      "importSoon": "Package import opening soon."
+    },
+    "activeExchanges": {
+      "title": "Active Exchanges",
+      "subtitle": "{{count}} records in workspace",
+      "live": "Live",
+      "empty": "No active exchanges match your filters."
+    },
+    "table": {
+      "type": "Type",
+      "title": "Title",
+      "recipient": "Recipient",
+      "status": "Status",
+      "views": "Views",
+      "expires": "Expires",
+      "securityPolicy": "Security Policy",
+      "actions": "Actions"
+    },
+    "status": {
+      "active": "Active",
+      "viewed": "Viewed",
+      "burned": "Burned",
+      "expired": "Expired",
+      "pending": "Pending"
+    },
+    "policy": {
+      "burnAfterRead": "Burn after read",
+      "malwareScan": "Malware scan + 48h"
+    },
+    "recentTransfers": {
+      "title": "Recent Transfers",
+      "aiComplete": "AI analysis complete",
+      "aiPending": "AI analysis pending"
+    },
+    "trust": {
+      "e2e": "End-to-End Encrypted",
+      "zeroKnowledge": "Zero Knowledge Architecture",
+      "autoBurn": "Auto-Burn Protection",
+      "compliance": "Enterprise Compliance"
+    },
+    "commandCenter": {
+      "title": "Security Command Center",
+      "aiInsights": "AI Insights",
+      "expiringSoon": "Expiring Soon",
+      "securityShields": "Security Shields",
+      "storageAnalytics": "Storage Analytics",
+      "recentActivity": "Recent Activity"
+    },
+    "shields": {
+      "e2e": "End-to-End Encryption",
+      "zeroKnowledge": "Zero Knowledge Storage",
+      "malwareScan": "Malware Scan",
+      "shamir": "Shamir Secret Sharing",
+      "auditLog": "Audit Logging",
+      "autoBurn": "Auto Burn Policies"
+    },
+    "activity": {
+      "secretCreated": "Secret Created",
+      "secretViewed": "Secret Viewed",
+      "credentialBurned": "Credential Burned",
+      "dropzoneUploaded": "Dropzone Uploaded",
+      "aiCompleted": "AI Analysis Completed",
+      "autoBurn": "Auto burn • 1h ago",
+      "justNow": "Just now"
+    },
+    "burn": {
+      "success": "Burn command queued."
+    },
+    "delete": {
+      "success": "Exchange item removed."
+    }
+  },
   "vault": {
     "title": "GeistVault Enterprise Vault",
     "titleShort": "GeistVault",

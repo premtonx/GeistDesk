@@ -953,6 +953,157 @@
       "will_meta": "In der Entwurfs-Warteschlange • MFA-Fehlerbehebung"
     }
   },
+  "exchange": {
+    "pageTitle": "GeistExchange",
+    "pageSubtitle": "Tauschen Sie Anmeldedaten, Diagnosedaten, Dateien und Geheimnisse sicher mit Unternehmensschutz aus.",
+    "customizeDashboard": "Dashboard anpassen",
+    "searchPlaceholder": "Austausche, Empfänger, Dateien suchen...",
+    "sidebar": {
+      "workspace": "Arbeitsbereich",
+      "overview": "Übersicht",
+      "secureLinks": "Sichere Links",
+      "dropzones": "Sichere Dropzones",
+      "aiEngine": "KI-Analyse-Engine",
+      "templates": "Vorlagen",
+      "activity": "Aktivität",
+      "securityCenter": "Sicherheitszentrum",
+      "quickFilters": "Schnellfilter",
+      "templatesSection": "Vorlagen",
+      "settings": "Einstellungen"
+    },
+    "filters": {
+      "active": "Aktiv",
+      "expiring": "Läuft bald ab",
+      "sharedByMe": "Von mir geteilt",
+      "received": "Empfangen",
+      "burned": "Vernichtet",
+      "archived": "Archiviert"
+    },
+    "templates": {
+      "logCollection": "Log-Sammlung",
+      "sqlBackup": "SQL-Backup-Upload",
+      "securityAudit": "Sicherheitsaudit-Paket",
+      "incidentResponse": "Incident-Response-Paket"
+    },
+    "storage": {
+      "title": "Speicher",
+      "ofTotal": "von 2 TB",
+      "secrets": "Geheimnisse",
+      "dropzoneFiles": "Dropzone-Dateien",
+      "diagnostics": "Diagnose",
+      "total": "Gesamt",
+      "uploads": "Uploads"
+    },
+    "kpi": {
+      "activeSecrets": "Aktive Geheimnisse gesamt",
+      "activeDropzones": "Aktive Dropzones",
+      "filesReceived": "Empfangene Dateien",
+      "securityScore": "Sicherheitswert",
+      "vsLastMonth": "ggü. Vormonat"
+    },
+    "aiInsights": {
+      "badge": "KI-Sicherheitseinblicke",
+      "headline": "KI hat 2 potenzielle Risiken und 4 Optimierungsmöglichkeiten erkannt.",
+      "criticalLogs": "Kritische Log-Fehler erkannt",
+      "criticalLogsDesc": "Azure-Socket-Pool-Timeouts in logs.zip",
+      "sqlWarnings": "SQL-Dump-Warnungen",
+      "sqlWarningsDesc": "Fehlende Index-Marker in backup.sql",
+      "expiringCreds": "Ablaufende Anmeldedaten",
+      "expiringCredsDesc": "Innerhalb von 48 Stunden rotieren",
+      "malwareScan": "Malware-Scan-Ergebnisse",
+      "malwareScanDesc": "Alle Uploads bestanden ICAP-Scan"
+    },
+    "quickActions": {
+      "title": "Schnellaktionen"
+    },
+    "actions": {
+      "sendSecret": "Geheimnis senden",
+      "sendSecretDesc": "Anmeldedaten, Passwörter und API-Schlüssel mit Vernichtung-nach-Lesen teilen.",
+      "sendSecretCta": "Geheimnis konfigurieren",
+      "createDropzone": "Dropzone erstellen",
+      "createDropzoneDesc": "Diagnosedateien, DB-Dumps, Logs und Screenshots sicher anfordern.",
+      "createDropzoneCta": "Dropzone erstellen",
+      "analyzeUpload": "Upload analysieren",
+      "analyzeUploadDesc": "KI-Analyse für SQL-Dumps, Logs und Diagnose-Payloads sofort starten.",
+      "analyzeUploadCta": "Analyse starten",
+      "emergencyShare": "Notfall-Freigabe",
+      "emergencyShareDesc": "Break-Glass-Anmeldedaten-Freigabe mit OTP-Verifizierungsprotokoll.",
+      "emergencyShareCta": "Bypass starten",
+      "importPackage": "Paket importieren",
+      "importPackageDesc": "Verschlüsselte Austauschpakete von Partnern oder Legacy-Systemen importieren.",
+      "importPackageCta": "Jetzt importieren",
+      "importSoon": "Paketimport wird bald verfügbar."
+    },
+    "activeExchanges": {
+      "title": "Aktive Austausche",
+      "subtitle": "{{count}} Datensätze im Arbeitsbereich",
+      "live": "Live",
+      "empty": "Keine aktiven Austausche entsprechen Ihren Filtern."
+    },
+    "table": {
+      "type": "Typ",
+      "title": "Titel",
+      "recipient": "Empfänger",
+      "status": "Status",
+      "views": "Aufrufe",
+      "expires": "Läuft ab",
+      "securityPolicy": "Sicherheitsrichtlinie",
+      "actions": "Aktionen"
+    },
+    "status": {
+      "active": "Aktiv",
+      "viewed": "Angesehen",
+      "burned": "Vernichtet",
+      "expired": "Abgelaufen",
+      "pending": "Ausstehend"
+    },
+    "policy": {
+      "burnAfterRead": "Vernichten nach Lesen",
+      "malwareScan": "Malware-Scan + 48h"
+    },
+    "recentTransfers": {
+      "title": "Letzte Übertragungen",
+      "aiComplete": "KI-Analyse abgeschlossen",
+      "aiPending": "KI-Analyse ausstehend"
+    },
+    "trust": {
+      "e2e": "Ende-zu-Ende verschlüsselt",
+      "zeroKnowledge": "Zero-Knowledge-Architektur",
+      "autoBurn": "Auto-Vernichtungsschutz",
+      "compliance": "Unternehmens-Compliance"
+    },
+    "commandCenter": {
+      "title": "Sicherheits-Kommandozentrale",
+      "aiInsights": "KI-Einblicke",
+      "expiringSoon": "Läuft bald ab",
+      "securityShields": "Sicherheitsschilde",
+      "storageAnalytics": "Speicheranalyse",
+      "recentActivity": "Letzte Aktivität"
+    },
+    "shields": {
+      "e2e": "Ende-zu-Ende-Verschlüsselung",
+      "zeroKnowledge": "Zero-Knowledge-Speicher",
+      "malwareScan": "Malware-Scan",
+      "shamir": "Shamir Secret Sharing",
+      "auditLog": "Audit-Protokollierung",
+      "autoBurn": "Auto-Vernichtungsrichtlinien"
+    },
+    "activity": {
+      "secretCreated": "Geheimnis erstellt",
+      "secretViewed": "Geheimnis angesehen",
+      "credentialBurned": "Anmeldedaten vernichtet",
+      "dropzoneUploaded": "Dropzone hochgeladen",
+      "aiCompleted": "KI-Analyse abgeschlossen",
+      "autoBurn": "Auto-Vernichtung • vor 1h",
+      "justNow": "Gerade eben"
+    },
+    "burn": {
+      "success": "Vernichtungsbefehl in Warteschlange."
+    },
+    "delete": {
+      "success": "Austausch-Element entfernt."
+    }
+  },
   "vault": {
     "workspaceTitle": "GeistExchange Arbeitsbereich",
     "quantumSecure": "QUANTENSICHER",
