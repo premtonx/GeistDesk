@@ -697,6 +697,7 @@
     "helpful": "helpful",
     "updatedAgo": "Updated {{date}}",
     "allArticlesSection": "All Articles",
+    "resultsCount": "{{count}} results",
     "sortLatest": "Latest updated",
     "aiInsightsTitle": "AI Knowledge Insights",
     "beta": "Beta",

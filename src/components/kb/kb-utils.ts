@@ -141,3 +141,7 @@ export function qualityBarClass(score: number): string {
 export function kbPanelClass(className?: string): string {
   return cn(KB_RADIUS, 'border border-slate-200/80 bg-white overflow-hidden', className);
 }
+
+export function isKbOverviewMode(nav: { type: string; id: string }): boolean {
+  return nav.type === 'workspace' && nav.id === 'overview';
+}

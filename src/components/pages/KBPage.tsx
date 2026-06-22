@@ -98,12 +98,11 @@ import { KBPageHeader } from '../kb/KBPageHeader';
 import { KBKpiCards } from '../kb/KBKpiCards';
 import { KBSearchSection } from '../kb/KBSearchSection';
 import { KBCategoryGrid } from '../kb/KBCategoryGrid';
-import { KBFeaturedArticles } from '../kb/KBFeaturedArticles';
 import { KBActivitySidebar, buildRecentActivity, buildTopContributors } from '../kb/KBActivitySidebar';
 import { KBViewModeSelector, type KBArticleViewMode } from '../kb/KBViewModeSelector';
 import { KBArticleViews } from '../kb/KBArticleViews';
 import { KBLeftSidebar, type KBNavFilter } from '../kb/KBLeftSidebar';
-import { filterArticlesByWorkspace } from '../kb/kb-utils';
+import { filterArticlesByWorkspace, isKbOverviewMode, categoryI18nKey } from '../kb/kb-utils';
 import { useWorkspace } from '../../lib/context/WorkspaceContext';
 import { KBImporter } from '../KBImporter';
 import { RichTextEditor } from '../RichTextEditor';
@@ -920,12 +919,36 @@ export default function KBPage() {
   );
   const monthlyViews = workspaceArticles.reduce((sum, a) => sum + (a.views || 0), 0);
   const missingTagsCount = workspaceArticles.filter((a) => !a.tags || a.tags.length === 0).length;
-  const featuredArticles = [...workspaceArticles]
-    .filter((a) => a.status === 'Published')
-    .sort((a, b) => (b.views || 0) - (a.views || 0))
-    .slice(0, 3);
   const recentActivity = buildRecentActivity(workspaceArticles, t);
   const topContributors = buildTopContributors(workspaceArticles);
+
+  const isOverviewMode = isKbOverviewMode(kbNav);
+
+  const articlesSectionTitle = useMemo(() => {
+    if (isOverviewMode) return t('kb.allArticlesSection', 'All Articles');
+    if (kbNav.type === 'workspace') {
+      const workspaceLabels: Record<string, string> = {
+        all: t('kb.sidebar.allArticles', 'All Articles'),
+        drafts: t('kb.sidebar.drafts', 'Drafts'),
+        reviews: t('kb.sidebar.reviews', 'Reviews'),
+        ai: t('kb.sidebar.aiAssistant', 'AI Assistant'),
+        analytics: t('kb.sidebar.analytics', 'Analytics'),
+      };
+      return workspaceLabels[kbNav.id] ?? t('kb.allArticlesSection', 'All Articles');
+    }
+    if (kbNav.type === 'category') {
+      if (kbNav.id === 'Billing') return t('kb.sidebar.billingPlans', 'Billing & Plans');
+      return t(categoryI18nKey(kbNav.id), kbNav.id);
+    }
+    const smartLabels: Record<string, string> = {
+      popular: t('kb.sidebar.popularArticles', 'Popular Articles'),
+      recent: t('kb.sidebar.recentlyUpdated', 'Recently Updated'),
+      mostViewed: t('kb.sidebar.mostViewed', 'Most Viewed'),
+      missing: t('kb.sidebar.missingArticles', 'Missing Articles'),
+      outdated: t('kb.sidebar.outdatedContent', 'Outdated Content'),
+    };
+    return smartLabels[kbNav.id] ?? t('kb.allArticlesSection', 'All Articles');
+  }, [kbNav, isOverviewMode, t]);
 
   const sidebarCounts = useMemo(() => {
     const categoryIds = [
@@ -1725,12 +1748,14 @@ export default function KBPage() {
                     onNewArticle={() => openCreateArticle()}
                   />
 
-                  <KBKpiCards
-                    publishedCount={publishedCount}
-                    draftCount={draftCount}
-                    healthScore={healthScore}
-                    monthlyViews={monthlyViews}
-                  />
+                  {isOverviewMode ? (
+                    <KBKpiCards
+                      publishedCount={publishedCount}
+                      draftCount={draftCount}
+                      healthScore={healthScore}
+                      monthlyViews={monthlyViews}
+                    />
+                  ) : null}
 
                   <KBSearchSection
                     searchQuery={searchQuery}
@@ -1765,54 +1790,90 @@ export default function KBPage() {
                     </div>
                   ) : null}
 
-                  <KBCategoryGrid
-                    categories={categories}
-                    articles={workspaceArticles}
-                    selectedCategory={selectedCategory}
-                    onSelect={(name) => {
-                      setSelectedCategory(name);
-                      setKbNav({ type: 'category', id: name });
-                    }}
-                  />
-
-                  <KBFeaturedArticles
-                    articles={featuredArticles}
-                    onSelect={(art) => setViewingArticle(art)}
-                    onViewAll={() => setKbNav({ type: 'smart', id: 'popular' })}
-                  />
-
-                  <section>
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-                      <h2 className="text-sm font-semibold text-slate-900">
-                        {t('kb.allArticlesSection', 'All Articles')}
-                      </h2>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <KBViewModeSelector value={viewLayout} onChange={setViewLayout} />
-                        <div className="flex items-center gap-1">
-                          <span className="text-[11px] font-medium text-slate-500">{t('modulePage.sort', 'Sort')}:</span>
-                          <ModuleToolbarSelect
-                            value={sortBy}
-                            onChange={(v) => setSortBy(v as typeof sortBy)}
-                            aria-label={t('actions.sort', 'Sort')}
-                          >
-                            <option value="date">{t('kb.sortLatest', 'Latest updated')}</option>
-                            <option value="popular">{t('kb.sortPopularity', 'Popularity')}</option>
-                            <option value="views">{t('kb.sortViews', 'Most views')}</option>
-                            <option value="confidence">{t('kb.sortConfidence', 'Trust score')}</option>
-                          </ModuleToolbarSelect>
+                  {!isOverviewMode ? (
+                    <section>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <div className="min-w-0">
+                          <h2 className="text-sm font-semibold text-slate-900">{articlesSectionTitle}</h2>
+                          <p className="text-[11px] text-slate-400 mt-0.5">
+                            {t('kb.resultsCount', '{{count}} results').replace('{{count}}', String(processedArticles.length))}
+                          </p>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end shrink-0">
+                          <KBViewModeSelector value={viewLayout} onChange={setViewLayout} />
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] font-medium text-slate-500">{t('modulePage.sort', 'Sort')}:</span>
+                            <ModuleToolbarSelect
+                              value={sortBy}
+                              onChange={(v) => setSortBy(v as typeof sortBy)}
+                              aria-label={t('actions.sort', 'Sort')}
+                            >
+                              <option value="date">{t('kb.sortLatest', 'Latest updated')}</option>
+                              <option value="popular">{t('kb.sortPopularity', 'Popularity')}</option>
+                              <option value="views">{t('kb.sortViews', 'Most views')}</option>
+                              <option value="confidence">{t('kb.sortConfidence', 'Trust score')}</option>
+                            </ModuleToolbarSelect>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    <KBArticleViews
-                      articles={processedArticles}
-                      viewMode={viewLayout}
-                      onSelect={(art) => setViewingArticle(art)}
-                      onEdit={handleEditArticle}
-                      onDuplicate={handleDuplicateArticle}
-                      onDelete={handleDeleteArticle}
-                      onResetFilters={resetFilters}
+                      <KBArticleViews
+                        articles={processedArticles}
+                        viewMode={viewLayout}
+                        onSelect={(art) => setViewingArticle(art)}
+                        onEdit={handleEditArticle}
+                        onDuplicate={handleDuplicateArticle}
+                        onDelete={handleDeleteArticle}
+                        onResetFilters={resetFilters}
+                      />
+                    </section>
+                  ) : null}
+
+                  {isOverviewMode ? (
+                    <KBCategoryGrid
+                      categories={categories}
+                      articles={workspaceArticles}
+                      selectedCategory={selectedCategory}
+                      onSelect={(name) => {
+                        setSelectedCategory(name);
+                        setKbNav({ type: 'category', id: name });
+                      }}
                     />
-                  </section>
+                  ) : null}
+
+                  {isOverviewMode ? (
+                    <section>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+                        <h2 className="text-sm font-semibold text-slate-900">
+                          {t('kb.allArticlesSection', 'All Articles')}
+                        </h2>
+                        <div className="flex flex-wrap items-center gap-2 sm:justify-end shrink-0">
+                          <KBViewModeSelector value={viewLayout} onChange={setViewLayout} />
+                          <div className="flex items-center gap-1">
+                            <span className="text-[11px] font-medium text-slate-500">{t('modulePage.sort', 'Sort')}:</span>
+                            <ModuleToolbarSelect
+                              value={sortBy}
+                              onChange={(v) => setSortBy(v as typeof sortBy)}
+                              aria-label={t('actions.sort', 'Sort')}
+                            >
+                              <option value="date">{t('kb.sortLatest', 'Latest updated')}</option>
+                              <option value="popular">{t('kb.sortPopularity', 'Popularity')}</option>
+                              <option value="views">{t('kb.sortViews', 'Most views')}</option>
+                              <option value="confidence">{t('kb.sortConfidence', 'Trust score')}</option>
+                            </ModuleToolbarSelect>
+                          </div>
+                        </div>
+                      </div>
+                      <KBArticleViews
+                        articles={processedArticles}
+                        viewMode={viewLayout}
+                        onSelect={(art) => setViewingArticle(art)}
+                        onEdit={handleEditArticle}
+                        onDuplicate={handleDuplicateArticle}
+                        onDelete={handleDeleteArticle}
+                        onResetFilters={resetFilters}
+                      />
+                    </section>
+                  ) : null}
                 </main>
 
                 <aside className="xl:w-[280px] shrink-0 border-t xl:border-t-0 xl:border-l border-slate-200/80 bg-white px-4 py-6 xl:sticky xl:top-0 xl:self-start">

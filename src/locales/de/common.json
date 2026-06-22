@@ -697,6 +697,7 @@
     "helpful": "hilfreich",
     "updatedAgo": "Aktualisiert {{date}}",
     "allArticlesSection": "Alle Artikel",
+    "resultsCount": "{{count}} Ergebnisse",
     "sortLatest": "Zuletzt aktualisiert",
     "aiInsightsTitle": "KI-Wissens-Einblicke",
     "beta": "Beta",
