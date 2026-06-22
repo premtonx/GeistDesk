@@ -42,7 +42,7 @@ export function ModulePageScrollRegion({ children, className }: { children: Reac
 export function ModulePageInset({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <div className={cn(MODULE_PAGE_PX, 'py-4', className)}>
-      <div className="max-w-[1400px] mx-auto w-full">{children}</div>
+      <div className="w-full">{children}</div>
     </div>
   );
 }

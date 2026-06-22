@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../../lib/utils';
-import { MODULE_PAGE_BORDER, MODULE_PAGE_MAX_W, MODULE_PAGE_PX } from './styles';
+import { MODULE_PAGE_BORDER, MODULE_PAGE_INNER, MODULE_PAGE_PX } from './styles';
 
 export interface ModuleKpiItem {
   id: string;
@@ -53,8 +53,8 @@ export function ModuleKpiGrid({ items, className }: ModuleKpiGridProps) {
     >
       <div
         className={cn(
-          MODULE_PAGE_MAX_W,
-          'mx-auto grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3',
+          MODULE_PAGE_INNER,
+          'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3',
         )}
       >
         {items.map((item) => (

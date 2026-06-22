@@ -170,11 +170,11 @@ import { RedesignedSidebar } from '../ticket-details/RedesignedSidebar';
 import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
 import {
-  ModulePageHeader,
+  ModulePageCompactHeader,
   ModulePageTabs,
-  ModuleKpiGrid,
   ModuleToolbar,
 } from '../ui/module-page';
+import { TicketsQueueAiChip } from '../tickets/TicketsQueueAiChip';
 
 const matchStatus = (status: string | undefined, target: string): boolean => {
   if (!status) return false;
@@ -314,7 +314,7 @@ export default function TicketsPage() {
   const [activeView, setActiveView] = useState<string>(() => {
     return localStorage.getItem('geistdesk_default_view') || 'unassigned';
   });
-  const [topStatusFilter, setTopStatusFilter] = useState<'all' | 'open' | 'pending' | 'awaiting_triage'>('all');
+  const [topStatusFilter, setTopStatusFilter] = useState<'all' | 'open' | 'pending' | 'urgent' | 'unassigned'>('all');
 
   useEffect(() => {
     setTopStatusFilter('all');
@@ -403,7 +403,7 @@ export default function TicketsPage() {
     kb: false,
     maintenance: false
   });
-  const [viewDensity, setViewDensity] = useState<'comfortable' | 'compact'>('comfortable');
+  const [viewDensity, setViewDensity] = useState<'comfortable' | 'compact'>('compact');
   const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
   const [headerCheckboxActive, setHeaderCheckboxActive] = useState(false);
   const [isAIPanelSecondaryExpanded, setIsAIPanelSecondaryExpanded] = useState(false);
@@ -771,6 +771,23 @@ export default function TicketsPage() {
     return filtered;
   }, [allTickets, activeView, user, watchedTicketIds, isAiReady]);
 
+  const ticketQueueStats = useMemo(() => {
+    const pool = baseSidebarTickets.filter(
+      (tk) => matchStatusNot(tk.status, 'trash') && matchStatusNot(tk.status, 'spam'),
+    );
+    return {
+      all: pool.length,
+      open: pool.filter((tk) => matchStatus(tk.status, 'open')).length,
+      pending: pool.filter((tk) => matchStatus(tk.status, 'pending')).length,
+      urgent: pool.filter((tk) => tk.priority === 'urgent' || tk.priority === 'high').length,
+      unassigned: pool.filter((tk) => !tk.agentName).length,
+      vip: pool.filter(
+        (tk) => tk.tags?.includes('VIP') || tk.customerName?.toLowerCase().includes('sarah'),
+      ).length,
+      critical: pool.filter((tk) => tk.priority === 'urgent' || tk.priority === 'high').length,
+    };
+  }, [baseSidebarTickets]);
+
   // Subscribe to all tickets
   useEffect(() => {
     if (!user || permsLoading) return;
@@ -841,8 +858,11 @@ export default function TicketsPage() {
       case 'pending':
         result = result.filter(t => matchStatus(t.status, 'pending'));
         break;
-      case 'awaiting_triage':
-        result = result.filter(t => matchStatus((t as any).status, 'awaiting_triage') || ((!t.tags || t.tags.length === 0) && matchStatusNot(t.status, 'resolved') && matchStatusNot(t.status, 'closed') && matchStatusNot(t.status, 'trash') && matchStatusNot(t.status, 'spam')));
+      case 'urgent':
+        result = result.filter(t => t.priority === 'urgent' || t.priority === 'high');
+        break;
+      case 'unassigned':
+        result = result.filter(t => !t.agentName);
         break;
       case 'all':
       default:
@@ -3734,54 +3754,67 @@ export default function TicketsPage() {
     ) : (
       /* List View: Expanded Full Width */
       <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#FAFBFC]">
-            <ModulePageHeader
-              title={t('tickets.title', 'Sovereign Tickets')}
-              description={t('tickets.moduleDescription', 'Manage support pipeline, SLA tracking, and AI-assisted resolution.')}
+            <ModulePageCompactHeader
+              title={t('tickets.titleShort', 'Tickets')}
+              meta={t('tickets.headerMeta', '{{open}} Open • {{pending}} In Progress • {{urgent}} Urgent')
+                .replace('{{open}}', String(ticketQueueStats.open))
+                .replace('{{pending}}', String(ticketQueueStats.pending))
+                .replace('{{urgent}}', String(ticketQueueStats.urgent))}
               trailing={
                 <Button
-                  variant="outline"
+                  variant="ghost"
                   size="icon"
                   onClick={() => setIsMobileSidebarOpen(true)}
-                  className="flex md:hidden h-9 w-9 rounded-lg shrink-0"
+                  className="flex lg:hidden h-8 w-8 rounded-md shrink-0"
                   aria-label={t('tickets.detail.mobileMenu', 'Menu')}
                 >
-                  <ChevronLeft className="w-4 h-4" />
+                  <List className="w-4 h-4" />
                 </Button>
               }
             />
             <ModulePageTabs
               tabs={[
-                { id: 'all', label: t('tickets.allTickets', 'All'), count: baseSidebarTickets.filter(tk => matchStatusNot(tk.status, 'trash') && matchStatusNot(tk.status, 'spam')).length },
-                { id: 'open', label: t('tickets.open', 'Open'), count: baseSidebarTickets.filter(tk => matchStatus(tk.status, 'open')).length },
-                { id: 'pending', label: t('tickets.pending', 'Pending'), count: baseSidebarTickets.filter(tk => matchStatus(tk.status, 'pending')).length },
-                { id: 'awaiting_triage', label: t('tickets.awaitingTriage', 'Awaiting Triage'), count: baseSidebarTickets.filter(tk => matchStatus((tk as any).status, 'awaiting_triage') || ((!tk.tags || tk.tags.length === 0) && matchStatusNot(tk.status, 'resolved') && matchStatusNot(tk.status, 'closed') && matchStatusNot(tk.status, 'trash') && matchStatusNot(tk.status, 'spam'))).length },
+                { id: 'all', label: t('tickets.allTickets', 'All'), count: ticketQueueStats.all },
+                { id: 'open', label: t('tickets.open', 'Open'), count: ticketQueueStats.open },
+                { id: 'pending', label: t('tickets.inProgress', 'In Progress'), count: ticketQueueStats.pending },
+                { id: 'urgent', label: t('tickets.priorityUrgent', 'Urgent'), count: ticketQueueStats.urgent },
+                { id: 'unassigned', label: t('tickets.unassigned', 'Unassigned'), count: ticketQueueStats.unassigned },
               ]}
               activeId={topStatusFilter}
               onChange={(id) => setTopStatusFilter(id as typeof topStatusFilter)}
             />
-            <ModuleKpiGrid
-              items={[
-                { id: 'queue', label: t(`tickets.items.${activeView}`, activeView.replace('_', ' ')), value: tickets.length },
-                { id: 'open', label: t('tickets.open', 'Open'), value: baseSidebarTickets.filter(tk => matchStatus(tk.status, 'open')).length },
-                { id: 'pending', label: t('tickets.pending', 'Pending'), value: baseSidebarTickets.filter(tk => matchStatus(tk.status, 'pending')).length },
-                { id: 'urgent', label: t('tickets.priorityUrgent', 'Urgent'), value: baseSidebarTickets.filter(tk => tk.priority === 'urgent' || tk.priority === 'high').length },
-                { id: 'unassigned', label: t('tickets.unassigned', 'Unassigned'), value: baseSidebarTickets.filter(tk => !tk.agentName).length },
-                { id: 'view', label: t('tickets.allTickets', 'All'), value: baseSidebarTickets.length },
-              ]}
-            />
             <ModuleToolbar
-              searchPlaceholder={t('tickets.searchPlaceholder', 'Search tickets, customers, companies...')}
+              searchPlaceholder={t('tickets.searchPlaceholder', 'Search tickets...')}
               searchValue={searchQuery}
               onSearchChange={setSearchQuery}
               onFilterClick={() => setIsFilterDrawerOpen(true)}
               filterActive={isFilterDrawerOpen}
+              viewsSlot={
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsMobileSidebarOpen(true)}
+                  className="h-8 gap-1 rounded-md border-slate-200/80 text-slate-600 font-medium shrink-0 px-2.5"
+                >
+                  <Layout className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline text-xs">{t('tickets.views', 'Views')}</span>
+                </Button>
+              }
               createAction={
                 <ModuleCreateButton
                   ariaLabelKey="actions.createTicket"
                   ariaLabelDefault="Create Ticket"
                   onClick={() => setIsCreateTicketOpen(true)}
+                  iconOnly
                 />
               }
+            />
+            <TicketsQueueAiChip
+              ticketCount={tickets.length}
+              criticalCount={ticketQueueStats.critical}
+              vipCount={ticketQueueStats.vip}
+              className="mb-1 mt-1"
             />
 
             {/* Filter Drawer Implementation using Sheet */}
@@ -4167,103 +4200,6 @@ export default function TicketsPage() {
               </SheetContent>
             </Sheet>
 
-            {/* Redesigned Sleek Horizontal Ribbon KI-Betriebszusammenfassung */}
-            <div className="mx-6 mt-4 mb-2 bg-gradient-to-r from-blue-50/50 via-indigo-50/25 to-purple-50/20 dark:from-slate-900/40 dark:to-slate-900/20 border border-blue-100 dark:border-slate-800 rounded-2xl p-3 shadow-xs">
-              <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4">
-                {/* Left Section: Icon and Dynamic Statistics Info */}
-                <div className="flex items-center gap-3">
-                  <div className="p-2.5 bg-blue-100 dark:bg-blue-950/60 rounded-xl text-blue-600 dark:text-blue-400 shrink-0 select-none shadow-inner">
-                    <Sparkles className="w-5 h-5 animate-pulse" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-black text-slate-800 dark:text-slate-200 tracking-tight flex items-center gap-1.5">
-                      KI-Betriebszusammenfassung
-                    </h4>
-                    <p className="text-[11px] text-muted-foreground mt-0.5 font-medium leading-tight">
-                      Basierend auf <span className="text-blue-600 dark:text-blue-400 font-bold">{tickets.length} Tickets</span> • Stimmung: <span className="text-emerald-600 dark:text-emerald-400 font-bold">neutral-positiv</span> • Erkennt: <span className="text-amber-500 font-bold">{tickets.filter(t => t.priority === 'urgent' || t.priority === 'high').length} kritische Probleme</span> und <span className="text-blue-500 font-bold">{tickets.filter(t => t.tags?.includes('VIP') || t.customerName?.toLowerCase().includes('sarah')).length} VIP-Anfragen</span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Right Section: Action Buttons and Expand Toggle Chevron */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => {
-                      toast.success("AI Copilot summarized unassigned tickets successfully", {
-                        description: "Core issue: 40% auth errors, 30% invoice request delay, 30% configuration feedback.",
-                        duration: 5500
-                      });
-                    }}
-                    className="h-8 rounded-full text-[10px] font-black border-blue-200 hover:border-blue-300 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-blue-50/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 uppercase tracking-wider gap-1.5 px-4 shadow-xs"
-                  >
-                    <Sparkles className="w-3 h-3 text-blue-500 animate-pulse" />
-                    Warteschlange zusammenfassen
-                  </Button>
-
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => {
-                      setActiveView('sla_risk');
-                      toast.success("Prioritizing high SLA risk tickets");
-                    }}
-                    className="h-8 rounded-full text-[10px] font-black border-amber-200 hover:border-amber-300 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-amber-50/60 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 uppercase tracking-wider gap-0.5 px-4 shadow-xs"
-                  >
-                    <AlertTriangle className="w-3 h-3 text-amber-500" />
-                    SLA-Risiken priorisieren
-                  </Button>
-
-                  <Button 
-                    variant="outline" 
-                    size="sm" 
-                    onClick={() => {
-                      toast.promise(
-                        new Promise((resolve) => setTimeout(resolve, 1200)),
-                        {
-                          loading: "Generating relevant matches with macro catalog...",
-                          success: "Matched 3 candidates! Applied auto-macros & tags correctly.",
-                          error: "Failed to generate suggest macro responses"
-                        }
-                      );
-                    }}
-                    className="h-8 rounded-full text-[10px] font-black border-indigo-200 hover:border-indigo-300 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-indigo-50/60 dark:hover:bg-slate-800 text-indigo-700 dark:text-indigo-300 uppercase tracking-wider gap-1.5 px-4 shadow-xs"
-                  >
-                    <Zap className="w-3 h-3 text-indigo-500 animate-pulse" />
-                    Makros vorschlagen
-                  </Button>
-
-                  {/* Expand / Minimize Toggle */}
-                  <button
-                    onClick={() => setIsAIPanelSecondaryExpanded(!isAIPanelSecondaryExpanded)}
-                    className="p-1.5 hover:bg-slate-200 dark:hover:bg-slate-800 rounded-full text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 transition-all ml-1 cursor-pointer"
-                    title="Toggle operational insights details"
-                  >
-                    <ChevronDown className={cn("w-4 h-4 transition-transform duration-200", isAIPanelSecondaryExpanded && "rotate-180")} />
-                  </button>
-                </div>
-              </div>
-
-              {/* Collapsible insights text block */}
-              <AnimatePresence>
-                {isAIPanelSecondaryExpanded && (
-                  <motion.div
-                    initial={{ opacity: 0, height: 0 }}
-                    animate={{ opacity: 1, height: "auto" }}
-                    exit={{ opacity: 0, height: 0 }}
-                    className="overflow-hidden mt-3 pt-3 border-t border-blue-100/50 dark:border-slate-800"
-                  >
-                    <p className="text-xs text-muted-foreground leading-relaxed font-semibold max-w-5xl">
-                      Das AI Operations Copilot Dashboard empfiehlt sofortige Antwort auf die aktuellen Abrechnungsfragen und Authentifizierungs-Schnittstellen. 
-                      Darüber hinaus deuten Kundenstimmungs-Trends darauf hin, dass ungelöste Systemverzögerungs-Tickets das Risiko einer Eskalation bergen. 
-                      Benutzen Sie Massen-Aktionen für schnelle Problembeseitigung oder weisen Sie die Tickets direkt den zuständigen Fachexperten zu.
-                    </p>
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
-
             {/* Inline Bulk Actions Toolbar (Conditional Render) */}
             <AnimatePresence>
               {selectedTicketIds.length > 0 && (
@@ -4401,7 +4337,7 @@ export default function TicketsPage() {
               <div className="hidden lg:block w-full overflow-x-auto">
                 <div className="min-w-[1000px] border-collapse bg-card">
                 {/* Table Header */}
-                <div className="flex items-center px-8 h-12 bg-muted border-b border-border sticky top-0 z-10">
+                <div className="flex items-center px-4 h-9 bg-muted/80 border-b border-border sticky top-0 z-10">
                    <div className="w-[36px] flex items-center justify-center shrink-0">
                       <Checkbox 
                         checked={headerCheckboxActive}
@@ -4519,8 +4455,8 @@ export default function TicketsPage() {
                           animate={{ opacity: 1 }}
                           onClick={() => handleTicketSelect(ticket.id)}
                           className={cn(
-                            "flex items-center px-8 hover:bg-muted/80 hover:shadow-sm cursor-pointer group transition-all duration-200 overflow-hidden border-l-2 border-transparent",
-                            viewDensity === 'comfortable' ? "py-4 min-h-[76px]" : "py-2 min-h-[48px]",
+                            "flex items-center px-4 hover:bg-muted/60 cursor-pointer group transition-colors duration-150 overflow-hidden border-l-2 border-transparent",
+                            "py-1.5 min-h-[36px]",
                             selectedTicketIds.includes(ticket.id) && "bg-primary/5 hover:bg-primary/10 border-l-primary"
                           )}
                         >
@@ -4654,7 +4590,7 @@ export default function TicketsPage() {
                               value={ticket.status}
                               onValueChange={(val) => handleInlineUpdate(ticket.id, { status: val as TicketStatus })}
                             >
-                              <SelectTrigger className="h-8 border-none bg-transparent hover:bg-muted-foreground/10 transition-colors cursor-pointer outline-none focus:ring-0 text-xs text-slate-850 dark:text-slate-200">
+                              <SelectTrigger className="h-7 border-none bg-transparent hover:bg-muted-foreground/10 transition-colors cursor-pointer outline-none focus:ring-0 text-[11px] text-slate-850 dark:text-slate-200">
                                 <div className="flex items-center gap-2">
                                   <span className={cn(
                                     "w-2 h-2 rounded-full shrink-0",

@@ -28,6 +28,8 @@ interface ModuleCreateButtonProps {
   menuItems?: ModuleCreateMenuItem[];
   className?: string;
   disabled?: boolean;
+  /** When true, always renders a 40×40 circular icon button (toolbar density). */
+  iconOnly?: boolean;
 }
 
 /**
@@ -43,6 +45,7 @@ export function ModuleCreateButton({
   menuItems,
   className,
   disabled,
+  iconOnly = false,
 }: ModuleCreateButtonProps) {
   const { t } = useTranslation();
   const fullLabel = t(ariaLabelKey, ariaLabelDefault);
@@ -56,18 +59,20 @@ export function ModuleCreateButton({
       title={fullLabel}
       aria-label={fullLabel}
       className={cn(
-        'shrink-0 h-10 w-10 sm:h-9 sm:w-auto sm:min-w-[5rem]',
-        'rounded-full',
+        'shrink-0 rounded-full',
         'bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white',
         'font-semibold shadow-none ring-1 ring-blue-600/10',
-        'flex items-center justify-center gap-0 sm:gap-1.5',
-        'px-0 sm:px-3.5',
-        'transition-colors',
+        'flex items-center justify-center transition-colors',
+        iconOnly
+          ? 'h-10 w-10 p-0'
+          : 'h-10 w-10 sm:h-9 sm:w-auto sm:min-w-[5rem] gap-0 sm:gap-1.5 px-0 sm:px-3.5',
         className,
       )}
     >
       <Plus className="w-4 h-4 shrink-0" strokeWidth={2.5} aria-hidden />
-      <span className="hidden sm:inline text-[11px] tracking-tight leading-none">{shortLabel}</span>
+      {!iconOnly ? (
+        <span className="hidden sm:inline text-[11px] tracking-tight leading-none">{shortLabel}</span>
+      ) : null}
     </Button>
   );
 

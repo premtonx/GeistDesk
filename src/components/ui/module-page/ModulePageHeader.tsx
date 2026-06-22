@@ -1,6 +1,6 @@
 import React from 'react';
 import { cn } from '../../../lib/utils';
-import { MODULE_PAGE_BORDER, MODULE_PAGE_MAX_W, MODULE_PAGE_PX } from './styles';
+import { MODULE_PAGE_BORDER, MODULE_PAGE_INNER, MODULE_PAGE_PX } from './styles';
 
 interface ModulePageHeaderProps {
   title: React.ReactNode;
@@ -19,7 +19,7 @@ export function ModulePageHeader({ title, description, trailing, className }: Mo
         className,
       )}
     >
-      <div className={cn(MODULE_PAGE_MAX_W, 'mx-auto w-full flex items-start justify-between gap-4')}>
+      <div className={cn(MODULE_PAGE_INNER, 'flex items-start justify-between gap-4')}>
         <div className="min-w-0 space-y-1">
           <h1 className="text-[1.25rem] sm:text-[1.375rem] font-bold tracking-tight text-slate-900 leading-tight">
             {title}

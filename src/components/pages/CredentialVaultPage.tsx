@@ -73,10 +73,10 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
 import {
   ModulePageShell,
-  ModulePageHeader,
+  ModulePageCompactHeader,
   ModulePageTabs,
-  ModuleKpiGrid,
   ModuleToolbar,
+  ModuleToolbarSelect,
   ModulePageScrollRegion,
   type ModuleTabItem,
 } from '../ui/module-page';
@@ -906,42 +906,78 @@ export default function CredentialVaultPage() {
     { id: 'emergency', label: t('vault.breakGlass', 'Break Glass Emergency') },
   ];
 
-  const vaultKpiItems = [
-    { id: 'total', label: t('vault.total', 'Total entries'), value: totalEntries },
-    { id: 'shared', label: t('vault.sharedWithMe', 'Shared with me'), value: sharedCount },
-    { id: 'weak', label: t('vault.weakPasswords', 'Weak passwords'), value: weakCount },
-    { id: 'expiring', label: t('vault.expiringSoon', 'Expiring soon'), value: expiringCount },
-    { id: 'favorites', label: t('vault.pinnedFavorites', 'Pinned favorites'), value: nonDeletedItems.filter(c => c.favorite).length },
-    { id: 'trash', label: t('vault.trashFolder', 'Trash'), value: trashItems.length },
+  const vaultStorageTabs: ModuleTabItem[] = [
+    { id: 'all', label: t('vault.allEntries', 'All Entries'), count: totalEntries },
+    { id: 'favorites', label: t('vault.pinnedFavorites', 'Favorites'), count: nonDeletedItems.filter((c) => c.favorite).length },
+    { id: 'recently', label: t('vault.recentlyAccessed', 'Recent') },
+    { id: 'shared', label: t('vault.sharedWithMe', 'Shared'), count: sharedCount },
+    { id: 'trash', label: t('vault.trashFolder', 'Trash'), count: trashItems.length },
   ];
 
   return (
     <ModulePageShell scrollable={false} className="bg-[#FAFBFC]">
-      <ModulePageHeader
-        title={t('vault.title', 'GeistVault Enterprise')}
-        description={t('vault.subtitle', 'Centralized infrastructure access, passwords, and compliance vaults.')}
+      <ModulePageCompactHeader
+        title={t('vault.titleShort', 'GeistVault')}
+        meta={t('vault.headerMeta', '{{total}} entries • {{weak}} weak • {{expiring}} expiring')
+          .replace('{{total}}', String(totalEntries))
+          .replace('{{weak}}', String(weakCount))
+          .replace('{{expiring}}', String(expiringCount))}
       />
       <ModulePageTabs
         tabs={vaultModeTabs}
         activeId={vaultViewMode}
         onChange={(id) => setVaultViewMode(id as typeof vaultViewMode)}
       />
-      {vaultViewMode === 'vault' ? <ModuleKpiGrid items={vaultKpiItems} /> : null}
+      {vaultViewMode === 'vault' ? (
+        <ModulePageTabs
+          tabs={vaultStorageTabs}
+          activeId={selectedView === 'all' && selectedType === 'all' ? 'all' : selectedView}
+          onChange={(id) => {
+            if (id === 'all') {
+              setSelectedView('all');
+              setSelectedType('all');
+            } else {
+              setSelectedView(id as typeof selectedView);
+              setSelectedType('all');
+            }
+          }}
+        />
+      ) : null}
       {vaultViewMode === 'vault' ? (
         <ModuleToolbar
           searchPlaceholder={t('vault.searchPlaceholderAdvanced', 'Search assets, usernames, hosts...')}
           searchValue={searchQuery}
           onSearchChange={setSearchQuery}
-          filtersSlot={
-            <span className="text-[11px] font-medium text-slate-500 uppercase hidden sm:inline">
-              {t(`vault.${selectedView}Filter`, selectedView)}
-            </span>
+          sortControl={
+            <ModuleToolbarSelect
+              value={selectedType}
+              onChange={(v) => {
+                setSelectedView('all');
+                setSelectedType(v);
+              }}
+              aria-label={t('vault.accessCategories', 'Category')}
+            >
+              <option value="all">{t('vault.allCategories', 'All categories')}</option>
+              <option value="rdp">{t('category.rdp', 'RDP Sessions')}</option>
+              <option value="vpn">{t('category.vpn', 'VPN Access')}</option>
+              <option value="ssh">{t('category.ssh', 'SSH Server Nodes')}</option>
+              <option value="web">{t('category.web', 'Web Logins')}</option>
+              <option value="db">{t('category.database', 'Databases')}</option>
+              <option value="api">{t('category.api', 'APIs & Keys')}</option>
+              <option value="cloud">{t('category.cloud', 'Cloud Accounts')}</option>
+              {customCategories.map((c) => (
+                <option key={c.slug} value={c.slug}>
+                  {c.name}
+                </option>
+              ))}
+            </ModuleToolbarSelect>
           }
           createAction={
             <ModuleCreateButton
               ariaLabelKey="vault.createCredential"
               ariaLabelDefault="Create Credential"
               onClick={() => setShowAddModal(true)}
+              iconOnly
             />
           }
         />
@@ -959,239 +995,8 @@ export default function CredentialVaultPage() {
 
       {/* Main Vault Workspace tab */}
       {vaultViewMode === 'vault' && (
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start select-none">
+        <div className="space-y-4 select-none">
           
-          {/* Left Navigation Sidebar */}
-          <div className="col-span-1 lg:col-span-3 space-y-4">
-            
-            {/* Storage center structure matching exactly the screenshot specifications */}
-            <div className="bg-white border border-[#DADCE0] rounded-2.5xl p-4 shadow-sm space-y-5">
-              
-              {/* Heading 1 */}
-              <div className="space-y-1">
-                <span className="text-[9px] font-black text-[#9AA0A6] uppercase tracking-widest pl-2 block col-span-1">{t('vault.storageCenter', 'Storage Center')}</span>
-                <nav className="space-y-0.5">
-                  <button 
-                    type="button"
-                    onClick={() => { setSelectedView('all'); setSelectedType('all'); }}
-                    className={cn("w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all",
-                      selectedView === 'all' && selectedType === 'all' ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-slate-600 hover:bg-neutral-50"
-                    )}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Lock className="w-3.5 h-3.5 mr-0.5" />
-                      {t('vault.allEntries', 'All Entries')}
-                    </span>
-                    <Badge variant="outline" className="text-[9px] font-bold px-1.5 h-5 bg-[#F8F9FA] border-none text-[#5F6368]">{totalEntries}</Badge>
-                  </button>
-
-                  <button 
-                    type="button"
-                    onClick={() => { setSelectedView('favorites'); setSelectedType('all'); }}
-                    className={cn("w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all",
-                      selectedView === 'favorites' ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-slate-600 hover:bg-neutral-50"
-                    )}
-                  >
-                    <span className="flex items-center gap-2">
-                      <Star className="w-3.5 h-3.5 mr-0.5" />
-                      {t('vault.pinnedFavorites', 'Pinned Favorites')}
-                    </span>
-                    <Badge variant="outline" className="text-[9px] font-bold px-1.5 h-5 bg-[#F8F9FA] border-none text-[#5F6368]">
-                      {nonDeletedItems.filter(c => c.favorite).length}
-                    </Badge>
-                  </button>
-
-                  <button 
-                    type="button"
-                    onClick={() => { setSelectedView('recently'); setSelectedType('all'); }}
-                    className={cn("w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all",
-                      selectedView === 'recently' ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-slate-600 hover:bg-neutral-50"
-                    )}
-                  >
-                    <span className="flex items-center gap-2">
-                       <Clock className="w-3.5 h-3.5 mr-0.5" />
-                       {t('vault.recentlyAccessed', 'Recently Accessed')}
-                    </span>
-                  </button>
-
-                  <button 
-                    type="button"
-                    onClick={() => { setSelectedView('shared'); setSelectedType('all'); }}
-                    className={cn("w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all",
-                      selectedView === 'shared' ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-slate-600 hover:bg-neutral-50"
-                    )}
-                  >
-                    <span className="flex items-center gap-2">
-                       <Users className="w-3.5 h-3.5 mr-0.5" />
-                       {t('vault.sharedWithMe', 'Shared With Me')}
-                    </span>
-                    <Badge variant="outline" className="text-[9px] font-bold px-1.5 h-5 bg-[#F8F9FA] border-none text-[#5F6368]">{sharedCount}</Badge>
-                  </button>
-
-                  <button 
-                    type="button"
-                    onClick={() => { setSelectedView('trash'); setSelectedType('all'); }}
-                    className={cn("w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all",
-                      selectedView === 'trash' ? "bg-[#FCE8E6] text-[#C5221F]" : "text-slate-600 hover:bg-neutral-50"
-                    )}
-                  >
-                    <span className="flex items-center gap-2">
-                       <Trash2 className="w-3.5 h-3.5 mr-0.5" />
-                       {t('vault.trashFolder', 'Trash Folder')}
-                    </span>
-                    <Badge variant="outline" className="text-[9px] font-bold px-1.5 h-5 bg-red-50 border-none text-red-600">{trashItems.length}</Badge>
-                  </button>
-                </nav>
-              </div>
-
-              {/* Heading 2: Categories */}
-              <div className="space-y-1 pt-2 border-t border-[#F1F3F4]">
-                <div className="flex items-center justify-between pb-1 px-2">
-                  <span className="text-[9px] font-black text-[#9AA0A6] uppercase tracking-widest block">{t('vault.accessCategories', 'Access Categories')}</span>
-                  <button 
-                    type="button"
-                    onClick={() => setShowAddCategoryModal(true)}
-                    className="p-1 rounded-md hover:bg-slate-100 text-[#1A73E8] transition-all hover:scale-105"
-                    title={t('vault.addCustomCategory', 'Add Custom Category')}
-                  >
-                    <Plus className="w-3 h-3" />
-                  </button>
-                </div>
-                <nav className="space-y-0.5">
-                  {[
-                    { type: 'rdp', label: t('category.rdp', 'RDP Sessions'), count: nonDeletedItems.filter(c => c.type === 'rdp').length },
-                    { type: 'vpn', label: t('category.vpn', 'VPN Access'), count: nonDeletedItems.filter(c => c.type === 'vpn').length },
-                    { type: 'ssh', label: t('category.ssh', 'SSH Server Nodes'), count: nonDeletedItems.filter(c => c.type === 'ssh').length },
-                    { type: 'web', label: t('category.web', 'Web Logins'), count: nonDeletedItems.filter(c => c.type === 'web').length },
-                    { type: 'db', label: t('category.database', 'Databases'), count: nonDeletedItems.filter(c => c.type === 'db').length },
-                    { type: 'api', label: t('category.api', 'APIs & Keys'), count: nonDeletedItems.filter(c => c.type === 'api').length },
-                    { type: 'cloud', label: t('category.cloud', 'Cloud Accounts'), count: nonDeletedItems.filter(c => c.type === 'cloud').length },
-                    ...customCategories.map(c => ({
-                      type: c.slug,
-                      label: c.name,
-                      count: nonDeletedItems.filter(item => item.type === c.slug).length,
-                      icon: c.icon
-                    }))
-                  ].map((cat: any) => (
-                    <button 
-                      type="button"
-                      key={cat.type}
-                      onClick={() => { setSelectedView('all'); setSelectedType(cat.type); }}
-                      className={cn("w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all",
-                        selectedType === cat.type ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-slate-600 hover:bg-neutral-50"
-                      )}
-                    >
-                      <span className="flex items-center gap-2 truncate">
-                        {cat.icon ? (
-                          <>
-                            {cat.icon === 'monitor' && <Monitor className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.icon === 'shield' && <Shield className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.icon === 'terminal' && <Terminal className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.icon === 'globe' && <Globe className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.icon === 'database' && <Database className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.icon === 'key' && <KeyIcon className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.icon === 'cloud' && <Cloud className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.icon === 'filecode' && <FileCode className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.icon === 'layers' && <FileCode className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.icon === 'server' && <Terminal className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                          </>
-                        ) : (
-                          <>
-                            {cat.type === 'rdp' && <Monitor className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.type === 'vpn' && <Shield className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.type === 'ssh' && <Terminal className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.type === 'web' && <Globe className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.type === 'db' && <Database className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.type === 'api' && <KeyIcon className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                            {cat.type === 'cloud' && <Cloud className="w-3.5 h-3.5 text-slate-400 mr-0.5" />}
-                          </>
-                        )}
-                        {cat.label}
-                      </span>
-                      <span className="text-[9px] text-[#9AA0A6] font-extrabold">{cat.count}</span>
-                    </button>
-                  ))}
-                </nav>
-              </div>
-
-              {/* Heading 3: Vault Directory Authorities */}
-              <div className="space-y-1 pt-2 border-t border-[#F1F3F4]">
-                <span className="text-[9px] font-black text-[#9AA0A6] uppercase tracking-widest pl-2 block col-span-1">{t('vault.vaultAuthorities', 'Vault Authorities')}</span>
-                <nav className="space-y-0.5">
-                  <button 
-                    type="button"
-                    onClick={() => { setActiveVaultId('local'); setSelectedView('all'); setSelectedType('all'); }}
-                    className={cn("w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all",
-                      activeVaultId === 'local' ? "bg-blue-50 text-[#1a73e8]" : "text-slate-600 hover:bg-neutral-50"
-                    )}
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
-                    {t('vault.personalLocalVault', 'Personal Local Vault')}
-                  </button>
-                  <button 
-                    type="button"
-                    onClick={() => { setActiveVaultId('shared'); setSelectedView('shared'); setSelectedType('all'); }}
-                    className={cn("w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-[11px] font-bold transition-all",
-                      activeVaultId === 'shared' ? "bg-purple-50 text-purple-700" : "text-slate-600 hover:bg-neutral-50"
-                    )}
-                  >
-                    <span className="h-1.5 w-1.5 rounded-full bg-purple-500" />
-                    {t('vault.teamSharedVault', 'Team Shared Vault')}
-                  </button>
-                </nav>
-              </div>
-
-              {/* Heading 4: Tools shortcuts */}
-              <div className="space-y-1 pt-2 border-t border-[#F1F3F4]">
-                <span className="text-[9px] font-black text-[#9AA0A6] uppercase tracking-widest pl-2 block col-span-1">{t('vault.vaultTools', 'Vault Tools')}</span>
-                <nav className="space-y-0.5">
-                  <button 
-                    type="button"
-                    onClick={() => setVaultViewMode('security')}
-                    className="w-full flex items-center justify-between px-3 py-1.5 rounded-lg text-[11px] text-slate-600 font-bold hover:bg-neutral-50"
-                  >
-                    <span className="flex items-center gap-2 truncate">
-                       <ShieldCheck className="w-3.5 h-3.5 text-slate-400 mr-0.5" />
-                       {t('vault.vaultComplianceCheck', 'Vault Compliance Check')}
-                    </span>
-                    <Badge className="bg-green-100 text-green-700 hover:bg-green-100 text-[8px] h-4 font-bold select-none px-1">NEW & AI</Badge>
-                  </button>
-                </nav>
-              </div>
-            </div>
-
-            {/* Browser Extension panel promotions widget */}
-            <div className="bg-white border border-[#DADCE0] rounded-2.5xl p-5 shadow-sm space-y-4">
-              <div className="flex items-center gap-2 select-none">
-                <Chrome className="w-5 h-5 text-[#1A73E8]" />
-                <h4 className="text-xs font-bold text-slate-800">{t('vault.browserAutoFill', 'Browser Auto-Fill')}</h4>
-              </div>
-              <p className="text-[10px] text-slate-400 font-medium leading-relaxed select-none">
-                {t('vault.browserAutoFillDesc', 'Promote zero-trust automation by installing our secure browser auto-fill extension.')}
-              </p>
-              
-              <div className="bg-[#F8F9FA] rounded-xl border p-3 space-y-2 select-none text-[10px] shadow-3xs">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-500 font-sans">{t('vault.chromeExtension', 'Chrome Extension')}</span>
-                  <Badge className="bg-green-100 text-[#137333] border-none text-[8px] h-4 font-bold rounded">{t('vault.installed', 'Installed')}</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-500 font-sans">{t('vault.edgeIntegrator', 'Edge Integrator')}</span>
-                  <button 
-                    type="button"
-                    onClick={() => { setChromeSyncActive(!chromeSyncActive); toast.success("Edge synchronization toggled!"); }}
-                    className={cn("text-[8px] h-4 font-extrabold px-1.5 rounded uppercase font-sans tracking-wide", 
-                      chromeSyncActive ? "bg-blue-100 text-[#1A73E8]" : "bg-neutral-100 text-slate-400")}
-                  >
-                    {chromeSyncActive ? t('vault.syncActive', 'Sync Active') : t('vault.linkNode', 'Link Node')}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right Page Main Workspace */}
-          <div className="col-span-1 lg:col-span-9 space-y-6">
             
             {/* 1. Statistics Cards widget row */}
             <VaultOverview 
@@ -1286,8 +1091,6 @@ export default function CredentialVaultPage() {
               </Card>
 
             </div>
-          </div>
-
         </div>
       )}
 

@@ -51,9 +51,8 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
 import {
   ModulePageShell,
-  ModulePageHeader,
+  ModulePageCompactHeader,
   ModulePageTabs,
-  ModuleKpiGrid,
   ModuleToolbar,
   ModuleToolbarSelect,
   type ModuleTabItem,
@@ -500,6 +499,7 @@ export default function VaultPage() {
       ariaLabelKey="actions.createExchange"
       ariaLabelDefault="Create Secure Exchange"
       shortLabelKey="actions.createShort"
+      iconOnly
       menuItems={[
         {
           labelKey: 'vault.createSecretLink',
@@ -519,16 +519,12 @@ export default function VaultPage() {
 
   return (
     <ModulePageShell scrollable={false} className="bg-[#FAFBFC]">
-      <ModulePageHeader
-        title={t('vault.workspaceTitle', 'GeistExchange')}
-        description={t('vault.welcomeSubtitle', 'Securely share credentials and request diagnostic payloads with encrypted burn links.')}
-      />
+      <ModulePageCompactHeader title={t('vault.workspaceTitle', 'GeistExchange')} />
       <ModulePageTabs
         tabs={exchangeTabs}
         activeId={activeTab}
         onChange={(id) => setActiveTab(id as typeof activeTab)}
       />
-      <ModuleKpiGrid items={exchangeKpis} />
       <ModuleToolbar
         searchPlaceholder={t('vault.activeTable.searchPlaceholder', 'Search workspace...')}
         searchValue={searchTerm}
@@ -551,103 +547,7 @@ export default function VaultPage() {
       />
 
       <div className="flex flex-1 min-h-0 overflow-hidden w-full">
-        
-        {/* Left Side Sub-Navigation Drawer / Column */}
-        <aside className="w-64 border-r bg-white flex flex-col justify-between shrink-0 hidden md:flex">
-          <div className="p-4 space-y-6">
-            <div className="space-y-1">
-              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider px-3 mb-2">{t('vault.workspaceNavigation', 'Workspace Navigation')}</p>
-              
-              <button 
-                onClick={() => setActiveTab('dashboard')} 
-                className={cn(
-                  "w-full text-left px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-2 transition-all",
-                  activeTab === 'dashboard' ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-slate-600 hover:bg-slate-50"
-                )}
-              >
-                <Sliders className="w-4 h-4 shrink-0" />
-                {t('vault.navDashboard', 'Dashboard')}
-              </button>
-
-              <button 
-                onClick={() => setActiveTab('secrets')} 
-                className={cn(
-                  "w-full text-left px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-2 transition-all",
-                  activeTab === 'secrets' ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-slate-600 hover:bg-slate-50"
-                )}
-              >
-                <Send className="w-4 h-4 shrink-0" />
-                {t('vault.navSecrets', 'Secret Links Form')}
-              </button>
-
-              <button 
-                onClick={() => setActiveTab('dropzones')} 
-                className={cn(
-                  "w-full text-left px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-2 transition-all",
-                  activeTab === 'dropzones' ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-slate-600 hover:bg-slate-50"
-                )}
-              >
-                <Upload className="w-4 h-4 shrink-0" />
-                {t('vault.navDropzones', 'Secure Dropzones Builder')}
-              </button>
-
-              <button 
-                onClick={() => setActiveTab('analysis')} 
-                className={cn(
-                  "w-full text-left px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-2 transition-all",
-                  activeTab === 'analysis' ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-slate-600 hover:bg-slate-50"
-                )}
-              >
-                <Sparkles className="w-4 h-4 shrink-0 text-indigo-500 fill-indigo-200" />
-                {t('vault.navInsights', 'AI Insights Engine')}
-              </button>
-
-              <button 
-                onClick={() => setActiveTab('templates')} 
-                className={cn(
-                  "w-full text-left px-3 py-2 text-xs font-bold rounded-xl flex items-center gap-2 transition-all",
-                  activeTab === 'templates' ? "bg-[#E8F0FE] text-[#1A73E8]" : "text-slate-600 hover:bg-slate-50"
-                )}
-              >
-                <FileText className="w-4 h-4 shrink-0" />
-                {t('vault.navTemplates', 'Dropzone Templates')}
-              </button>
-            </div>
-
-            <div className="border-t border-slate-100 pt-4">
-              <p className="text-[10px] font-bold uppercase text-slate-400 tracking-wider px-3 mb-2">{t('vault.quickAccess', 'Quick Access')}</p>
-              <div className="space-y-1">
-                <button onClick={() => { setActiveTab('secrets'); setDeliveryOption('attach_ticket'); }} className="w-full text-left px-3 py-1.5 text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-2">
-                  <Ticket className="w-3.5 h-3.5" /> {t('vault.attachTicket', 'Attach to Ticket')}
-                </button>
-                <button onClick={() => { setActiveTab('secrets'); setDeliveryOption('attach_company'); }} className="w-full text-left px-3 py-1.5 text-[11px] text-slate-500 hover:text-slate-800 flex items-center gap-2">
-                  <Building2 className="w-3.5 h-3.5" /> {t('vault.linkCompany', 'Link Company')}
-                </button>
-                <button onClick={() => setIsEmergencyModalOpen(true)} className="w-full text-left px-3 py-1.5 text-[11px] text-red-500 font-bold hover:text-red-700 flex items-center gap-2">
-                  <AlertTriangle className="w-3.5 h-3.5" /> {t('vault.emergencyBypass', 'Emergency Bypass')}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Quick System Health Summary in sidebar */}
-          <div className="p-4 bg-slate-50 border-t border-slate-100 text-[11px] space-y-2">
-            <div className="flex items-center justify-between font-mono">
-              <span className="text-slate-400">{t('vault.nodeStatus', 'Node Status')}:</span>
-              <span className="text-emerald-600 font-bold">● {t('companies.active', 'ACTIVE')}</span>
-            </div>
-            <div className="flex items-center justify-between font-mono">
-              <span className="text-slate-400">{t('vault.pqcLevel', 'PQC Level')}:</span>
-              <span className="text-[#1A73E8] font-bold">ML-KEM-1024</span>
-            </div>
-            <div className="w-full bg-slate-200 h-1 rounded-full overflow-hidden">
-              <div className="bg-emerald-500 h-full w-[96%]" />
-            </div>
-          </div>
-        </aside>
-
-        {/* Center Canvas Areas */}
-        <main className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
+        <main className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
           <AnimatePresence mode="wait">
             {activeTab === 'dashboard' && (
               <motion.div 
