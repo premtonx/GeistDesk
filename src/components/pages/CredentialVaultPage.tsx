@@ -991,7 +991,7 @@ export default function CredentialVaultPage() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-1 min-h-0">
+        <div className="flex flex-1 min-h-0 w-full">
           <VaultLeftSidebar
             activeVaultId={activeVaultId}
             onVaultChange={(id) => { setActiveVaultId(id); setSmartFilter(null); }}
@@ -1004,8 +1004,8 @@ export default function CredentialVaultPage() {
             smartCounts={smartCounts}
           />
 
-          <main className="flex-1 min-w-0 overflow-y-auto">
-            <div className="p-6 space-y-5 max-w-[1200px]">
+          <main className="flex-1 min-w-0 w-full overflow-y-auto">
+            <div className="p-6 space-y-5 w-full min-w-0">
               <div className="flex items-start justify-between gap-4">
                 <VaultPageHeader />
                 <div className="flex items-center gap-2 shrink-0">
