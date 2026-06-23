@@ -425,7 +425,11 @@
       "customViewName": "e.g. Critical Work",
       "filterAssignedMe": "Assigned to me",
       "filterNotClosed": "Status not closed",
-      "saveCustomView": "Save custom view"
+      "saveCustomView": "Save custom view",
+      "defaultSectionState": "Default section state",
+      "defaultSectionStateDesc": "Choose which sections start expanded or collapsed in the sidebar.",
+      "startCollapsed": "Starts collapsed",
+      "startExpanded": "Starts expanded"
     },
     "responseSla": "Response SLA",
     "replyBtn": "Reply",

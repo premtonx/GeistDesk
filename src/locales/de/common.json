@@ -425,7 +425,11 @@
       "customViewName": "z. B. Kritische Arbeit",
       "filterAssignedMe": "Mir zugewiesen",
       "filterNotClosed": "Status nicht geschlossen",
-      "saveCustomView": "Ansicht speichern"
+      "saveCustomView": "Ansicht speichern",
+      "defaultSectionState": "Standard-Bereichszustand",
+      "defaultSectionStateDesc": "Legen Sie fest, welche Bereiche in der Seitenleiste aufgeklappt oder eingeklappt starten.",
+      "startCollapsed": "Startet eingeklappt",
+      "startExpanded": "Startet aufgeklappt"
     },
     "responseSla": "Antwort-SLA",
     "replyBtn": "Antworten",

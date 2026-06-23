@@ -42,11 +42,11 @@ export const DEFAULT_GROUP_ORDER = [
 
 export const DEFAULT_COLLAPSED_GROUPS: Record<string, boolean> = {
   favorites: false,
-  my_work: false,
-  inbox: false,
+  my_work: true,
+  inbox: true,
   status: true,
-  customers_sla: false,
-  ai_views: false,
+  customers_sla: true,
+  ai_views: true,
 };
 
 const PRIORITY_RANK: Record<string, number> = {
@@ -183,17 +183,24 @@ export function useTicketsSidebarPreferences(userId: string | undefined) {
     [prefs, persist],
   );
 
-  const toggleGroupCollapsed = useCallback(
-    (groupId: string) => {
+  const setGroupCollapsed = useCallback(
+    (groupId: string, collapsed: boolean) => {
       persist({
         ...prefs,
         collapsedGroups: {
           ...prefs.collapsedGroups,
-          [groupId]: !prefs.collapsedGroups[groupId],
+          [groupId]: collapsed,
         },
       });
     },
     [prefs, persist],
+  );
+
+  const toggleGroupCollapsed = useCallback(
+    (groupId: string) => {
+      setGroupCollapsed(groupId, !prefs.collapsedGroups[groupId]);
+    },
+    [prefs.collapsedGroups, setGroupCollapsed],
   );
 
   const addCustomView = useCallback(
@@ -255,6 +262,7 @@ export function useTicketsSidebarPreferences(userId: string | undefined) {
     reorderGroups,
     toggleGroupVisibility,
     toggleGroupCollapsed,
+    setGroupCollapsed,
     addCustomView,
     updateCustomView,
     removeCustomView,

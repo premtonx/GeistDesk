@@ -366,6 +366,7 @@ export default function TicketsPage() {
     reorderGroups,
     toggleGroupVisibility,
     toggleGroupCollapsed,
+    setGroupCollapsed,
     addCustomView,
     updateCustomView,
     removeCustomView,
@@ -1658,9 +1659,11 @@ export default function TicketsPage() {
         favoriteViewIds={sidebarPrefs.favoriteViewIds}
         hiddenGroupIds={sidebarPrefs.hiddenGroupIds}
         groupOrder={sidebarPrefs.groupOrder}
+        collapsedGroups={sidebarPrefs.collapsedGroups}
         customViews={sidebarPrefs.customViews}
         onToggleGroupVisibility={toggleGroupVisibility}
         onReorderGroups={reorderGroups}
+        onSetGroupCollapsed={setGroupCollapsed}
         onAddCustomView={addCustomView}
         onUpdateCustomView={updateCustomView}
         onRemoveCustomView={removeCustomView}

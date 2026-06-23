@@ -197,8 +197,11 @@ export function TicketsLeftSidebar({
     return t(`tickets.items.${item.id}`, item.label);
   };
 
-  const renderGroup = (cat: SidebarGroupConfig) => (
-    <div key={cat.id} className="space-y-0.5">
+  const renderGroup = (cat: SidebarGroupConfig, withDivider: boolean) => (
+    <div
+      key={cat.id}
+      className={cn('space-y-0.5', withDivider && 'pt-2.5 mt-2.5 border-t border-border/70')}
+    >
       {!effectiveCollapsed && (
         <button
           type="button"
@@ -263,10 +266,10 @@ export function TicketsLeftSidebar({
         </div>
       )}
 
-      <div className="flex-1 space-y-2 px-2 min-h-0">
+      <div className="flex-1 space-y-0 px-2 min-h-0">
         {/* Favorites */}
         {!effectiveCollapsed && favoriteItems.length > 0 && (
-          <div className="space-y-0.5">
+          <div className="space-y-0.5 pb-2.5 mb-0.5 border-b border-border/70">
             <button
               type="button"
               onClick={() => toggleGroup(FAVORITES_SECTION_ID)}
@@ -314,7 +317,7 @@ export function TicketsLeftSidebar({
           </div>
         )}
 
-        {orderedGroups.map(renderGroup)}
+        {orderedGroups.map((cat, index) => renderGroup(cat, index > 0 || favoriteItems.length > 0))}
       </div>
 
       <TicketsAiQualityScore collapsed={effectiveCollapsed} className="mt-auto shrink-0" />

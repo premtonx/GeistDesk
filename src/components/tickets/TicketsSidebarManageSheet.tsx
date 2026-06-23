@@ -11,7 +11,7 @@ import {
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { useTranslation } from '../../lib/context/I18nContext';
-import { TICKETS_SIDEBAR_GROUPS } from './ticketsSidebarConfig';
+import { FAVORITES_SECTION_ID, TICKETS_SIDEBAR_GROUPS } from './ticketsSidebarConfig';
 import type { CustomTicketView, CustomTicketViewFilters } from '../../lib/ticketsSidebarPreferences';
 import { cn } from '../../lib/utils';
 
@@ -21,9 +21,11 @@ interface TicketsSidebarManageSheetProps {
   favoriteViewIds: string[];
   hiddenGroupIds: string[];
   groupOrder: string[];
+  collapsedGroups: Record<string, boolean>;
   customViews: CustomTicketView[];
   onToggleGroupVisibility: (groupId: string) => void;
   onReorderGroups: (from: number, to: number) => void;
+  onSetGroupCollapsed: (groupId: string, collapsed: boolean) => void;
   onAddCustomView: (view: Omit<CustomTicketView, 'id' | 'createdAt'>) => void;
   onUpdateCustomView: (id: string, patch: Partial<CustomTicketView>) => void;
   onRemoveCustomView: (id: string) => void;
@@ -40,11 +42,12 @@ export function TicketsSidebarManageSheet({
   onOpenChange,
   hiddenGroupIds,
   groupOrder,
+  collapsedGroups,
   customViews,
   onToggleGroupVisibility,
   onReorderGroups,
+  onSetGroupCollapsed,
   onAddCustomView,
-  onUpdateCustomView,
   onRemoveCustomView,
 }: TicketsSidebarManageSheetProps) {
   const { t } = useTranslation();
@@ -54,6 +57,8 @@ export function TicketsSidebarManageSheet({
   const orderedGroups = groupOrder
     .map((id) => TICKETS_SIDEBAR_GROUPS.find((g) => g.id === id))
     .filter(Boolean);
+
+  const collapseSectionIds = [FAVORITES_SECTION_ID, ...groupOrder];
 
   const onGroupDragEnd = (result: DropResult) => {
     if (!result.destination) return;
@@ -73,6 +78,14 @@ export function TicketsSidebarManageSheet({
     setNewFilters({ ...EMPTY_FILTERS });
   };
 
+  const sectionLabel = (id: string) => {
+    if (id === FAVORITES_SECTION_ID) {
+      return t('tickets.groups.favorites', 'Favorites');
+    }
+    const group = TICKETS_SIDEBAR_GROUPS.find((g) => g.id === id);
+    return group ? t(`tickets.groups.${group.id}`, group.label) : id;
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
       <SheetContent side="left" className="w-[380px] sm:max-w-[380px] p-0 flex flex-col">
@@ -86,6 +99,43 @@ export function TicketsSidebarManageSheet({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto p-5 space-y-6">
+          <section>
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-1">
+              {t('tickets.sidebar.defaultSectionState', 'Default section state')}
+            </h3>
+            <p className="text-[11px] text-muted-foreground mb-2">
+              {t('tickets.sidebar.defaultSectionStateDesc', 'Choose which sections start expanded or collapsed in the sidebar.')}
+            </p>
+            <ul className="space-y-1 rounded-lg border border-border divide-y divide-border overflow-hidden">
+              {collapseSectionIds.map((id) => {
+                const collapsed = collapsedGroups[id] ?? true;
+                const hidden = id !== FAVORITES_SECTION_ID && hiddenGroupIds.includes(id);
+                return (
+                  <li
+                    key={id}
+                    className={cn(
+                      'flex items-center justify-between gap-2 px-3 py-2 bg-card',
+                      hidden && 'opacity-50',
+                    )}
+                  >
+                    <span className="text-xs font-semibold truncate">{sectionLabel(id)}</span>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="h-7 text-[10px] px-2 shrink-0"
+                      onClick={() => onSetGroupCollapsed(id, !collapsed)}
+                    >
+                      {collapsed
+                        ? t('tickets.sidebar.startCollapsed', 'Starts collapsed')
+                        : t('tickets.sidebar.startExpanded', 'Starts expanded')}
+                    </Button>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+
           <section>
             <h3 className="text-[10px] font-black uppercase tracking-widest text-muted-foreground mb-2">
               {t('tickets.sidebar.sectionOrder', 'Section order & visibility')}
