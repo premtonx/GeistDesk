@@ -164,6 +164,10 @@ import {
   filterTicketsByView,
   type TopStatusFilterId,
 } from '../../lib/ticketViewFilters';
+import {
+  customViewId,
+  useTicketsSidebarPreferences,
+} from '../../lib/ticketsSidebarPreferences';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useTranslation } from '../../lib/context/I18nContext';
 
@@ -194,9 +198,10 @@ import {
 import { TicketsQueueAiChip } from '../tickets/TicketsQueueAiChip';
 import { TicketsPageHeader } from '../tickets/TicketsPageHeader';
 import { TicketsLeftSidebar } from '../tickets/TicketsLeftSidebar';
+import { TicketsSidebarManageSheet } from '../tickets/TicketsSidebarManageSheet';
 import { TicketsEmptyState } from '../tickets/TicketsEmptyState';
 import { TicketDetailDrawer } from '../tickets/TicketDetailDrawer';
-import { TICKETS_SIDEBAR_GROUPS } from '../tickets/ticketsSidebarConfig';
+import { FAVORITES_SECTION_ID, TICKETS_SIDEBAR_GROUPS } from '../tickets/ticketsSidebarConfig';
 import { TicketStatusChip, TicketPriorityChip, TicketAssigneeChip } from '../tickets/TicketTableCells';
 import { TicketsTableHeader } from '../tickets/TicketsTableHeader';
 import { getTicketTableGridClass, getTicketTableMinWidth, ticketTableRowClass } from '../tickets/ticketTableLayout';
@@ -352,6 +357,20 @@ export default function TicketsPage() {
   const [layoutMode, setLayoutMode] = useState<TicketsLayoutMode>('list');
   const [listSort, setListSort] = useState<'newest' | 'oldest' | 'priority'>('newest');
 
+  const [isManageViewsOpen, setIsManageViewsOpen] = useState(false);
+
+  const {
+    prefs: sidebarPrefs,
+    toggleFavorite,
+    reorderFavorites,
+    reorderGroups,
+    toggleGroupVisibility,
+    toggleGroupCollapsed,
+    addCustomView,
+    updateCustomView,
+    removeCustomView,
+  } = useTicketsSidebarPreferences(user?.uid);
+
   const supportTickets = useMemo(
     () => filterTicketsByWorkspace(allTickets, 'support'),
     [allTickets],
@@ -388,12 +407,13 @@ export default function TicketsPage() {
   }, [defaultViewSetting]);
 
   useEffect(() => {
-    // Collect all valid view IDs in visibility
-    const visibleViewIds = dynamicCategories.flatMap(c => c.items.map(i => i.id));
+    const builtIn = TICKETS_SIDEBAR_GROUPS.flatMap((c) => c.items.map((i) => i.id));
+    const custom = sidebarPrefs.customViews.map((v) => customViewId(v));
+    const visibleViewIds = [...builtIn, ...custom];
     if (!visibleViewIds.includes(activeView)) {
       setActiveView(defaultViewSetting);
     }
-  }, [dynamicCategories, activeView, defaultViewSetting]);
+  }, [sidebarPrefs.customViews, activeView, defaultViewSetting]);
 
   const moveCategory = (id: string, direction: 'up' | 'down') => {
     const idx = categoryOrder.indexOf(id);
@@ -419,10 +439,11 @@ export default function TicketsPage() {
     const saved = localStorage.getItem('watchedTickets');
     return saved ? JSON.parse(saved) : [];
   });
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({
-    inbox: false,
-    customers_sla: false,
-  });
+  const collapsedGroups = sidebarPrefs.collapsedGroups;
+
+  const toggleGroup = (group: string) => {
+    toggleGroupCollapsed(group);
+  };
   const [viewDensity, setViewDensity] = useState<'comfortable' | 'compact'>('compact');
   const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
   const [headerCheckboxActive, setHeaderCheckboxActive] = useState(false);
@@ -576,10 +597,6 @@ export default function TicketsPage() {
     }
   }, [loading, allTickets.length, user]);
 
-  const toggleGroup = (group: string) => {
-    setCollapsedGroups(prev => ({ ...prev, [group]: !prev[group] }));
-  };
-  
   const [isAiDrafting, setIsAiDrafting] = useState(false);
   const [ghostDraft, setGhostDraft] = useState('');
   const [isGhostDrafting, setIsGhostDrafting] = useState(false);
@@ -652,8 +669,9 @@ export default function TicketsPage() {
       watchedTicketIds,
       allTickets,
       isAiReady,
+      customViews: sidebarPrefs.customViews,
     }),
-    [user?.uid, watchedTicketIds, allTickets, isAiReady],
+    [user?.uid, watchedTicketIds, allTickets, isAiReady, sidebarPrefs.customViews],
   );
 
   // Compute tickets filtered ONLY by the current active sidebar view category
@@ -1591,6 +1609,13 @@ export default function TicketsPage() {
         activeView={activeView}
         onViewChange={handleViewChange}
         getViewCount={getViewCount}
+        favoriteViewIds={sidebarPrefs.favoriteViewIds}
+        onToggleFavorite={toggleFavorite}
+        onReorderFavorites={reorderFavorites}
+        groupOrder={sidebarPrefs.groupOrder}
+        hiddenGroupIds={sidebarPrefs.hiddenGroupIds}
+        customViews={sidebarPrefs.customViews}
+        onOpenManageViews={() => setIsManageViewsOpen(true)}
         selectedTicketId={selectedTicketId}
         isMobileSidebarOpen={isMobileSidebarOpen}
         footer={
@@ -1625,6 +1650,20 @@ export default function TicketsPage() {
             </div>
           ) : undefined
         }
+      />
+
+      <TicketsSidebarManageSheet
+        open={isManageViewsOpen}
+        onOpenChange={setIsManageViewsOpen}
+        favoriteViewIds={sidebarPrefs.favoriteViewIds}
+        hiddenGroupIds={sidebarPrefs.hiddenGroupIds}
+        groupOrder={sidebarPrefs.groupOrder}
+        customViews={sidebarPrefs.customViews}
+        onToggleGroupVisibility={toggleGroupVisibility}
+        onReorderGroups={reorderGroups}
+        onAddCustomView={addCustomView}
+        onUpdateCustomView={updateCustomView}
+        onRemoveCustomView={removeCustomView}
       />
 
       {/* Main Content Area: Conditional Master-Detail */}

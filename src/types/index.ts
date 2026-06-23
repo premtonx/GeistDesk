@@ -1,4 +1,19 @@
-export type TicketStatus = "open" | "pending" | "resolved" | "closed" | "deleted" | "spam" | "merged" | "trash" | "qs";
+export type TicketStatus =
+  | 'open'
+  | 'pending'
+  | 'resolved'
+  | 'closed'
+  | 'deleted'
+  | 'spam'
+  | 'merged'
+  | 'trash'
+  | 'qs'
+  | 'paused'
+  | 'on-hold'
+  | 'on_hold'
+  | 'waiting_customer'
+  | 'waiting_dev'
+  | 'waiting_vendor';
 export type TicketPriority = "low" | "medium" | "high" | "urgent";
 export type SenderType = "customer" | "agent" | "ai";
 

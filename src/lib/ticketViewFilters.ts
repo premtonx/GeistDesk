@@ -1,5 +1,11 @@
 import { Ticket } from '../types';
 import { getLinkedSupportTickets, isBugTicket } from './ticketWorkspace';
+import {
+  type CustomTicketView,
+  customViewId,
+  isCustomViewId,
+  matchesCustomViewFilters,
+} from './ticketsSidebarPreferences';
 
 export type TopStatusFilterId =
   | 'all'
@@ -29,6 +35,7 @@ export interface TicketViewFilterContext {
   watchedTicketIds: string[];
   allTickets: Ticket[];
   isAiReady: boolean;
+  customViews?: CustomTicketView[];
 }
 
 export function isActiveSupportTicket(ticket: Ticket): boolean {
@@ -113,7 +120,109 @@ export function isUrgentPriorityTicket(ticket: Ticket): boolean {
 }
 
 export function isOnHoldTicket(ticket: Ticket): boolean {
-  return matchStatus(ticket.status, 'on-hold') || matchStatus(ticket.status, 'on_hold');
+  return (
+    matchStatus(ticket.status, 'on-hold') ||
+    matchStatus(ticket.status, 'on_hold') ||
+    matchStatus(ticket.status, 'paused')
+  );
+}
+
+export function isPausedTicket(ticket: Ticket): boolean {
+  return isOnHoldTicket(ticket);
+}
+
+export function isQsTicket(ticket: Ticket): boolean {
+  return matchStatus(ticket.status, 'qs');
+}
+
+export function isWaitingCustomerTicket(ticket: Ticket): boolean {
+  return matchStatus(ticket.status, 'waiting_customer');
+}
+
+export function isWaitingDevTicket(ticket: Ticket): boolean {
+  return matchStatus(ticket.status, 'waiting_dev');
+}
+
+export function isWaitingVendorTicket(ticket: Ticket): boolean {
+  return matchStatus(ticket.status, 'waiting_vendor');
+}
+
+export function isDueTodayTicket(ticket: Ticket, userId: string): boolean {
+  if (ticket.agentId !== userId) return false;
+  const due = ticket.slaDueAt || ticket.firstResponseDue;
+  if (!due) return false;
+  const dueDate = due.toDate ? due.toDate() : new Date(due as unknown as string);
+  const today = new Date();
+  return (
+    dueDate.toDateString() === today.toDateString() &&
+    matchStatusNot(ticket.status, 'resolved') &&
+    matchStatusNot(ticket.status, 'closed')
+  );
+}
+
+export function isWaitingMyResponseTicket(ticket: Ticket, userId: string): boolean {
+  return (
+    ticket.agentId === userId &&
+    (matchStatus(ticket.status, 'open') || matchStatus(ticket.status, 'pending')) &&
+    matchStatusNot(ticket.status, 'resolved') &&
+    matchStatusNot(ticket.status, 'closed')
+  );
+}
+
+export function isNegativeSentimentTicket(ticket: Ticket): boolean {
+  return ticket.sentiment === 'angry' || ticket.sentiment === 'negative';
+}
+
+export function isPotentialEscalationTicket(ticket: Ticket): boolean {
+  return (
+    isNegativeSentimentTicket(ticket) &&
+    (ticket.priority === 'urgent' || ticket.priority === 'high' || isEscalationTicket(ticket))
+  );
+}
+
+export function isDuplicateTicket(ticket: Ticket, allTickets: Ticket[]): boolean {
+  const subject = ticket.subject?.toLowerCase().trim();
+  if (!subject) return false;
+  return allTickets.some(
+    (other) => other.id !== ticket.id && other.subject?.toLowerCase().trim() === subject,
+  );
+}
+
+export function isKbSuggestionTicket(ticket: Ticket): boolean {
+  return (
+    (typeof ticket.aiConfidence === 'number' && ticket.aiConfidence >= 0.7) ||
+    hasTagCaseInsensitive(ticket.tags, 'KB_Candidate') ||
+    hasTagCaseInsensitive(ticket.tags, 'KB_Suggestion')
+  );
+}
+
+export function isVipRequestTicket(ticket: Ticket): boolean {
+  return isVipCustomerTicket(ticket) && isTeamAllOpenTicket(ticket);
+}
+
+function filterByStatusValue(tickets: Ticket[], status: string): Ticket[] {
+  switch (status) {
+    case 'open':
+      return tickets.filter((t) => matchStatus(t.status, 'open'));
+    case 'pending':
+      return tickets.filter((t) => matchStatus(t.status, 'pending'));
+    case 'paused':
+      return tickets.filter(isPausedTicket);
+    case 'qs':
+      return tickets.filter(isQsTicket);
+    case 'waiting_customer':
+      return tickets.filter((t) => matchStatus(t.status, 'waiting_customer'));
+    case 'waiting_dev':
+      return tickets.filter(isWaitingDevTicket);
+    case 'waiting_vendor':
+      return tickets.filter(isWaitingVendorTicket);
+    case 'resolved':
+      return tickets.filter((t) => matchStatus(t.status, 'resolved'));
+    case 'closed':
+      return tickets.filter((t) => matchStatus(t.status, 'closed'));
+    default:
+      return tickets.filter((t) => matchStatus(t.status, status));
+  }
 }
 
 /** Sidebar view predicates — single source of truth for counts and table pools. */
@@ -122,7 +231,13 @@ export function filterTicketsByView(
   viewId: string,
   ctx: TicketViewFilterContext,
 ): Ticket[] {
-  const { userId, watchedTicketIds, allTickets, isAiReady } = ctx;
+  const { userId, watchedTicketIds, allTickets, isAiReady, customViews = [] } = ctx;
+
+  if (isCustomViewId(viewId)) {
+    const custom = customViews.find((v) => customViewId(v) === viewId);
+    if (!custom) return [];
+    return tickets.filter((t) => matchesCustomViewFilters(t, custom.filters, userId));
+  }
 
   switch (viewId) {
     case 'team_all_open':
@@ -142,6 +257,51 @@ export function filterTicketsByView(
       return tickets.filter(isEscalationTicket);
     case 'sla_risk':
       return tickets.filter(isSlaRiskTicket);
+    case 'assigned_me':
+      return tickets.filter(
+        (t) =>
+          t.agentId === userId &&
+          matchStatusNot(t.status, 'resolved') &&
+          matchStatusNot(t.status, 'closed') &&
+          matchStatusNot(t.status, 'trash') &&
+          matchStatusNot(t.status, 'spam'),
+      );
+    case 'due_today':
+      return tickets.filter((t) => isDueTodayTicket(t, userId));
+    case 'waiting_my_response':
+      return tickets.filter((t) => isWaitingMyResponseTicket(t, userId));
+    case 'my_paused':
+      return tickets.filter((t) => t.agentId === userId && isPausedTicket(t));
+    case 'my_qs':
+      return tickets.filter((t) => t.agentId === userId && isQsTicket(t));
+    case 'status_open':
+      return filterByStatusValue(tickets, 'open');
+    case 'status_pending':
+      return filterByStatusValue(tickets, 'pending');
+    case 'status_paused':
+      return filterByStatusValue(tickets, 'paused');
+    case 'status_qs':
+      return filterByStatusValue(tickets, 'qs');
+    case 'status_waiting_customer':
+      return tickets.filter(isWaitingCustomerTicket);
+    case 'status_waiting_dev':
+      return filterByStatusValue(tickets, 'waiting_dev');
+    case 'status_waiting_vendor':
+      return filterByStatusValue(tickets, 'waiting_vendor');
+    case 'status_resolved':
+      return filterByStatusValue(tickets, 'resolved');
+    case 'status_closed':
+      return filterByStatusValue(tickets, 'closed');
+    case 'negative_sentiment':
+      return tickets.filter(isNegativeSentimentTicket);
+    case 'potential_escalations':
+      return tickets.filter(isPotentialEscalationTicket);
+    case 'duplicates_detected':
+      return tickets.filter((t) => isDuplicateTicket(t, allTickets));
+    case 'kb_suggestion':
+      return tickets.filter(isKbSuggestionTicket);
+    case 'vip_requests':
+      return tickets.filter(isVipRequestTicket);
     case 'my_queue':
       return tickets.filter(
         (t) =>
