@@ -2,7 +2,7 @@ import { GoogleGenAI, Type } from "@google/genai";
 import { db } from "../lib/firebase";
 import { collection, query, where, getDocs, limit, orderBy } from "firebase/firestore";
 import { Ticket } from "../types";
-import { getModuleConfig } from "../lib/module-config";
+import { getCachedLegacyAiConfig } from "../lib/aiOrchestratorClient";
 
 export interface SuggestedLink {
   ticketId: string;
@@ -15,7 +15,7 @@ export interface SuggestedLink {
  * Uses Gemini or Ollama to find semantically related tickets for a given ticket.
  */
 export async function suggestNeuralLinks(currentTicket: Ticket): Promise<SuggestedLink[]> {
-  const config = getModuleConfig();
+  const config = { ai: getCachedLegacyAiConfig() };
   const isGoogle = config.ai.sentimentModel === 'gemini-flash';
 
   try {

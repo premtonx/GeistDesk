@@ -4,7 +4,8 @@
  */
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { getModuleConfig, AIConfig } from "../module-config";
+import { getCachedLegacyAiConfig } from "../aiOrchestratorClient";
+import type { AIConfig } from "../module-config";
 
 export type AIProvider = "google" | "local-ollama" | "openai-compat";
 
@@ -35,7 +36,13 @@ export class AIAdapter {
   private config: AIConfig;
 
   constructor() {
-    this.config = getModuleConfig().ai;
+    this.config = getCachedLegacyAiConfig();
+    this.initializeSDK();
+  }
+
+  /** Refresh in-memory config from workspace orchestrator cache. */
+  reloadConfig() {
+    this.config = getCachedLegacyAiConfig();
     this.initializeSDK();
   }
 

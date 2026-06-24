@@ -1,5 +1,6 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { getModuleConfig } from "../lib/module-config";
+import { getCachedLegacyAiConfig } from "../lib/aiOrchestratorClient";
 import { db, auth } from "../lib/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 
@@ -14,8 +15,9 @@ export interface LegalValidationResult {
  * Validates a draft content against legal guardrails using a local Gemini or local/Ollama model.
  */
 export async function validateDraft(draftContent: string, ticketId?: string): Promise<LegalValidationResult> {
-  const config = getModuleConfig();
-  const policyText = config.legalPolicy;
+  const moduleConfig = getModuleConfig();
+  const policyText = moduleConfig.legalPolicy;
+  const ai = getCachedLegacyAiConfig();
 
   if (!policyText) return { isValid: true };
 
@@ -34,10 +36,10 @@ Company Policy & Guardrails:
 
   try {
     let result: LegalValidationResult = { isValid: true };
-    const isGoogle = config.ai.sentimentModel === 'gemini-flash';
+    const isGoogle = ai.sentimentModel === 'gemini-flash';
 
     if (isGoogle) {
-      const apiKey = config.ai.apiKey || process.env.GEMINI_API_KEY || "";
+      const apiKey = ai.apiKey || process.env.GEMINI_API_KEY || "";
       if (!apiKey) {
         console.warn("Legal validation skipped: Gemini API key not set");
         return { isValid: true };
@@ -62,16 +64,16 @@ Company Policy & Guardrails:
       });
       result = JSON.parse(response.text) as LegalValidationResult;
     } else {
-      const endpoint = config.ai.localEndpoint || "http://localhost:11434/v1";
-      const modelName = config.ai.sentimentModel === 'custom-local'
-        ? (config.ai.customSentimentModelName || "gemma")
-        : (config.ai.sentimentModel === 'local-gemma' ? "gemma" : "llama3");
+      const endpoint = ai.localEndpoint || "http://localhost:11434/v1";
+      const modelName = ai.sentimentModel === 'custom-local'
+        ? (ai.customSentimentModelName || "gemma")
+        : (ai.sentimentModel === 'local-gemma' ? "gemma" : "llama3");
 
       const response = await fetch(`${endpoint}/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${config.ai.customApiKey || "ollama"}`
+          "Authorization": `Bearer ${ai.customApiKey || "ollama"}`
         },
         body: JSON.stringify({
           model: modelName,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { startOrchestratorConfigPolling } from '../../lib/aiOrchestratorClient';
 import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -138,6 +138,7 @@ export default function MainLayout() {
 
   useEffect(() => {
     if (!user) return;
+    startOrchestratorConfigPolling();
     const fetchAiHealth = async () => {
       try {
         const response = await fetch('/api/admin/orchestrator/health');

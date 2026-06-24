@@ -75,6 +75,52 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_geistdesk_documents_collection ON geistdesk_documents(collection);
     CREATE INDEX IF NOT EXISTS idx_geistdesk_documents_data_gin ON geistdesk_documents USING GIN (data);
   `);
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS ai_orchestrator_config (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
+      scope VARCHAR(32) NOT NULL DEFAULT 'workspace',
+      primary_model VARCHAR(128) NOT NULL DEFAULT 'gemini-flash',
+      reasoning_model VARCHAR(128) NOT NULL DEFAULT 'gemini-pro',
+      triage_model VARCHAR(128) NOT NULL DEFAULT 'gemini-flash',
+      fallback_models JSONB NOT NULL DEFAULT '["claude","gpt-5","local-llama"]',
+      feature_routing_json JSONB NOT NULL DEFAULT '{}',
+      endpoint_url TEXT NOT NULL DEFAULT 'http://localhost:11434/v1',
+      pii_enabled BOOLEAN NOT NULL DEFAULT true,
+      auto_escalation_enabled BOOLEAN NOT NULL DEFAULT true,
+      audit_enabled BOOLEAN NOT NULL DEFAULT true,
+      config_locked BOOLEAN NOT NULL DEFAULT false,
+      reasoning_level VARCHAR(32) NOT NULL DEFAULT 'balanced',
+      content_filtering_enabled BOOLEAN NOT NULL DEFAULT true,
+      prompt_logging_enabled BOOLEAN NOT NULL DEFAULT false,
+      data_residency VARCHAR(64) NOT NULL DEFAULT 'eu',
+      created_by VARCHAR(255),
+      updated_by VARCHAR(255),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id)
+    );
+    CREATE TABLE IF NOT EXISTS ai_orchestrator_secrets (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
+      provider VARCHAR(64) NOT NULL,
+      secret_encrypted TEXT NOT NULL,
+      updated_by VARCHAR(255),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, provider)
+    );
+    CREATE TABLE IF NOT EXISTS ai_orchestrator_audit (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
+      user_id VARCHAR(255),
+      user_email VARCHAR(255),
+      action VARCHAR(128) NOT NULL,
+      field_name VARCHAR(128),
+      old_value TEXT,
+      new_value TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_orchestrator_audit_workspace ON ai_orchestrator_audit(workspace_id, created_at DESC);
+  `);
   console.log("[DB Engine] PostgreSQL Tables Verified.");
 }
 
@@ -84,6 +130,11 @@ function requirePool(): pg.Pool {
     throw new Error("[DB Engine] PostgreSQL pool is not initialized. Call initDb() before issuing queries.");
   }
   return pgPool;
+}
+
+/** Execute parameterized SQL against the live pool. */
+export async function queryDb(sql: string, params: unknown[] = []): Promise<pg.QueryResult> {
+  return requirePool().query(sql, params);
 }
 
 // -----------------------------------------------------------------------------

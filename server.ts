@@ -297,6 +297,19 @@ async function startServer() {
   // Mount Admin User Management Router
   app.use("/api/admin", adminRoutes);
 
+  // Workspace AI orchestrator — read-only config for all authenticated modules
+  app.get("/api/ai/config", authenticate, async (req: any, res) => {
+    try {
+      const { getOrchestratorConfig } = await import("./src/lib/ai-orchestrator-store.js");
+      const workspaceId = String(req.query.workspaceId || "default");
+      const config = await getOrchestratorConfig(workspaceId);
+      return res.json(config);
+    } catch (e: any) {
+      console.error("[AI Config] Failed:", e?.message || e);
+      return res.status(500).json({ error: "Failed to load AI configuration." });
+    }
+  });
+
   // Mount hardened GeistVault router (server-side AES-256-GCM, split storage)
   app.use("/api/vault", vaultRoutes);
 
@@ -1811,37 +1824,34 @@ async function processAiTriage(ticketId: string, emailBody: string, subject: str
 }
 
 async function getServerAiConfig() {
-  let aiConfig = {
-    sentimentModel: 'gemini-flash',
-    deepThinkingModel: 'gemini-pro',
-    summaryModel: 'sentiment',
-    localEndpoint: 'http://localhost:11434/v1',
-    apiKey: process.env.GEMINI_API_KEY || '',
-    customSentimentModelName: 'gemma',
-    customThinkingModelName: 'qwen:36b',
-    customApiKey: ''
-  };
-
   try {
-    const doc = await getDocDirect("system_configs", "ai_orchestrator_global");
-    if (doc) {
-      const { id: _, ...settings } = doc;
-      aiConfig = { ...aiConfig, ...settings };
-    } else {
-      const db = getDb();
-      const configSnap = await db.collection("module_config").doc("global").get();
-      if (configSnap.exists) {
-        const dbData = configSnap.data();
-        if (dbData && dbData.ai) {
-          aiConfig = { ...aiConfig, ...dbData.ai };
-        }
-      }
-    }
+    const { getOrchestratorConfig, getProviderSecret } = await import("./src/lib/ai-orchestrator-store.js");
+    const { toLegacyAiConfig } = await import("./src/types/aiOrchestrator.js");
+    const orchestrator = await getOrchestratorConfig("default");
+    const legacy = toLegacyAiConfig(orchestrator);
+    const googleKey =
+      (await getProviderSecret("google", "default")) ||
+      process.env.GEMINI_API_KEY ||
+      "";
+    const localKey = (await getProviderSecret("local", "default")) || "";
+    return {
+      ...legacy,
+      apiKey: googleKey,
+      customApiKey: localKey,
+    };
   } catch (error) {
-    console.warn("Failed to read server module config, using fallback defaults:", error);
+    console.warn("Failed to read orchestrator config, using fallback defaults:", error);
+    return {
+      sentimentModel: "gemini-flash",
+      deepThinkingModel: "gemini-pro",
+      summaryModel: "sentiment",
+      localEndpoint: "http://localhost:11434/v1",
+      apiKey: process.env.GEMINI_API_KEY || "",
+      customSentimentModelName: "gemma",
+      customThinkingModelName: "qwen:36b",
+      customApiKey: "",
+    };
   }
-
-  return aiConfig;
 }
 
 console.log("Booting startServer...");

@@ -26,7 +26,7 @@ import { useAuth } from '../lib/hooks';
 import { auth } from '../lib/firebase';
 import { getSessionToken } from 'firebase/auth';
 
-import { getModuleConfig } from '../lib/module-config';
+import { getCachedLegacyAiConfig } from '../lib/aiOrchestratorClient';
 
 interface ProcessingItem {
   id: string;
@@ -66,7 +66,7 @@ export function KBImporter() {
   const processContent = async (id: string, title: string, content: string) => {
     try {
       updateItem(id, { status: 'ai_processing', progress: 60 });
-      const config = getModuleConfig();
+      const config = { ai: getCachedLegacyAiConfig() };
       const isGoogle = config.ai.sentimentModel === 'gemini-flash';
       
       const prompt = `You are a technical writer for GeistDesk. Analyze this raw text. 

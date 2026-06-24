@@ -100,14 +100,12 @@ export const getModuleConfig = (): ModuleConfig => {
   if (!saved) return DEFAULT_CONFIG;
   try {
     const parsed = JSON.parse(saved);
-    // Deep merge or at least ensure AI and Email config exists
+    // AI config is workspace-scoped in PostgreSQL — never hydrate from browser storage.
+    const { ai: _stripAi, ...rest } = parsed;
     return {
       ...DEFAULT_CONFIG,
-      ...parsed,
-      ai: {
-        ...DEFAULT_CONFIG.ai,
-         ...(parsed.ai || {})
-      },
+      ...rest,
+      ai: DEFAULT_CONFIG.ai,
       email: {
         ...DEFAULT_CONFIG.email,
         ...(parsed.email || {})
@@ -125,7 +123,8 @@ export const getModuleConfig = (): ModuleConfig => {
 
 export const saveModuleConfig = (config: ModuleConfig) => {
   if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-    localStorage.setItem('geistdesk_module_config', JSON.stringify(config));
+    const { ai: _stripAi, ...persistable } = config;
+    localStorage.setItem('geistdesk_module_config', JSON.stringify({ ...persistable, ai: undefined }));
     window.dispatchEvent(new Event('module-config-changed'));
 
     let token: string | null = null;

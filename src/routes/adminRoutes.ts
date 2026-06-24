@@ -9,6 +9,19 @@ import {
   setDocDirect 
 } from "../lib/postgres-backend.js";
 import { hashPassword } from "../lib/crypto.js";
+import {
+  appendOrchestratorAudit,
+  getOrchestratorAudit,
+  getOrchestratorConfig,
+  listProviderSecretStatus,
+  setProviderSecret,
+  upsertOrchestratorConfig,
+} from "../lib/ai-orchestrator-store.js";
+import {
+  getOrchestratorHealth,
+  testOrchestratorConfiguration,
+} from "../lib/ai-orchestrator-service.js";
+import type { AiFeatureRouting, AiOrchestratorConfig } from "../types/aiOrchestrator.js";
 
 const router = Router();
 
@@ -320,214 +333,206 @@ router.post("/users/:id/set-password", authenticate, requireRole(["SYSTEM_ADMIN"
 
 /**
  * 4. GET /api/admin/orchestrator/config
- * Retrieves the global AI Orchestrator configurations from Postgres JSONB store.
- * Restricted to SYSTEM_ADMIN.
+ * Workspace-scoped AI control plane configuration (no secrets).
  */
 router.get("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const systemDefaults = {
-      sentimentModel: "gemini-flash",
-      deepThinkingModel: "gemini-pro",
-      summaryModel: "sentiment",
-      localEndpoint: "http://localhost:11434/v1",
-      apiKey: process.env.GEMINI_API_KEY || "",
-      customSentimentModelName: "gemma",
-      customThinkingModelName: "qwen:36b",
-      customApiKey: ""
-    };
-
-    const doc = await getDocDirect("system_configs", "ai_orchestrator_global");
-    if (doc) {
-      const { id: _, ...settings } = doc;
-      return res.status(200).json({ ...systemDefaults, ...settings });
-    }
-
-    return res.status(200).json(systemDefaults);
+    const workspaceId = String(req.query.workspaceId || "default");
+    await migrateLegacyOrchestratorConfig(workspaceId);
+    const config = await getOrchestratorConfig(workspaceId);
+    const secretStatus = await listProviderSecretStatus(workspaceId);
+    return res.status(200).json({
+      ...config,
+      secretStatus,
+      updatedAt: config.updatedAt,
+    });
   } catch (error: any) {
     console.error("[Admin Orchestrator GET] Error retrieving config:", error);
     return res.status(500).json({
       error: "Internal Server Error",
-      details: error.message || String(error)
+      details: error.message || String(error),
     });
   }
 });
 
 /**
  * 5. POST /api/admin/orchestrator/config
- * Securely writes/upserts updated configurations to our JSONB field in Postgres system_configs collection.
- * Restricted to SYSTEM_ADMIN.
+ * Upserts workspace AI orchestrator settings with audit trail.
  */
 router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const payload = req.body;
+    const workspaceId = String(req.body.workspaceId || "default");
+    const existing = await getOrchestratorConfig(workspaceId);
 
-    const cleanConfig = {
-      sentimentModel: payload.sentimentModel || "gemini-flash",
-      deepThinkingModel: payload.deepThinkingModel || "gemini-pro",
-      summaryModel: payload.summaryModel || "sentiment",
-      localEndpoint: payload.localEndpoint || "http://localhost:11434/v1",
-      apiKey: payload.apiKey || "",
-      customSentimentModelName: payload.customSentimentModelName || "gemma",
-      customThinkingModelName: payload.customThinkingModelName || "qwen:36b",
-      customApiKey: payload.customApiKey || ""
+    if (existing.configLocked && req.body.forceUnlock !== true) {
+      return res.status(403).json({
+        error: "Configuration is locked. Super Admin unlock required.",
+        configLocked: true,
+      });
+    }
+
+    const payload = req.body as Partial<AiOrchestratorConfig> & {
+      secrets?: Record<string, string>;
     };
+    const updatedBy = req.user?.email || req.user?.id || "SYSTEM_ADMIN";
 
-    await setDocDirect("system_configs", "ai_orchestrator_global", cleanConfig);
+    const auditFields: Array<keyof AiOrchestratorConfig> = [
+      "primaryModel",
+      "reasoningModel",
+      "triageModel",
+      "scope",
+      "piiEnabled",
+      "autoEscalationEnabled",
+      "auditEnabled",
+      "configLocked",
+      "reasoningLevel",
+      "contentFilteringEnabled",
+      "endpointUrl",
+    ];
 
-    return res.status(200).json({
-      success: true,
-      settings: cleanConfig
-    });
+    for (const field of auditFields) {
+      if (payload[field] !== undefined && String(payload[field]) !== String((existing as any)[field])) {
+        await appendOrchestratorAudit({
+          workspaceId,
+          userId: req.user?.id,
+          userEmail: req.user?.email,
+          action: `Changed ${field}`,
+          fieldName: field,
+          oldValue: String((existing as any)[field]),
+          newValue: String(payload[field]),
+        });
+      }
+    }
+
+    if (payload.featureRouting) {
+      await appendOrchestratorAudit({
+        workspaceId,
+        userId: req.user?.id,
+        userEmail: req.user?.email,
+        action: "Updated Feature Routing",
+        fieldName: "featureRouting",
+        oldValue: JSON.stringify(existing.featureRouting),
+        newValue: JSON.stringify(payload.featureRouting),
+      });
+    }
+
+    const saved = await upsertOrchestratorConfig(
+      {
+        workspaceId,
+        scope: payload.scope,
+        primaryModel: payload.primaryModel,
+        reasoningModel: payload.reasoningModel,
+        triageModel: payload.triageModel,
+        fallbackModels: payload.fallbackModels,
+        featureRouting: payload.featureRouting as AiFeatureRouting | undefined,
+        endpointUrl: payload.endpointUrl,
+        piiEnabled: payload.piiEnabled,
+        autoEscalationEnabled: payload.autoEscalationEnabled,
+        auditEnabled: payload.auditEnabled,
+        configLocked: payload.configLocked,
+        reasoningLevel: payload.reasoningLevel,
+        contentFilteringEnabled: payload.contentFilteringEnabled,
+        promptLoggingEnabled: payload.promptLoggingEnabled,
+        dataResidency: payload.dataResidency,
+      },
+      updatedBy,
+    );
+
+    if (payload.secrets && typeof payload.secrets === "object") {
+      for (const [provider, secret] of Object.entries(payload.secrets)) {
+        if (secret && secret.trim()) {
+          await setProviderSecret(provider, secret.trim(), updatedBy, workspaceId);
+          await appendOrchestratorAudit({
+            workspaceId,
+            userId: req.user?.id,
+            userEmail: req.user?.email,
+            action: `Updated ${provider} API key`,
+            fieldName: `${provider}_secret`,
+            newValue: "••••••••",
+          });
+        }
+      }
+    }
+
+    const secretStatus = await listProviderSecretStatus(workspaceId);
+    return res.status(200).json({ success: true, config: saved, secretStatus });
   } catch (error: any) {
     console.error("[Admin Orchestrator POST] Error updating config:", error);
     return res.status(500).json({
       error: "Internal Server Error",
-      details: error.message || String(error)
+      details: error.message || String(error),
     });
   }
 });
 
 /**
- * Helper to fetch real-time database-driven AI metrics.
- * Seeds initial logs if the log database is currently empty.
+ * 5b. GET /api/admin/orchestrator/audit
  */
-async function fetchLiveAiMetrics(): Promise<{ totalRequests: number; totalRedactions: number; averageLatency: number }> {
+router.get("/orchestrator/audit", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    let logs = await getDocsDirect("ai_audit_logs", []);
+    const workspaceId = String(req.query.workspaceId || "default");
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const entries = await getOrchestratorAudit(workspaceId, limit);
+    return res.status(200).json({ entries });
+  } catch (error: any) {
+    console.error("[Admin Orchestrator Audit] Error:", error);
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
 
-    if (!logs || logs.length === 0) {
-      // Seed initial realistic historical records since midnight
-      const now = new Date();
-      const seeded = [];
-      const seedTimes = [1, 3, 5, 7, 8, 9, 10, 11, 12, 13];
-      for (const hour of seedTimes) {
-        const logTime = new Date();
-        logTime.setHours(hour, Math.floor(Math.random() * 60));
-        if (logTime.getTime() < now.getTime()) {
-          const doc = {
-            createdAt: logTime.toISOString(),
-            redactionsCount: Math.random() > 0.70 ? Math.floor(Math.random() * 4) + 1 : 0,
-            latency: Math.floor(Math.random() * 110) + 70, // 70ms to 180ms
-            promptTokens: Math.floor(Math.random() * 400) + 150,
-            completionTokens: Math.floor(Math.random() * 200) + 50,
-            model: "gemini-2.5-flash",
-            status: "success"
-          };
-          const res = await addDocDirect("ai_audit_logs", doc);
-          seeded.push({ id: res.id, ...doc });
-        }
-      }
-      logs = seeded;
-    }
+/**
+ * 5c. POST /api/admin/orchestrator/test
+ */
+router.post("/orchestrator/test", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.body.workspaceId || "default");
+    const results = await testOrchestratorConfiguration(workspaceId);
+    return res.status(200).json({ results });
+  } catch (error: any) {
+    console.error("[Admin Orchestrator Test] Error:", error);
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
 
-    const midnight = new Date();
-    midnight.setHours(0, 0, 0, 0);
-    const midnightTime = midnight.getTime();
+async function migrateLegacyOrchestratorConfig(workspaceId: string): Promise<void> {
+  const current = await getOrchestratorConfig(workspaceId);
+  if (current.updatedBy && current.updatedBy !== "system") return;
 
-    // Filter audits since midnight today
-    const todayLogs = logs.filter((log: any) => {
-      if (!log.createdAt) return false;
-      const logTime = new Date(log.createdAt).getTime();
-      return logTime >= midnightTime;
-    });
+  const legacy = await getDocDirect("system_configs", "ai_orchestrator_global");
+  if (!legacy) return;
 
-    const totalRequests = todayLogs.length;
-    const totalRedactions = todayLogs.reduce((sum: number, log: any) => sum + (log.redactionsCount || 0), 0);
-    const sumLatency = todayLogs.reduce((sum: number, log: any) => sum + (log.latency || 0), 0);
-    const averageLatency = totalRequests > 0 ? Math.round(sumLatency / totalRequests) : 0;
+  await upsertOrchestratorConfig(
+    {
+      workspaceId,
+      triageModel: legacy.sentimentModel || current.triageModel,
+      reasoningModel: legacy.deepThinkingModel || current.reasoningModel,
+      endpointUrl: legacy.localEndpoint || current.endpointUrl,
+    },
+    "migration",
+  );
 
-    return {
-      totalRequests,
-      totalRedactions,
-      averageLatency
-    };
-  } catch (error) {
-    console.error("[fetchLiveAiMetrics] Error gathering AI session telemetry:", error);
-    return {
-      totalRequests: 0,
-      totalRedactions: 0,
-      averageLatency: 0
-    };
+  if (legacy.apiKey) {
+    await setProviderSecret("google", legacy.apiKey, "migration", workspaceId);
+  }
+  if (legacy.customApiKey) {
+    await setProviderSecret("local", legacy.customApiKey, "migration", workspaceId);
   }
 }
 
 /**
  * 6. GET /api/admin/orchestrator/health
- * Pings active model gateway connection (Gemini key or local endpoint configuration)
- * and calculates real-time dashboard indicators.
- * Restricted to SYSTEM_ADMIN.
+ * Per-provider health dashboard with cost metrics.
  */
 router.get("/orchestrator/health", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const configDoc = await getDocDirect("system_configs", "ai_orchestrator_global");
-    const config = configDoc || {
-      sentimentModel: "gemini-flash",
-      deepThinkingModel: "gemini-pro",
-      summaryModel: "sentiment",
-      localEndpoint: "http://localhost:11434/v1",
-      apiKey: process.env.GEMINI_API_KEY || "",
-      customSentimentModelName: "gemma",
-      customThinkingModelName: "qwen:36b",
-      customApiKey: ""
-    };
-
-    const isLocal = config.sentimentModel === "local" || config.deepThinkingModel === "local";
-    let isOnline = false;
-    let gatewayError = "";
-
-    try {
-      if (isLocal) {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 2000);
-        const fetchRes = await fetch(config.localEndpoint || "http://localhost:11434/v1", {
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        if (fetchRes.status >= 200 && fetchRes.status < 400) {
-          isOnline = true;
-        } else {
-          throw new Error(`Local endpoint responsed with status: ${fetchRes.status}`);
-        }
-      } else {
-        const apiKey = config.apiKey || process.env.GEMINI_API_KEY;
-        if (!apiKey) {
-          throw new Error("Missing AI API key configuration.");
-        }
-        const { GoogleGenAI } = await import("@google/genai");
-        const ai = new GoogleGenAI({ apiKey });
-        await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: "ping",
-          config: {
-            maxOutputTokens: 1
-          }
-        });
-        isOnline = true;
-      }
-    } catch (e: any) {
-      isOnline = false;
-      gatewayError = e.message || String(e);
-      console.warn("[Orchestrator Health Check Ping] Failed gateway ping:", gatewayError);
-    }
-
-    if (isOnline) {
-      const metrics = await fetchLiveAiMetrics();
-      return res.status(200).json({
-        status: "online",
-        primaryModel: config.deepThinkingModel || "gemini-pro",
-        metrics
-      });
-    } else {
-      return res.status(200).json({
-        status: "offline",
-        error: gatewayError || "Gateway Connection Failed"
-      });
-    }
+    const workspaceId = String(req.query.workspaceId || "default");
+    const health = await getOrchestratorHealth(workspaceId);
+    return res.status(200).json(health);
   } catch (error: any) {
     console.error("[Admin Orchestrator Health] Top level error:", error);
     return res.status(500).json({
       error: "Internal Server Error",
-      details: error.message || String(error)
+      details: error.message || String(error),
     });
   }
 });

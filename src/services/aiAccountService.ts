@@ -1,10 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
 import { Company, Ticket } from "../types";
-import { getModuleConfig } from "../lib/module-config";
+import { getCachedLegacyAiConfig } from "../lib/aiOrchestratorClient";
 
 export const aiAccountService = {
   generateAccountHealthSummary: async (company: Company, tickets: Ticket[]): Promise<string> => {
-    const config = getModuleConfig();
+    const config = { ai: getCachedLegacyAiConfig() };
     const isGoogle = config.ai.sentimentModel === 'gemini-flash';
 
     const ticketContext = tickets.map(t => ({

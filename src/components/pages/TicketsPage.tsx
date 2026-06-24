@@ -138,6 +138,7 @@ import { Checkbox } from '../../components/ui/checkbox';
 import { Ticket as TicketType, Message, KBArticle, TicketStatus, TicketPriority, Company, Contact } from '../../types';
 import { redactPII, isTextSensitive } from '../../lib/ai/pii-shield';
 import { AIAdapter } from '../../lib/ai/provider-adapter';
+import { subscribeOrchestratorConfig, startOrchestratorConfigPolling } from '../../lib/aiOrchestratorClient';
 import { getModuleConfig, ModuleConfig } from '../../lib/module-config';
 import { useTheme } from '../../lib/context/ThemeContext';
 
@@ -661,7 +662,12 @@ export default function TicketsPage() {
   const [isTranslating, setIsTranslating] = useState(false);
   const [liveTranslation, setLiveTranslation] = useState('');
   
-  const ai = useMemo(() => new AIAdapter(), [moduleConfig.ai]);
+  const ai = useMemo(() => new AIAdapter(), []);
+
+  useEffect(() => {
+    startOrchestratorConfigPolling();
+    return subscribeOrchestratorConfig(() => ai.reloadConfig());
+  }, [ai]);
   const isAiReady = useMemo(() => ai.isConfigured, [ai]);
 
   const viewFilterContext = useMemo(
