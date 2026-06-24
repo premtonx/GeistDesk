@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
 import { useSearchParams } from 'react-router-dom';
 import { 
   Search, 
@@ -323,6 +323,10 @@ export default function KBPage() {
   const { user } = useAuth();
   const { workspace, isDeveloperWorkspace } = useWorkspace();
   const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    startOrchestratorConfigSync();
+  }, []);
   
   // States
   const [firestoreArticles, setFirestoreArticles] = useState<KBArticle[]>([]);

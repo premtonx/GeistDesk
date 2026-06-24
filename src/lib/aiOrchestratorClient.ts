@@ -1,65 +1,135 @@
 import axios from 'axios';
-import type { AiOrchestratorConfig } from '../types/aiOrchestrator';
+import type { AiOrchestratorConfig, AiOrchestratorHealth } from '../types/aiOrchestrator';
 import { DEFAULT_ORCHESTRATOR_CONFIG, toLegacyAiConfig } from '../types/aiOrchestrator';
 import type { AIConfig } from './module-config';
 
 let cachedConfig: AiOrchestratorConfig | null = null;
 let cachedLegacy: AIConfig | null = null;
-let lastFetchedAt = 0;
-const POLL_MS = 30_000;
-const listeners = new Set<(config: AiOrchestratorConfig) => void>();
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let cachedHealth: AiOrchestratorHealth | null = null;
+const configListeners = new Set<(config: AiOrchestratorConfig) => void>();
+const healthListeners = new Set<(health: AiOrchestratorHealth) => void>();
+let eventSource: EventSource | null = null;
 
-function notify(config: AiOrchestratorConfig) {
-  for (const cb of listeners) cb(config);
+function notifyConfig(config: AiOrchestratorConfig) {
+  for (const cb of configListeners) cb(config);
+}
+
+function notifyHealth(health: AiOrchestratorHealth) {
+  for (const cb of healthListeners) cb(health);
 }
 
 function legacyFromConfig(config: AiOrchestratorConfig): AIConfig {
   return toLegacyAiConfig(config) as AIConfig;
 }
 
+function applyConfig(data: Partial<AiOrchestratorConfig>) {
+  cachedConfig = { ...DEFAULT_ORCHESTRATOR_CONFIG, ...data };
+  cachedLegacy = legacyFromConfig(cachedConfig);
+  notifyConfig(cachedConfig);
+}
+
 export function getCachedOrchestratorConfig(): AiOrchestratorConfig {
   return cachedConfig ?? DEFAULT_ORCHESTRATOR_CONFIG;
 }
 
-/** Synchronous legacy shape for AIAdapter and services — uses last fetched workspace config. */
+export function getCachedAiHealth(): AiOrchestratorHealth | null {
+  return cachedHealth;
+}
+
 export function getCachedLegacyAiConfig(): AIConfig {
   if (cachedLegacy) return cachedLegacy;
   return legacyFromConfig(DEFAULT_ORCHESTRATOR_CONFIG);
 }
 
 export async function fetchOrchestratorConfig(force = false): Promise<AiOrchestratorConfig> {
-  const now = Date.now();
-  if (!force && cachedConfig && now - lastFetchedAt < POLL_MS) {
-    return cachedConfig;
-  }
+  if (!force && cachedConfig) return cachedConfig;
   try {
     const res = await axios.get('/api/ai/config');
-    cachedConfig = { ...DEFAULT_ORCHESTRATOR_CONFIG, ...res.data };
-    cachedLegacy = legacyFromConfig(cachedConfig);
-    lastFetchedAt = now;
-    notify(cachedConfig);
-    return cachedConfig;
+    applyConfig(res.data);
+    return cachedConfig!;
   } catch {
     return cachedConfig ?? DEFAULT_ORCHESTRATOR_CONFIG;
   }
 }
 
-export function subscribeOrchestratorConfig(cb: (config: AiOrchestratorConfig) => void): () => void {
-  listeners.add(cb);
-  if (cachedConfig) cb(cachedConfig);
-  return () => listeners.delete(cb);
-}
-
-export function startOrchestratorConfigPolling(): void {
-  if (pollTimer) return;
-  void fetchOrchestratorConfig(true);
-  pollTimer = setInterval(() => void fetchOrchestratorConfig(true), POLL_MS);
-}
-
-export function stopOrchestratorConfigPolling(): void {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
+export async function fetchAiStatus(): Promise<AiOrchestratorHealth | null> {
+  try {
+    const res = await axios.get('/api/ai/status');
+    cachedHealth = res.data;
+    notifyHealth(cachedHealth!);
+    return cachedHealth;
+  } catch {
+    return cachedHealth;
   }
+}
+
+export function subscribeOrchestratorConfig(cb: (config: AiOrchestratorConfig) => void): () => void {
+  configListeners.add(cb);
+  if (cachedConfig) cb(cachedConfig);
+  return () => configListeners.delete(cb);
+}
+
+export function subscribeAiHealth(cb: (health: AiOrchestratorHealth) => void): () => void {
+  healthListeners.add(cb);
+  if (cachedHealth) cb(cachedHealth);
+  return () => healthListeners.delete(cb);
+}
+
+function getAuthToken(): string | null {
+  try {
+    return localStorage.getItem('geistdesk_token');
+  } catch {
+    return null;
+  }
+}
+
+/** Real-time sync via Server-Sent Events (replaces 30s polling). */
+export function startOrchestratorConfigSync(): void {
+  void fetchOrchestratorConfig(true);
+  void fetchAiStatus();
+
+  if (eventSource) return;
+
+  const token = getAuthToken();
+  const url = token
+    ? `/api/ai/events?token=${encodeURIComponent(token)}`
+    : '/api/ai/events';
+
+  eventSource = new EventSource(url);
+
+  eventSource.onmessage = (event) => {
+    try {
+      const payload = JSON.parse(event.data);
+      if (payload.type === 'config_updated' && payload.config) {
+        applyConfig(payload.config);
+      }
+      if (payload.type === 'health_changed' || payload.health) {
+        cachedHealth = payload.health ?? cachedHealth;
+        if (cachedHealth) notifyHealth(cachedHealth);
+      }
+    } catch {
+      /* ignore malformed events */
+    }
+  };
+
+  eventSource.onerror = () => {
+    eventSource?.close();
+    eventSource = null;
+    setTimeout(() => startOrchestratorConfigSync(), 5000);
+  };
+}
+
+/** @deprecated Use startOrchestratorConfigSync */
+export function startOrchestratorConfigPolling(): void {
+  startOrchestratorConfigSync();
+}
+
+export function stopOrchestratorConfigSync(): void {
+  eventSource?.close();
+  eventSource = null;
+}
+
+/** @deprecated Use stopOrchestratorConfigSync */
+export function stopOrchestratorConfigPolling(): void {
+  stopOrchestratorConfigSync();
 }

@@ -1,22 +1,34 @@
-import { getDocsDirect } from './postgres-backend.js';
+import { queryDb } from './postgres-backend.js';
 import {
   getOrchestratorConfig,
   getProviderSecret,
+  getUsageCostTotals,
   listProviderSecretStatus,
 } from './ai-orchestrator-store.js';
 import type {
+  AiFeatureId,
+  AiFeatureUsageStat,
+  AiModuleId,
+  AiModuleUsage,
   AiOrchestratorConfig,
   AiOrchestratorHealth,
   AiOrchestratorTestResult,
   AiProviderHealth,
+  AiUsageAnalytics,
+  DetectedLocalModel,
 } from '../types/aiOrchestrator.js';
+import { FEATURE_LABELS as FEATURE_LABELS_CONST } from '../types/aiOrchestrator.js';
 
 const PROVIDER_LABELS: Record<string, string> = {
   openai: 'GPT-5',
-  anthropic: 'Claude',
+  anthropic: 'Claude Sonnet',
   google: 'Gemini',
   azure_openai: 'Azure OpenAI',
   local: 'Local Llama',
+  'gpt-5': 'GPT-5',
+  claude: 'Claude Sonnet',
+  'gemini-flash': 'Gemini Flash',
+  'local-llama': 'Local Llama',
   custom_gateway: 'Custom Gateway',
 };
 
@@ -25,15 +37,14 @@ async function pingLocalEndpoint(url: string, apiKey?: string | null): Promise<{
   try {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 4000);
-    const res = await fetch(url.replace(/\/$/, ''), {
+    const base = url.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+    const res = await fetch(`${base}/`, {
       signal: controller.signal,
       headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
     });
     clearTimeout(timeoutId);
     const latencyMs = Date.now() - start;
-    if (res.status >= 200 && res.status < 500) {
-      return { ok: true, latencyMs };
-    }
+    if (res.status >= 200 && res.status < 500) return { ok: true, latencyMs };
     return { ok: false, latencyMs, message: `HTTP ${res.status}` };
   } catch (e: any) {
     return { ok: false, latencyMs: Date.now() - start, message: e.message || String(e) };
@@ -92,69 +103,141 @@ async function pingAnthropic(apiKey: string): Promise<{ ok: boolean; latencyMs: 
   }
 }
 
-export async function fetchAiCostMetrics(): Promise<{
-  totalRequests: number;
-  totalRedactions: number;
-  averageLatency: number;
-  costTodayUsd: number;
-  costMonthUsd: number;
-  avgCostPerTicketUsd: number;
-  topConsumerFeature: string;
-}> {
+export async function detectLocalModels(
+  endpointUrl: string,
+  apiKey?: string | null,
+): Promise<DetectedLocalModel[]> {
+  const base = endpointUrl.replace(/\/v1\/?$/, '').replace(/\/$/, '');
+  const headers: Record<string, string> = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+  const models: DetectedLocalModel[] = [];
+
   try {
-    const logs = await getDocsDirect('ai_audit_logs', []);
-    const now = new Date();
-    const midnight = new Date(now);
-    midnight.setHours(0, 0, 0, 0);
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const todayLogs = logs.filter((log: any) => log.createdAt && new Date(log.createdAt) >= midnight);
-    const monthLogs = logs.filter((log: any) => log.createdAt && new Date(log.createdAt) >= monthStart);
-
-    const estimateCost = (log: any) => {
-      const prompt = log.promptTokens || 200;
-      const completion = log.completionTokens || 80;
-      return (prompt * 0.0000015) + (completion * 0.000006);
-    };
-
-    const costTodayUsd = todayLogs.reduce((s: number, l: any) => s + estimateCost(l), 0);
-    const costMonthUsd = monthLogs.reduce((s: number, l: any) => s + estimateCost(l), 0);
-    const totalRedactions = todayLogs.reduce((s: number, l: any) => s + (l.redactionsCount || 0), 0);
-    const sumLatency = todayLogs.reduce((s: number, l: any) => s + (l.latency || 0), 0);
-    const averageLatency = todayLogs.length > 0 ? Math.round(sumLatency / todayLogs.length) : 0;
-
-    const featureCounts: Record<string, number> = {};
-    for (const log of todayLogs) {
-      const feature = log.feature || log.model || 'unknown';
-      featureCounts[feature] = (featureCounts[feature] || 0) + 1;
+    const ollamaRes = await fetch(`${base}/api/tags`, { headers, signal: AbortSignal.timeout(4000) });
+    if (ollamaRes.ok) {
+      const data = await ollamaRes.json();
+      for (const m of data.models ?? []) {
+        models.push({
+          id: m.name || m.model,
+          name: m.name || m.model,
+          provider: 'ollama',
+          size: m.size ? `${Math.round(m.size / 1e9)}GB` : undefined,
+        });
+      }
+      if (models.length) return models;
     }
-    const topConsumerFeature =
-      Object.entries(featureCounts).sort((a, b) => b[1] - a[1])[0]?.[0] || 'smart_reply';
-
-    const ticketLogs = todayLogs.filter((l: any) => l.ticketId);
-    const avgCostPerTicketUsd =
-      ticketLogs.length > 0 ? costTodayUsd / new Set(ticketLogs.map((l: any) => l.ticketId)).size : 0;
-
-    return {
-      totalRequests: todayLogs.length,
-      totalRedactions,
-      averageLatency,
-      costTodayUsd: Math.round(costTodayUsd * 100) / 100,
-      costMonthUsd: Math.round(costMonthUsd * 100) / 100,
-      avgCostPerTicketUsd: Math.round(avgCostPerTicketUsd * 10000) / 10000,
-      topConsumerFeature,
-    };
   } catch {
-    return {
-      totalRequests: 0,
-      totalRedactions: 0,
-      averageLatency: 0,
-      costTodayUsd: 0,
-      costMonthUsd: 0,
-      avgCostPerTicketUsd: 0,
-      topConsumerFeature: 'smart_reply',
-    };
+    /* try openai compat next */
   }
+
+  try {
+    const modelsUrl = endpointUrl.endsWith('/v1') ? `${endpointUrl}/models` : `${base}/v1/models`;
+    const res = await fetch(modelsUrl, { headers, signal: AbortSignal.timeout(4000) });
+    if (res.ok) {
+      const data = await res.json();
+      const list = data.data ?? data.models ?? [];
+      for (const m of list) {
+        const id = m.id || m.name;
+        if (!id) continue;
+        models.push({
+          id,
+          name: id,
+          provider: base.includes('1234') ? 'lmstudio' : 'openai_compat',
+        });
+      }
+    }
+  } catch {
+    /* no models */
+  }
+
+  return models;
+}
+
+export function isBudgetExceeded(config: AiOrchestratorConfig, costs: { today: number; month: number }): boolean {
+  return costs.today >= config.dailyBudgetUsd || costs.month >= config.monthlyBudgetUsd;
+}
+
+async function fetchUsageAnalytics(workspaceId: string): Promise<AiUsageAnalytics> {
+  const todayRes = await queryDb(
+    `SELECT module, feature, model,
+            COUNT(*)::int AS total,
+            COUNT(*) FILTER (WHERE success = true)::int AS successes,
+            AVG(latency_ms)::float AS avg_latency,
+            AVG(cost_usd)::float AS avg_cost,
+            MAX(created_at) AS last_used
+     FROM ai_usage_log
+     WHERE workspace_id = $1 AND created_at >= date_trunc('day', NOW())
+     GROUP BY module, feature, model`,
+    [workspaceId],
+  );
+
+  const monthRes = await queryDb(
+    `SELECT
+       COUNT(*)::int AS total,
+       COUNT(*) FILTER (WHERE success = true)::int AS successes,
+       AVG(latency_ms)::float AS avg_latency,
+       AVG(cost_usd)::float AS avg_cost
+     FROM ai_usage_log
+     WHERE workspace_id = $1 AND created_at >= date_trunc('month', NOW())`,
+    [workspaceId],
+  );
+
+  const moduleRes = await queryDb(
+    `SELECT module,
+            COUNT(*) FILTER (WHERE created_at >= date_trunc('day', NOW()))::int AS today,
+            COUNT(*) FILTER (WHERE created_at >= date_trunc('month', NOW()))::int AS month,
+            COUNT(*) FILTER (WHERE success = true)::float / NULLIF(COUNT(*), 0) AS success_rate,
+            AVG(latency_ms)::float AS avg_latency,
+            AVG(cost_usd)::float AS avg_cost
+     FROM ai_usage_log
+     WHERE workspace_id = $1 AND created_at >= date_trunc('month', NOW())
+     GROUP BY module`,
+    [workspaceId],
+  );
+
+  const monthRow = monthRes.rows[0];
+  const requestsMonth = Number(monthRow?.total ?? 0);
+  const monthSuccesses = Number(monthRow?.successes ?? 0);
+  const requestsToday = todayRes.rows.reduce((s, r) => s + Number(r.total), 0);
+  const todaySuccesses = todayRes.rows.reduce((s, r) => s + Number(r.successes), 0);
+
+  const byModule: AiModuleUsage[] = (['tickets', 'kb', 'vault', 'exchange'] as AiModuleId[]).map((mod) => {
+    const row = moduleRes.rows.find((r) => r.module === mod);
+    const total = Number(row?.month ?? 0);
+    const rate = Number(row?.success_rate ?? 1);
+    return {
+      module: mod,
+      requestsToday: Number(row?.today ?? 0),
+      requestsMonth: total,
+      successRate: Math.round(rate * 1000) / 10,
+      failureRate: Math.round((1 - rate) * 1000) / 10,
+      averageLatency: Math.round(Number(row?.avg_latency ?? 0)),
+      averageCost: Math.round(Number(row?.avg_cost ?? 0) * 10000) / 10000,
+    };
+  });
+
+  const byFeature: AiFeatureUsageStat[] = todayRes.rows.map((row) => ({
+    feature: row.feature as AiFeatureId,
+    featureLabel: FEATURE_LABELS_CONST[row.feature as AiFeatureId] ?? String(row.feature),
+    model: String(row.model),
+    requestCount: Number(row.total),
+    lastUsedAt: row.last_used ? new Date(row.last_used).toISOString() : undefined,
+  }));
+
+  byFeature.sort((a, b) => b.requestCount - a.requestCount);
+
+  const successRate = requestsToday > 0 ? (todaySuccesses / requestsToday) * 100 : 100;
+  const monthRate = requestsMonth > 0 ? (monthSuccesses / requestsMonth) * 100 : 100;
+
+  return {
+    requestsToday,
+    requestsMonth,
+    successRate: Math.round(successRate * 10) / 10,
+    failureRate: Math.round((100 - successRate) * 10) / 10,
+    averageLatency: Math.round(Number(monthRow?.avg_latency ?? 0)),
+    averageCost: Math.round(Number(monthRow?.avg_cost ?? 0) * 10000) / 10000,
+    byModule,
+    byFeature,
+  };
 }
 
 export async function buildProviderHealth(
@@ -162,48 +245,32 @@ export async function buildProviderHealth(
   config?: AiOrchestratorConfig,
 ): Promise<AiProviderHealth[]> {
   const cfg = config ?? (await getOrchestratorConfig(workspaceId));
-  const secretStatus = await listProviderSecretStatus(workspaceId);
-  const metrics = await fetchAiCostMetrics();
   const providers: AiProviderHealth[] = [];
 
   const googleKey =
-    (await getProviderSecret('google', workspaceId)) ||
-    process.env.GEMINI_API_KEY ||
-    null;
-  if (!googleKey && !secretStatus.google) {
-    providers.push({
-      provider: 'google',
-      label: PROVIDER_LABELS.google,
-      status: 'missing_key',
-      message: 'API key not configured',
-      requestsToday: metrics.totalRequests,
-    });
-  } else if (googleKey) {
+    (await getProviderSecret('google', workspaceId)) || process.env.GEMINI_API_KEY || null;
+  if (!googleKey) {
+    providers.push({ provider: 'google', label: 'Gemini Flash', status: 'missing_key', message: 'API key not configured' });
+  } else {
     const ping = await pingGoogle(googleKey);
     providers.push({
       provider: 'google',
-      label: PROVIDER_LABELS.google,
+      label: 'Gemini Flash',
       status: ping.ok ? 'online' : 'offline',
       latencyMs: ping.latencyMs,
       lastSuccessAt: ping.ok ? new Date().toISOString() : undefined,
-      requestsToday: metrics.totalRequests,
       message: ping.message,
     });
   }
 
   const openaiKey = await getProviderSecret('openai', workspaceId);
   if (!openaiKey) {
-    providers.push({
-      provider: 'openai',
-      label: PROVIDER_LABELS.openai,
-      status: 'missing_key',
-      message: 'API key not configured',
-    });
+    providers.push({ provider: 'openai', label: 'GPT-5', status: 'missing_key', message: 'API key not configured' });
   } else {
     const ping = await pingOpenAI(openaiKey);
     providers.push({
       provider: 'openai',
-      label: PROVIDER_LABELS.openai,
+      label: 'GPT-5',
       status: ping.ok ? 'online' : 'offline',
       latencyMs: ping.latencyMs,
       lastSuccessAt: ping.ok ? new Date().toISOString() : undefined,
@@ -213,17 +280,12 @@ export async function buildProviderHealth(
 
   const anthropicKey = await getProviderSecret('anthropic', workspaceId);
   if (!anthropicKey) {
-    providers.push({
-      provider: 'anthropic',
-      label: PROVIDER_LABELS.anthropic,
-      status: 'missing_key',
-      message: 'API key not configured',
-    });
+    providers.push({ provider: 'anthropic', label: 'Claude Sonnet', status: 'missing_key', message: 'API key not configured' });
   } else {
     const ping = await pingAnthropic(anthropicKey);
     providers.push({
       provider: 'anthropic',
-      label: PROVIDER_LABELS.anthropic,
+      label: 'Claude Sonnet',
       status: ping.ok ? 'online' : 'offline',
       latencyMs: ping.latencyMs,
       lastSuccessAt: ping.ok ? new Date().toISOString() : undefined,
@@ -235,12 +297,22 @@ export async function buildProviderHealth(
   const localPing = await pingLocalEndpoint(cfg.endpointUrl, localKey);
   providers.push({
     provider: 'local',
-    label: PROVIDER_LABELS.local,
+    label: 'Local Llama',
     status: localPing.ok ? 'online' : 'degraded',
     latencyMs: localPing.latencyMs,
     lastSuccessAt: localPing.ok ? new Date().toISOString() : undefined,
     message: localPing.message,
   });
+
+  for (const modelId of cfg.providerPriority ?? []) {
+    if (providers.some((p) => p.provider === modelId)) continue;
+    providers.push({
+      provider: modelId,
+      label: PROVIDER_LABELS[modelId] ?? modelId,
+      status: 'offline',
+      message: 'Not probed',
+    });
+  }
 
   return providers;
 }
@@ -248,30 +320,93 @@ export async function buildProviderHealth(
 export async function getOrchestratorHealth(workspaceId = 'default'): Promise<AiOrchestratorHealth> {
   const config = await getOrchestratorConfig(workspaceId);
   const providers = await buildProviderHealth(workspaceId, config);
-  const metrics = await fetchAiCostMetrics();
-  const anyOnline = providers.some((p) => p.status === 'online');
-  const anyDegraded = providers.some((p) => p.status === 'degraded' || p.status === 'offline');
+  const usage = await fetchUsageAnalytics(workspaceId);
+  const costs = await getUsageCostTotals(workspaceId);
+  const budgetExceeded = isBudgetExceeded(config, costs);
+
+  const priorityOnline = (config.providerPriority ?? []).some((model) => {
+    const p = providers.find((pr) => pr.provider === model || pr.label.toLowerCase().includes(model));
+    return p?.status === 'online';
+  });
+  const anyOnline = providers.some((p) => p.status === 'online') || priorityOnline;
+  const anyDegraded = providers.some((p) => p.status === 'degraded' || p.status === 'offline' || p.status === 'missing_key');
+  const killSwitchActive = config.killSwitch.master;
+
+  let status: AiOrchestratorHealth['status'] = 'offline';
+  let label = 'AI Offline';
+  if (killSwitchActive) {
+    status = 'offline';
+    label = 'AI Disabled';
+  } else if (anyOnline && !anyDegraded) {
+    status = 'healthy';
+    label = 'AI Healthy';
+  } else if (anyOnline) {
+    status = 'degraded';
+    label = 'AI Degraded';
+  }
+
+  const topFeature = usage.byFeature[0]?.feature ?? 'smart_reply';
 
   return {
-    status: anyOnline ? (anyDegraded ? 'degraded' : 'online') : 'offline',
-    primaryModel: config.primaryModel,
+    status,
+    label,
+    primaryModel: config.providerPriority[0] ?? config.primaryModel,
     providers,
-    metrics,
+    killSwitchActive,
+    budgetExceeded,
+    metrics: {
+      totalRequests: usage.requestsToday,
+      totalRedactions: 0,
+      averageLatency: usage.averageLatency,
+      costTodayUsd: Math.round(costs.today * 100) / 100,
+      costMonthUsd: Math.round(costs.month * 100) / 100,
+      avgCostPerTicketUsd: usage.averageCost,
+      topConsumerFeature: topFeature,
+    },
+    usage,
   };
 }
 
 export async function testOrchestratorConfiguration(workspaceId = 'default'): Promise<AiOrchestratorTestResult[]> {
   const providers = await buildProviderHealth(workspaceId);
-  return providers.map((p) => ({
-    provider: p.provider,
-    label: p.label,
-    success: p.status === 'online',
-    message:
-      p.status === 'missing_key'
-        ? 'Authentication Failed — API key missing'
-        : p.status === 'online'
-          ? 'Connected'
-          : p.message || 'Connection failed',
-    latencyMs: p.latencyMs,
-  }));
+  return providers
+    .filter((p) => p.status !== 'offline' || p.message !== 'Not probed')
+    .map((p) => ({
+      provider: p.provider,
+      label: p.label,
+      success: p.status === 'online',
+      message:
+        p.status === 'missing_key'
+          ? 'Authentication Failed — API key missing'
+          : p.status === 'online'
+            ? 'Connected'
+            : p.message || 'Connection failed',
+      latencyMs: p.latencyMs,
+    }));
+}
+
+export async function logAiUsageFromServer(entry: {
+  workspaceId?: string;
+  module: AiModuleId;
+  feature: AiFeatureId;
+  model: string;
+  latencyMs?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  success?: boolean;
+}): Promise<void> {
+  const cost =
+    (entry.promptTokens ?? 200) * 0.0000015 + (entry.completionTokens ?? 80) * 0.000006;
+  const { logAiUsage } = await import('./ai-orchestrator-store.js');
+  await logAiUsage({
+    workspaceId: entry.workspaceId,
+    module: entry.module,
+    feature: entry.feature,
+    model: entry.model,
+    latencyMs: entry.latencyMs,
+    promptTokens: entry.promptTokens,
+    completionTokens: entry.completionTokens,
+    costUsd: cost,
+    success: entry.success,
+  });
 }

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
 import { 
   Lock, 
   Unlock, 
@@ -259,6 +259,10 @@ export default function CredentialVaultPage() {
   const [smartFilter, setSmartFilter] = useState<VaultSmartFilter | null>(null);
   const [assetViewMode, setAssetViewMode] = useState<VaultAssetViewMode>('table');
   const [sharedVaults, setSharedVaults] = useState<any[]>([]);
+
+  useEffect(() => {
+    startOrchestratorConfigSync();
+  }, []);
   
   const [isLocked, setIsLocked] = useState(true);
   const [masterPassword, setMasterPassword] = useState('password123'); // Preset password123 for seamless testing!

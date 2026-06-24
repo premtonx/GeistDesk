@@ -13,15 +13,19 @@ import {
   appendOrchestratorAudit,
   getOrchestratorAudit,
   getOrchestratorConfig,
+  listConfigVersions,
   listProviderSecretStatus,
+  restoreConfigVersion,
   setProviderSecret,
   upsertOrchestratorConfig,
 } from "../lib/ai-orchestrator-store.js";
 import {
+  detectLocalModels,
   getOrchestratorHealth,
   testOrchestratorConfiguration,
 } from "../lib/ai-orchestrator-service.js";
-import type { AiFeatureRouting, AiOrchestratorConfig } from "../types/aiOrchestrator.js";
+import { orchestratorEventBus } from "../lib/ai-orchestrator-events.js";
+import type { AiFeatureRouting, AiKillSwitch, AiOrchestratorConfig } from "../types/aiOrchestrator.js";
 
 const router = Router();
 
@@ -374,6 +378,11 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
     const payload = req.body as Partial<AiOrchestratorConfig> & {
       secrets?: Record<string, string>;
     };
+
+    if (payload.scope === "global" && req.user?.role !== "SYSTEM_ADMIN") {
+      return res.status(403).json({ error: "Only Super Admins may edit Global scope configuration." });
+    }
+
     const updatedBy = req.user?.email || req.user?.id || "SYSTEM_ADMIN";
 
     const auditFields: Array<keyof AiOrchestratorConfig> = [
@@ -388,6 +397,10 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
       "reasoningLevel",
       "contentFilteringEnabled",
       "endpointUrl",
+      "dailyBudgetUsd",
+      "monthlyBudgetUsd",
+      "budgetExceededAction",
+      "configVersion",
     ];
 
     for (const field of auditFields) {
@@ -419,10 +432,11 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
     const saved = await upsertOrchestratorConfig(
       {
         workspaceId,
-        scope: payload.scope,
+        scope: payload.scope === "personal" ? "workspace" : payload.scope,
         primaryModel: payload.primaryModel,
         reasoningModel: payload.reasoningModel,
         triageModel: payload.triageModel,
+        providerPriority: payload.providerPriority,
         fallbackModels: payload.fallbackModels,
         featureRouting: payload.featureRouting as AiFeatureRouting | undefined,
         endpointUrl: payload.endpointUrl,
@@ -434,6 +448,10 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
         contentFilteringEnabled: payload.contentFilteringEnabled,
         promptLoggingEnabled: payload.promptLoggingEnabled,
         dataResidency: payload.dataResidency,
+        killSwitch: payload.killSwitch as AiKillSwitch | undefined,
+        dailyBudgetUsd: payload.dailyBudgetUsd,
+        monthlyBudgetUsd: payload.monthlyBudgetUsd,
+        budgetExceededAction: payload.budgetExceededAction,
       },
       updatedBy,
     );
@@ -454,8 +472,11 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
       }
     }
 
+    orchestratorEventBus.emitConfigUpdated(workspaceId, saved, saved.configVersion);
+
     const secretStatus = await listProviderSecretStatus(workspaceId);
-    return res.status(200).json({ success: true, config: saved, secretStatus });
+    const versions = await listConfigVersions(workspaceId, 10);
+    return res.status(200).json({ success: true, config: saved, secretStatus, versions });
   } catch (error: any) {
     console.error("[Admin Orchestrator POST] Error updating config:", error);
     return res.status(500).json({
@@ -490,6 +511,66 @@ router.post("/orchestrator/test", authenticate, requireRole(["SYSTEM_ADMIN"]), a
     return res.status(200).json({ results });
   } catch (error: any) {
     console.error("[Admin Orchestrator Test] Error:", error);
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5d. GET /api/admin/orchestrator/versions
+ */
+router.get("/orchestrator/versions", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const versions = await listConfigVersions(workspaceId, Math.min(Number(req.query.limit) || 20, 50));
+    return res.status(200).json({ versions });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5e. POST /api/admin/orchestrator/restore
+ */
+router.post("/orchestrator/restore", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.body.workspaceId || "default");
+    const versionId = String(req.body.versionId || "");
+    if (!versionId) return res.status(400).json({ error: "versionId is required" });
+    const restoredBy = req.user?.email || req.user?.id || "SYSTEM_ADMIN";
+    const config = await restoreConfigVersion(workspaceId, versionId, restoredBy);
+    orchestratorEventBus.emitConfigUpdated(workspaceId, config, config.configVersion);
+    return res.status(200).json({ success: true, config });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5f. GET /api/admin/orchestrator/models — detect local gateway models
+ */
+router.get("/orchestrator/models", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const config = await getOrchestratorConfig(workspaceId);
+    const endpoint = String(req.query.endpoint || config.endpointUrl);
+    const { getProviderSecret } = await import("../lib/ai-orchestrator-store.js");
+    const localKey = await getProviderSecret("local", workspaceId);
+    const models = await detectLocalModels(endpoint, localKey);
+    return res.status(200).json({ models });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5g. GET /api/admin/orchestrator/analytics
+ */
+router.get("/orchestrator/analytics", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const health = await getOrchestratorHealth(workspaceId);
+    return res.status(200).json({ usage: health.usage, metrics: health.metrics });
+  } catch (error: any) {
     return res.status(500).json({ error: "Internal Server Error", details: error.message });
   }
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
 import { 
   Lock, 
   ShieldCheck, 
@@ -94,6 +94,10 @@ export default function VaultPage() {
   const [selectedExchangeItem, setSelectedExchangeItem] = useState<ExchangeItemRow | null>(null);
   const [deleteTargetItem, setDeleteTargetItem] = useState<ExchangeItemRow | null>(null);
   const [seedExpiringItems, setSeedExpiringItems] = useState(() => buildExpiringSoonSeedItems());
+
+  useEffect(() => {
+    startOrchestratorConfigSync();
+  }, []);
   
   // Real DB Data
   const [history, setHistory] = useState<VaultItem[]>([]);

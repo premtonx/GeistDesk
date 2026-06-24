@@ -2,10 +2,14 @@ import crypto from 'crypto';
 import { queryDb } from './postgres-backend.js';
 import {
   DEFAULT_FEATURE_ROUTING,
+  DEFAULT_KILL_SWITCH,
   DEFAULT_ORCHESTRATOR_CONFIG,
+  DEFAULT_PROVIDER_PRIORITY,
   type AiFeatureRouting,
+  type AiKillSwitch,
   type AiOrchestratorAuditEntry,
   type AiOrchestratorConfig,
+  type AiOrchestratorVersion,
 } from '../types/aiOrchestrator.js';
 
 const SECRET_KEY = process.env.AI_SECRETS_KEY || process.env.JWT_SECRET || 'geistdesk-dev-secrets-key';
@@ -32,22 +36,37 @@ export function decryptSecret(payload: string): string {
   return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8');
 }
 
+function parseJson<T>(val: unknown, fallback: T): T {
+  if (val == null) return fallback;
+  if (typeof val === 'string') {
+    try {
+      return JSON.parse(val) as T;
+    } catch {
+      return fallback;
+    }
+  }
+  return val as T;
+}
+
+function parseKillSwitch(row: Record<string, unknown>): AiKillSwitch {
+  const raw = parseJson<Partial<AiKillSwitch>>(row.kill_switch_json, {});
+  return { ...DEFAULT_KILL_SWITCH, ...raw };
+}
+
 function rowToConfig(row: Record<string, unknown>): AiOrchestratorConfig {
-  const routing =
-    typeof row.feature_routing_json === 'string'
-      ? JSON.parse(row.feature_routing_json)
-      : row.feature_routing_json;
-  const fallbacks =
-    typeof row.fallback_models === 'string'
-      ? JSON.parse(row.fallback_models)
-      : row.fallback_models;
+  const routing = parseJson(row.feature_routing_json, DEFAULT_FEATURE_ROUTING);
+  const fallbacks = parseJson<string[]>(row.fallback_models, DEFAULT_ORCHESTRATOR_CONFIG.fallbackModels);
+  const priority = parseJson<string[]>(row.provider_priority, DEFAULT_PROVIDER_PRIORITY);
+  const scope = String(row.scope ?? 'workspace');
+  const normalizedScope = scope === 'personal' ? 'workspace' : (scope as AiOrchestratorConfig['scope']);
 
   return {
     workspaceId: String(row.workspace_id ?? 'default'),
-    scope: (row.scope as AiOrchestratorConfig['scope']) ?? 'workspace',
+    scope: normalizedScope,
     primaryModel: String(row.primary_model ?? DEFAULT_ORCHESTRATOR_CONFIG.primaryModel),
     reasoningModel: String(row.reasoning_model ?? DEFAULT_ORCHESTRATOR_CONFIG.reasoningModel),
     triageModel: String(row.triage_model ?? DEFAULT_ORCHESTRATOR_CONFIG.triageModel),
+    providerPriority: Array.isArray(priority) && priority.length ? priority : DEFAULT_PROVIDER_PRIORITY,
     fallbackModels: Array.isArray(fallbacks) ? fallbacks : DEFAULT_ORCHESTRATOR_CONFIG.fallbackModels,
     featureRouting: { ...DEFAULT_FEATURE_ROUTING, ...(routing as AiFeatureRouting) },
     endpointUrl: String(row.endpoint_url ?? DEFAULT_ORCHESTRATOR_CONFIG.endpointUrl),
@@ -59,6 +78,13 @@ function rowToConfig(row: Record<string, unknown>): AiOrchestratorConfig {
     contentFilteringEnabled: row.content_filtering_enabled !== false,
     promptLoggingEnabled: row.prompt_logging_enabled === true,
     dataResidency: String(row.data_residency ?? 'eu'),
+    killSwitch: parseKillSwitch(row),
+    dailyBudgetUsd: Number(row.daily_budget_usd ?? DEFAULT_ORCHESTRATOR_CONFIG.dailyBudgetUsd),
+    monthlyBudgetUsd: Number(row.monthly_budget_usd ?? DEFAULT_ORCHESTRATOR_CONFIG.monthlyBudgetUsd),
+    budgetExceededAction:
+      (row.budget_exceeded_action as AiOrchestratorConfig['budgetExceededAction']) ??
+      DEFAULT_ORCHESTRATOR_CONFIG.budgetExceededAction,
+    configVersion: Number(row.config_version ?? 1),
     updatedBy: row.updated_by ? String(row.updated_by) : undefined,
     updatedAt: row.updated_at ? new Date(row.updated_at as string).toISOString() : undefined,
   };
@@ -81,61 +107,84 @@ export async function getOrchestratorConfig(workspaceId = 'default'): Promise<Ai
   return (await fetchConfigRow(workspaceId)) ?? defaults;
 }
 
-async function insertOrchestratorConfig(
-  config: AiOrchestratorConfig,
-  updatedBy: string,
-): Promise<void> {
+async function insertOrchestratorConfig(config: AiOrchestratorConfig, updatedBy: string): Promise<void> {
   await queryDb(
     `INSERT INTO ai_orchestrator_config (
       workspace_id, scope, primary_model, reasoning_model, triage_model,
-      fallback_models, feature_routing_json, endpoint_url,
+      fallback_models, provider_priority, feature_routing_json, endpoint_url,
       pii_enabled, auto_escalation_enabled, audit_enabled, config_locked,
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
-      data_residency, created_by, updated_by, updated_at
+      data_residency, kill_switch_json, daily_budget_usd, monthly_budget_usd,
+      budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW()
     )
     ON CONFLICT (workspace_id) DO NOTHING`,
-    [
-      config.workspaceId,
-      config.scope,
-      config.primaryModel,
-      config.reasoningModel,
-      config.triageModel,
-      JSON.stringify(config.fallbackModels),
-      JSON.stringify(config.featureRouting),
-      config.endpointUrl,
-      config.piiEnabled,
-      config.autoEscalationEnabled,
-      config.auditEnabled,
-      config.configLocked,
-      config.reasoningLevel,
-      config.contentFilteringEnabled,
-      config.promptLoggingEnabled,
-      config.dataResidency,
-      updatedBy,
-      updatedBy,
-    ],
+    configInsertParams(config, updatedBy),
   );
+}
+
+function configInsertParams(config: AiOrchestratorConfig, updatedBy: string): unknown[] {
+  return [
+    config.workspaceId,
+    config.scope,
+    config.primaryModel,
+    config.reasoningModel,
+    config.triageModel,
+    JSON.stringify(config.fallbackModels),
+    JSON.stringify(config.providerPriority),
+    JSON.stringify(config.featureRouting),
+    config.endpointUrl,
+    config.piiEnabled,
+    config.autoEscalationEnabled,
+    config.auditEnabled,
+    config.configLocked,
+    config.reasoningLevel,
+    config.contentFilteringEnabled,
+    config.promptLoggingEnabled,
+    config.dataResidency,
+    JSON.stringify(config.killSwitch),
+    config.dailyBudgetUsd,
+    config.monthlyBudgetUsd,
+    config.budgetExceededAction,
+    config.configVersion,
+    updatedBy,
+    updatedBy,
+  ];
 }
 
 export async function upsertOrchestratorConfig(
   config: Partial<AiOrchestratorConfig> & { workspaceId?: string },
   updatedBy: string,
+  options?: { skipVersion?: boolean },
 ): Promise<AiOrchestratorConfig> {
   const workspaceId = config.workspaceId ?? 'default';
   const existing = await getOrchestratorConfig(workspaceId);
-  const merged: AiOrchestratorConfig = { ...existing, ...config, workspaceId };
+  const nextVersion = options?.skipVersion ? existing.configVersion : existing.configVersion + 1;
+  const merged: AiOrchestratorConfig = {
+    ...existing,
+    ...config,
+    workspaceId,
+    configVersion: nextVersion,
+    providerPriority: config.providerPriority ?? existing.providerPriority,
+    killSwitch: config.killSwitch ? { ...existing.killSwitch, ...config.killSwitch } : existing.killSwitch,
+  };
+
+  if (merged.providerPriority.length > 0) {
+    merged.primaryModel = merged.providerPriority[0];
+    merged.fallbackModels = merged.providerPriority.slice(1);
+  }
 
   await queryDb(
     `INSERT INTO ai_orchestrator_config (
       workspace_id, scope, primary_model, reasoning_model, triage_model,
-      fallback_models, feature_routing_json, endpoint_url,
+      fallback_models, provider_priority, feature_routing_json, endpoint_url,
       pii_enabled, auto_escalation_enabled, audit_enabled, config_locked,
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
-      data_residency, created_by, updated_by, updated_at
+      data_residency, kill_switch_json, daily_budget_usd, monthly_budget_usd,
+      budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW()
     )
     ON CONFLICT (workspace_id) DO UPDATE SET
       scope = EXCLUDED.scope,
@@ -143,6 +192,7 @@ export async function upsertOrchestratorConfig(
       reasoning_model = EXCLUDED.reasoning_model,
       triage_model = EXCLUDED.triage_model,
       fallback_models = EXCLUDED.fallback_models,
+      provider_priority = EXCLUDED.provider_priority,
       feature_routing_json = EXCLUDED.feature_routing_json,
       endpoint_url = EXCLUDED.endpoint_url,
       pii_enabled = EXCLUDED.pii_enabled,
@@ -153,31 +203,118 @@ export async function upsertOrchestratorConfig(
       content_filtering_enabled = EXCLUDED.content_filtering_enabled,
       prompt_logging_enabled = EXCLUDED.prompt_logging_enabled,
       data_residency = EXCLUDED.data_residency,
+      kill_switch_json = EXCLUDED.kill_switch_json,
+      daily_budget_usd = EXCLUDED.daily_budget_usd,
+      monthly_budget_usd = EXCLUDED.monthly_budget_usd,
+      budget_exceeded_action = EXCLUDED.budget_exceeded_action,
+      config_version = EXCLUDED.config_version,
       updated_by = EXCLUDED.updated_by,
       updated_at = NOW()`,
-    [
-      workspaceId,
-      merged.scope,
-      merged.primaryModel,
-      merged.reasoningModel,
-      merged.triageModel,
-      JSON.stringify(merged.fallbackModels),
-      JSON.stringify(merged.featureRouting),
-      merged.endpointUrl,
-      merged.piiEnabled,
-      merged.autoEscalationEnabled,
-      merged.auditEnabled,
-      merged.configLocked,
-      merged.reasoningLevel,
-      merged.contentFilteringEnabled,
-      merged.promptLoggingEnabled,
-      merged.dataResidency,
-      updatedBy,
-      updatedBy,
-    ],
+    configInsertParams(merged, updatedBy),
   );
 
+  if (!options?.skipVersion) {
+    await saveConfigVersion(workspaceId, merged, updatedBy);
+  }
+
   return getOrchestratorConfig(workspaceId);
+}
+
+export async function saveConfigVersion(
+  workspaceId: string,
+  config: AiOrchestratorConfig,
+  createdBy: string,
+): Promise<void> {
+  await queryDb(
+    `INSERT INTO ai_orchestrator_versions (workspace_id, version_number, config_json, created_by)
+     VALUES ($1, $2, $3, $4)`,
+    [workspaceId, config.configVersion, JSON.stringify(config), createdBy],
+  );
+}
+
+export async function listConfigVersions(
+  workspaceId = 'default',
+  limit = 20,
+): Promise<AiOrchestratorVersion[]> {
+  const res = await queryDb(
+    `SELECT id, version_number, config_json, created_by, created_at
+     FROM ai_orchestrator_versions
+     WHERE workspace_id = $1
+     ORDER BY version_number DESC
+     LIMIT $2`,
+    [workspaceId, limit],
+  );
+  return res.rows.map((row) => ({
+    id: String(row.id),
+    versionNumber: Number(row.version_number),
+    createdBy: row.created_by ? String(row.created_by) : undefined,
+    createdAt: new Date(row.created_at).toISOString(),
+    config: parseJson<AiOrchestratorConfig>(row.config_json, DEFAULT_ORCHESTRATOR_CONFIG),
+  }));
+}
+
+export async function restoreConfigVersion(
+  workspaceId: string,
+  versionId: string,
+  restoredBy: string,
+): Promise<AiOrchestratorConfig> {
+  const res = await queryDb(
+    'SELECT config_json FROM ai_orchestrator_versions WHERE id = $1 AND workspace_id = $2',
+    [versionId, workspaceId],
+  );
+  if (!res.rows[0]) throw new Error('Version not found');
+  const snapshot = parseJson<AiOrchestratorConfig>(res.rows[0].config_json, DEFAULT_ORCHESTRATOR_CONFIG);
+  await appendOrchestratorAudit({
+    workspaceId,
+    userEmail: restoredBy,
+    action: `Restored configuration version ${snapshot.configVersion}`,
+    fieldName: 'configVersion',
+    newValue: String(snapshot.configVersion),
+  });
+  return upsertOrchestratorConfig({ ...snapshot, workspaceId }, restoredBy);
+}
+
+export async function logAiUsage(entry: {
+  workspaceId?: string;
+  module: string;
+  feature: string;
+  model: string;
+  latencyMs?: number;
+  promptTokens?: number;
+  completionTokens?: number;
+  costUsd?: number;
+  success?: boolean;
+}): Promise<void> {
+  await queryDb(
+    `INSERT INTO ai_usage_log
+     (workspace_id, module, feature, model, latency_ms, prompt_tokens, completion_tokens, cost_usd, success)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      entry.workspaceId ?? 'default',
+      entry.module,
+      entry.feature,
+      entry.model,
+      entry.latencyMs ?? 0,
+      entry.promptTokens ?? 0,
+      entry.completionTokens ?? 0,
+      entry.costUsd ?? 0,
+      entry.success !== false,
+    ],
+  );
+}
+
+export async function getUsageCostTotals(workspaceId = 'default'): Promise<{ today: number; month: number }> {
+  const res = await queryDb(
+    `SELECT
+       COALESCE(SUM(CASE WHEN created_at >= date_trunc('day', NOW()) THEN cost_usd ELSE 0 END), 0) AS today,
+       COALESCE(SUM(CASE WHEN created_at >= date_trunc('month', NOW()) THEN cost_usd ELSE 0 END), 0) AS month
+     FROM ai_usage_log WHERE workspace_id = $1`,
+    [workspaceId],
+  );
+  return {
+    today: Number(res.rows[0]?.today ?? 0),
+    month: Number(res.rows[0]?.month ?? 0),
+  };
 }
 
 export async function setProviderSecret(

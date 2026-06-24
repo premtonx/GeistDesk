@@ -4,7 +4,7 @@
  */
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { getCachedLegacyAiConfig } from "../aiOrchestratorClient";
+import { getCachedLegacyAiConfig, getCachedOrchestratorConfig } from "../aiOrchestratorClient";
 import type { AIConfig } from "../module-config";
 
 export type AIProvider = "google" | "local-ollama" | "openai-compat";
@@ -47,6 +47,9 @@ export class AIAdapter {
   }
 
   get isConfigured(): boolean {
+    const orchestrator = getCachedOrchestratorConfig();
+    if (orchestrator.killSwitch?.master) return false;
+
     const sentimentProfile = this.getProfileForType('sentiment');
     const thinkingProfile = this.getProfileForType('thinking');
     

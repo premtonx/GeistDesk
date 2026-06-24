@@ -120,6 +120,36 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_ai_orchestrator_audit_workspace ON ai_orchestrator_audit(workspace_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS ai_orchestrator_versions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
+      version_number INTEGER NOT NULL,
+      config_json JSONB NOT NULL,
+      created_by VARCHAR(255),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_orchestrator_versions_ws ON ai_orchestrator_versions(workspace_id, version_number DESC);
+    CREATE TABLE IF NOT EXISTS ai_usage_log (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
+      module VARCHAR(32) NOT NULL,
+      feature VARCHAR(64) NOT NULL,
+      model VARCHAR(128) NOT NULL,
+      latency_ms INTEGER DEFAULT 0,
+      prompt_tokens INTEGER DEFAULT 0,
+      completion_tokens INTEGER DEFAULT 0,
+      cost_usd NUMERIC(12, 6) DEFAULT 0,
+      success BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_usage_log_workspace ON ai_usage_log(workspace_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_ai_usage_log_feature ON ai_usage_log(workspace_id, feature, created_at DESC);
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS provider_priority JSONB NOT NULL DEFAULT '["gpt-5","claude","gemini-flash","local-llama"]';
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS kill_switch_json JSONB NOT NULL DEFAULT '{"master":false,"smartReply":false,"summaries":false,"kbGeneration":false,"sentiment":false}';
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS daily_budget_usd NUMERIC(12,2) NOT NULL DEFAULT 10;
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS monthly_budget_usd NUMERIC(12,2) NOT NULL DEFAULT 300;
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS budget_exceeded_action VARCHAR(32) NOT NULL DEFAULT 'local_fallback';
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS config_version INTEGER NOT NULL DEFAULT 1;
   `);
   console.log("[DB Engine] PostgreSQL Tables Verified.");
 }

@@ -29,7 +29,9 @@ import {
   CheckCircle2,
   XCircle,
   AlertTriangle,
-  Loader2,
+  Power,
+  RotateCcw,
+  Ban,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -41,9 +43,16 @@ import {
   type AiOrchestratorConfig,
   type AiOrchestratorHealth,
   type AiOrchestratorTestResult,
+  type AiOrchestratorVersion,
   type AiProviderHealth,
+  type DetectedLocalModel,
 } from '../../types/aiOrchestrator';
-import { fetchOrchestratorConfig } from '../../lib/aiOrchestratorClient';
+import {
+  fetchOrchestratorConfig,
+  startOrchestratorConfigSync,
+  subscribeOrchestratorConfig,
+} from '../../lib/aiOrchestratorClient';
+import { ProviderPriorityList } from '../ai-orchestrator/ProviderPriorityList';
 
 const MODEL_OPTIONS = [
   { value: 'gemini-flash', label: 'Gemini Flash' },
@@ -113,20 +122,26 @@ export default function AISettingsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [versions, setVersions] = useState<AiOrchestratorVersion[]>([]);
+  const [detectedModels, setDetectedModels] = useState<DetectedLocalModel[]>([]);
+  const [isDetectingModels, setIsDetectingModels] = useState(false);
+  const [isRestoring, setIsRestoring] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string>('');
 
   const loadAll = useCallback(async (silent = false) => {
     if (!silent) setIsLoading(true);
     try {
-      const [configRes, healthRes, auditRes] = await Promise.all([
+      const [configRes, healthRes, auditRes, versionsRes] = await Promise.all([
         axios.get('/api/admin/orchestrator/config'),
         axios.get('/api/admin/orchestrator/health'),
         axios.get('/api/admin/orchestrator/audit?limit=30'),
+        axios.get('/api/admin/orchestrator/versions?limit=15'),
       ]);
       setConfig({ ...DEFAULT_ORCHESTRATOR_CONFIG, ...configRes.data });
       setSecretStatus(configRes.data.secretStatus || {});
       setHealth(healthRes.data);
       setAudit(auditRes.data.entries || []);
+      setVersions(versionsRes.data.versions || []);
       setLastSyncAt(new Date().toISOString());
       void fetchOrchestratorConfig(true);
     } catch (err) {
@@ -138,9 +153,12 @@ export default function AISettingsPage() {
   }, []);
 
   useEffect(() => {
+    startOrchestratorConfigSync();
     void loadAll();
-    const interval = setInterval(() => void loadAll(true), 30_000);
-    return () => clearInterval(interval);
+    return subscribeOrchestratorConfig((cfg) => {
+      setConfig(cfg);
+      setLastSyncAt(new Date().toISOString());
+    });
   }, [loadAll]);
 
   const patchConfig = (patch: Partial<AiOrchestratorConfig>) => {
@@ -178,6 +196,34 @@ export default function AISettingsPage() {
     }
   };
 
+  const handleRestoreVersion = async (versionId: string) => {
+    setIsRestoring(true);
+    try {
+      await axios.post('/api/admin/orchestrator/restore', { versionId });
+      toast.success('Configuration restored from snapshot.');
+      await loadAll(true);
+    } catch {
+      toast.error('Failed to restore version.');
+    } finally {
+      setIsRestoring(false);
+    }
+  };
+
+  const handleDetectModels = async () => {
+    setIsDetectingModels(true);
+    try {
+      const res = await axios.get('/api/admin/orchestrator/models', {
+        params: { endpoint: config.endpointUrl },
+      });
+      setDetectedModels(res.data.models || []);
+      toast.success(`Detected ${res.data.models?.length ?? 0} local models.`);
+    } catch {
+      toast.error('Model detection failed. Check endpoint URL.');
+    } finally {
+      setIsDetectingModels(false);
+    }
+  };
+
   const handleTest = async () => {
     setIsTesting(true);
     setTestResults(null);
@@ -193,6 +239,7 @@ export default function AISettingsPage() {
 
   const readOnly = config.configLocked;
   const metrics = health?.metrics;
+  const usage = health?.usage;
   const systemStatus = health?.status ?? 'offline';
 
   if (isLoading) {
@@ -224,7 +271,7 @@ export default function AISettingsPage() {
             <Badge
               variant="outline"
               className={
-                systemStatus === 'online'
+                systemStatus === 'healthy'
                   ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
                   : systemStatus === 'degraded'
                     ? 'border-amber-200 bg-amber-50 text-amber-700'
@@ -232,7 +279,10 @@ export default function AISettingsPage() {
               }
             >
               <Radio className="w-3 h-3 mr-1" />
-              {systemStatus === 'online' ? 'Control Plane Live' : systemStatus === 'degraded' ? 'Degraded' : 'Offline'}
+              {health?.label ?? (systemStatus === 'healthy' ? 'AI Healthy' : systemStatus === 'degraded' ? 'AI Degraded' : 'AI Offline')}
+              {config.configVersion > 0 && (
+                <span className="ml-1 opacity-60">v{config.configVersion}</span>
+              )}
             </Badge>
           </div>
         </div>
@@ -295,7 +345,7 @@ export default function AISettingsPage() {
           <CardContent className="p-6 space-y-4">
             <SectionHeader icon={Globe} title="Configuration Scope" />
             <div className="flex flex-wrap gap-4">
-              {(['personal', 'workspace', 'global'] as const).map((scope) => (
+              {(['workspace', 'global'] as const).map((scope) => (
                 <label key={scope} className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
@@ -306,9 +356,13 @@ export default function AISettingsPage() {
                     className="accent-slate-900"
                   />
                   <span className="text-sm capitalize">{scope}</span>
+                  {scope === 'global' && (
+                    <span className="text-[10px] text-muted-foreground">(Super Admin only)</span>
+                  )}
                 </label>
               ))}
             </div>
+            <p className="text-[10px] text-muted-foreground">Default: Workspace — all admins share identical AI behavior.</p>
             <Separator />
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -323,6 +377,24 @@ export default function AISettingsPage() {
                 onCheckedChange={(v) => patchConfig({ configLocked: v })}
               />
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Provider Priority (Failover Order) */}
+        <Card className="rounded-2xl shadow-sm border-indigo-100">
+          <CardHeader>
+            <SectionHeader
+              icon={BrainCircuit}
+              title="Provider Priority"
+              description="Drag to reorder — runtime failover follows exact order"
+            />
+          </CardHeader>
+          <CardContent>
+            <ProviderPriorityList
+              items={config.providerPriority}
+              disabled={readOnly}
+              onChange={(providerPriority) => patchConfig({ providerPriority })}
+            />
           </CardContent>
         </Card>
 
@@ -353,19 +425,6 @@ export default function AISettingsPage() {
                 </Select>
               </div>
             ))}
-            <div className="md:col-span-3 space-y-2">
-              <Label>Fallback Models (comma-separated priority)</Label>
-              <Input
-                disabled={readOnly}
-                value={config.fallbackModels.join(', ')}
-                onChange={(e) =>
-                  patchConfig({
-                    fallbackModels: e.target.value.split(',').map((s) => s.trim()).filter(Boolean),
-                  })
-                }
-                placeholder="claude, gpt-5, local-llama"
-              />
-            </div>
           </CardContent>
         </Card>
 
@@ -449,6 +508,87 @@ export default function AISettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Emergency Kill Switch */}
+        <Card className="rounded-2xl shadow-sm border-red-100 bg-red-50/20">
+          <CardHeader>
+            <SectionHeader icon={Ban} title="Emergency Kill Switch" description="Disable AI features during outages — platform remains operational" />
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center justify-between p-3 rounded-xl border border-red-200 bg-white">
+              <div>
+                <p className="text-sm font-bold text-red-800">Disable All AI Features</p>
+                <p className="text-xs text-red-600">Master kill switch</p>
+              </div>
+              <Switch
+                checked={config.killSwitch.master}
+                disabled={readOnly}
+                onCheckedChange={(v) => patchConfig({ killSwitch: { ...config.killSwitch, master: v } })}
+              />
+            </div>
+            {[
+              { key: 'smartReply' as const, label: 'Smart Reply' },
+              { key: 'summaries' as const, label: 'Summaries' },
+              { key: 'kbGeneration' as const, label: 'KB Generation' },
+              { key: 'sentiment' as const, label: 'Sentiment Analysis' },
+            ].map(({ key, label }) => (
+              <div key={key} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-white">
+                <span className="text-sm">{label}</span>
+                <Switch
+                  checked={config.killSwitch[key]}
+                  disabled={readOnly || config.killSwitch.master}
+                  onCheckedChange={(v) => patchConfig({ killSwitch: { ...config.killSwitch, [key]: v } })}
+                />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Cost Protection */}
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <SectionHeader icon={Power} title="AI Cost Protection" description="Automatic fallback when budgets are exceeded" />
+          </CardHeader>
+          <CardContent className="grid sm:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>Daily Budget (USD)</Label>
+              <Input
+                type="number"
+                disabled={readOnly}
+                value={config.dailyBudgetUsd}
+                onChange={(e) => patchConfig({ dailyBudgetUsd: Number(e.target.value) })}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Monthly Budget (USD)</Label>
+              <Input
+                type="number"
+                disabled={readOnly}
+                value={config.monthlyBudgetUsd}
+                onChange={(e) => patchConfig({ monthlyBudgetUsd: Number(e.target.value) })}
+              />
+            </div>
+            <div className="sm:col-span-2 space-y-2">
+              <Label>When Budget Exceeded</Label>
+              <Select
+                value={config.budgetExceededAction}
+                disabled={readOnly}
+                onValueChange={(v: AiOrchestratorConfig['budgetExceededAction']) => patchConfig({ budgetExceededAction: v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="local_fallback">Fallback to Local Llama</SelectItem>
+                  <SelectItem value="disable_non_critical">Disable Non-Critical Features</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {health?.budgetExceeded && (
+              <div className="sm:col-span-2 p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 font-semibold">
+                Budget threshold exceeded — {config.budgetExceededAction === 'local_fallback' ? 'routing to local fallback' : 'non-critical features disabled'}.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Infrastructure */}
         <Card className="rounded-2xl shadow-sm">
           <CardHeader>
@@ -466,6 +606,26 @@ export default function AISettingsPage() {
                 onChange={(e) => patchConfig({ endpointUrl: e.target.value })}
                 placeholder="http://localhost:11434/v1"
               />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isDetectingModels}
+                onClick={handleDetectModels}
+                className="mt-2"
+              >
+                {isDetectingModels ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Detect Local Models
+              </Button>
+              {detectedModels.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {detectedModels.map((m) => (
+                    <Badge key={m.id} variant="outline" className="text-xs">
+                      {m.name} ({m.provider})
+                    </Badge>
+                  ))}
+                </div>
+              )}
             </div>
             <Separator />
             <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Provider API Keys</p>
@@ -553,6 +713,120 @@ export default function AISettingsPage() {
                 Top Consumer: <strong className="capitalize">{metrics?.topConsumerFeature?.replace(/_/g, ' ') ?? '—'}</strong>
               </p>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Module Usage Analytics */}
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <SectionHeader icon={Activity} title="AI Usage Analytics" description="Consumption by GeistDesk module" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {[
+                { label: 'Requests Today', value: usage?.requestsToday ?? 0 },
+                { label: 'Requests Month', value: usage?.requestsMonth ?? 0 },
+                { label: 'Success Rate', value: `${usage?.successRate ?? 100}%` },
+                { label: 'Failure Rate', value: `${usage?.failureRate ?? 0}%` },
+                { label: 'Avg Latency', value: `${usage?.averageLatency ?? 0}ms` },
+                { label: 'Avg Cost', value: `$${usage?.averageCost?.toFixed(4) ?? '0.0000'}` },
+              ].map((item) => (
+                <div key={item.label} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-[9px] font-black uppercase text-slate-400">{item.label}</p>
+                  <p className="text-lg font-black font-mono mt-1">{item.value}</p>
+                </div>
+              ))}
+            </div>
+            <div className="rounded-xl border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="text-left p-3">Module</th>
+                    <th className="text-right p-3">Today</th>
+                    <th className="text-right p-3">Month</th>
+                    <th className="text-right p-3">Success</th>
+                    <th className="text-right p-3">Avg Latency</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(usage?.byModule ?? []).map((m) => (
+                    <tr key={m.module} className="border-t border-slate-100">
+                      <td className="p-3 font-semibold capitalize">{m.module}</td>
+                      <td className="p-3 text-right font-mono">{m.requestsToday}</td>
+                      <td className="p-3 text-right font-mono">{m.requestsMonth}</td>
+                      <td className="p-3 text-right">{m.successRate}%</td>
+                      <td className="p-3 text-right font-mono">{m.averageLatency}ms</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Prompt Audit (metadata only) */}
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <SectionHeader icon={Zap} title="Prompt Audit" description="Feature usage metadata — no user content stored" />
+          </CardHeader>
+          <CardContent>
+            <div className="rounded-xl border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="text-left p-3">Feature</th>
+                    <th className="text-left p-3">Model</th>
+                    <th className="text-right p-3">Request Count</th>
+                    <th className="text-right p-3">Last Used</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(usage?.byFeature ?? []).map((f) => (
+                    <tr key={f.feature} className="border-t border-slate-100">
+                      <td className="p-3 font-medium">{f.featureLabel}</td>
+                      <td className="p-3 font-mono text-xs">{f.model}</td>
+                      <td className="p-3 text-right font-mono">{f.requestCount.toLocaleString()}</td>
+                      <td className="p-3 text-right text-xs text-muted-foreground">
+                        {f.lastUsedAt ? formatRelativeTime(f.lastUsedAt) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                  {(usage?.byFeature ?? []).length === 0 && (
+                    <tr><td colSpan={4} className="p-4 text-center text-muted-foreground text-sm">No usage recorded yet.</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Configuration Versions */}
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <SectionHeader icon={History} title="Configuration Versions" description="Rollback routing if production config breaks" />
+          </CardHeader>
+          <CardContent className="space-y-2 max-h-56 overflow-y-auto">
+            {versions.map((v) => (
+              <div key={v.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100">
+                <div>
+                  <p className="text-sm font-bold">Version {v.versionNumber}</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {v.createdBy || 'System'} · {formatRelativeTime(v.createdAt)}
+                  </p>
+                </div>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={isRestoring || readOnly}
+                  onClick={() => handleRestoreVersion(v.id)}
+                >
+                  <RotateCcw className="w-3 h-3 mr-1" /> Restore
+                </Button>
+              </div>
+            ))}
+            {versions.length === 0 && (
+              <p className="text-sm text-muted-foreground">Versions are created on each save.</p>
+            )}
           </CardContent>
         </Card>
 

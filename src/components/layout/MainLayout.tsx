@@ -1,4 +1,5 @@
-import { startOrchestratorConfigPolling } from '../../lib/aiOrchestratorClient';
+import { startOrchestratorConfigSync, fetchAiStatus, subscribeAiHealth } from '../../lib/aiOrchestratorClient';
+import { AiWorkspaceStatusBanner } from '../ai-orchestrator/AiWorkspaceStatusBanner';
 import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
@@ -133,38 +134,26 @@ export default function MainLayout() {
   const [isProfileDropdownOpen, setIsProfileDropdownOpen] = useState(false);
   const navigate = useNavigate();
 
-  const [aiStatus, setAiStatus] = useState<'loading' | 'online' | 'offline'>('loading');
+  const [aiStatus, setAiStatus] = useState<'loading' | 'healthy' | 'degraded' | 'offline'>('loading');
   const [activeModel, setActiveModel] = useState<string>('');
 
   useEffect(() => {
     if (!user) return;
-    startOrchestratorConfigPolling();
-    const fetchAiHealth = async () => {
-      try {
-        const response = await fetch('/api/admin/orchestrator/health');
-        if (response.ok) {
-          const data = await response.json();
-          if (data.status === 'online') {
-            setAiStatus('online');
-            setActiveModel(data.primaryModel || 'Gemini 3.5 Pro');
-          } else {
-            setAiStatus('offline');
-            setActiveModel('');
-          }
-        } else {
-          setAiStatus('offline');
-          setActiveModel('');
-        }
-      } catch (err) {
-        console.error("AI gateway health check error in header:", err);
+    startOrchestratorConfigSync();
+    const applyHealth = (data: { status?: string; primaryModel?: string }) => {
+      if (data.status === 'healthy') {
+        setAiStatus('healthy');
+        setActiveModel(data.primaryModel || 'GPT-5');
+      } else if (data.status === 'degraded') {
+        setAiStatus('degraded');
+        setActiveModel(data.primaryModel || '');
+      } else {
         setAiStatus('offline');
         setActiveModel('');
       }
     };
-
-    fetchAiHealth();
-    const interval = setInterval(fetchAiHealth, 30000); // 30 sec polling for high responsiveness
-    return () => clearInterval(interval);
+    void fetchAiStatus().then((h) => h && applyHealth(h));
+    return subscribeAiHealth((h) => applyHealth(h));
   }, [user]);
 
   useEffect(() => {
@@ -428,6 +417,8 @@ export default function MainLayout() {
             </DropdownMenu>
           </div>
 
+          <AiWorkspaceStatusBanner />
+
           {/* AI Orchestrator Gateway Global Indicator (with model details on click) */}
           <div className="shrink-0">
             <DropdownMenu>
@@ -436,7 +427,8 @@ export default function MainLayout() {
                   title={t('header.aiOrchestratorStatus', 'AI Orchestrator Status')}
                   className={cn(
                     "flex items-center justify-center h-9 w-9 rounded-full border transition-all shrink-0 cursor-pointer shadow-xs select-none relative",
-                    aiStatus === 'online' ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100/70 border-indigo-100/80" :
+                    aiStatus === 'healthy' ? "bg-indigo-50 text-indigo-700 hover:bg-indigo-100/70 border-indigo-100/80" :
+                    aiStatus === 'degraded' ? "bg-amber-50 text-amber-700 hover:bg-amber-100/70 border-amber-100/80" :
                     aiStatus === 'offline' ? "bg-red-50 text-red-700 hover:bg-red-100/70 border-red-100/80" :
                     "bg-slate-50 text-slate-400 border-slate-200"
                   )}
@@ -444,7 +436,8 @@ export default function MainLayout() {
                   <BrainCircuit className="w-4.5 h-4.5 animate-pulse" />
                   <span className={cn(
                     "absolute top-1 right-1 h-2 w-2 rounded-full",
-                    aiStatus === 'online' ? "bg-emerald-500 animate-pulse shadow-[0_0_4px_rgba(16,185,129,0.5)]" :
+                    aiStatus === 'healthy' ? "bg-emerald-500 animate-pulse shadow-[0_0_4px_rgba(16,185,129,0.5)]" :
+                    aiStatus === 'degraded' ? "bg-amber-500 animate-pulse" :
                     aiStatus === 'offline' ? "bg-red-500 shadow-[0_0_4px_rgba(239,68,68,0.5)]" :
                     "bg-amber-400 animate-pulse"
                   )} />
@@ -472,11 +465,13 @@ export default function MainLayout() {
                     </span>
                     <span className={cn(
                       "text-[10px] font-black uppercase tracking-widest",
-                      aiStatus === 'online' ? "text-emerald-600" :
+                      aiStatus === 'healthy' ? "text-emerald-600" :
+                      aiStatus === 'degraded' ? "text-amber-600" :
                       aiStatus === 'offline' ? "text-red-700" : "text-amber-500"
                     )}>
-                      {aiStatus === 'online' ? `🟢 ${t('header.online', 'Online')}` :
-                       aiStatus === 'offline' ? `🔴 ${t('header.offline', 'Offline')}` :
+                      {aiStatus === 'healthy' ? `🟢 ${t('header.aiHealthy', 'AI Healthy')}` :
+                       aiStatus === 'degraded' ? `🟡 ${t('header.aiDegraded', 'AI Degraded')}` :
+                       aiStatus === 'offline' ? `🔴 ${t('header.aiOffline', 'AI Offline')}` :
                        `🟡 ${t('header.checking', 'Checking...')}`}
                     </span>
                   </div>
@@ -488,7 +483,7 @@ export default function MainLayout() {
                     <div className="flex items-center gap-2">
                       <div className="h-1.5 w-1.5 rounded-full bg-indigo-500" />
                       <span className="text-xs font-black text-slate-800">
-                        {aiStatus === 'online' ? (
+                        {aiStatus === 'healthy' || aiStatus === 'degraded' ? (
                           activeModel === 'gemini-pro' ? 'Gemini 3.5 Pro' :
                           activeModel === 'gemini-flash' ? 'Gemini 2.5 Flash' : activeModel
                         ) : (aiStatus === 'offline' ? t('header.noneOffline', 'None (Offline)') : '...')}

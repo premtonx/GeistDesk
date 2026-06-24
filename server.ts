@@ -28,6 +28,7 @@ import { generateAzureAIAnswer } from "./azure-ai-orchestrator.js";
 import { authenticate, requireRole } from "./src/middleware/authMiddleware";
 import adminRoutes from "./src/routes/adminRoutes.js";
 import vaultRoutes from "./src/routes/vaultRoutes.js";
+import { orchestratorEventBus } from "./src/lib/ai-orchestrator-events.js";
 import { hashPassword, verifyPassword } from "./src/lib/crypto.js";
 import { calculateCoverage, getDashboardData } from "./src/services/coverageEngine.js";
 
@@ -308,6 +309,67 @@ async function startServer() {
       console.error("[AI Config] Failed:", e?.message || e);
       return res.status(500).json({ error: "Failed to load AI configuration." });
     }
+  });
+
+  app.get("/api/ai/status", authenticate, async (req: any, res) => {
+    try {
+      const { getOrchestratorHealth } = await import("./src/lib/ai-orchestrator-service.js");
+      const workspaceId = String(req.query.workspaceId || "default");
+      const health = await getOrchestratorHealth(workspaceId);
+      return res.json(health);
+    } catch (e: any) {
+      console.error("[AI Status] Failed:", e?.message || e);
+      return res.status(500).json({ error: "Failed to load AI status." });
+    }
+  });
+
+  // Real-time orchestrator sync via Server-Sent Events
+  app.get("/api/ai/events", (req: any, res, next) => {
+    if (req.query.token && !req.headers.authorization) {
+      req.headers.authorization = `Bearer ${req.query.token}`;
+    }
+    next();
+  }, authenticate, (req: any, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+
+    const send = (payload: unknown) => {
+      res.write(`data: ${JSON.stringify(payload)}\n\n`);
+    };
+
+    void (async () => {
+      try {
+        const { getOrchestratorConfig } = await import("./src/lib/ai-orchestrator-store.js");
+        const { getOrchestratorHealth } = await import("./src/lib/ai-orchestrator-service.js");
+        const workspaceId = String(req.query.workspaceId || "default");
+        const [config, health] = await Promise.all([
+          getOrchestratorConfig(workspaceId),
+          getOrchestratorHealth(workspaceId),
+        ]);
+        send({ type: "config_updated", workspaceId, config, version: config.configVersion });
+        send({ type: "health_changed", workspaceId, health, status: health.status });
+      } catch {
+        send({ type: "connected" });
+      }
+    })();
+
+    const onBroadcast = (event: any) => {
+      send(event);
+      if (event.type === "config_updated") {
+        void import("./src/lib/ai-orchestrator-service.js").then(({ getOrchestratorHealth }) =>
+          getOrchestratorHealth(event.workspaceId || "default").then((health) =>
+            send({ type: "health_changed", workspaceId: event.workspaceId, health, status: health.status }),
+          ),
+        );
+      }
+    };
+
+    orchestratorEventBus.on("broadcast", onBroadcast);
+    req.on("close", () => {
+      orchestratorEventBus.off("broadcast", onBroadcast);
+    });
   });
 
   // Mount hardened GeistVault router (server-side AES-256-GCM, split storage)
@@ -1135,6 +1197,20 @@ Respond only with the raw valid JSON payload.`;
         aiRootCause = parsed.aiRootCause || "";
         aiChecklist = parsed.aiChecklist || [];
         aiSentiment = parsed.aiSentiment || "Neutral";
+
+        try {
+          const { logAiUsageFromServer } = await import("./src/lib/ai-orchestrator-service.js");
+          await logAiUsageFromServer({
+            module: "tickets",
+            feature: "ticket_summarization",
+            model: "gemini-2.5-flash",
+            promptTokens: 200,
+            completionTokens: 80,
+            success: true,
+          });
+        } catch (logErr) {
+          console.warn("[AI Usage Log] Failed:", logErr);
+        }
       } else {
         // Safe Sovereign local fallback
         aiSummary = `Summary of the incident regarding: ${ticket.subject}. The system detected configuration issues and identity providers are awaiting handshake.`;
