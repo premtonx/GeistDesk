@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from './components/ui/sonner';
 import { TooltipProvider } from './components/ui/tooltip';
 import MainLayout from './components/layout/MainLayout';
@@ -79,14 +79,13 @@ export default function App() {
   }
 
   return (
-    <Router>
-      <I18nProvider>
-        <ThemeProvider>
-          <SidebarProvider>
-            <WorkspaceProvider>
-            <TooltipProvider>
-              <div className="min-h-screen bg-background font-sans antialiased text-foreground">
-              <Routes>
+    <I18nProvider>
+      <ThemeProvider>
+        <SidebarProvider>
+          <WorkspaceProvider>
+          <TooltipProvider>
+            <div className="min-h-screen bg-background font-sans antialiased text-foreground">
+            <Routes>
                 <Route path="/help" element={<HelpCenterPage />} />
                 <Route path="/v/:id" element={<SecretViewerPage />} />
                 {!user ? (
@@ -123,13 +122,12 @@ export default function App() {
                   </Route>
                 )}
               </Routes>
-              <Toaster />
-            </div>
-            </TooltipProvider>
-            </WorkspaceProvider>
-          </SidebarProvider>
-        </ThemeProvider>
-      </I18nProvider>
-    </Router>
+            <Toaster />
+          </div>
+          </TooltipProvider>
+          </WorkspaceProvider>
+        </SidebarProvider>
+      </ThemeProvider>
+    </I18nProvider>
   );
 }
