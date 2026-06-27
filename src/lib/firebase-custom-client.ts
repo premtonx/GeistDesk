@@ -2,6 +2,7 @@
 // Emulates the Firebase SDK interface but resolves queries on standard PostgreSQL / SQL backend APIs.
 
 import firebaseConfig from '../../firebase-applet-config.json';
+import { applySessionAuthHeader } from './session-auth';
 
 // Simple Auth State Store. Credentials are NEVER stored client-side; the only
 // persisted artifact is the server-issued signed session token.
@@ -20,6 +21,7 @@ function setSessionToken(token: string | null) {
   try {
     if (token) localStorage.setItem(TOKEN_KEY, token);
     else localStorage.removeItem(TOKEN_KEY);
+    applySessionAuthHeader();
   } catch {
     /* ignore storage errors */
   }
@@ -482,6 +484,8 @@ export function onSnapshot(
 export function initializeApp(...args: any[]) {
   return {};
 }
+
+export const db = getFirestore();
 
 export function handleFirestoreError(error: unknown, operationType: string, path: string | null) {
   const errInfo = {

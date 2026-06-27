@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { startOrchestratorConfigSync, fetchAiStatus, subscribeAiHealth } from '../../lib/aiOrchestratorClient';
 import { AiWorkspaceStatusBanner } from '../ai-orchestrator/AiWorkspaceStatusBanner';
 import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
@@ -90,7 +90,7 @@ export default function MainLayout() {
                         userProfile?.is_admin === true || 
                         role?.name === 'admin';
 
-  const visibleNavItems = React.useMemo(() => {
+  const visibleNavItems = useMemo(() => {
     return navItems.filter((item) => {
       // Admin elements require system admin status
       if (item.path.startsWith('/admin') || item.path === '/audit') {
