@@ -1,6 +1,6 @@
-import React from 'react';
 import { Plus, Globe, Monitor, Key, Database, FileText, Lock, Upload } from 'lucide-react';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { Button } from '../ui/button';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,32 +26,32 @@ export function VaultFabMenu({ onNewAsset, onImport }: VaultFabMenuProps) {
   const { t } = useTranslation();
 
   return (
-    <div className="fixed bottom-6 right-6 z-40">
-      <DropdownMenu>
-        <DropdownMenuTrigger
-          render={
-            <button
-              type="button"
-              className="h-12 w-12 rounded-full bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-600/30 flex items-center justify-center transition-all hover:scale-105"
-              aria-label={t('vault.fab.newAsset', 'New Asset')}
-            >
-              <Plus className="w-5 h-5" strokeWidth={2.5} />
-            </button>
-          }
-        />
-        <DropdownMenuContent align="end" side="top" className="w-52 rounded-xl mb-2">
-          {ASSET_TYPES.map((item) => (
-            <DropdownMenuItem key={item.type} className="text-xs gap-2 cursor-pointer" onClick={() => onNewAsset(item.type)}>
-              <item.icon className="w-3.5 h-3.5 text-slate-500" />
-              {t(item.labelKey, item.defaultLabel)}
-            </DropdownMenuItem>
-          ))}
-          <DropdownMenuItem className="text-xs gap-2 cursor-pointer" onClick={onImport}>
-            <Upload className="w-3.5 h-3.5 text-slate-500" />
-            {t('vault.importAssets', 'Import Assets')}
+    <DropdownMenu>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            type="button"
+            size="sm"
+            className="h-9 rounded-xl text-xs gap-1.5"
+            aria-label={t('vault.createAsset', 'Create Asset')}
+          >
+            <Plus className="w-3.5 h-3.5" strokeWidth={2.5} />
+            {t('vault.createAsset', 'Create Asset')}
+          </Button>
+        }
+      />
+      <DropdownMenuContent align="end" className="w-52 rounded-xl">
+        {ASSET_TYPES.map((item) => (
+          <DropdownMenuItem key={item.type} className="text-xs gap-2 cursor-pointer" onClick={() => onNewAsset(item.type)}>
+            <item.icon className="w-3.5 h-3.5 text-slate-500" />
+            {t(item.labelKey, item.defaultLabel)}
           </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </div>
+        ))}
+        <DropdownMenuItem className="text-xs gap-2 cursor-pointer" onClick={onImport}>
+          <Upload className="w-3.5 h-3.5 text-slate-500" />
+          {t('vault.importAssets', 'Import Assets')}
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }

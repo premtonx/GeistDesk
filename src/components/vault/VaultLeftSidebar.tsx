@@ -100,7 +100,7 @@ export function VaultLeftSidebar({
   ];
 
   return (
-    <aside className="w-[240px] shrink-0 border-r border-slate-200/80 bg-white flex flex-col h-full overflow-y-auto">
+    <aside className="w-[240px] shrink-0 border-r border-slate-200/80 bg-white flex flex-col">
       <div className="p-3 flex-1">
         <SectionTitle>{t('vault.sections.vaults', 'Vaults')}</SectionTitle>
         <div className="space-y-0.5">

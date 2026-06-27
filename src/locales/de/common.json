@@ -1622,6 +1622,7 @@
     "searchPlaceholder": "Search credentials, domains or secrets...",
     "searchPlaceholderAdvanced": "Search assets, usernames, hosts...",
     "createCredential": "Create Credential",
+    "createAsset": "Asset erstellen",
     "sovereignVault": "Sovereign Vault",
     "securityChecks": "AI Security Checks",
     "breakGlass": "Break Glass Emergency",
