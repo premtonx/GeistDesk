@@ -130,5 +130,51 @@
     "industry": "Industry",
     "contacts": "Contacts",
     "timeline": "Timeline"
+  },
+  "aiOrchestrator": {
+    "featureRouting": {
+      "title": "Feature Routing",
+      "description": "Visual routing matrix for all GeistDesk AI features",
+      "bulkRouter": "Bulk Model Router",
+      "applyToAll": "Apply to All",
+      "featureColumn": "Feature",
+      "routedModelColumn": "Routed Model",
+      "selectModel": "Select model…",
+      "bulkApplied": "Routed model applied to all features."
+    },
+    "features": {
+      "ticket_summarization": {
+        "label": "Ticket Summarization",
+        "tooltip": "Generates a concise TL;DR text summary right at the top of incoming customer support threads to save agent evaluation time."
+      },
+      "sentiment_analysis": {
+        "label": "Sentiment Analysis",
+        "tooltip": "Evaluates the emotional tone of customer messages (e.g., Negative, Critical) to color-code triage priority tags dynamically."
+      },
+      "smart_reply": {
+        "label": "Smart Reply",
+        "tooltip": "Drafts automated context-aware text responses directly within the ticket response composer window for rapid execution."
+      },
+      "kb_generation": {
+        "label": "KB Generation",
+        "tooltip": "Converts closed, high-quality resolution threads into draft document suggestions inside the GeistKB repository."
+      },
+      "escalation_analysis": {
+        "label": "Escalation Analysis",
+        "tooltip": "Monitors response drift and customer urgency signals to auto-route critical tickets to manager queues before SLA breaches."
+      },
+      "root_cause_analysis": {
+        "label": "Root Cause Analysis",
+        "tooltip": "Identifies systemic clusters among incoming issues to automatically flag system bugs to the engineering backlogs."
+      },
+      "translation": {
+        "label": "Translation",
+        "tooltip": "Instantly translates incoming messages to the agent's system language, and translates outgoing replies back to the customer's language."
+      },
+      "vault_insights": {
+        "label": "Vault Insights",
+        "tooltip": "Scans data encryption strengths and key lifecycles to surface security recommendations on the GeistVault compliance dashboard."
+      }
+    }
   }
 }

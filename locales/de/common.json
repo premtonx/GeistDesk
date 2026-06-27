@@ -130,5 +130,51 @@
     "industry": "Branche",
     "contacts": "Kontakte",
     "timeline": "Verlauf"
+  },
+  "aiOrchestrator": {
+    "featureRouting": {
+      "title": "Feature-Routing",
+      "description": "Visuelle Routing-Matrix für alle GeistDesk-KI-Funktionen",
+      "bulkRouter": "Massen-Modellzuweisung",
+      "applyToAll": "Für alle übernehmen",
+      "featureColumn": "Funktion",
+      "routedModelColumn": "Geroutetes Modell",
+      "selectModel": "Modell wählen…",
+      "bulkApplied": "Modell für alle Funktionen übernommen."
+    },
+    "features": {
+      "ticket_summarization": {
+        "label": "Ticket-Zusammenfassung",
+        "tooltip": "Erstellt eine prägnante TL;DR-Zusammenfassung oben in eingehenden Support-Threads, um die Bewertungszeit für Agenten zu verkürzen."
+      },
+      "sentiment_analysis": {
+        "label": "Sentiment-Analyse",
+        "tooltip": "Bewertet den emotionalen Ton von Kundennachrichten (z. B. negativ, kritisch), um Triage-Prioritäts-Tags dynamisch farblich zu markieren."
+      },
+      "smart_reply": {
+        "label": "Smart Reply",
+        "tooltip": "Entwirft automatisierte, kontextbezogene Antworttexte direkt im Ticket-Antwort-Composer für schnelle Ausführung."
+      },
+      "kb_generation": {
+        "label": "KB-Generierung",
+        "tooltip": "Wandelt abgeschlossene, hochwertige Lösungs-Threads in Entwurfsdokument-Vorschläge in der GeistKB-Wissensdatenbank um."
+      },
+      "escalation_analysis": {
+        "label": "Eskalations-Analyse",
+        "tooltip": "Überwacht Antwortabweichungen und Dringlichkeitssignale, um kritische Tickets vor SLA-Verstößen automatisch an Manager-Queues zu leiten."
+      },
+      "root_cause_analysis": {
+        "label": "Root-Cause-Analyse",
+        "tooltip": "Erkennt systemische Cluster bei eingehenden Problemen und markiert Systemfehler automatisch für Engineering-Backlogs."
+      },
+      "translation": {
+        "label": "Übersetzung",
+        "tooltip": "Übersetzt eingehende Nachrichten sofort in die Systemsprache des Agenten und ausgehende Antworten zurück in die Kundensprache."
+      },
+      "vault_insights": {
+        "label": "Vault Insights",
+        "tooltip": "Analysiert Verschlüsselungsstärken und Schlüssel-Lebenszyklen, um Sicherheitsempfehlungen im GeistVault-Compliance-Dashboard anzuzeigen."
+      }
+    }
   }
 }

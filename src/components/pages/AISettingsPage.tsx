@@ -33,10 +33,13 @@ import {
   RotateCcw,
   Ban,
   Loader2,
+  Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 import { AdminBreadcrumbs } from '../AdminBreadcrumbs';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
+import { useTranslation } from '../../lib/context/I18nContext';
 import {
   DEFAULT_ORCHESTRATOR_CONFIG,
   type AiFeatureRouting,
@@ -64,16 +67,16 @@ const MODEL_OPTIONS = [
   { value: 'qwen-36b', label: 'Qwen 36B (Local)' },
 ];
 
-const FEATURE_ROUTING_LABELS: Record<keyof AiFeatureRouting, string> = {
-  ticket_summarization: 'Ticket Summarization',
-  sentiment_analysis: 'Sentiment Analysis',
-  smart_reply: 'Smart Reply',
-  kb_generation: 'KB Generation',
-  escalation_analysis: 'Escalation Analysis',
-  root_cause_analysis: 'Root Cause Analysis',
-  translation: 'Translation',
-  vault_insights: 'Vault Insights',
-};
+const FEATURE_ROUTING_KEYS: Array<keyof AiFeatureRouting> = [
+  'ticket_summarization',
+  'sentiment_analysis',
+  'smart_reply',
+  'kb_generation',
+  'escalation_analysis',
+  'root_cause_analysis',
+  'translation',
+  'vault_insights',
+];
 
 const PROVIDER_SECRET_FIELDS = [
   { id: 'google', label: 'Google Gemini API Key' },
@@ -113,7 +116,28 @@ function SectionHeader({ icon: Icon, title, description }: { icon: ElementType; 
   );
 }
 
+function FeatureInfoTooltip({ text }: { text: string }) {
+  return (
+    <Tooltip>
+      <TooltipTrigger
+        type="button"
+        className="inline-flex shrink-0 items-center text-slate-400 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 rounded-sm"
+        aria-label={text}
+      >
+        <Info className="w-3.5 h-3.5" />
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        className="max-w-[280px] text-left leading-snug font-normal normal-case tracking-normal"
+      >
+        {text}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export default function AISettingsPage() {
+  const { t } = useTranslation();
   const [config, setConfig] = useState<AiOrchestratorConfig>(DEFAULT_ORCHESTRATOR_CONFIG);
   const [secretStatus, setSecretStatus] = useState<Record<string, boolean>>({});
   const [secrets, setSecrets] = useState<Record<string, string>>({});
@@ -128,6 +152,7 @@ export default function AISettingsPage() {
   const [isDetectingModels, setIsDetectingModels] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string>('');
+  const [bulkRoutingModel, setBulkRoutingModel] = useState(MODEL_OPTIONS[0]?.value ?? 'gemini-flash');
 
   const loadAll = useCallback(async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -171,6 +196,18 @@ export default function AISettingsPage() {
       ...prev,
       featureRouting: { ...prev.featureRouting, [key]: value },
     }));
+  };
+
+  const applyBulkRouting = () => {
+    if (config.configLocked || !bulkRoutingModel) return;
+    setConfig((prev) => ({
+      ...prev,
+      featureRouting: FEATURE_ROUTING_KEYS.reduce(
+        (acc, key) => ({ ...acc, [key]: bulkRoutingModel }),
+        { ...prev.featureRouting },
+      ),
+    }));
+    toast.success(t('aiOrchestrator.featureRouting.bulkApplied', 'Routed model applied to all features.'));
   };
 
   const handleSave = async () => {
@@ -432,21 +469,70 @@ export default function AISettingsPage() {
         {/* Feature Routing Matrix */}
         <Card className="rounded-2xl shadow-sm border-purple-100">
           <CardHeader>
-            <SectionHeader icon={Zap} title="Feature Routing" description="Visual routing matrix for all GeistDesk AI features" />
+            <SectionHeader
+              icon={Zap}
+              title={t('aiOrchestrator.featureRouting.title', 'Feature Routing')}
+              description={t('aiOrchestrator.featureRouting.description', 'Visual routing matrix for all GeistDesk AI features')}
+            />
           </CardHeader>
           <CardContent>
-            <div className="rounded-xl border overflow-hidden">
+            <div className="rounded-xl border overflow-hidden bg-white">
+              <div className="flex flex-wrap items-center gap-2.5 px-3 py-2.5 border-b border-slate-100 bg-slate-50/80">
+                <span className="text-xs font-semibold text-slate-700 whitespace-nowrap shrink-0">
+                  {t('aiOrchestrator.featureRouting.bulkRouter', 'Bulk Model Router')}
+                </span>
+                <Select
+                  value={bulkRoutingModel}
+                  disabled={readOnly}
+                  onValueChange={setBulkRoutingModel}
+                >
+                  <SelectTrigger className="h-8 w-[min(100%,200px)] bg-white">
+                    <SelectValue placeholder={t('aiOrchestrator.featureRouting.selectModel', 'Select model…')} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {MODEL_OPTIONS.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  className="h-8 shrink-0"
+                  disabled={readOnly || !bulkRoutingModel}
+                  onClick={applyBulkRouting}
+                >
+                  {t('aiOrchestrator.featureRouting.applyToAll', 'Apply to All')}
+                </Button>
+              </div>
               <table className="w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    <th className="text-left p-3 font-semibold text-slate-600">Feature</th>
-                    <th className="text-left p-3 font-semibold text-slate-600">Routed Model</th>
+                    <th className="text-left p-3 font-semibold text-slate-600">
+                      {t('aiOrchestrator.featureRouting.featureColumn', 'Feature')}
+                    </th>
+                    <th className="text-left p-3 font-semibold text-slate-600">
+                      {t('aiOrchestrator.featureRouting.routedModelColumn', 'Routed Model')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  {(Object.keys(FEATURE_ROUTING_LABELS) as Array<keyof AiFeatureRouting>).map((key) => (
+                  {FEATURE_ROUTING_KEYS.map((key) => (
                     <tr key={key} className="border-t border-slate-100">
-                      <td className="p-3 font-medium">{FEATURE_ROUTING_LABELS[key]}</td>
+                      <td className="p-3 font-medium">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="truncate">
+                            {t(`aiOrchestrator.features.${key}.label`, key.replace(/_/g, ' '))}
+                          </span>
+                          <FeatureInfoTooltip
+                            text={t(
+                              `aiOrchestrator.features.${key}.tooltip`,
+                              'Configure which model handles this AI feature.',
+                            )}
+                          />
+                        </div>
+                      </td>
                       <td className="p-3">
                         <Select
                           value={config.featureRouting[key]}
