@@ -26,7 +26,11 @@ export const vaultService = {
    * never persisted.
    */
   createItem: async (
-    item: Omit<VaultItem, 'id' | 'createdAt' | 'createdBy' | 'isBurned'> & { content?: string }
+    item: Omit<VaultItem, 'id' | 'createdAt' | 'createdBy' | 'isBurned'> & {
+      content?: string;
+      shares?: string[];
+      passphrase?: string;
+    }
   ) => {
     const user = auth.currentUser;
     if (!user) throw new Error('Not authenticated');
@@ -39,6 +43,8 @@ export const vaultService = {
         shares: item.shares || undefined,
         expirationType: item.expirationType,
         expiresAt: item.expiresAt instanceof Date ? item.expiresAt.toISOString() : item.expiresAt || null,
+        maxViews: item.maxViews,
+        passphrase: item.passphrase || undefined,
         metadata: item.metadata || {}
       })
     });
@@ -91,7 +97,10 @@ export const vaultService = {
    * Reveal a secret once. The server returns decrypted shares (and content for
    * dropzones) and burns read-once secrets immediately.
    */
-  revealItem: async (id: string): Promise<{ shares: string[]; content: string | null; preview?: boolean } | null> => {
+  revealItem: async (
+    id: string,
+    options?: { passphrase?: string; viewerEmail?: string },
+  ): Promise<{ shares: string[]; content: string | null; preview?: boolean; viewCount?: number; maxViews?: number | null; burned?: boolean } | null> => {
     try {
       const res = await fetch(`/api/vault/secrets/${encodeURIComponent(id)}/reveal`, {
         method: 'POST',
@@ -99,6 +108,10 @@ export const vaultService = {
           'Content-Type': 'application/json',
           'X-GeistDesk-Read-Intent': 'commit',
         },
+        body: JSON.stringify({
+          passphrase: options?.passphrase,
+          viewerEmail: options?.viewerEmail,
+        }),
       });
       if (res.status === 410 || res.status === 404) return null;
       const data = await parse(res);

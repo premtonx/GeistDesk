@@ -50,7 +50,7 @@ function formatVaultHistoryItem(
         ? expiresAt.toLocaleDateString()
         : 'Once Read',
     expiresAt: item.isBurned ? null : expiresAt,
-    views: item.isBurned ? 1 : 0,
+    views: item.viewCount ?? (item.isBurned ? 1 : 0),
     type: item.type,
     createdAt: item.createdAt?.toDate ? item.createdAt.toDate() : new Date(),
   };

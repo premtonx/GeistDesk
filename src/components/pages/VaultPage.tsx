@@ -72,6 +72,12 @@ import { ExchangeCreateTemplateModal } from '../exchange/ExchangeCreateTemplateM
 import { useExchangeFilters, useQuickFilterHandler } from '../exchange/useExchangeFilters';
 import { useExchangeTemplates } from '../exchange/useExchangeTemplates';
 import { ExchangeDeleteConfirmModal } from '../exchange/ExchangeDeleteConfirmModal';
+import { ExchangeCreateSecretPanel } from '../exchange/ExchangeCreateSecretPanel';
+import {
+  buildCreateSecretPayload,
+  parseRecipientEmails,
+  type ExchangeCreateSecretFormState,
+} from '../exchange/exchange-create-secret-utils';
 import { copyExchangeLinkToClipboard } from '../exchange/exchange-actions';
 import { isExchangeExpiringSoon, matchesExchangeSearch } from '../exchange/exchange-filter-utils';
 import { resolveExchangeStatus } from '../exchange/exchange-status-utils';
@@ -105,19 +111,7 @@ export default function VaultPage() {
   const [tickets, setTickets] = useState<TicketType[]>([]);
   const [companies, setCompanies] = useState<Company[]>([]);
 
-  // Secret Form State
-  const [secretContent, setSecretContent] = useState('');
-  const [secretType, setSecretType] = useState('password'); // password, api_key, ssh_key, vpn_credentials, certificate, secure_note
-  const [expirationType, setExpirationType] = useState('read'); // 'read' or 'time'
-  const [burnViews, setBurnViews] = useState(1);
-  const [passwordProtection, setPasswordProtection] = useState('');
-  const [mfaRequired, setMfaRequired] = useState(false);
-  const [ipRestriction, setIpRestriction] = useState('');
-  const [deliveryOption, setDeliveryOption] = useState('copy_link'); // copy_link, send_email, attach_ticket, attach_company, attach_asset
-  const [targetRecipient, setTargetRecipient] = useState('');
-  const [targetTicketId, setTargetTicketId] = useState('');
-  const [targetCompanyId, setTargetCompanyId] = useState('');
-  const [targetAssetId, setTargetAssetId] = useState('');
+  // Secret generation outputs (form state lives in ExchangeCreateSecretPanel)
 
   // Dropzone Form State
   const [requestName, setRequestName] = useState('');
@@ -323,55 +317,63 @@ export default function VaultPage() {
     return { ok: true as const };
   };
 
-  // Generate Secret Handler
-  const handleGenerateSecret = async () => {
-    if (!secretContent.trim()) {
-      toast.error("Please enter a secret to secure.");
+  const handleGenerateSecret = async (form: ExchangeCreateSecretFormState) => {
+    if (!form.secretContent.trim()) {
+      toast.error(t('exchange.createSecret.errors.contentRequired', 'Please enter a secret to secure.'));
       return;
     }
-    
+    if (form.expirationPreset === 'custom' && !form.customExpiresAt) {
+      toast.error(t('exchange.createSecret.errors.customExpiryRequired', 'Select a custom expiration date and time.'));
+      return;
+    }
+    if (form.passphraseEnabled && !form.passphrase.trim()) {
+      toast.error(t('exchange.createSecret.errors.passphraseRequired', 'Enter an additional passphrase or disable the layer.'));
+      return;
+    }
+    if (form.ipRestrictionEnabled && !form.ipAllowlist.trim()) {
+      toast.error(t('exchange.createSecret.errors.ipAllowlistRequired', 'Enter at least one allowed IP or CIDR range.'));
+      return;
+    }
+    if (form.domainWhitelistEnabled && !form.allowedEmailDomains.trim()) {
+      toast.error(t('exchange.createSecret.errors.domainWhitelistRequired', 'Enter at least one allowed email domain.'));
+      return;
+    }
+    if (form.shareViaEmailOpen) {
+      const emails = parseRecipientEmails(form.recipientEmails);
+      if (emails.length === 0) {
+        toast.error(t('exchange.createSecret.errors.recipientEmailsRequired', 'Enter at least one valid recipient email address.'));
+        return;
+      }
+    }
+
     setIsGenerating(true);
     setGeneratedLink('');
-    
+
     try {
-      // Shamir's Secret Sharing (SSS)
       let splitShares: string[] = [];
       try {
         const encoder = new TextEncoder();
-        const secretUint8 = encoder.encode(secretContent);
-        // SSS Split: 3 out of 5 shares required
+        const secretUint8 = encoder.encode(form.secretContent);
         const uint8Shares = await split(secretUint8, 5, 3);
-        
-        // Convert to base64 for storage
-        splitShares = uint8Shares.map(share => {
-          const binary = Array.from(share).map(b => String.fromCharCode(b)).join('');
+        splitShares = uint8Shares.map((share) => {
+          const binary = Array.from(share).map((b) => String.fromCharCode(b)).join('');
           return btoa(binary);
         });
       } catch (sssError: any) {
-        console.error("SSS Splitting Failed:", sssError);
-        throw new Error(`Credential Security failure: ${sssError.message || "Fragmenting error"}`);
+        console.error('SSS Splitting Failed:', sssError);
+        throw new Error(`Credential Security failure: ${sssError.message || 'Fragmenting error'}`);
       }
-      
-      const expiresAt = new Date();
-      if (expirationType === 'time') {
-        expiresAt.setHours(expiresAt.getHours() + 24);
-      }
+
+      const payload = buildCreateSecretPayload(form);
 
       const secretId = await vaultService.createItem({
         type: 'secret',
         shares: splitShares,
-        expirationType: expirationType as 'read' | 'time',
-        expiresAt: expirationType === 'time' ? expiresAt : null,
-        metadata: {
-          isQuantumSafe: true,
-          pqcLevel: 3,
-          secretType,
-          deliveryOption,
-          relatedTicketId: targetTicketId,
-          relatedCompanyId: targetCompanyId,
-          relatedAssetId: targetAssetId,
-          targetRecipient: targetRecipient || 'internal'
-        }
+        expirationType: payload.expirationType,
+        expiresAt: payload.expiresAt,
+        maxViews: payload.maxViews,
+        passphrase: payload.passphrase,
+        metadata: payload.metadata,
       });
 
       setShares(splitShares);
@@ -379,18 +381,25 @@ export default function VaultPage() {
       const baseUrl = window.location.origin;
       const finalLink = `${baseUrl}/v/${secretId}`;
       setGeneratedLink(finalLink);
-      setIsGenerating(false);
-      toast.success("Quantum-Safe Link generated with 5 SSS Shares & ML-KEM Shield.");
-      setSecretContent('');
+      toast.success(t('exchange.createSecret.success', 'Quantum-safe link generated with view quota and security policy.'));
 
-      // Create ticket log if linked to ticket
-      if (targetTicketId) {
-        toast.info("Secret Link logged on Ticket timeline automatically.");
+      if (payload.metadata.shareViaEmail) {
+        toast.info(
+          t('exchange.createSecret.emailQueued', 'Secure link dispatch queued for {{count}} recipient(s).').replace(
+            '{{count}}',
+            String(payload.metadata.recipientEmails?.length ?? 0),
+          ),
+        );
+      }
+
+      if (form.targetTicketId || payload.metadata.relatedTicketId) {
+        toast.info(t('exchange.createSecret.ticketLogged', 'Secret link logged on ticket timeline automatically.'));
       }
     } catch (error: any) {
-      console.error("Vault Creation Error:", error);
+      console.error('Vault Creation Error:', error);
+      toast.error(error.message || t('exchange.createSecret.errors.createFailed', 'Failed to generate shielded link.'));
+    } finally {
       setIsGenerating(false);
-      toast.error(error.message || "Failed to generate shielded link.");
     }
   };
 
@@ -776,210 +785,16 @@ export default function VaultPage() {
                       <Badge className="bg-blue-50 text-[#1A73E8] font-bold">{t('vault.pqcEncryption', 'PQC Level 3 Encryption')}</Badge>
                     </div>
                   </header>
-                  <CardContent className="p-8 space-y-6">
-                    
-                    {/* Secret parameters config row */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('vault.secretValueType', 'Secret Value Type')}</label>
-                        <select 
-                          value={secretType}
-                          onChange={(e: any) => setSecretType(e.target.value)}
-                          className="w-full h-11 px-4 mt-1.5 bg-[#F8F9FA] border border-slate-200 rounded-2xl text-xs font-bold cursor-pointer"
-                        >
-                          <option value="password">{t('vault.passwordKeyphrase', 'Password Keyphrase')}</option>
-                          <option value="api_key">{t('vault.apiKeyToken', 'Third-Party API Access Token')}</option>
-                          <option value="ssh_key">{t('vault.sshPrivateKey', 'SSH Private Credentials Pair')}</option>
-                          <option value="vpn_credentials">{t('vault.vpnSecureProfile', 'Corporate VPN Secure Profile')}</option>
-                          <option value="certificate">{t('vault.sslCertificate', 'SSL/TLS CA Certificate File')}</option>
-                          <option value="secure_note">{t('vault.generalSecureNote', 'General Confessional Secure Note')}</option>
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">{t('vault.selfDestructSetting', 'Self-Destruct Setting')}</label>
-                        <div className="grid grid-cols-2 gap-2 mt-1.5">
-                          <button 
-                            type="button"
-                            onClick={() => setExpirationType('read')}
-                            className={cn(
-                              "h-11 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all",
-                              expirationType === 'read' ? "bg-blue-50 border-[#1A73E8] text-[#1A73E8]" : "bg-white border-slate-200 hover:border-slate-400"
-                            )}
-                          >
-                            <Zap className="w-3.5 h-3.5" /> {t('vault.burnOnRead', 'Burn on Read')}
-                          </button>
-                          <button 
-                            type="button"
-                            onClick={() => setExpirationType('time')}
-                            className={cn(
-                              "h-11 rounded-2xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all",
-                              expirationType === 'time' ? "bg-blue-50 border-[#1A73E8] text-[#1A73E8]" : "bg-white border-slate-200 hover:border-slate-400"
-                            )}
-                          >
-                            <Clock className="w-3.5 h-3.5" /> {t('vault.hoursDuration', '24 Hours duration')}
-                          </button>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Content text */}
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wide">{t('vault.plainSecretLabel', 'Plain Secret Content to Shield')}</label>
-                      <Textarea 
-                        placeholder={t('vault.plainSecretPlaceholder', 'Type or paste the credential logs, private tokens, or configs here...')}
-                        className="h-32 bg-[#F8F9FA] border-slate-200 rounded-2xl resize-none p-4 text-sm font-semibold"
-                        value={secretContent}
-                        onChange={(e) => setSecretContent(e.target.value)}
-                      />
-                      <span className="text-[9.5px] text-slate-400 block py-0.5 font-semibold">
-                        {t('vault.clientSideEncNote', '🔒 Note: GeistDesk encrypts this client-side using ML-KEM post-quantum cryptographic parameters.')}
-                      </span>
-                    </div>
-
-                    {/* Expansion settings collapsible: password credentials, restrictions, etc. */}
-                    <div className="p-4 bg-slate-50 rounded-2xl space-y-3 border">
-                      <p className="text-[10.5px] font-bold text-slate-400 uppercase uppercase tracking-wider">{t('vault.advProtectionShields', 'Advanced Protection Shields')}</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                        <Input 
-                          placeholder={t('vault.passwordProtectionOpt', 'Password protection (Optional)')}
-                          value={passwordProtection}
-                          onChange={(e) => setPasswordProtection(e.target.value)}
-                          className="h-10 text-xs bg-white rounded-xl border-slate-200"
-                        />
-                        <Input 
-                          placeholder={t('vault.ipRangeOpt', 'IP Range Restriction (Optional)')}
-                          value={ipRestriction}
-                          onChange={(e) => setIpRestriction(e.target.value)}
-                          className="h-10 text-xs bg-white rounded-xl border-slate-200"
-                        />
-                        <div className="flex items-center gap-2 px-3 border border-slate-200 bg-white rounded-xl h-10 select-none">
-                          <input 
-                            type="checkbox" 
-                            id="mfaCheckbox"
-                            checked={mfaRequired}
-                            onChange={(e) => setMfaRequired(e.target.checked)}
-                            className="h-3.5 w-3.5 text-[#1A73E8] border-slate-200 rounded"
-                          />
-                          <label htmlFor="mfaCheckbox" className="text-[10px] font-bold text-slate-500 cursor-pointer">{t('vault.mfaAuthReq', 'MFA AUTH REQ')}</label>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Delivery & Linking options */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-100 pt-5">
-                      <div>
-                        <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest font-sans">{t('vault.corpAssignment', 'Corporate Assignment (Linking)')}</label>
-                        <select 
-                          value={deliveryOption}
-                          onChange={(e: any) => setDeliveryOption(e.target.value)}
-                          className="w-full h-11 px-4 mt-1.5 bg-[#F8F9FA] border border-slate-200 rounded-2xl text-xs font-bold cursor-pointer"
-                        >
-                          <option value="copy_link">{t('vault.copyLinkOnly', 'Simultaneous Copy link only (Transient)')}</option>
-                          <option value="send_email">{t('vault.sendEmail', 'External Email delivery dispatch')}</option>
-                          <option value="attach_ticket">{t('vault.attachTicket', 'Attach Directly on Support Ticket')}</option>
-                          <option value="attach_company">{t('vault.syncCompany', 'Sync with Company Profile record')}</option>
-                          <option value="attach_asset">{t('vault.anchorHardware', 'Anchor onto Client Hardware Asset')}</option>
-                        </select>
-                      </div>
-
-                      {/* Dynamic options based on deliveryOption */}
-                      <div className="flex flex-col justify-end">
-                        {deliveryOption === 'send_email' && (
-                          <Input 
-                            placeholder={t('vault.recipientEmailPlaceholder', 'Recipient email address (sarah@acme.com)')}
-                            value={targetRecipient}
-                            onChange={(e) => setTargetRecipient(e.target.value)}
-                            className="h-11 text-xs bg-[#F8F9FA] rounded-2xl border-slate-200"
-                          />
-                        )}
-                        {deliveryOption === 'attach_ticket' && (
-                          <select 
-                            value={targetTicketId}
-                            onChange={(e) => setTargetTicketId(e.target.value)}
-                            className="w-full h-11 px-4 bg-[#F8F9FA] border border-slate-200 rounded-2xl text-xs font-bold cursor-pointer"
-                          >
-                            <option value="">{t('vault.selectTicketLink', 'Select ticket to link...')}</option>
-                            {tickets.map(t => (
-                              <option key={t.id} value={t.id}>{t.subject ? `[TKT] ${t.subject.substring(0, 30)}...` : t.id}</option>
-                            ))}
-                          </select>
-                        )}
-                        {deliveryOption === 'attach_company' && (
-                          <select 
-                            value={targetCompanyId}
-                            onChange={(e) => setTargetCompanyId(e.target.value)}
-                            className="w-full h-11 px-4 bg-[#F8F9FA] border border-slate-200 rounded-2xl text-xs font-bold cursor-pointer"
-                          >
-                            <option value="">{t('vault.selectCompanyProfile', 'Select Company profile...')}</option>
-                            {companies.map(c => (
-                              <option key={c.id} value={c.id}>{c.name}</option>
-                            ))}
-                          </select>
-                        )}
-                        {deliveryOption === 'attach_asset' && (
-                          <select 
-                            value={targetAssetId}
-                            onChange={(e) => setTargetAssetId(e.target.value)}
-                            className="w-full h-11 px-4 bg-[#F8F9FA] border border-slate-200 rounded-2xl text-xs font-bold cursor-pointer"
-                          >
-                            <option value="">{t('vault.selectCorpHardware', 'Select Corporate Hardware...')}</option>
-                            <option value="firewall-99">{t('vault.firewallGate', 'Firewall Core Gateway')}</option>
-                            <option value="server-core-2">{t('vault.secureServer', 'Sichere Server-core-02')}</option>
-                            <option value="db-node-primary">{t('vault.targetDbPostgres', 'Target Postgres Database Master')}</option>
-                            <option value="vpn-routing">{t('vault.vpnRoutingGateway', 'VPN Routing Gateway')}</option>
-                            <option value="ssl-cert">{t('vault.sslHostCert', 'Host Wildcard SSL certificate')}</option>
-                          </select>
-                        )}
-                        {deliveryOption === 'copy_link' && (
-                          <p className="text-[10px] italic text-slate-400 text-center pb-2">{t('vault.linkGeneratedClient', 'The link is generated inside the client workspace interface immediately.')}</p>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Output and split actions */}
-                    {generatedLink && (
-                      <motion.div 
-                        initial={{ opacity: 0, y: 12 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="p-5 bg-emerald-50 border border-emerald-300 rounded-2xl space-y-3"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          <div className="min-w-0">
-                            <p className="text-[9px] font-black uppercase text-[#137333] tracking-widest">{t('vault.encryptedPqcLink', 'Encrypted post-quantum link generated')}</p>
-                            <p className="text-xs font-mono font-bold text-emerald-800 truncate select-all">{generatedLink}</p>
-                          </div>
-                          <Button 
-                            onClick={() => copyToClipboard(generatedLink)}
-                            className="bg-[#34A853] hover:bg-[#2e9449] text-white shrink-0 font-bold text-xs rounded-full h-9"
-                          >
-                            <Check className="w-4 h-4 mr-1" /> {t('vault.copySecureUrl', 'Copy Secure URL')}
-                          </Button>
-                        </div>
-                        {shares.length > 0 && (
-                          <div className="pt-2 border-t border-emerald-200 text-[10px] text-[#137333] flex flex-wrap gap-2 items-center">
-                            <ShieldCheck className="w-4 h-4 text-[#34A853]" /> 
-                            <span>{t('vault.shamirDivision', 'Shamir-Aufteilung (3/5-Schwellenwert):')}</span>
-                            <div className="flex gap-1">
-                              {shares.map((_, i) => (
-                                <span key={i} className="h-1.5 w-3 rounded-full bg-[#1A73E8]" title={`Share fragment #${i+1}`} />
-                              ))}
-                            </div>
-                            <span className="italic opacity-70">{t('vault.secretPiecesScattered', 'Secret pieces scattered globally to sovereign shards.')}</span>
-                          </div>
-                        )}
-                      </motion.div>
-                    )}
-
-                    <Button 
-                      className="w-full h-14 bg-[#1A73E8] hover:bg-[#1665cb] text-white rounded-2xl font-bold text-lg select-none uppercase tracking-wide flex items-center justify-center gap-2"
-                      onClick={handleGenerateSecret}
-                      disabled={isGenerating}
-                    >
-                      {isGenerating ? t('vault.pqcCryptoSplit', 'Post-Quantum cryptographic split splitting...') : t('vault.generatePqcLink', 'Generate PQC Shielded Link')}
-                      <Zap className="w-5 h-5 fill-current text-white animate-spin-slow" />
-                    </Button>
-
+                  <CardContent className="p-8">
+                    <ExchangeCreateSecretPanel
+                      tickets={tickets}
+                      companies={companies}
+                      isGenerating={isGenerating}
+                      generatedLink={generatedLink}
+                      shares={shares}
+                      onGenerate={handleGenerateSecret}
+                      onCopyLink={copyToClipboard}
+                    />
                   </CardContent>
                 </Card>
                 <ExchangeActiveTable items={secretItems} {...exchangeTableProps} />
