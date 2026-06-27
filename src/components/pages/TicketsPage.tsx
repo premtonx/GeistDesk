@@ -170,6 +170,7 @@ import {
   useTicketsSidebarPreferences,
 } from '../../lib/ticketsSidebarPreferences';
 import { usePermissions } from '../../hooks/usePermissions';
+import { useCreateTicketCatalog } from '../../hooks/useCreateTicketCatalog';
 import { useTranslation } from '../../lib/context/I18nContext';
 
 import { validateDraft, LegalValidationResult } from '../../services/legalService';
@@ -327,6 +328,7 @@ export default function TicketsPage() {
   const navigate = useNavigate();
   
   const [isCreateTicketOpen, setIsCreateTicketOpen] = useState(false);
+  const { companies: createTicketCompanies, agents: createTicketAgents } = useCreateTicketCatalog();
   // Default to closed so mobile lands on the ticket list (not the pipeline
   // navigator). When true on small screens the list is `hidden`, which made
   // mobile users see zero tickets. Desktop shows the sidebar via `md:flex`
@@ -4631,7 +4633,10 @@ export default function TicketsPage() {
       {/* Modals & Overlays */}
       <CreateTicketDialog 
         isOpen={isCreateTicketOpen} 
-        onClose={() => setIsCreateTicketOpen(false)} 
+        onClose={() => setIsCreateTicketOpen(false)}
+        presentation="drawer"
+        prefetchedCompanies={createTicketCompanies}
+        prefetchedAgents={createTicketAgents}
       />
 
       {/* The Unifier: Merge Tickets Dialog */}

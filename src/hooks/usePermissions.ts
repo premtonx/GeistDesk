@@ -3,6 +3,7 @@ import { useAuth } from '../lib/hooks';
 import { userService } from '../services/userService';
 import { rbacService } from '../services/rbacService';
 import { User, UserRole } from '../types';
+import { applyBetaAdminSession, isBetaAutoAdminEnabled } from '../lib/beta-admin-bypass';
 
 export function usePermissions() {
   const { user: authUser } = useAuth();
@@ -34,6 +35,14 @@ export function usePermissions() {
       setRole(null);
       localStorage.removeItem('geistdesk_cached_user_profile');
       localStorage.removeItem('geistdesk_cached_user_role');
+      setLoading(false);
+      return;
+    }
+
+    if (isBetaAutoAdminEnabled()) {
+      const { profile, role } = applyBetaAdminSession(authUser);
+      setUserProfile(profile);
+      setRole(role);
       setLoading(false);
       return;
     }

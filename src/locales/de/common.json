@@ -1922,7 +1922,8 @@
     "slaBasedOnPriorityPre": "Basierend auf der Priorität",
     "slaBasedOnPriorityPost": ".",
     "press": "Drücken Sie",
-    "toSaveAndPublish": "zum Speichern und Veröffentlichen"
+    "toSaveAndPublish": "zum Speichern und Veröffentlichen",
+    "loadingEditor": "Editor wird geladen..."
   },
   "integrations": {
     "persisted": "Integrations-Einstellungen gespeichert.",

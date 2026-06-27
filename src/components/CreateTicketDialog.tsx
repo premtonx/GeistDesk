@@ -1,12 +1,12 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useState, type FormEvent } from 'react';
 import { 
   Dialog, 
   DialogContent, 
-  DialogHeader, 
-  DialogTitle, 
-  DialogDescription, 
-  DialogFooter 
 } from './ui/dialog';
+import {
+  Sheet,
+  SheetContent,
+} from './ui/sheet';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Textarea } from './ui/textarea';
@@ -25,7 +25,9 @@ import { ticketService } from '../services/ticketService';
 import { useAuth } from '../lib/hooks';
 import { toast } from 'sonner';
 import { logAudit } from '../services/auditService';
-import { RichTextEditor } from './RichTextEditor';
+const RichTextEditor = lazy(() =>
+  import('./RichTextEditor').then((m) => ({ default: m.RichTextEditor }))
+);
 import { 
   Plus, 
   X, 
@@ -40,7 +42,7 @@ import {
   AlertCircle,
   FileText,
   Mail,
-  User,
+  User as UserIcon,
   Users,
   Flag,
   HelpCircle,
@@ -51,16 +53,28 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../lib/utils';
 import { customerService } from '../services/customerService';
-import { Company, Contact } from '../types';
+import { Company, Contact, User } from '../types';
 import { useTranslation } from '../lib/context/I18nContext';
 import { useWorkspace } from '../lib/context/WorkspaceContext';
 
 interface CreateTicketDialogProps {
   isOpen: boolean;
   onClose: () => void;
+  presentation?: 'dialog' | 'drawer';
+  prefetchedCompanies?: Company[];
+  prefetchedAgents?: User[];
 }
 
-export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps) {
+const SHELL_CLASS =
+  'w-full h-full max-w-full max-h-screen sm:max-w-[1100px] sm:max-h-[95vh] rounded-none sm:rounded-xl flex flex-col p-0 overflow-hidden bg-[#F8F9FB] border-none shadow-2xl';
+
+export function CreateTicketDialog({
+  isOpen,
+  onClose,
+  presentation = 'dialog',
+  prefetchedCompanies,
+  prefetchedAgents,
+}: CreateTicketDialogProps) {
   const { t, language } = useTranslation();
   const { workspace } = useWorkspace();
   const { user } = useAuth();
@@ -69,7 +83,8 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
   const [isAdditionalDetailsOpen, setIsAdditionalDetailsOpen] = useState(true);
   const [tagInput, setTagInput] = useState('');
   
-  const [companies, setCompanies] = useState<Company[]>([]);
+  const [companies, setCompanies] = useState<Company[]>(prefetchedCompanies ?? []);
+  const [agents, setAgents] = useState<User[]>(prefetchedAgents ?? []);
   const [contacts, setContacts] = useState<Contact[]>([]);
   
   const [formData, setFormData] = useState({
@@ -107,8 +122,18 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
   }, [isOpen, workspace]);
 
   useEffect(() => {
+    if (prefetchedCompanies) {
+      setCompanies(prefetchedCompanies);
+      return;
+    }
     return customerService.subscribeToCompanies(setCompanies);
-  }, []);
+  }, [prefetchedCompanies]);
+
+  useEffect(() => {
+    if (prefetchedAgents) {
+      setAgents(prefetchedAgents);
+    }
+  }, [prefetchedAgents]);
 
   useEffect(() => {
     if (formData.companyId) {
@@ -158,6 +183,17 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
       hours: resolutionHours
     };
   }, [formData.priority]);
+
+  const assigneeLabel = useMemo(() => {
+    if (formData.assignee === 'unassigned') {
+      return t('dialog.unassigned', 'Unassigned');
+    }
+    if (user?.uid && formData.assignee === user.uid) {
+      return t('dialog.assignToMe', 'Assign to me');
+    }
+    const agent = agents.find((a) => a.id === formData.assignee);
+    return agent?.name || formData.assignee;
+  }, [agents, formData.assignee, t, user?.uid]);
 
   const handleAddTag = (tag: string) => {
     const cleanTag = tag.trim().replace(/^#/, '');
@@ -216,9 +252,12 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
     }
   };
 
-  return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="w-full h-full max-w-full max-h-screen sm:max-w-[1100px] sm:max-h-[95vh] rounded-none sm:rounded-xl flex flex-col p-0 overflow-hidden bg-[#F8F9FB] border-none shadow-2xl">
+  const handleOpenChange = (open: boolean) => {
+    if (!open) onClose();
+  };
+
+  const content = (
+    <>
         {/* Header */}
         <div className="px-4 sm:px-8 py-4 sm:py-5 shrink-0 flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b bg-white">
           <div className="flex items-center gap-3 sm:gap-5">
@@ -298,7 +337,7 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
                             >
                                 <SelectTrigger className="w-full h-12 border-slate-200 bg-white rounded-xl text-sm placeholder:text-slate-300 focus:ring-2 focus:ring-blue-100 focus:border-blue-400">
                                    <div className="flex items-center gap-2">
-                                      <User className="w-4 h-4 text-slate-300" />
+                                      <UserIcon className="w-4 h-4 text-slate-300" />
                                       <SelectValue placeholder={formData.companyId ? t('dialog.selectEmployee', 'Select employee...') : t('dialog.selectCompanyFirst', 'Select company first')} />
                                    </div>
                                 </SelectTrigger>
@@ -331,12 +370,25 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
                                 <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
                              </div>
                         </div>
-                        <RichTextEditor 
-                            value={formData.description}
-                            onChange={(v) => setFormData({...formData, description: v})}
-                            placeholder={t('dialog.descriptionPlaceholder', 'Add details, context, steps tried, expected outcome, etc.')}
-                            className="border-none shadow-none focus-within:ring-0 min-h-[220px]"
-                        />
+                        {isOpen ? (
+                          <Suspense
+                            fallback={
+                              <div className="min-h-[220px] flex items-center justify-center text-sm text-slate-400">
+                                {t('dialog.loadingEditor', 'Loading editor...')}
+                              </div>
+                            }
+                          >
+                            <RichTextEditor
+                              value={formData.description}
+                              onChange={(v) => setFormData({ ...formData, description: v })}
+                              placeholder={t(
+                                'dialog.descriptionPlaceholder',
+                                'Add details, context, steps tried, expected outcome, etc.'
+                              )}
+                              className="border-none shadow-none focus-within:ring-0 min-h-[220px]"
+                            />
+                          </Suspense>
+                        ) : null}
                     </div>
                     <p className="text-[11px] text-slate-400 font-medium italic ml-1">{t('dialog.descriptionTip', 'Tip: Include relevant details to help us resolve this faster.')}</p>
                 </div>
@@ -534,13 +586,20 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
                     <Select value={formData.assignee} onValueChange={(v) => setFormData({...formData, assignee: v})}>
                         <SelectTrigger className="w-full h-11 border-slate-100 rounded-xl bg-[#F9FAFB] hover:bg-slate-50 transition-colors">
                              <div className="flex items-center gap-3">
-                                <User className="w-4.5 h-4.5 text-slate-400" />
-                                <span className="capitalize text-sm font-semibold text-[#374151]">{formData.assignee === 'unassigned' ? t('dialog.unassigned', 'Unassigned') : t('dialog.assignToMe', 'Assign to me')}</span>
+                                <UserIcon className="w-4.5 h-4.5 text-slate-400" />
+                                <span className="capitalize text-sm font-semibold text-[#374151]">{assigneeLabel}</span>
                             </div>
                         </SelectTrigger>
                         <SelectContent className="rounded-xl">
                             <SelectItem value="unassigned">{t('dialog.unassigned', 'Unassigned')}</SelectItem>
-                            <SelectItem value={user?.uid || 'me'}>{t('dialog.assignToMe', 'Assign to me')}</SelectItem>
+                            {user?.uid ? (
+                              <SelectItem value={user.uid}>{t('dialog.assignToMe', 'Assign to me')}</SelectItem>
+                            ) : null}
+                            {agents.map((agent) => (
+                              <SelectItem key={agent.id} value={agent.id}>
+                                {agent.name}
+                              </SelectItem>
+                            ))}
                         </SelectContent>
                     </Select>
                 </div>
@@ -619,6 +678,27 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
               <Button onClick={handleSubmit} disabled={loading} className="text-[13px] font-bold bg-[#3B82F6] hover:bg-blue-600 text-white rounded-lg px-9 h-11 shadow-lg shadow-blue-500/25 transition-all active:scale-[0.98]">{t('dialog.publishTicket', 'Publish ticket')}</Button>
            </div>
         </div>
+    </>
+  );
+
+  if (presentation === 'drawer') {
+    return (
+      <Sheet open={isOpen} onOpenChange={handleOpenChange}>
+        <SheetContent
+          side="right"
+          showCloseButton={false}
+          className={`${SHELL_CLASS} w-[1100px] sm:max-w-[1100px]`}
+        >
+          {content}
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  return (
+    <Dialog open={isOpen} onOpenChange={handleOpenChange}>
+      <DialogContent className={SHELL_CLASS}>
+        {content}
       </DialogContent>
     </Dialog>
   );

@@ -12,6 +12,7 @@ import {
 import { getModuleConfig } from './module-config';
 import { userService } from '../services/userService';
 import { applySessionAuthHeader } from './session-auth';
+import { applyBetaAdminSession, isBetaAutoAdminEnabled } from './beta-admin-bypass';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -31,6 +32,9 @@ export function useAuth() {
           return;
         }
         applySessionAuthHeader();
+        if (isBetaAutoAdminEnabled()) {
+          applyBetaAdminSession(u);
+        }
         userService.syncProfile(u);
       } else {
         applySessionAuthHeader();
@@ -48,6 +52,12 @@ export function useAdmin() {
 
   useEffect(() => {
     async function checkAdmin() {
+      if (isBetaAutoAdminEnabled() && user) {
+        setIsAdmin(true);
+        setChecking(false);
+        return;
+      }
+
       // Priority 1: Check Local Debug Mode for testing
       const config = getModuleConfig();
       if (config.debugAdminMode) {
