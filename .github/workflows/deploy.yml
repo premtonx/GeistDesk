@@ -63,23 +63,26 @@ jobs:
     name: Deploy to production
     needs: validate-build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Execute Remote SSH Deployment Loop
         uses: appleboy/ssh-action@v1.0.3
         env:
           BUILD_ID: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: sovereign
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          envs: BUILD_ID
+          envs: BUILD_ID,GITHUB_TOKEN
           script: |
             set -euo pipefail
 
             cd ~/GeistDesk
-            git fetch origin main
-            git reset --hard origin/main
+            git fetch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/premtonx/GeistDesk.git main
+            git reset --hard FETCH_HEAD
 
             DEPLOY_COMMIT="$(git rev-parse HEAD)"
             export BUILD_ID="${BUILD_ID:-$DEPLOY_COMMIT}"
