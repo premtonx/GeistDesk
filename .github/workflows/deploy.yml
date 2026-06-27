@@ -4,27 +4,132 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+
+concurrency:
+  group: geistdesk-production-deploy
+  cancel-in-progress: true
 
 jobs:
-  deploy:
+  validate-build:
+    name: Strict build gate
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Code Baseline
         uses: actions/checkout@v4
 
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci
+
+      - name: TypeScript compile gate
+        run: npm run lint
+
+      - name: Reject unsafe React namespace usage
+        run: node scripts/verify-no-react-namespace.mjs
+
+      - name: Strict production build
+        env:
+          BUILD_ID: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          npm run build 2>&1 | tee build.log
+
+          if grep -E '(^✗|error during build|Build failed|SyntaxError|ReferenceError: React|TS[0-9]{4}:)' build.log; then
+            echo "::error::Production build reported fatal errors — deployment blocked."
+            exit 1
+          fi
+
+          if grep -Ei '\[plugin vite:esbuild\].*\berror\b' build.log; then
+            echo "::error::Vite esbuild plugin reported errors — deployment blocked."
+            exit 1
+          fi
+
+          node scripts/verify-production-build.mjs
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-dist-${{ github.sha }}
+          path: dist/
+          retention-days: 14
+
+  deploy:
+    name: Deploy to production
+    needs: validate-build
+    runs-on: ubuntu-latest
+    steps:
       - name: Execute Remote SSH Deployment Loop
         uses: appleboy/ssh-action@v1.0.3
+        env:
+          BUILD_ID: ${{ github.sha }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: sovereign
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
+          envs: BUILD_ID,CLOUDFLARE_API_TOKEN,CLOUDFLARE_ZONE_ID
           script: |
+            set -euo pipefail
+
             cd ~/GeistDesk
             git fetch origin main
             git reset --hard origin/main
-            docker compose up -d --build
-            # Give Postgres + the gateway a moment to become ready, then seed.
-            # Idempotent upsert: safe to run on every deploy.
+
+            DEPLOY_COMMIT="$(git rev-parse HEAD)"
+            export BUILD_ID="${BUILD_ID:-$DEPLOY_COMMIT}"
+
+            echo "=== GeistDesk deploy @ ${DEPLOY_COMMIT} (BUILD_ID=${BUILD_ID}) ==="
+
+            # Prevent stale host-side artifacts from being copied into Docker layers.
+            rm -rf dist .vite node_modules/.vite || true
+
+            docker compose build --no-cache --pull \
+              --build-arg BUILD_ID="${BUILD_ID}" \
+              geistdesk-gateway
+
+            docker compose up -d geistdesk-gateway
+
+            echo "Waiting for gateway health..."
             sleep 15
+
+            BUNDLE="$(docker compose exec -T geistdesk-gateway sh -c "grep -oE 'index-[^\"]+\.js' dist/index.html | head -1")"
+            echo "Active bundle inside container: ${BUNDLE}"
+
+            if [ -z "${BUNDLE}" ]; then
+              echo "FATAL: Could not detect bundle hash in dist/index.html"
+              exit 1
+            fi
+
+            if [ "${BUNDLE}" = "index-PNcfVvbc.js" ]; then
+              echo "FATAL: Legacy broken bundle still deployed after forced rebuild"
+              exit 1
+            fi
+
             docker compose exec -T geistdesk-gateway node dist/seed.cjs
+
+            if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ZONE_ID:-}" ]; then
+              echo "Purging Cloudflare CDN cache..."
+              PURGE_RESPONSE="$(curl -sS -X POST \
+                "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
+                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+                -H "Content-Type: application/json" \
+                --data '{"purge_everything":true}')"
+              echo "${PURGE_RESPONSE}"
+              echo "${PURGE_RESPONSE}" | grep -q '"success":true' || {
+                echo "FATAL: Cloudflare CDN purge failed"
+                exit 1
+              }
+              echo "Cloudflare CDN cache purged."
+            else
+              echo "WARN: Set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ZONE_ID repo secrets to enable CDN purge."
+            fi
+
+            echo "=== Deploy success: ${BUNDLE} @ ${DEPLOY_COMMIT} ==="

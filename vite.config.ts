@@ -7,6 +7,7 @@ import topLevelAwait from "vite-plugin-top-level-await";
 
 export default defineConfig(({mode}) => {
   const env = loadEnv(mode, '.', '');
+  const buildStamp = process.env.BUILD_ID || Date.now().toString(36);
   return {
     base: '/',
     plugins: [
@@ -17,8 +18,19 @@ export default defineConfig(({mode}) => {
     ],
     define: {
       'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
+      __BUILD_ID__: JSON.stringify(buildStamp),
       global: 'globalThis',
       'localStorage': 'window.safeLocalStorage',
+    },
+    build: {
+      emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          entryFileNames: `assets/[name]-[hash]-${buildStamp.slice(0, 12)}.js`,
+          chunkFileNames: `assets/[name]-[hash]-${buildStamp.slice(0, 12)}.js`,
+          assetFileNames: `assets/[name]-[hash]-${buildStamp.slice(0, 12)}[extname]`,
+        },
+      },
     },
     resolve: {
       alias: {

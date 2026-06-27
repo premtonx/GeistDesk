@@ -3,7 +3,10 @@ version: '3.8'
 services:
   # The Core App / Gateway
   geistdesk-gateway:
-    build: .
+    build:
+      context: .
+      args:
+        BUILD_ID: ${BUILD_ID:-local}
     container_name: geistdesk-sovereign-gate
     depends_on:
       - geistdesk-db
