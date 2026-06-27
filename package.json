@@ -4,6 +4,9 @@
   "type": "module",
   "description": "Enterprise sovereign AI Orchestrator with detachable AI engines supporting local Ollama models and cloud services.",
   "main": "server.ts",
+  "engines": {
+    "node": ">=20.0.0"
+  },
   "dependencies": {
     "@azure/identity": "^4.5.0",
     "@azure/openai": "^2.0.0-beta.1",
