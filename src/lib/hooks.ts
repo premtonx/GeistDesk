@@ -1,28 +1,39 @@
 import { useState, useEffect } from 'react';
-import { auth, db } from './firebase';
-import { onAuthStateChanged, User, signOut, getSessionToken } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
+import {
+  auth,
+  db,
+  onAuthStateChanged,
+  getSessionToken,
+  signOut,
+  doc,
+  getDoc,
+  type User,
+} from './firebase';
 import { getModuleConfig } from './module-config';
 import { userService } from '../services/userService';
-import axios from 'axios';
+import { applySessionAuthHeader } from './session-auth';
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    applySessionAuthHeader();
+
     return onAuthStateChanged(auth, (u) => {
       setUser(u);
       setLoading(false);
       if (u) {
-        // Authenticate downstream requests with the signed session token only.
         const token = getSessionToken();
-        if (token) {
-          axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
+        if (!token) {
+          console.warn('[useAuth] Authenticated user without session token; clearing stale session');
+          signOut(auth);
+          return;
         }
+        applySessionAuthHeader();
         userService.syncProfile(u);
       } else {
-        delete axios.defaults.headers.common['Authorization'];
+        applySessionAuthHeader();
       }
     });
   }, []);

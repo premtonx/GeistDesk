@@ -432,7 +432,7 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
     const saved = await upsertOrchestratorConfig(
       {
         workspaceId,
-        scope: payload.scope === "personal" ? "workspace" : payload.scope,
+        scope: (payload.scope as string) === "personal" ? "workspace" : payload.scope,
         primaryModel: payload.primaryModel,
         reasoningModel: payload.reasoningModel,
         triageModel: payload.triageModel,

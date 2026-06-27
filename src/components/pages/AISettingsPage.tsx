@@ -32,6 +32,7 @@ import {
   Power,
   RotateCcw,
   Ban,
+  Loader2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';

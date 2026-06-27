@@ -17,7 +17,7 @@ export interface LegalValidationResult {
 export async function validateDraft(draftContent: string, ticketId?: string): Promise<LegalValidationResult> {
   const moduleConfig = getModuleConfig();
   const policyText = moduleConfig.legalPolicy;
-  const ai = getCachedLegacyAiConfig();
+  const aiConfig = getCachedLegacyAiConfig();
 
   if (!policyText) return { isValid: true };
 
@@ -36,16 +36,16 @@ Company Policy & Guardrails:
 
   try {
     let result: LegalValidationResult = { isValid: true };
-    const isGoogle = ai.sentimentModel === 'gemini-flash';
+    const isGoogle = aiConfig.sentimentModel === 'gemini-flash';
 
     if (isGoogle) {
-      const apiKey = ai.apiKey || process.env.GEMINI_API_KEY || "";
+      const apiKey = aiConfig.apiKey || process.env.GEMINI_API_KEY || "";
       if (!apiKey) {
         console.warn("Legal validation skipped: Gemini API key not set");
         return { isValid: true };
       }
-      const ai = new GoogleGenAI({ apiKey });
-      const response = await ai.models.generateContent({
+      const genAI = new GoogleGenAI({ apiKey });
+      const response = await genAI.models.generateContent({
         model: "gemini-3-flash-preview",
         contents: prompt,
         config: {
@@ -64,16 +64,16 @@ Company Policy & Guardrails:
       });
       result = JSON.parse(response.text) as LegalValidationResult;
     } else {
-      const endpoint = ai.localEndpoint || "http://localhost:11434/v1";
-      const modelName = ai.sentimentModel === 'custom-local'
-        ? (ai.customSentimentModelName || "gemma")
-        : (ai.sentimentModel === 'local-gemma' ? "gemma" : "llama3");
+      const endpoint = aiConfig.localEndpoint || "http://localhost:11434/v1";
+      const modelName = aiConfig.sentimentModel === 'custom-local'
+        ? (aiConfig.customSentimentModelName || "gemma")
+        : (aiConfig.sentimentModel === 'local-gemma' ? "gemma" : "llama3");
 
       const response = await fetch(`${endpoint}/chat/completions`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${ai.customApiKey || "ollama"}`
+          "Authorization": `Bearer ${aiConfig.customApiKey || "ollama"}`
         },
         body: JSON.stringify({
           model: modelName,
