@@ -68,14 +68,12 @@ jobs:
         uses: appleboy/ssh-action@v1.0.3
         env:
           BUILD_ID: ${{ github.sha }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
         with:
           host: ${{ secrets.SSH_HOST }}
           username: sovereign
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
-          envs: BUILD_ID,CLOUDFLARE_API_TOKEN,CLOUDFLARE_ZONE_ID
+          envs: BUILD_ID
           script: |
             set -euo pipefail
 
@@ -115,21 +113,5 @@ jobs:
 
             docker compose exec -T geistdesk-gateway node dist/seed.cjs
 
-            if [ -n "${CLOUDFLARE_API_TOKEN:-}" ] && [ -n "${CLOUDFLARE_ZONE_ID:-}" ]; then
-              echo "Purging Cloudflare CDN cache..."
-              PURGE_RESPONSE="$(curl -sS -X POST \
-                "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/purge_cache" \
-                -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
-                -H "Content-Type: application/json" \
-                --data '{"purge_everything":true}')"
-              echo "${PURGE_RESPONSE}"
-              echo "${PURGE_RESPONSE}" | grep -q '"success":true' || {
-                echo "FATAL: Cloudflare CDN purge failed"
-                exit 1
-              }
-              echo "Cloudflare CDN cache purged."
-            else
-              echo "WARN: Set CLOUDFLARE_API_TOKEN + CLOUDFLARE_ZONE_ID repo secrets to enable CDN purge."
-            fi
-
             echo "=== Deploy success: ${BUNDLE} @ ${DEPLOY_COMMIT} ==="
+            echo "Cache busting: Docker --no-cache rebuild + hashed assets + Cache-Control: no-store on index.html"
