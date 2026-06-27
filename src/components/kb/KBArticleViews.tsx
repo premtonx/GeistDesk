@@ -15,7 +15,7 @@ import {
   qualityBarClass,
   kbPanelClass,
 } from './kb-utils';
-import { KB_LIST_GRID, KB_LIST_HEADER_CELL } from './kbListLayout';
+import { KB_LIST_GRID, KB_LIST_HEADER_CELL, KB_LIST_CELL } from './kbListLayout';
 import type { KBArticleViewMode } from './KBViewModeSelector';
 import type { KBArticleItem } from './KBFeaturedArticles';
 import type { KBCategoryRecord } from './kbCategoryUtils';
@@ -164,8 +164,8 @@ function ListView({
   const { t } = useTranslation();
 
   return (
-    <div className={kbPanelClass()}>
-      <div className={cn('hidden md:grid px-4 py-2 border-b border-slate-100 bg-slate-50/80 items-center', KB_LIST_GRID, '[grid-template-columns:2rem_1fr_repeat(4,minmax(0,1fr))]')}>
+    <div className={cn(kbPanelClass(), 'w-full')}>
+      <div className={cn('hidden md:grid px-4 py-2 border-b border-slate-100 bg-slate-50/80', KB_LIST_GRID)}>
         <Checkbox checked={allSelected} onCheckedChange={onToggleSelectAll} aria-label={t('kb.bulk.selectAll', 'Select all')} />
         <span className={KB_LIST_HEADER_CELL}>{t('kb.table.title', 'Title')}</span>
         <span className={KB_LIST_HEADER_CELL}>{t('kb.table.category', 'Category')}</span>
@@ -173,18 +173,17 @@ function ListView({
         <span className={KB_LIST_HEADER_CELL}>{t('kb.table.metadataOwner', 'Owner')}</span>
         <span className={cn(KB_LIST_HEADER_CELL, 'text-right')}>{t('kb.table.views', 'Views')}</span>
       </div>
-      <div className="divide-y divide-slate-100">
+      <div className="divide-y divide-slate-100 w-full">
         {articles.map((art) => (
           <div
             key={art.id}
             className={cn(
-              'grid px-4 py-2 hover:bg-slate-50/60 cursor-pointer group items-center',
+              'px-4 py-2 hover:bg-slate-50/60 cursor-pointer group',
               KB_LIST_GRID,
-              '[grid-template-columns:2rem_1fr_repeat(4,minmax(0,1fr))]',
               selectedIds.has(art.id) && 'bg-blue-50/40',
             )}
           >
-            <div onClick={(e) => e.stopPropagation()}>
+            <div className={KB_LIST_CELL} onClick={(e) => e.stopPropagation()}>
               <Checkbox
                 checked={selectedIds.has(art.id)}
                 onCheckedChange={() => onToggleSelect(art.id)}
@@ -192,22 +191,24 @@ function ListView({
               />
             </div>
             <p
-              className="text-xs font-semibold text-slate-900 truncate group-hover:text-blue-600"
+              className={cn(KB_LIST_CELL, 'text-xs font-semibold text-slate-900 truncate group-hover:text-blue-600')}
               onClick={() => onSelect(art)}
             >
               {art.title}
             </p>
-            <CategoryLabel art={art} categories={categories} />
-            <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-lg border w-fit', getStatusBadgeClass(art.status))}>
+            <div className={cn(KB_LIST_CELL, 'justify-self-start')}>
+              <CategoryLabel art={art} categories={categories} />
+            </div>
+            <span className={cn(KB_LIST_CELL, 'justify-self-start text-[10px] font-semibold px-2 py-0.5 rounded-lg border w-fit', getStatusBadgeClass(art.status))}>
               {t(statusLabelKey(art.status), art.status ?? 'Draft')}
             </span>
-            <span className="inline-flex items-center gap-1.5 min-w-0">
+            <span className={cn(KB_LIST_CELL, 'inline-flex items-center gap-1.5')}>
               <Avatar className="h-5 w-5 border border-slate-200 shrink-0">
                 <AvatarFallback className="text-[8px] bg-slate-100 font-bold">{art.owner?.charAt(0) ?? '?'}</AvatarFallback>
               </Avatar>
               <span className="text-[11px] text-slate-600 truncate">{art.owner ?? '—'}</span>
             </span>
-            <span className="text-[11px] font-medium tabular-nums text-slate-600 text-right">{art.views ?? 0}</span>
+            <span className={cn(KB_LIST_CELL, 'text-[11px] font-medium tabular-nums text-slate-600 text-right')}>{art.views ?? 0}</span>
           </div>
         ))}
       </div>
