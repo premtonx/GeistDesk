@@ -980,9 +980,9 @@ export default function CredentialVaultPage() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#FAFBFC] overflow-hidden relative">
+    <div className="flex flex-col flex-1 min-h-0 bg-[#FAFBFC] relative">
       {vaultViewMode !== 'vault' ? (
-        <div className="flex flex-col flex-1 min-h-0">
+        <div className="flex flex-col flex-1 min-h-0 overflow-y-auto">
           <div className="px-6 py-3 border-b border-slate-200/80 bg-white flex items-center justify-between shrink-0">
             <VaultPageHeader />
             <Button type="button" variant="ghost" size="sm" onClick={() => setVaultViewMode('vault')} className="h-9 gap-1.5 text-xs font-medium">
@@ -990,13 +990,13 @@ export default function CredentialVaultPage() {
               {t('vault.backToVault', 'Back to Vault')}
             </Button>
           </div>
-          <div className="flex-1 overflow-y-auto p-6">
+          <div className="p-6">
             {vaultViewMode === 'security' && <GeistVaultAIAssistant credentialsList={nonDeletedItems as any} />}
             {vaultViewMode === 'emergency' && <GeistVaultEmergency />}
           </div>
         </div>
       ) : (
-        <div className="flex flex-1 min-h-0 w-full">
+        <div className="flex flex-1 min-h-0 w-full overflow-y-auto">
           <VaultLeftSidebar
             activeVaultId={activeVaultId}
             onVaultChange={(id) => { setActiveVaultId(id); setSmartFilter(null); }}
@@ -1009,7 +1009,7 @@ export default function CredentialVaultPage() {
             smartCounts={smartCounts}
           />
 
-          <main className="flex-1 min-w-0 w-full overflow-y-auto">
+          <main className="flex-1 min-w-0 w-full">
             <div className="p-6 space-y-5 w-full min-w-0">
               <div className="flex items-start justify-between gap-4">
                 <VaultPageHeader />
@@ -1020,6 +1020,7 @@ export default function CredentialVaultPage() {
                   <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl text-xs" onClick={() => setVaultViewMode('emergency')}>
                     {t('vault.breakGlass', 'Break Glass Emergency')}
                   </Button>
+                  <VaultFabMenu onNewAsset={openNewAsset} onImport={handleImportDummyData} />
                 </div>
               </div>
 
@@ -1079,10 +1080,6 @@ export default function CredentialVaultPage() {
           />
         </div>
       )}
-
-      {vaultViewMode === 'vault' ? (
-        <VaultFabMenu onNewAsset={openNewAsset} onImport={handleImportDummyData} />
-      ) : null}
 
       {/* Slide drawer for secrets diagnostics detail information */}
       <AnimatePresence>
