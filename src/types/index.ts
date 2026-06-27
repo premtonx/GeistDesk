@@ -291,10 +291,13 @@ export interface VaultItem {
   content?: string; // Encrypted for secrets
   shares?: string[]; // SSS shares if used
   expiresAt: any;
-  expirationType: 'read' | 'time';
+  expirationType: 'read' | 'time' | 'quota';
+  maxViews?: number;
+  viewCount?: number;
   isBurned: boolean;
   createdBy: string;
   createdAt: any;
+  passphraseRequired?: boolean;
   metadata?: {
     isQuantumSafe?: boolean;
     pqcLevel?: number;
@@ -313,6 +316,17 @@ export interface VaultItem {
     virusScan?: boolean;
     malwareScan?: boolean;
     retentionPolicy?: string;
+    maxViews?: number;
+    expirationPreset?: string;
+    shareViaEmail?: boolean;
+    recipientEmails?: string[];
+    notifyOnView?: boolean;
+    ipRestrictionEnabled?: boolean;
+    ipAllowlist?: string;
+    passphraseEnabled?: boolean;
+    domainWhitelistEnabled?: boolean;
+    allowedEmailDomains?: string[];
+    mfaRequired?: boolean;
   };
 }
 

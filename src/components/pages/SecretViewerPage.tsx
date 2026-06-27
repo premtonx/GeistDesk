@@ -1,19 +1,19 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { vaultService } from '../../services/vaultService';
 import { VaultItem } from '../../types';
 import { isDemoExchangeId } from '../../components/exchange/exchange-status-utils';
-import { 
-  ShieldCheck, 
-  Lock, 
-  Trash2, 
-  Copy, 
-  Check, 
+import {
+  ShieldCheck,
+  Lock,
+  Trash2,
+  Copy,
+  Check,
   ShieldAlert,
   Clock,
   Zap,
   ArrowRight,
-  Upload
+  Upload,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -21,20 +21,31 @@ import { Badge } from '../ui/badge';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { combine } from 'shamir-secret-sharing';
+import { useTranslation } from '../../lib/context/I18nContext';
 
 export default function SecretViewerPage() {
   const { id } = useParams<{ id: string }>();
+  const { t } = useTranslation();
   const [item, setItem] = useState<VaultItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [viewed, setViewed] = useState(false);
   const [copying, setCopying] = useState(false);
   const [reconstructedContent, setReconstructedContent] = useState<string | null>(null);
+  const [passphrase, setPassphrase] = useState('');
+  const [viewerEmail, setViewerEmail] = useState('');
+  const [revealing, setRevealing] = useState(false);
 
   useEffect(() => {
     if (id) {
-      loadItem();
+      void loadItem();
     }
   }, [id]);
+
+  const viewsRemaining = useMemo(() => {
+    if (!item?.maxViews) return null;
+    const used = item.viewCount ?? 0;
+    return Math.max(0, item.maxViews - used);
+  }, [item]);
 
   const loadItem = async () => {
     setLoading(true);
@@ -49,15 +60,29 @@ export default function SecretViewerPage() {
   };
 
   const handleReveal = async () => {
-    if (!item || item.isBurned) return;
+    if (!item || item.isBurned || revealing) return;
 
+    if (item.passphraseRequired && !passphrase.trim()) {
+      toast.error(t('exchange.createSecret.viewer.passphraseRequired', 'Enter the additional passphrase to continue.'));
+      return;
+    }
+    if (item.metadata?.domainWhitelistEnabled && !viewerEmail.trim()) {
+      toast.error(t('exchange.createSecret.viewer.emailRequired', 'Enter your corporate email address to continue.'));
+      return;
+    }
+
+    setRevealing(true);
     setViewed(true);
 
-    // Fetch decrypted material from the server exactly once. Read-once secrets
-    // are burned server-side as part of this call.
-    const revealed = await vaultService.revealItem(item.id);
+    const revealed = await vaultService.revealItem(item.id, {
+      passphrase: passphrase.trim() || undefined,
+      viewerEmail: viewerEmail.trim() || undefined,
+    });
+
+    setRevealing(false);
+
     if (!revealed || revealed.preview) {
-      toast.error("This secret has already been burned or has expired.");
+      toast.error(t('exchange.createSecret.viewer.expired', 'This secret has already been burned or has expired.'));
       setItem({ ...item, isBurned: true });
       return;
     }
@@ -66,7 +91,7 @@ export default function SecretViewerPage() {
       setReconstructedContent(revealed.content);
     } else if (revealed.shares && revealed.shares.length > 0) {
       try {
-        const uint8Shares = revealed.shares.slice(0, 3).map(shareB64 => {
+        const uint8Shares = revealed.shares.slice(0, 3).map((shareB64) => {
           const binary = atob(shareB64);
           const bytes = new Uint8Array(binary.length);
           for (let i = 0; i < binary.length; i++) {
@@ -79,11 +104,27 @@ export default function SecretViewerPage() {
         const decoded = new TextDecoder().decode(combinedUint8);
         setReconstructedContent(decoded);
       } catch (err) {
-        console.error("SSS Reconstruction Failed:", err);
+        console.error('SSS Reconstruction Failed:', err);
+        toast.error(t('exchange.createSecret.viewer.reconstructFailed', 'Failed to reconstruct the secure payload.'));
       }
     }
 
-    toast.info("This secret has been revealed and will self-destruct.");
+    if (revealed.burned) {
+      setItem({ ...item, isBurned: true, viewCount: revealed.viewCount });
+      toast.info(t('exchange.createSecret.viewer.finalView', 'Final view consumed. This link is now expired.'));
+    } else {
+      setItem({
+        ...item,
+        viewCount: revealed.viewCount,
+        maxViews: revealed.maxViews ?? item.maxViews,
+      });
+      toast.success(
+        t('exchange.createSecret.viewer.viewConsumed', 'Secure payload revealed. {{remaining}} view slot(s) remaining.').replace(
+          '{{remaining}}',
+          String(Math.max(0, (revealed.maxViews ?? 0) - (revealed.viewCount ?? 0))),
+        ),
+      );
+    }
   };
 
   const copyToClipboard = () => {
@@ -92,7 +133,7 @@ export default function SecretViewerPage() {
     navigator.clipboard.writeText(textToCopy);
     setCopying(true);
     setTimeout(() => setCopying(false), 2000);
-    toast.success("Copied to clipboard.");
+    toast.success(t('exchange.createSecret.viewer.copied', 'Copied to clipboard.'));
   };
 
   if (loading) {
@@ -103,7 +144,9 @@ export default function SecretViewerPage() {
           <div className="w-3 h-8 bg-blue-400 rounded-full"></div>
           <div className="w-3 h-8 bg-blue-300 rounded-full"></div>
         </div>
-        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Decrypting Payload...</p>
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+          {t('exchange.createSecret.viewer.decrypting', 'Decrypting Payload...')}
+        </p>
       </div>
     );
   }
@@ -115,15 +158,25 @@ export default function SecretViewerPage() {
           <ShieldAlert className="w-10 h-10 text-red-500" />
         </div>
         <h1 className="text-2xl font-bold text-slate-900 mb-2">
-          {id && isDemoExchangeId(id) ? 'Demo Link — Not Live' : 'Phantom Link Expired'}
+          {id && isDemoExchangeId(id)
+            ? t('exchange.createSecret.viewer.demoExpired', 'Demo Link — Not Live')
+            : t('exchange.createSecret.viewer.phantomExpired', 'Phantom Link Expired')}
         </h1>
         <p className="text-slate-500 max-w-md mb-8">
           {id && isDemoExchangeId(id)
-            ? 'This dashboard row is seeded for Schnellfilter demos and has no vault payload. Create a real secret link to test burn-after-read.'
-            : 'This data has already been burned or the link was invalid. Phantom links self-destruct immediately after viewing.'}
+            ? t(
+                'exchange.createSecret.viewer.demoExpiredDesc',
+                'This dashboard row is seeded for demo filters and has no vault payload.',
+              )
+            : t(
+                'exchange.createSecret.viewer.phantomExpiredDesc',
+                'This data has already been burned, the view quota was consumed, or the link was invalid.',
+              )}
         </p>
         {!isDemoExchangeId(id ?? '') && (
-          <Badge variant="outline" className="bg-white border-red-200 text-red-600 px-4 py-1">Code 410: Gone</Badge>
+          <Badge variant="outline" className="bg-white border-red-200 text-red-600 px-4 py-1">
+            {t('exchange.createSecret.viewer.goneCode', 'Code 410: Gone')}
+          </Badge>
         )}
       </div>
     );
@@ -131,7 +184,7 @@ export default function SecretViewerPage() {
 
   return (
     <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         className="max-w-md w-full bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-8 text-center space-y-8"
@@ -143,37 +196,71 @@ export default function SecretViewerPage() {
         </div>
 
         <div className="space-y-2">
-          <h1 className="text-2xl font-bold text-slate-900">Secure Payload Received</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {t('exchange.createSecret.viewer.title', 'Secure Payload Received')}
+          </h1>
           <p className="text-sm text-slate-500">
-            {item.expirationType === 'read' 
-              ? "This secret will self-destruct as soon as you reveal it." 
-              : "This secret will expire in 24 hours."}
+            {item.maxViews && item.maxViews > 1
+              ? t(
+                  'exchange.createSecret.viewer.multiViewHint',
+                  'This link allows up to {{max}} views. {{remaining}} remain before automatic expiry.',
+                )
+                  .replace('{{max}}', String(item.maxViews))
+                  .replace('{{remaining}}', String(viewsRemaining ?? item.maxViews))
+              : t(
+                  'exchange.createSecret.viewer.singleViewHint',
+                  'This secret will self-destruct once the allowed view quota is consumed.',
+                )}
           </p>
         </div>
 
         <AnimatePresence mode="wait">
           {!viewed ? (
-            <motion.div 
-              key="reveal"
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
-            >
-              <div className="p-12 rounded-3xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 group hover:border-[#1A73E8] transition-colors cursor-pointer" onClick={handleReveal}>
+            <motion.div key="reveal" exit={{ opacity: 0, y: -20 }} className="space-y-4">
+              {item.passphraseRequired ? (
+                <Input
+                  type="password"
+                  value={passphrase}
+                  onChange={(e) => setPassphrase(e.target.value)}
+                  placeholder={t('exchange.createSecret.viewer.passphrasePlaceholder', 'Additional passphrase')}
+                  className="h-11 rounded-2xl border-slate-200"
+                />
+              ) : null}
+              {item.metadata?.domainWhitelistEnabled ? (
+                <Input
+                  type="email"
+                  value={viewerEmail}
+                  onChange={(e) => setViewerEmail(e.target.value)}
+                  placeholder={t('exchange.createSecret.viewer.emailPlaceholder', 'you@company.com')}
+                  className="h-11 rounded-2xl border-slate-200"
+                />
+              ) : null}
+
+              <div
+                className="p-12 rounded-3xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4 group hover:border-[#1A73E8] transition-colors cursor-pointer"
+                onClick={() => void handleReveal()}
+              >
                 <Zap className="w-8 h-8 text-[#1A73E8] fill-current animate-pulse group-hover:scale-125 transition-transform" />
                 <span className="text-sm font-bold text-[#1A73E8] uppercase tracking-widest">
-                  {item.type === 'request' ? 'Open Secure Dropzone' : 'Click to Reveal'}
+                  {item.type === 'request'
+                    ? t('exchange.createSecret.viewer.openDropzone', 'Open Secure Dropzone')
+                    : t('exchange.createSecret.viewer.clickReveal', 'Click to Reveal')}
                 </span>
               </div>
-              
-              <Button 
-                onClick={handleReveal}
+
+              <Button
+                onClick={() => void handleReveal()}
+                disabled={revealing}
                 className="w-full h-14 bg-[#1A73E8] hover:bg-[#1765cc] rounded-2xl font-bold"
               >
-                {item.type === 'request' ? 'Enter Dropzone' : 'Reveal Secret'} <ArrowRight className="w-4 h-4 ml-2" />
+                {item.type === 'request'
+                  ? t('exchange.createSecret.viewer.enterDropzone', 'Enter Dropzone')
+                  : t('exchange.createSecret.viewer.revealSecret', 'Reveal Secret')}{' '}
+                <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </motion.div>
           ) : (
-            <motion.div 
+            <motion.div
               key="content"
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
@@ -186,35 +273,44 @@ export default function SecretViewerPage() {
                       <Upload className="w-8 h-8" />
                     </div>
                     <div className="text-center">
-                      <p className="text-sm font-bold text-slate-900">Secure Dropzone Active</p>
-                      <p className="text-xs text-slate-500 mt-1">Files uploaded here are encrypted with PQC-ECC before storage.</p>
+                      <p className="text-sm font-bold text-slate-900">
+                        {t('exchange.createSecret.viewer.dropzoneActive', 'Secure Dropzone Active')}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {t(
+                          'exchange.createSecret.viewer.dropzoneActiveDesc',
+                          'Files uploaded here are encrypted with PQC-ECC before storage.',
+                        )}
+                      </p>
                     </div>
-                    <Input 
-                      type="file" 
-                      className="hidden" 
-                      id="dropzone-file" 
+                    <Input
+                      type="file"
+                      className="hidden"
+                      id="dropzone-file"
                       onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) {
                           const reader = new FileReader();
                           reader.onload = async (event) => {
                             const text = event.target?.result as string;
-                            await vaultService.updateItem(item.id, { 
+                            await vaultService.updateItem(item.id, {
                               content: `FILE: ${file.name}\nCONTENT: ${text.slice(0, 500)}...`,
-                              metadata: { ...item.metadata, filename: file.name }
+                              metadata: { ...item.metadata, filename: file.name },
                             });
-                            toast.success("Payload delivered successfully to destination.");
-                            loadItem();
+                            toast.success(
+                              t('exchange.createSecret.viewer.uploadSuccess', 'Payload delivered successfully.'),
+                            );
+                            void loadItem();
                           };
                           reader.readAsText(file);
                         }
                       }}
                     />
-                    <label 
+                    <label
                       htmlFor="dropzone-file"
                       className="mt-2 px-6 py-3 bg-[#1A73E8] text-white rounded-xl text-xs font-bold cursor-pointer hover:bg-[#1765cc] transition-colors"
                     >
-                      SELECT PAYLOAD
+                      {t('exchange.createSecret.viewer.selectPayload', 'SELECT PAYLOAD')}
                     </label>
                   </div>
                 </div>
@@ -223,26 +319,30 @@ export default function SecretViewerPage() {
                   <div className="relative group">
                     <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-3xl opacity-20 blur group-hover:opacity-40 transition-opacity" />
                     <div className="relative p-6 bg-slate-50 rounded-3xl border border-slate-100 text-left">
-                       <p className="text-[10px] font-black uppercase tracking-widest text-[#1A73E8] mb-2">
-                         {item.type === 'request' ? 'Uploaded Payload' : 'Secret Content'}
-                       </p>
-                       <pre className="text-sm font-mono text-slate-900 whitespace-pre-wrap break-all">
-                         {reconstructedContent || item.content || "Payload burned."}
-                       </pre>
+                      <p className="text-[10px] font-black uppercase tracking-widest text-[#1A73E8] mb-2">
+                        {item.type === 'request'
+                          ? t('exchange.createSecret.viewer.uploadedPayload', 'Uploaded Payload')
+                          : t('exchange.createSecret.viewer.secretContent', 'Secret Content')}
+                      </p>
+                      <pre className="text-sm font-mono text-slate-900 whitespace-pre-wrap break-all">
+                        {reconstructedContent || item.content || t('exchange.createSecret.viewer.payloadBurned', 'Payload burned.')}
+                      </pre>
                     </div>
                   </div>
 
                   <div className="flex gap-3">
-                    <Button 
-                      variant="outline" 
-                       className="flex-1 h-12 rounded-xl font-bold flex items-center justify-center gap-2"
-                       onClick={copyToClipboard}
+                    <Button
+                      variant="outline"
+                      className="flex-1 h-12 rounded-xl font-bold flex items-center justify-center gap-2"
+                      onClick={copyToClipboard}
                     >
                       {copying ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                      {copying ? 'Copied' : 'Copy Text'}
+                      {copying
+                        ? t('exchange.createSecret.viewer.copiedShort', 'Copied')
+                        : t('exchange.createSecret.viewer.copyText', 'Copy Text')}
                     </Button>
                     <div className="h-12 px-4 rounded-xl bg-red-50 flex items-center justify-center text-red-600">
-                       <Trash2 className="w-4 h-4" />
+                      <Trash2 className="w-4 h-4" />
                     </div>
                   </div>
                 </div>
@@ -252,18 +352,24 @@ export default function SecretViewerPage() {
         </AnimatePresence>
 
         <div className="pt-4 border-t border-slate-50 flex items-center justify-center gap-6">
-           <div className="flex items-center gap-1.5 grayscale opacity-50">
-             <ShieldCheck className="w-3 h-3 text-[#1A73E8]" />
-             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">PQC-ECC Shield</span>
-           </div>
-           <div className="flex items-center gap-1.5 grayscale opacity-50">
-             <Clock className="w-3 h-3 text-[#1A73E8]" />
-             <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">Self Destruct</span>
-           </div>
+          <div className="flex items-center gap-1.5 grayscale opacity-50">
+            <ShieldCheck className="w-3 h-3 text-[#1A73E8]" />
+            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
+              {t('exchange.createSecret.viewer.pqcShield', 'PQC-ECC Shield')}
+            </span>
+          </div>
+          <div className="flex items-center gap-1.5 grayscale opacity-50">
+            <Clock className="w-3 h-3 text-[#1A73E8]" />
+            <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
+              {t('exchange.createSecret.viewer.selfDestruct', 'Self Destruct')}
+            </span>
+          </div>
         </div>
       </motion.div>
-      
-      <p className="mt-8 text-[10px] font-bold text-slate-400 uppercase tracking-[.2em]">Powered by GeistDesk Phantom Vault</p>
+
+      <p className="mt-8 text-[10px] font-bold text-slate-400 uppercase tracking-[.2em]">
+        {t('exchange.createSecret.viewer.poweredBy', 'Powered by GeistDesk Phantom Vault')}
+      </p>
     </div>
   );
 }
