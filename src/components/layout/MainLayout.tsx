@@ -1,3 +1,4 @@
+import React, { useState, useEffect } from 'react';
 import { startOrchestratorConfigSync, fetchAiStatus, subscribeAiHealth } from '../../lib/aiOrchestratorClient';
 import { AiWorkspaceStatusBanner } from '../ai-orchestrator/AiWorkspaceStatusBanner';
 import { NavLink, Outlet, useLocation, useNavigate, Link } from 'react-router-dom';
