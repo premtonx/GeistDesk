@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import {
@@ -22,7 +22,7 @@ interface VaultLeftSidebarProps {
   collapsed?: boolean;
 }
 
-function SectionTitle({ children }: { children: React.ReactNode }) {
+function SectionTitle({ children }: { children: ReactNode }) {
   return (
     <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 px-2 mb-2 mt-4 first:mt-0">
       {children}
@@ -38,8 +38,8 @@ function NavButton({
 }: {
   active?: boolean;
   onClick: () => void;
-  children: React.ReactNode;
-  trailing?: React.ReactNode;
+  children: ReactNode;
+  trailing?: ReactNode;
 }) {
   return (
     <button

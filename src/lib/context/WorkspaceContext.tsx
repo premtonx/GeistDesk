@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import { AppWorkspace } from '../ticketWorkspace';
 
 interface WorkspaceContextType {
@@ -20,7 +20,7 @@ function parseStoredWorkspace(value: string | null): AppWorkspace {
 
 const WorkspaceContext = createContext<WorkspaceContextType | undefined>(undefined);
 
-export function WorkspaceProvider({ children }: { children: React.ReactNode }) {
+export function WorkspaceProvider({ children }: { children: ReactNode }) {
   const [workspace, setWorkspaceState] = useState<AppWorkspace>(() =>
     parseStoredWorkspace(localStorage.getItem(STORAGE_KEY)),
   );

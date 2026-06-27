@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Bot, Send, Sparkles, AlertTriangle, ShieldCheck, Key, RefreshCw, Trash } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../ui/card';
 import { Button } from '../../ui/button';
@@ -25,7 +25,7 @@ export function GeistVaultAIAssistant({ onClose, credentialsList }: AIProps) {
     setInput(query);
   };
 
-  const handleSend = (e: React.FormEvent) => {
+  const handleSend = (e: FormEvent) => {
     e.preventDefault();
     if (!input.trim()) return;
 

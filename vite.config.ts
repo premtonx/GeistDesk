@@ -10,7 +10,7 @@ export default defineConfig(({mode}) => {
   return {
     base: '/',
     plugins: [
-      react(), 
+      react({ jsxRuntime: 'automatic' }),
       tailwindcss(),
       wasm(),
       topLevelAwait()

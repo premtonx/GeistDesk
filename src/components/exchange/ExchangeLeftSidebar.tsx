@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ElementType, type ReactNode } from 'react';
 import {
   LayoutDashboard,
   Link2,
@@ -37,7 +37,7 @@ interface ExchangeLeftSidebarProps {
   className?: string;
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <p className="px-3 pt-4 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
       {children}
@@ -55,7 +55,7 @@ function NavButton({
 }: {
   active: boolean;
   onClick: () => void;
-  icon: React.ElementType;
+  icon: ElementType;
   label: string;
   count?: number;
   countTone?: 'green' | 'orange' | 'slate';
@@ -102,7 +102,7 @@ export function ExchangeLeftSidebar({
 }: ExchangeLeftSidebarProps) {
   const { t } = useTranslation();
 
-  const workspaceItems: { id: ExchangeNavId; icon: React.ElementType; labelKey: string; defaultLabel: string }[] = [
+  const workspaceItems: { id: ExchangeNavId; icon: ElementType; labelKey: string; defaultLabel: string }[] = [
     { id: 'overview', icon: LayoutDashboard, labelKey: 'exchange.sidebar.overview', defaultLabel: 'Overview' },
     { id: 'secrets', icon: Link2, labelKey: 'exchange.sidebar.secureLinks', defaultLabel: 'Secure Links' },
     { id: 'dropzones', icon: FolderUp, labelKey: 'exchange.sidebar.dropzones', defaultLabel: 'Secure Dropzones' },

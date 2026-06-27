@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { Lock, FolderUp, FileDown, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
@@ -8,7 +8,7 @@ interface KpiProps {
   value: string;
   trend: string;
   trendUp?: boolean;
-  icon: React.ReactNode;
+  icon: ReactNode;
   accent: string;
   iconBg: string;
 }

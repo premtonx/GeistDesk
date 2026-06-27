@@ -1,4 +1,4 @@
-import React from 'react';
+import { useMemo, type MouseEvent } from 'react';
 import { 
   Building2, 
   Search, 
@@ -24,7 +24,7 @@ interface CompanySidebarProps {
   selectedCompanyId: string | null;
   onSelectCompany: (id: string) => void;
   favorites: string[];
-  onToggleFavorite: (id: string, e: React.MouseEvent) => void;
+  onToggleFavorite: (id: string, e: MouseEvent) => void;
   activeFilter: string;
   setActiveFilter: (filter: string) => void;
   searchQuery: string;
@@ -55,7 +55,7 @@ export default function CompanySidebar({
   const { t } = useTranslation();
 
   // Hydrate all companies for listing
-  const hydratedCompanies = React.useMemo(() => {
+  const hydratedCompanies = useMemo(() => {
     return companies.map(c => {
       const tickets = ticketHistoryMap[c.id] || [];
       return hydrateCompany(c, tickets)!;
@@ -63,7 +63,7 @@ export default function CompanySidebar({
   }, [companies, ticketHistoryMap]);
 
   // Filter accounts
-  const filteredCompanies = React.useMemo(() => {
+  const filteredCompanies = useMemo(() => {
     return hydratedCompanies.filter(c => {
       // Search matching
       const matchesSearch = 
@@ -84,7 +84,7 @@ export default function CompanySidebar({
   }, [hydratedCompanies, activeFilter, searchQuery]);
 
   // Calculate counts dynamically
-  const filterCounts = React.useMemo(() => {
+  const filterCounts = useMemo(() => {
     return {
       all: hydratedCompanies.length,
       enterprise: hydratedCompanies.filter(c => c.tier === 'Enterprise').length,
@@ -95,11 +95,11 @@ export default function CompanySidebar({
     };
   }, [hydratedCompanies]);
 
-  const pinnedCompanies = React.useMemo(() => {
+  const pinnedCompanies = useMemo(() => {
     return hydratedCompanies.filter(c => favorites.includes(c.id));
   }, [hydratedCompanies, favorites]);
 
-  const standardCompanies = React.useMemo(() => {
+  const standardCompanies = useMemo(() => {
     return hydratedCompanies.filter(c => !favorites.includes(c.id));
   }, [hydratedCompanies, favorites]);
 
@@ -276,7 +276,7 @@ function CompanyCard({
   isSelected: boolean; 
   isStarred: boolean; 
   onSelect: () => void;
-  onToggleStar: (e: React.MouseEvent) => void;
+  onToggleStar: (e: MouseEvent) => void;
 }) {
   const { t } = useTranslation();
   return (

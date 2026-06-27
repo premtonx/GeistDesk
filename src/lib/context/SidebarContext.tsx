@@ -1,5 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 interface SidebarContextType {
   isMainCollapsed: boolean;
   isPipelineCollapsed: boolean;
@@ -11,7 +10,7 @@ interface SidebarContextType {
 
 const SidebarContext = createContext<SidebarContextType | undefined>(undefined);
 
-export function SidebarProvider({ children }: { children: React.ReactNode }) {
+export function SidebarProvider({ children }: { children: ReactNode }) {
   const [isMainCollapsed, setIsMainCollapsed] = useState(() => {
     const saved = localStorage.getItem('mainSidebarCollapsed');
     return saved ? JSON.parse(saved) : false;

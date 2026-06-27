@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from './components/ui/sonner';
 import { TooltipProvider } from './components/ui/tooltip';
@@ -37,7 +37,7 @@ import { WorkspaceProvider } from './lib/context/WorkspaceContext';
 import { ThemeProvider } from './lib/context/ThemeContext';
 import { I18nProvider } from './lib/context/I18nContext';
 
-function AdminRoute({ children }: { children: React.ReactNode }) {
+function AdminRoute({ children }: { children: ReactNode }) {
   const { isAdmin, checking } = useAdmin();
   const { role, userProfile, loading } = usePermissions();
 

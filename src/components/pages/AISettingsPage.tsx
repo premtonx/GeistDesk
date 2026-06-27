@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useState, type ElementType } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Label } from '../ui/label';
@@ -99,7 +99,7 @@ function formatRelativeTime(iso: string): string {
   return days === 1 ? 'Yesterday' : `${days} days ago`;
 }
 
-function SectionHeader({ icon: Icon, title, description }: { icon: React.ElementType; title: string; description?: string }) {
+function SectionHeader({ icon: Icon, title, description }: { icon: ElementType; title: string; description?: string }) {
   return (
     <div className="flex items-start gap-3 mb-4">
       <div className="p-2 rounded-xl bg-slate-100">

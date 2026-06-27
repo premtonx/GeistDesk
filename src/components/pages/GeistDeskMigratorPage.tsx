@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import { useCallback, useRef, useState, type DragEvent } from 'react';
 import { 
   UploadCloud, 
   FileJson, 
@@ -179,7 +179,7 @@ export default function GeistDeskMigratorPage() {
     }
   }, []);
 
-  const onDrop = (e: React.DragEvent) => {
+  const onDrop = (e: DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (file) handleFileUpload(file);

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState, type FormEvent, type MouseEvent } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { 
   Building2, 
@@ -97,7 +97,7 @@ export default function CustomersPage() {
     return saved ? JSON.parse(saved) : [];
   });
 
-  const handleToggleFavorite = (id: string, e: React.MouseEvent) => {
+  const handleToggleFavorite = (id: string, e: MouseEvent) => {
     e.stopPropagation();
     setFavorites(prev => {
       const isFav = prev.includes(id);
@@ -412,7 +412,7 @@ export default function CustomersPage() {
   };
 
   // Submit edits back to firebase
-  const handleEditCompanySubmit = async (e: React.FormEvent) => {
+  const handleEditCompanySubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedCompanyId) return;
     setIsSaving(true);
@@ -575,7 +575,7 @@ export default function CustomersPage() {
   };
 
   // Create standard company
-  const handleCreateCompany = async (e: React.FormEvent, isDraft = false) => {
+  const handleCreateCompany = async (e: FormEvent, isDraft = false) => {
     if (e) e.preventDefault();
     if (!newCompany.name || !newCompany.domain) {
       toast.error("Company name and domain are required");
@@ -656,7 +656,7 @@ export default function CustomersPage() {
   };
 
   // Create new contact
-  const handleCreateContact = async (e: React.FormEvent) => {
+  const handleCreateContact = async (e: FormEvent) => {
     e.preventDefault();
     if (!selectedCompanyId) return;
     if (!newContact.name || !newContact.email) {

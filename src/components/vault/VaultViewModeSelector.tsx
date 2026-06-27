@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { LayoutGrid, List, Table2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
@@ -10,7 +10,7 @@ interface VaultViewModeSelectorProps {
   onChange: (mode: VaultAssetViewMode) => void;
 }
 
-const MODES: { id: VaultAssetViewMode; icon: React.ReactNode; labelKey: string; defaultLabel: string }[] = [
+const MODES: { id: VaultAssetViewMode; icon: ReactNode; labelKey: string; defaultLabel: string }[] = [
   { id: 'table', icon: <Table2 className="w-3.5 h-3.5" />, labelKey: 'vault.layout.table', defaultLabel: 'Table' },
   { id: 'grid', icon: <LayoutGrid className="w-3.5 h-3.5" />, labelKey: 'vault.layout.grid', defaultLabel: 'Grid' },
   { id: 'card', icon: <List className="w-3.5 h-3.5" />, labelKey: 'vault.layout.card', defaultLabel: 'Card' },

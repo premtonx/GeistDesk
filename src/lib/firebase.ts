@@ -1,6 +1,6 @@
 /**
- * PostgreSQL-backed database client shim.
- * Re-exports the Firebase-compatible client — no real Firebase SDK is loaded.
+ * PostgreSQL-backed database client entry point.
+ * Re-exports the Postgres adapter — no Firebase SDK is loaded on the client.
  */
 import {
   auth,

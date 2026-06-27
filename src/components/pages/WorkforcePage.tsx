@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { 
   Users, 
   UserPlus, 
@@ -153,7 +153,7 @@ export default function WorkforcePage() {
   };
 
   // Onboard manual user
-  const handleOnboardUser = async (e: React.FormEvent) => {
+  const handleOnboardUser = async (e: FormEvent) => {
     e.preventDefault();
     if (!newUser.email || !newUser.name) {
       toast.error('Please complete Name and Email fields.');

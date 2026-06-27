@@ -1,4 +1,4 @@
-import React from 'react';
+import { useState, type FormEvent } from 'react';
 import { Shield, Lock, Eye, EyeOff, AlertTriangle, FileText, CheckCircle2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
@@ -13,7 +13,7 @@ import { toast } from 'sonner';
 export default function PIIShieldPage() {
   const { language } = useTranslation();
   const isDe = language !== 'en'; // Default to German unless strictly English
-  const [enabled, setEnabled] = React.useState(true);
+  const [enabled, setEnabled] = useState(true);
   
   const redactionRules = [
     { 
@@ -57,7 +57,7 @@ export default function PIIShieldPage() {
     );
   };
 
-  const handleAddRule = (e: React.FormEvent) => {
+  const handleAddRule = (e: FormEvent) => {
     e.preventDefault();
     toast.info(
       isDe 

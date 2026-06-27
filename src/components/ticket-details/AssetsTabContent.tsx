@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { 
   Server, 
   ShieldCheck, 
@@ -186,7 +186,7 @@ export function AssetsTabContent({ ticket }: AssetsTabContentProps) {
     toast.success(t('tickets.assetsTab.copiedClipboard', 'Copied to clipboard'));
   };
 
-  const licensedAssets = React.useMemo(() => {
+  const licensedAssets = useMemo(() => {
     const isMobile = (ticket.product || 'geistdesktech').toLowerCase().includes('mobile');
     return [
       {

@@ -1,10 +1,10 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { BookOpen, FilePen, HeartPulse, Eye, TrendingUp } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 
 interface KpiCardProps {
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   value: string | number;
   trend?: string;

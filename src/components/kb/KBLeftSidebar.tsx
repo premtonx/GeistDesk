@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ElementType, type ReactNode } from 'react';
 import {
   LayoutDashboard,
   FileText,
@@ -56,7 +56,7 @@ const WORKSPACE_ITEMS = [
   { id: 'analytics', icon: BarChart3, labelKey: 'kb.sidebar.analytics', defaultLabel: 'Analytics' },
 ] as const;
 
-const CATEGORY_ITEMS: { id: string; icon: React.ElementType; labelKey?: string }[] = [
+const CATEGORY_ITEMS: { id: string; icon: ElementType; labelKey?: string }[] = [
   { id: 'Getting Started', icon: BookOpen },
   { id: 'Product Guides', icon: Package },
   { id: 'API Documentation', icon: Code2 },
@@ -85,7 +85,7 @@ function NavButton({
 }: {
   active: boolean;
   onClick: () => void;
-  icon: React.ElementType;
+  icon: ElementType;
   label: string;
   count?: number;
 }) {
@@ -111,7 +111,7 @@ function NavButton({
   );
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({ children }: { children: ReactNode }) {
   return (
     <p className="px-3 pt-4 pb-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
       {children}

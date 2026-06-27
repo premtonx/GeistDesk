@@ -1,9 +1,9 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
 import { MODULE_PAGE_INNER, MODULE_PAGE_PX } from './styles';
 
 interface ModulePageContentProps {
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
   flush?: boolean;
 }

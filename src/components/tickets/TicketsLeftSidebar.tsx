@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import { ChevronDown, ChevronRight, Settings2, Sparkles, Star } from 'lucide-react';
 import { DragDropContext, Draggable, Droppable, type DropResult } from '@hello-pangea/dnd';
 import { cn } from '../../lib/utils';
@@ -142,7 +142,7 @@ interface TicketsLeftSidebarProps {
   className?: string;
   selectedTicketId?: string | null;
   isMobileSidebarOpen?: boolean;
-  footer?: React.ReactNode;
+  footer?: ReactNode;
 }
 
 export function TicketsLeftSidebar({

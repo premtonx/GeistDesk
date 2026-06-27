@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { Search, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
 import { cn } from '../../../lib/utils';
 import { Input } from '../input';
@@ -12,10 +12,10 @@ interface ModuleToolbarProps {
   onSearchChange?: (value: string) => void;
   onFilterClick?: () => void;
   filterActive?: boolean;
-  sortControl?: React.ReactNode;
-  filtersSlot?: React.ReactNode;
-  viewsSlot?: React.ReactNode;
-  createAction?: React.ReactNode;
+  sortControl?: ReactNode;
+  filtersSlot?: ReactNode;
+  viewsSlot?: ReactNode;
+  createAction?: ReactNode;
   className?: string;
 }
 
@@ -107,7 +107,7 @@ export function ModuleToolbarSelect({
 }: {
   value: string;
   onChange: (value: string) => void;
-  children: React.ReactNode;
+  children: ReactNode;
   className?: string;
   'aria-label'?: string;
 }) {

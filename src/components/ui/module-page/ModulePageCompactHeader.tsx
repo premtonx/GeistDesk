@@ -1,12 +1,12 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
 import { MODULE_PAGE_BORDER, MODULE_PAGE_PX } from './styles';
 
 interface ModulePageCompactHeaderProps {
-  title: React.ReactNode;
+  title: ReactNode;
   /** Inline metadata e.g. "9 Open • 4 Pending • 5 Urgent" */
-  meta?: React.ReactNode;
-  trailing?: React.ReactNode;
+  meta?: ReactNode;
+  trailing?: ReactNode;
   className?: string;
 }
 

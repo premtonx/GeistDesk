@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState, type MouseEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Bell, 
@@ -50,7 +50,7 @@ export function NotificationHub() {
     return () => unsubscribe();
   }, [user]);
 
-  const handleMarkAsRead = async (id: string, e: React.MouseEvent) => {
+  const handleMarkAsRead = async (id: string, e: MouseEvent) => {
     e.stopPropagation();
     try {
       // Optimistic state update

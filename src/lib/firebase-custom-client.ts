@@ -1,7 +1,7 @@
-// Custom high-performance Client-Side Database & Authentication Adaptor
-// Emulates the Firebase SDK interface but resolves queries on standard PostgreSQL / SQL backend APIs.
+// PostgreSQL-backed client database & authentication adapter.
+// Preserves a Firebase-shaped API surface for legacy service modules.
 
-import firebaseConfig from '../../firebase-applet-config.json';
+import platformConfig from '../../geistdesk-platform-config.json';
 import { applySessionAuthHeader } from './session-auth';
 
 // Simple Auth State Store. Credentials are NEVER stored client-side; the only
@@ -187,7 +187,7 @@ export function onAuthStateChanged(authObj: FirebaseAuth, callback: (user: User 
 // -----------------------------------------------------------------------------
 
 export function getFirestore(...args: any[]) {
-  return { id: firebaseConfig?.firestoreDatabaseId || 'default' };
+  return { id: platformConfig?.databaseId || 'geistdesk_prod' };
 }
 
 export class Query {

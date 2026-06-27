@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { Plus } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from './button';
@@ -14,7 +14,7 @@ export interface ModuleCreateMenuItem {
   labelKey: string;
   labelDefault: string;
   onClick: () => void;
-  icon?: React.ReactNode;
+  icon?: ReactNode;
 }
 
 interface ModuleCreateButtonProps {

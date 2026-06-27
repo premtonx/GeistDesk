@@ -1,12 +1,12 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
 import { MODULE_PAGE_BORDER, MODULE_PAGE_INNER, MODULE_PAGE_PX } from './styles';
 
 export interface ModuleKpiItem {
   id: string;
-  label: React.ReactNode;
-  value: React.ReactNode;
-  hint?: React.ReactNode;
+  label: ReactNode;
+  value: ReactNode;
+  hint?: ReactNode;
 }
 
 interface ModuleKpiGridProps {
@@ -20,9 +20,9 @@ export function ModuleKpiCard({
   hint,
   className,
 }: {
-  label: React.ReactNode;
-  value: React.ReactNode;
-  hint?: React.ReactNode;
+  label: ReactNode;
+  value: ReactNode;
+  hint?: ReactNode;
   className?: string;
 }) {
   return (

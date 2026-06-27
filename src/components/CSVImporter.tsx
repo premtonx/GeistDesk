@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import Papa from 'papaparse';
 import { 
   Upload, 
@@ -58,7 +58,7 @@ export default function CSVImporter({ onComplete, open, onOpenChange }: CSVImpor
   const [progress, setProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       Papa.parse(file, {

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
 import deCommon from '../../locales/de/common.json';
 import enCommon from '../../locales/en/common.json';
 
@@ -38,7 +38,7 @@ function getNestedValue(obj: any, path: string): string | undefined {
   return typeof current === 'string' ? current : undefined;
 }
 
-export function I18nProvider({ children }: { children: React.ReactNode }) {
+export function I18nProvider({ children }: { children: ReactNode }) {
   const [translations, setTranslations] = useState<Record<string, any>>(defaultTranslations);
   const [language, setLanguageState] = useState<string>(() => {
     const saved = localStorage.getItem('lang');

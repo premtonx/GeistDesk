@@ -1,11 +1,11 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { cn } from '../../../lib/utils';
 import { MODULE_PAGE_BORDER, MODULE_PAGE_INNER, MODULE_PAGE_PX } from './styles';
 
 interface ModulePageHeaderProps {
-  title: React.ReactNode;
-  description?: React.ReactNode;
-  trailing?: React.ReactNode;
+  title: ReactNode;
+  description?: ReactNode;
+  trailing?: ReactNode;
   className?: string;
 }
 

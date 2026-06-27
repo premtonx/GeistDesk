@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { createElement, useEffect, useState } from 'react';
 import { 
   Type, 
   AlignLeft, 
@@ -306,7 +306,7 @@ export default function ContactSchemaPage() {
                                       <Tags className="w-5 h-5" />
                                     ) : (
                                       FIELD_TYPES.find(t => t.type === field.type)?.icon && 
-                                      React.createElement(FIELD_TYPES.find(t => t.type === field.type)!.icon, { className: "w-5 h-5" })
+                                      createElement(FIELD_TYPES.find(t => t.type === field.type)!.icon, { className: "w-5 h-5" })
                                     )}
                                   </div>
                                   <div className="flex-1 text-sm">

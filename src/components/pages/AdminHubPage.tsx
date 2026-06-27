@@ -1,4 +1,4 @@
-import React from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Shield, 
@@ -252,7 +252,7 @@ export default function AdminHubPage() {
   const { t } = useTranslation();
 
   // Unified Live Telemetry control state
-  const [telemetry, setTelemetry] = React.useState({
+  const [telemetry, setTelemetry] = useState({
     activeAgents: 12,
     ticketsProcessed: 1284,
     assetsManaged: 4532,
@@ -264,7 +264,7 @@ export default function AdminHubPage() {
   });
 
   // Dynamic simulation to make control plane feel alive and realistic (like Datadog/Cloudflare)
-  React.useEffect(() => {
+  useEffect(() => {
     const interval = setInterval(() => {
       setTelemetry(prev => {
         // Randomly adjust AI requests (upward trend)

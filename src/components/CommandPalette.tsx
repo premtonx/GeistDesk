@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Search, UserPlus, CheckCircle, XCircle, User, Zap, Hash, Database, Users, Shield, Ticket as TicketIcon } from 'lucide-react';
 import { Ticket } from '../types';
@@ -61,7 +61,7 @@ export function CommandPalette({
     v.type.toLowerCase().includes(query.toLowerCase())
   ).slice(0, 10);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       const currentListHeight = selectedColumn === 'tickets' ? filteredTickets.length : 

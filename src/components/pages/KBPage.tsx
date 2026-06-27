@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from 'react';
 import { startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
 import { useSearchParams } from 'react-router-dom';
 import { 
@@ -2439,7 +2439,7 @@ export default function KBPage() {
 }
 
 // Compact helper clock icon
-function ClockIcon(props: React.SVGProps<SVGSVGElement>) {
+function ClockIcon(props: SVGProps<SVGSVGElement>) {
   return (
     <svg 
       fill="none" 

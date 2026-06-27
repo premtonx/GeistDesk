@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { 
   Sparkles, 
@@ -43,7 +43,7 @@ export function AiSummaryCard({
   const [isAiSummaryExpanded, setIsAiSummaryExpanded] = useState(true);
 
   // Key Findings maps directly to ticket.aiSummary (or fallback aiSummary helper)
-  const findings = React.useMemo(() => {
+  const findings = useMemo(() => {
     const rawText = ticket.aiSummary || aiSummary;
     if (rawText) {
       return rawText.split('\n')
@@ -60,7 +60,7 @@ export function AiSummaryCard({
   }, [ticket.aiSummary, aiSummary]);
 
   // Action Plan checklists maps directly to ticket.aiChecklist
-  const checklist = React.useMemo(() => {
+  const checklist = useMemo(() => {
     if (ticket.aiChecklist && ticket.aiChecklist.length > 0) {
       return ticket.aiChecklist;
     }
@@ -91,7 +91,7 @@ export function AiSummaryCard({
   };
 
   // Determine SLA remaining string representing image behavior
-  const slaRemainingTime = React.useMemo(() => {
+  const slaRemainingTime = useMemo(() => {
     const now = new Date();
     const createdTime = ticket.createdAt?.toDate ? ticket.createdAt.toDate() : new Date(ticket.createdAt);
     const dueTime = ticket.slaDueAt?.toDate 

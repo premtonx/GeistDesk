@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import * as d3 from 'd3';
 import { 
   Network, 
@@ -317,7 +317,7 @@ export function AIRelationshipGraph2({ currentArticle, onSelectArticle, miniMode
   const [isDragging, setIsDragging] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
 
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const handleMouseDown = (e: ReactMouseEvent) => {
     const target = e.target as HTMLElement;
     if (target.tagName?.toLowerCase() === 'svg' || target.id === 'graph-bg') {
       setIsDragging(true);
@@ -325,7 +325,7 @@ export function AIRelationshipGraph2({ currentArticle, onSelectArticle, miniMode
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleMouseMove = (e: ReactMouseEvent) => {
     if (!isDragging) return;
     setPanOffset({
       x: e.clientX - dragStart.current.x,
@@ -338,13 +338,13 @@ export function AIRelationshipGraph2({ currentArticle, onSelectArticle, miniMode
   };
 
   // Node Drag physics setup
-  const handleNodeDragStart = (e: React.MouseEvent, node: GraphNode) => {
+  const handleNodeDragStart = (e: ReactMouseEvent, node: GraphNode) => {
     e.stopPropagation();
     // Anchor node
     node.fx = node.x;
     node.fy = node.y;
     
-    const onNodeDragMove = (moveEvent: MouseEvent) => {
+    const onNodeDragMove = (moveEvent: globalThis.MouseEvent) => {
       const zoom = zoomScale;
       // account for translation and scaling
       node.fx = (moveEvent.clientX - panOffset.x - d3.select(svgRef.current).node()!.getBoundingClientRect().left) / zoom;
@@ -419,7 +419,7 @@ export function AIRelationshipGraph2({ currentArticle, onSelectArticle, miniMode
   };
 
   // Manual Creation
-  const handleAddNewRelationship = async (e: React.FormEvent) => {
+  const handleAddNewRelationship = async (e: FormEvent) => {
     e.preventDefault();
     if (!newSource.trim() || !newTarget.trim()) {
       toast.error("Source and Target nodes must have non-empty names.");

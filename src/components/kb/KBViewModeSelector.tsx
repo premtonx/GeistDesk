@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { LayoutGrid, List, Table2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
@@ -11,7 +11,7 @@ interface KBViewModeSelectorProps {
   className?: string;
 }
 
-const MODES: { id: KBArticleViewMode; icon: React.ReactNode; labelKey: string; defaultLabel: string }[] = [
+const MODES: { id: KBArticleViewMode; icon: ReactNode; labelKey: string; defaultLabel: string }[] = [
   { id: 'grid', icon: <LayoutGrid className="w-3.5 h-3.5" />, labelKey: 'kb.layout.grid', defaultLabel: 'Grid' },
   { id: 'list', icon: <List className="w-3.5 h-3.5" />, labelKey: 'kb.layout.list', defaultLabel: 'List' },
   { id: 'table', icon: <Table2 className="w-3.5 h-3.5" />, labelKey: 'kb.layout.table', defaultLabel: 'Table' },

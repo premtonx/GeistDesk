@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { 
   Dialog, 
   DialogContent, 
@@ -171,7 +171,7 @@ export function CreateTicketDialog({ isOpen, onClose }: CreateTicketDialogProps)
     setFormData(prev => ({ ...prev, tags: prev.tags.filter(t => t !== tagToRemove) }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     if (!user) return;
 

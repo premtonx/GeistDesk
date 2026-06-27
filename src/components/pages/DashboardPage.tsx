@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
 import { motion } from 'motion/react';
@@ -687,7 +687,7 @@ export default function DashboardPage() {
 }
 
 // Highly stylized White Inner wrapper
-function CardWrapper({ children }: { children: React.ReactNode }) {
+function CardWrapper({ children }: { children: ReactNode }) {
   return (
     <div className="bg-white border border-gray-150 p-4.5 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
       {children}
@@ -696,7 +696,7 @@ function CardWrapper({ children }: { children: React.ReactNode }) {
 }
 
 // Side Badge card wrapper
-function BadgeCard({ border, children }: { border: string; children: React.ReactNode }) {
+function BadgeCard({ border, children }: { border: string; children: ReactNode }) {
   return (
     <div className={cn("p-5 rounded-2xl border border-gray-150 shadow-sm transition-all hover:translate-y-[-2px]", border)}>
       {children}

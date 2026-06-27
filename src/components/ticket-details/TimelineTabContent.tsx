@@ -1,4 +1,4 @@
-import React from 'react';
+import { useMemo } from 'react';
 import { 
   BadgeCheck,
   History,
@@ -31,7 +31,7 @@ export function TimelineTabContent({
 }: TimelineTabContentProps) {
   const { t } = useTranslation();
 
-  const timelineEvents = React.useMemo(() => {
+  const timelineEvents = useMemo(() => {
     const events: { id: string; type: string; title: string; desc: string; time: Date; actor: string }[] = [];
 
     const createdTime = ticket.createdAt?.toDate ? ticket.createdAt.toDate() : new Date(ticket.createdAt);

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type FormEvent } from 'react';
 import { ShieldCheck, HelpCircle, User, Clock, ArrowRight, Check, X, AlertCircle, Copy, Link, Send } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '../../ui/card';
 import { Button } from '../../ui/button';
@@ -76,7 +76,7 @@ export function GeistVaultAccessRequests() {
     toast.error(`Access Request denied for ${requester}.`);
   };
 
-  const handleGenerateShareLink = (e: React.FormEvent) => {
+  const handleGenerateShareLink = (e: FormEvent) => {
     e.preventDefault();
     if (!shareLinkName.trim()) {
       toast.error("Please enter a token label/URL reference path to share.");

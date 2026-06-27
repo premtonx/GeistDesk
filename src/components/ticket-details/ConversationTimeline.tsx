@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { 
   User, 
@@ -64,7 +64,7 @@ export function ConversationTimeline({
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
 
   // We compile all chronological timeline items, beginning with the opening post.
-  const timelineItems = React.useMemo(() => {
+  const timelineItems = useMemo(() => {
     // 1. Initial ticket description post as the first Customer post
     const items: Array<{
       id: string;

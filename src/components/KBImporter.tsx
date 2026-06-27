@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import { useRef, useState, type ChangeEvent } from 'react';
 import { 
   Globe, 
   Upload, 
@@ -203,7 +203,7 @@ export function KBImporter() {
     }
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (!files) return;
 

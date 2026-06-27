@@ -1,4 +1,4 @@
-import React from 'react';
+import { Fragment } from 'react';
 import { ChevronRight, Home } from 'lucide-react';
 import { Link, useLocation } from 'react-router-dom';
 import { cn } from '../lib/utils';
@@ -45,7 +45,7 @@ export function AdminBreadcrumbs() {
       </Link>
       
       {breadcrumbs.map((item, index) => (
-        <React.Fragment key={item.path}>
+        <Fragment key={item.path}>
           <ChevronRight className="w-4 h-4 text-slate-300" />
           <Link
             to={item.path}
@@ -57,7 +57,7 @@ export function AdminBreadcrumbs() {
           >
             {item.label}
           </Link>
-        </React.Fragment>
+        </Fragment>
       ))}
     </nav>
   );

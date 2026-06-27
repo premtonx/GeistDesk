@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { Sparkles, SlidersHorizontal } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
@@ -10,9 +10,9 @@ interface KBToolbarProps {
   onSearchChange: (value: string) => void;
   onFilterClick?: () => void;
   filterActive?: boolean;
-  sortControl?: React.ReactNode;
-  viewsSlot?: React.ReactNode;
-  createAction?: React.ReactNode;
+  sortControl?: ReactNode;
+  viewsSlot?: ReactNode;
+  createAction?: ReactNode;
   className?: string;
 }
 

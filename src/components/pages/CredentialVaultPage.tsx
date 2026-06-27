@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
 import { 
   Lock, 
@@ -379,7 +379,7 @@ export default function CredentialVaultPage() {
   };
 
   const [tagInput, setTagInput] = useState('');
-  const handleAddNewTag = (e: React.KeyboardEvent) => {
+  const handleAddNewTag = (e: KeyboardEvent) => {
     if (e.key === 'Enter' || e.key === ',') {
       e.preventDefault();
       const val = tagInput.trim();
@@ -466,7 +466,7 @@ export default function CredentialVaultPage() {
     }
   };
 
-  const handleUnlock = async (e?: React.FormEvent) => {
+  const handleUnlock = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     if (!masterPassword || !user) return;
     setIsUnlocking(true);
@@ -513,7 +513,7 @@ export default function CredentialVaultPage() {
   const [newCatName, setNewCatName] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('layers');
 
-  const handleCreateCategory = async (e: React.FormEvent) => {
+  const handleCreateCategory = async (e: FormEvent) => {
     e.preventDefault();
     if (!newCatName.trim()) {
       toast.error("Category name is required.");
@@ -652,7 +652,7 @@ export default function CredentialVaultPage() {
   };
 
   // Create new credentials
-  const handleCreateEntry = async (e: React.FormEvent) => {
+  const handleCreateEntry = async (e: FormEvent) => {
     e.preventDefault();
     if (!newEntry.label || !newEntry.username || !rawPassword || !derivedKey) {
       toast.error("Required fields missing. Ensure label, username and password are provided.");
@@ -749,7 +749,7 @@ export default function CredentialVaultPage() {
   };
 
   // Modify / Save edited credentials
-  const handleSaveEdit = async (e: React.FormEvent) => {
+  const handleSaveEdit = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingCred || !editingCred.id || !derivedKey) return;
     setIsSaving(true);

@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { LayoutGrid, Columns3, List } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
@@ -11,7 +11,7 @@ interface TicketsViewModeSelectorProps {
   className?: string;
 }
 
-const MODES: { id: TicketsLayoutMode; icon: React.ReactNode; labelKey: string; defaultLabel: string }[] = [
+const MODES: { id: TicketsLayoutMode; icon: ReactNode; labelKey: string; defaultLabel: string }[] = [
   { id: 'list', icon: <List className="w-3.5 h-3.5" />, labelKey: 'tickets.layout.list', defaultLabel: 'List' },
   { id: 'kanban', icon: <Columns3 className="w-3.5 h-3.5" />, labelKey: 'tickets.layout.kanban', defaultLabel: 'Kanban' },
   { id: 'cards', icon: <LayoutGrid className="w-3.5 h-3.5" />, labelKey: 'tickets.layout.cards', defaultLabel: 'Cards' },

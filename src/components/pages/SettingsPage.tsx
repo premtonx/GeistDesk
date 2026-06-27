@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useEffect, useState, type FormEvent } from 'react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
 import { Badge } from '../../components/ui/badge';
 import { Label } from '../../components/ui/label';
@@ -31,7 +31,6 @@ import { toast } from 'sonner';
 import { LogOut, User as UserIcon, ArrowRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
-import firebaseConfig from '../../../firebase-applet-config.json';
 
 import { AdminBreadcrumbs } from '../../components/AdminBreadcrumbs';
 import { userService } from '../../services/userService';
@@ -57,11 +56,11 @@ export default function SettingsPage() {
     }
   }, [user]);
 
-  const handleUpdateProfile = async (e: React.FormEvent) => {
+  const handleUpdateProfile = async (e: FormEvent) => {
     e.preventDefault();
     if (!user) return;
     try {
-      const { updateProfile } = await import('firebase/auth');
+      const { updateProfile } = await import('../../lib/firebase-custom-client');
       await updateProfile(user as any, { displayName: displayNameInput });
       await userService.updateUser(user.uid, { name: displayNameInput });
       toast.success("Profile display name updated successfully.");
@@ -70,12 +69,12 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpdateEmail = async (e: React.FormEvent) => {
+  const handleUpdateEmail = async (e: FormEvent) => {
     e.preventDefault();
     if (!user) return;
     if (!emailInput) return;
     try {
-      const { updateEmail } = await import('firebase/auth');
+      const { updateEmail } = await import('../../lib/firebase-custom-client');
       await updateEmail(user as any, emailInput);
       await userService.updateUser(user.uid, { email: emailInput });
       toast.success("Account contact email updated.");
@@ -84,7 +83,7 @@ export default function SettingsPage() {
     }
   };
 
-  const handleUpdatePassword = async (e: React.FormEvent) => {
+  const handleUpdatePassword = async (e: FormEvent) => {
     e.preventDefault();
     if (!user) return;
     if (!passwordInput) {
@@ -92,7 +91,7 @@ export default function SettingsPage() {
       return;
     }
     try {
-      const { updatePassword } = await import('firebase/auth');
+      const { updatePassword } = await import('../../lib/firebase-custom-client');
       await updatePassword(user as any, passwordInput);
       setPasswordInput('');
       toast.success("Security credentials password updated.");
@@ -527,12 +526,12 @@ export default function SettingsPage() {
                 <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200 space-y-2 text-xs text-slate-600">
                    <p className="font-bold text-slate-800">{t('settings.regInstructions', 'Registration Instructions:')}</p>
                    <p>{t('settings.regStep1', '1. Open the Azure Portal > **Microsoft Entra ID** > **App registrations** > **New registration**.')}</p>
-                   <p>{t('settings.regStep2', '2. Set the redirect URI as a **Web** platform type with your Firebase Auth redirection handler:')}</p>
+                   <p>{t('settings.regStep2', '2. Set the redirect URI as a **Web** platform type pointing at your GeistDesk SSO callback:')}</p>
                    <div className="bg-white p-2.5 rounded-xl font-mono text-[10px] text-slate-800 break-all border border-slate-200 select-all shadow-inner">
-                     https://{firebaseConfig?.projectId || 'your-firebase-project'}.firebaseapp.com/__/auth/handler
+                     https://app.premtonx.cloud/api/auth/sso/callback
                    </div>
-                   <p>{t('settings.regStep3', "3. Under Client Credentials, you don't need a client secret for Popup auth, but ensure local domain authentication is enabled.")}</p>
-                   <p className="text-[10px] text-indigo-600/80 italic font-semibold">{t('settings.firebaseNote', 'Note: Firebase handles the underlying Microsoft OAuth Provider flow seamlessly once registered.')}</p>
+                   <p>{t('settings.regStep3', "3. Configure MICROSOFT_PROVIDER_CLIENT_ID on the server. Sessions are issued as signed JWTs stored in geistdesk_token — no Firebase listener is used.")}</p>
+                   <p className="text-[10px] text-indigo-600/80 italic font-semibold">{t('settings.postgresNote', 'Note: Authentication is handled entirely by the PostgreSQL-backed GeistDesk API.')}</p>
                 </div>
               </div>
             )}

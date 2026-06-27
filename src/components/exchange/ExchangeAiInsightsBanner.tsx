@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { Sparkles, AlertTriangle, Database, Clock, ShieldCheck } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
@@ -9,7 +9,7 @@ interface InsightCardProps {
   title: string;
   description: string;
   count?: number;
-  icon: React.ReactNode;
+  icon: ReactNode;
 }
 
 function InsightCard({ tone, title, description, count, icon }: InsightCardProps) {

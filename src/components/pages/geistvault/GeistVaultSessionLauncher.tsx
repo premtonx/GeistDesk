@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { 
   X, Terminal, Shield, Monitor, Play, Globe, CheckCircle2, AlertCircle,
   Network, Wifi, Link, ShieldCheck, Power, RefreshCw, Send, ArrowRight
@@ -113,7 +113,7 @@ export function GeistVaultSessionLauncher({ isOpen, onClose, credential }: Launc
 
   if (!isOpen || !credential) return null;
 
-  const handleTerminalSubmit = (e: React.FormEvent) => {
+  const handleTerminalSubmit = (e: FormEvent) => {
     e.preventDefault();
     if (!terminalInput.trim()) return;
 

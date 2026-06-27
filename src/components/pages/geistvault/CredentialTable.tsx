@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type MouseEvent } from 'react';
 import {
   Star,
   MoreVertical,
@@ -136,7 +136,7 @@ export function CredentialTable({
   const [activeMenuId, setActiveMenuId] = useState<number | string | null>(null);
   const [copiedId, setCopiedId] = useState<number | string | null>(null);
 
-  const handleQuickCopyPassword = async (e: React.MouseEvent, cred: Credential) => {
+  const handleQuickCopyPassword = async (e: MouseEvent, cred: Credential) => {
     e.stopPropagation();
     try {
       const plain = await onDecryptPassword(cred);
@@ -155,7 +155,7 @@ export function CredentialTable({
     }
   };
 
-  const handleQuickCopyUsername = (e: React.MouseEvent, username: string) => {
+  const handleQuickCopyUsername = (e: MouseEvent, username: string) => {
     e.stopPropagation();
     navigator.clipboard.writeText(username);
     toast.success(t('vault.usernameCopied', 'Username copied'));

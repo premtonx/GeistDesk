@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Filter, 
@@ -532,7 +532,7 @@ export default function TicketsPage() {
     }
   };
 
-  const toggleWatch = (e: React.MouseEvent, id: string) => {
+  const toggleWatch = (e: MouseEvent, id: string) => {
     e.stopPropagation();
     setWatchedTicketIds(prev => 
       prev.includes(id) ? prev.filter(t => t !== id) : [...prev, id]
@@ -742,7 +742,7 @@ export default function TicketsPage() {
     }
   }, [hoveredTicketId]);
 
-  const handleMouseMove = (e: React.MouseEvent) => {
+  const handleMouseMove = (e: MouseEvent) => {
     setMousePos({ x: e.clientX, y: e.clientY });
   };
 

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
 import { 
   Lock, 
@@ -234,7 +234,7 @@ export default function VaultPage() {
     setTableTab,
   });
 
-  const handleQuickFilter = React.useCallback(
+  const handleQuickFilter = useCallback(
     (filter: ExchangeQuickFilter) => {
       setSelectedExchangeItem(null);
       applyQuickFilter(filter);
@@ -452,19 +452,19 @@ export default function VaultPage() {
     toast.success(t('exchange.actions.copySuccess', 'Link copied successfully.'));
   };
 
-  const handleCopyExchangeLink = React.useCallback(
+  const handleCopyExchangeLink = useCallback(
     (item: ExchangeItemRow) => copyExchangeLinkToClipboard(item.id, t),
     [t],
   );
 
-  const handleRotateAccessToken = React.useCallback(
+  const handleRotateAccessToken = useCallback(
     (_item: ExchangeItemRow) => {
       toast.success(t('exchange.drawer.rotateSuccess', 'Token rotation queued.'));
     },
     [t],
   );
 
-  const handleChangeSecurityPolicy = React.useCallback(
+  const handleChangeSecurityPolicy = useCallback(
     (item: ExchangeItemRow) => {
       setSelectedExchangeItem(item);
       toast.info(t('exchange.actions.policyEditorSoon', 'Security policy editor opening.'));
@@ -542,7 +542,7 @@ export default function VaultPage() {
     setEmergencyPhone('');
   };
 
-  const exchangeKpiStats = React.useMemo(
+  const exchangeKpiStats = useMemo(
     () => ({
       activeSecrets:
         allExchangeItems.filter(
@@ -558,17 +558,17 @@ export default function VaultPage() {
     [allExchangeItems],
   );
 
-  const secretItems = React.useMemo(
+  const secretItems = useMemo(
     () => allExchangeItems.filter((i) => i.type === 'secret' && matchesExchangeSearch(i, searchTerm)),
     [allExchangeItems, searchTerm],
   );
 
-  const dropzoneItems = React.useMemo(
+  const dropzoneItems = useMemo(
     () => allExchangeItems.filter((i) => i.type === 'request' && matchesExchangeSearch(i, searchTerm)),
     [allExchangeItems, searchTerm],
   );
 
-  const expiringSidebarRows = React.useMemo(
+  const expiringSidebarRows = useMemo(
     () =>
       allExchangeItems
         .filter(isExchangeExpiringSoon)

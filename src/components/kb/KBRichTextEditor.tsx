@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ElementType, type ReactNode } from 'react';
 import { useEditor, EditorContent, type Editor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
@@ -32,7 +32,7 @@ interface SlashItem {
   id: string;
   labelKey: string;
   defaultLabel: string;
-  icon: React.ElementType;
+  icon: ElementType;
   action: (editor: Editor) => void;
 }
 
@@ -60,7 +60,7 @@ function ToolbarButton({
 }: {
   active?: boolean;
   onClick: () => void;
-  children: React.ReactNode;
+  children: ReactNode;
   title?: string;
 }) {
   return (

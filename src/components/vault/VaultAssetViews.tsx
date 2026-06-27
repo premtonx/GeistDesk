@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useState, type MouseEvent, type ReactNode } from 'react';
 import {
   Copy,
   Eye,
@@ -195,18 +195,18 @@ function QuickActions({
   const { t } = useTranslation();
   const [revealed, setRevealed] = useState(false);
 
-  const copyUsername = (e: React.MouseEvent) => {
+  const copyUsername = (e: MouseEvent) => {
     e.stopPropagation();
     navigator.clipboard.writeText(asset.username);
   };
 
-  const copyPassword = async (e: React.MouseEvent) => {
+  const copyPassword = async (e: MouseEvent) => {
     e.stopPropagation();
     const plain = await onDecryptPassword(asset);
     if (plain) navigator.clipboard.writeText(plain);
   };
 
-  const reveal = async (e: React.MouseEvent) => {
+  const reveal = async (e: MouseEvent) => {
     e.stopPropagation();
     setRevealed(!revealed);
     if (!revealed) await onDecryptPassword(asset);
@@ -225,7 +225,7 @@ function QuickActions({
   );
 }
 
-function ActionBtn({ title, onClick, icon }: { title: string; onClick: (e: React.MouseEvent) => void; icon: React.ReactNode }) {
+function ActionBtn({ title, onClick, icon }: { title: string; onClick: (e: MouseEvent) => void; icon: ReactNode }) {
   return (
     <button type="button" title={title} onClick={onClick} className="h-7 w-7 rounded-lg flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition-colors">
       {icon}

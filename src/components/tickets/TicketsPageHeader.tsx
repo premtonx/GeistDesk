@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { MODULE_PAGE_PX } from '../ui/module-page/styles';
@@ -26,7 +26,7 @@ export interface TicketsHeaderStats {
 }
 
 interface TicketsPageHeaderProps {
-  trailing?: React.ReactNode;
+  trailing?: ReactNode;
   className?: string;
   stats?: TicketsHeaderStats;
 }

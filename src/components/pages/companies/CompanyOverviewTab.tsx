@@ -1,4 +1,4 @@
-import React from 'react';
+import { useMemo } from 'react';
 import { 
   Sparkles, 
   Activity, 
@@ -59,7 +59,7 @@ export default function CompanyOverviewTab({
   };
 
   // Safe mock or real tickets list
-  const displayTickets = React.useMemo(() => {
+  const displayTickets = useMemo(() => {
     if (ticketHistory.length > 0) {
       return ticketHistory.slice(0, 5);
     }

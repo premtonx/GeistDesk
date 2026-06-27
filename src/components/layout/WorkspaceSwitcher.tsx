@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { Headphones, Bug, Bot } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useWorkspace } from '../../lib/context/WorkspaceContext';
@@ -7,7 +7,7 @@ import { useTranslation } from '../../lib/context/I18nContext';
 
 const options: {
   id: AppWorkspace;
-  icon: React.ReactNode;
+  icon: ReactNode;
   labelKey: string;
   defaultLabel: string;
   emoji: string;

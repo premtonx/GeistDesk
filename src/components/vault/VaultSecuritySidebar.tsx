@@ -1,4 +1,4 @@
-import React from 'react';
+import { type ReactNode } from 'react';
 import { Shield, Key, RotateCcw, History, Eye, Share2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
@@ -110,7 +110,7 @@ function ActivityList({
   items,
 }: {
   title: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   items: ActivityCred[];
 }) {
   const { t } = useTranslation();

@@ -1,11 +1,11 @@
-import * as React from "react"
+import { forwardRef, type HTMLAttributes } from 'react';
 import { cn } from "../../lib/utils"
 
-interface ProgressProps extends React.HTMLAttributes<HTMLDivElement> {
+interface ProgressProps extends HTMLAttributes<HTMLDivElement> {
   value?: number
 }
 
-const Progress = React.forwardRef<HTMLDivElement, ProgressProps>(
+const Progress = forwardRef<HTMLDivElement, ProgressProps>(
   ({ className, value, ...props }, ref) => (
     <div
       ref={ref}
