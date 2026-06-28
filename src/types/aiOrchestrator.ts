@@ -255,6 +255,65 @@ export interface AiPlaygroundRunResult {
   error?: string;
 }
 
+export type AiGovernanceNodeType = 'root' | 'policy' | 'module' | 'layer';
+
+export interface AiGovernanceNodeDetail {
+  routingRules: string[];
+  promptSummaries: string[];
+  costProfile: string;
+  models: string[];
+}
+
+export interface AiGovernanceNode {
+  id: string;
+  labelKey: string;
+  type: AiGovernanceNodeType;
+  parentId?: string;
+  restrictions: string[];
+  safetyLayers: string[];
+  approvalGates: string[];
+  detail: AiGovernanceNodeDetail;
+}
+
+export interface AiGovernanceGraphData {
+  nodes: AiGovernanceNode[];
+}
+
+export interface AiWorkflowStep {
+  id: string;
+  labelKey: string;
+  feature?: AiFeatureId;
+  icon: 'ticket' | 'summarize' | 'sentiment' | 'kb' | 'reply' | 'sla' | 'notify';
+  active: boolean;
+}
+
+export interface AiBudgetComplianceState {
+  dailyCeilingEur: number;
+  spentTodayEur: number;
+  spentTodayUsd: number;
+  percentUsed: number;
+  exceeded: boolean;
+  localFallbackActive: boolean;
+  alertLevel: 'ok' | 'warning' | 'critical';
+  alertMessageKey: string;
+}
+
+export interface AiQualityMetrics {
+  customerAcceptanceRate: number;
+  rejectedSuggestions: number;
+  hallucinationFlags: number;
+  pendingReview: number;
+  totalAiOutputs: number;
+  lastUpdated: string;
+}
+
+export interface AiOperationsDashboard {
+  governance: AiGovernanceGraphData;
+  workflow: AiWorkflowStep[];
+  budget: AiBudgetComplianceState;
+  quality: AiQualityMetrics;
+}
+
 export interface AiKillSwitch {
   master: boolean;
   smartReply: boolean;
@@ -309,6 +368,8 @@ export interface AiOrchestratorConfig {
   killSwitch: AiKillSwitch;
   dailyBudgetUsd: number;
   monthlyBudgetUsd: number;
+  /** Daily spend ceiling in EUR for EU budget compliance fallback. */
+  dailyBudgetEur: number;
   budgetExceededAction: AiBudgetExceededAction;
   configVersion: number;
   updatedBy?: string;
@@ -693,6 +754,7 @@ export const DEFAULT_ORCHESTRATOR_CONFIG: AiOrchestratorConfig = {
   killSwitch: DEFAULT_KILL_SWITCH,
   dailyBudgetUsd: 10,
   monthlyBudgetUsd: 300,
+  dailyBudgetEur: 50,
   budgetExceededAction: 'local_fallback',
   configVersion: 1,
 };

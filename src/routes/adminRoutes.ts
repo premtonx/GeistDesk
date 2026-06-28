@@ -36,6 +36,7 @@ import {
   validateCorporatePolicyRules,
 } from "../lib/ai-orchestrator-policies.js";
 import { resumeApprovedAiRequest } from "../lib/ai-request-lifecycle.js";
+import { getOperationsDashboard } from "../lib/ai-orchestrator-operations.js";
 import { getProviderBenchmarkGrid, runPlaygroundComparison } from "../lib/ai-orchestrator-admin.js";
 import {
   listPromptTemplates,
@@ -530,6 +531,7 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
         killSwitch: payload.killSwitch as AiKillSwitch | undefined,
         dailyBudgetUsd: payload.dailyBudgetUsd,
         monthlyBudgetUsd: payload.monthlyBudgetUsd,
+        dailyBudgetEur: payload.dailyBudgetEur,
         budgetExceededAction: payload.budgetExceededAction,
       },
       updatedBy,
@@ -840,6 +842,19 @@ router.post("/orchestrator/playground", authenticate, requireRole(["SYSTEM_ADMIN
     if (models.length === 0) return res.status(400).json({ error: "At least one model is required" });
     const results = await runPlaygroundComparison({ prompt, models, workspaceId });
     return res.status(200).json({ results });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5s. GET /api/admin/orchestrator/operations-dashboard — command center reporting suite
+ */
+router.get("/orchestrator/operations-dashboard", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const dashboard = await getOperationsDashboard(workspaceId);
+    return res.status(200).json(dashboard);
   } catch (error: any) {
     return res.status(500).json({ error: "Internal Server Error", details: error.message });
   }

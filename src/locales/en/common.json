@@ -2104,6 +2104,61 @@
         "security_analyst": "Short",
         "knowledge_writer": "Markdown"
       }
+    },
+    "commandCenter": {
+      "pageTitle": "AI Operations Command Center",
+      "pageSubtitle": "Enterprise orchestrator — governance, routing, compliance, and quality intelligence.",
+      "title": "AI Operations Command Center",
+      "subtitle": "Governance visualization, workflow routing, budget compliance, and quality intelligence.",
+      "governance": {
+        "title": "AI Governance Graph",
+        "description": "Interactive workspace policy tree — click any node for details",
+        "panelSubtitle": "Routing rules, prompts, and cost profile",
+        "routingRules": "Routing Rules",
+        "prompts": "Active Prompts",
+        "costProfile": "Cost Profile",
+        "nodes": {
+          "root": "AI Governance",
+          "policy": "Workspace Policy Node",
+          "tickets": "Tickets",
+          "vault": "GeistVault",
+          "exchange": "GeistExchange"
+        }
+      },
+      "workflow": {
+        "title": "AI Workflow Routing Engine",
+        "description": "Incident-triggered sequential automation timeline",
+        "caption": "Sequential automation pipeline triggered on ticket creation",
+        "ticketCreated": "Ticket Created",
+        "summarize": "Summarize",
+        "sentiment": "Analyze Sentiment",
+        "findKb": "Find KB",
+        "suggestReply": "Suggest Reply",
+        "slaRisk": "Score SLA Risk",
+        "notifyTeam": "Notify Team"
+      },
+      "budget": {
+        "title": "Budget Compliance & Fallback Policy",
+        "description": "EUR ceiling with automatic local LLM failover",
+        "dailyCeiling": "Daily EUR Ceiling",
+        "fallbackNote": "Exceeding this triggers automatic local LLM routing.",
+        "spentToday": "Spent Today",
+        "alertCriticalTitle": "High-Priority Budget Alert",
+        "alertCriticalBody": "Daily EUR ceiling exceeded — all subsequent AI traffic is routed to local free LLM infrastructure.",
+        "alertWarningBody": "Approaching daily EUR ceiling — review usage.",
+        "localActive": "Local Fallback Active",
+        "alertOk": "Within budget",
+        "alertWarning": "Approaching ceiling",
+        "alertCritical": "Ceiling exceeded"
+      },
+      "quality": {
+        "title": "AI Quality Dashboard",
+        "acceptance": "Customer Acceptance Rate",
+        "rejected": "Rejected Suggestions",
+        "hallucination": "Hallucination Flags",
+        "pendingReview": "Pending Review",
+        "totalOutputs": "AI Outputs Today"
+      }
     }
   },
   "languages": {

@@ -148,6 +148,7 @@ export async function initDb() {
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS kill_switch_json JSONB NOT NULL DEFAULT '{"master":false,"smartReply":false,"summaries":false,"kbGeneration":false,"sentiment":false}';
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS daily_budget_usd NUMERIC(12,2) NOT NULL DEFAULT 10;
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS monthly_budget_usd NUMERIC(12,2) NOT NULL DEFAULT 300;
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS daily_budget_eur NUMERIC(12,2) NOT NULL DEFAULT 50;
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS budget_exceeded_action VARCHAR(32) NOT NULL DEFAULT 'local_fallback';
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS config_version INTEGER NOT NULL DEFAULT 1;
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS corporate_policies_json JSONB NOT NULL DEFAULT '{"customerPiiNeverLeavesWorkspace":true,"vaultAnalysisMustStayLocal":false,"rootCauseAnalysisRequiresAuditLogging":true,"promptLoggingRequiresExplicitConsent":true,"cloudFallbackRequiresApproval":false}';

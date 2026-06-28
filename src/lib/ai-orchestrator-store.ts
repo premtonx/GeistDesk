@@ -134,6 +134,7 @@ function rowToConfig(row: Record<string, unknown>): AiOrchestratorConfig {
     killSwitch: parseKillSwitch(row),
     dailyBudgetUsd: Number(row.daily_budget_usd ?? DEFAULT_ORCHESTRATOR_CONFIG.dailyBudgetUsd),
     monthlyBudgetUsd: Number(row.monthly_budget_usd ?? DEFAULT_ORCHESTRATOR_CONFIG.monthlyBudgetUsd),
+    dailyBudgetEur: Number(row.daily_budget_eur ?? DEFAULT_ORCHESTRATOR_CONFIG.dailyBudgetEur),
     budgetExceededAction:
       (row.budget_exceeded_action as AiOrchestratorConfig['budgetExceededAction']) ??
       DEFAULT_ORCHESTRATOR_CONFIG.budgetExceededAction,
@@ -169,10 +170,10 @@ async function insertOrchestratorConfig(config: AiOrchestratorConfig, updatedBy:
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
       data_residency, corporate_policies_json, trust_level, data_residency_policy_json,
       confidence_thresholds_json, memory_policy_json, feature_personas_json,
-      kill_switch_json, daily_budget_usd, monthly_budget_usd,
+      kill_switch_json, daily_budget_usd, monthly_budget_usd, daily_budget_eur,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,NOW()
     )
     ON CONFLICT (workspace_id) DO NOTHING`,
     configInsertParams(config, updatedBy),
@@ -207,6 +208,7 @@ function configInsertParams(config: AiOrchestratorConfig, updatedBy: string): un
     JSON.stringify(config.killSwitch),
     config.dailyBudgetUsd,
     config.monthlyBudgetUsd,
+    config.dailyBudgetEur,
     config.budgetExceededAction,
     config.configVersion,
     updatedBy,
@@ -259,10 +261,10 @@ export async function upsertOrchestratorConfig(
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
       data_residency, corporate_policies_json, trust_level, data_residency_policy_json,
       confidence_thresholds_json, memory_policy_json, feature_personas_json,
-      kill_switch_json, daily_budget_usd, monthly_budget_usd,
+      kill_switch_json, daily_budget_usd, monthly_budget_usd, daily_budget_eur,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,NOW()
     )
     ON CONFLICT (workspace_id) DO UPDATE SET
       scope = EXCLUDED.scope,
@@ -290,6 +292,7 @@ export async function upsertOrchestratorConfig(
       kill_switch_json = EXCLUDED.kill_switch_json,
       daily_budget_usd = EXCLUDED.daily_budget_usd,
       monthly_budget_usd = EXCLUDED.monthly_budget_usd,
+      daily_budget_eur = EXCLUDED.daily_budget_eur,
       budget_exceeded_action = EXCLUDED.budget_exceeded_action,
       config_version = EXCLUDED.config_version,
       updated_by = EXCLUDED.updated_by,

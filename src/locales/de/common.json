@@ -2384,6 +2384,61 @@
         "security_analyst": "Kurz",
         "knowledge_writer": "Markdown"
       }
+    },
+    "commandCenter": {
+      "pageTitle": "KI-Operations Command Center",
+      "pageSubtitle": "Enterprise-Orchestrator — Governance, Routing, Compliance und Qualitätsintelligenz.",
+      "title": "KI-Operations Command Center",
+      "subtitle": "Governance-Visualisierung, Workflow-Routing, Budget-Compliance und Qualitätsintelligenz.",
+      "governance": {
+        "title": "KI-Governance-Graph",
+        "description": "Interaktiver Workspace-Policy-Baum — Knoten anklicken für Details",
+        "panelSubtitle": "Routing-Regeln, Prompts und Kostenprofil",
+        "routingRules": "Routing-Regeln",
+        "prompts": "Aktive Prompts",
+        "costProfile": "Kostenprofil",
+        "nodes": {
+          "root": "KI-Governance",
+          "policy": "Workspace-Policy-Knoten",
+          "tickets": "Tickets",
+          "vault": "GeistVault",
+          "exchange": "GeistExchange"
+        }
+      },
+      "workflow": {
+        "title": "KI-Workflow-Routing-Engine",
+        "description": "Sequenzielle Automatisierungs-Timeline bei Incidents",
+        "caption": "Sequenzielle Automations-Pipeline bei Ticket-Erstellung",
+        "ticketCreated": "Ticket erstellt",
+        "summarize": "Zusammenfassen",
+        "sentiment": "Stimmung analysieren",
+        "findKb": "KB finden",
+        "suggestReply": "Antwort vorschlagen",
+        "slaRisk": "SLA-Risiko bewerten",
+        "notifyTeam": "Team benachrichtigen"
+      },
+      "budget": {
+        "title": "Budget-Compliance & Fallback-Richtlinie",
+        "description": "EUR-Obergrenze mit automatischem lokalem LLM-Failover",
+        "dailyCeiling": "Tägliche EUR-Obergrenze",
+        "fallbackNote": "Überschreitung leitet automatisch auf lokale LLM-Infrastruktur um.",
+        "spentToday": "Heute ausgegeben",
+        "alertCriticalTitle": "Budget-Warnung mit hoher Priorität",
+        "alertCriticalBody": "Tägliche EUR-Obergrenze überschritten — weiterer KI-Traffic wird auf kostenlose lokale LLMs umgeleitet.",
+        "alertWarningBody": "EUR-Obergrenze fast erreicht — Nutzung prüfen.",
+        "localActive": "Lokaler Fallback aktiv",
+        "alertOk": "Im Budget",
+        "alertWarning": "Obergrenze nahe",
+        "alertCritical": "Obergrenze überschritten"
+      },
+      "quality": {
+        "title": "KI-Qualitäts-Dashboard",
+        "acceptance": "Kundenakzeptanzrate",
+        "rejected": "Abgelehnte Vorschläge",
+        "hallucination": "Halluzinations-Flags",
+        "pendingReview": "Ausstehende Prüfung",
+        "totalOutputs": "KI-Ausgaben heute"
+      }
     }
   },
   "languages": {

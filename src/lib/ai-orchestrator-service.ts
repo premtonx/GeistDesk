@@ -153,7 +153,13 @@ export async function detectLocalModels(
 }
 
 export function isBudgetExceeded(config: AiOrchestratorConfig, costs: { today: number; month: number }): boolean {
-  return costs.today >= config.dailyBudgetUsd || costs.month >= config.monthlyBudgetUsd;
+  const eurSpend = costs.today * 0.93;
+  const eurCeiling = config.dailyBudgetEur ?? 50;
+  return (
+    costs.today >= config.dailyBudgetUsd ||
+    costs.month >= config.monthlyBudgetUsd ||
+    eurSpend >= eurCeiling
+  );
 }
 
 async function fetchUsageAnalytics(workspaceId: string): Promise<AiUsageAnalytics> {
