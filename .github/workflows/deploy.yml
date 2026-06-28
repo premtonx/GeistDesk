@@ -25,7 +25,7 @@ jobs:
           cache: npm
 
       - name: Install exact dependencies
-        run: npm ci
+        run: npm ci --dangerously-allow-all-scripts --no-audit
 
       - name: TypeScript compile gate
         run: npm run lint

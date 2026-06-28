@@ -3,8 +3,8 @@ FROM node:24-alpine AS builder
 WORKDIR /app
 ARG BUILD_ID=local
 ENV BUILD_ID=$BUILD_ID
-COPY package*.json ./
-RUN npm ci
+COPY package*.json .npmrc ./
+RUN npm ci --dangerously-allow-all-scripts --no-audit
 COPY . .
 RUN npm run lint && node scripts/verify-no-react-namespace.mjs && npm run build && node scripts/verify-production-build.mjs
 
@@ -14,8 +14,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 
 # Install only production dependencies
-COPY package*.json ./
-RUN npm ci --only=production
+COPY package*.json .npmrc ./
+RUN npm ci --omit=dev --dangerously-allow-all-scripts --no-audit
 
 # Copy built artifacts from the build stage
 COPY --from=builder /app/dist ./dist
