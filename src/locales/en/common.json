@@ -1988,6 +1988,179 @@
     "toSaveAndPublish": "to save and publish",
     "loadingEditor": "Loading editor..."
   },
+  "aiOrchestrator": {
+    "workbench": {
+      "title": "Admin Control Utilities",
+      "description": "Draft prompts, benchmark providers, test models safely, and assign personas to feature rows.",
+      "tabs": {
+        "prompts": "Prompt Library",
+        "benchmark": "Benchmark Grid",
+        "playground": "Playground",
+        "personas": "Personas"
+      }
+    },
+    "featureRouting": {
+      "title": "Feature Routing",
+      "description": "Visual routing matrix for all GeistDesk AI features",
+      "bulkRouter": "Bulk Model Router",
+      "selectModel": "Select model…",
+      "applyToAll": "Apply to All",
+      "bulkApplied": "Routed model applied to all features.",
+      "featureColumn": "Feature",
+      "routedModelColumn": "Routed Model"
+    },
+    "features": {
+      "ticket_summarization": { "label": "Ticket Summary", "tooltip": "Summarizes ticket threads for agents." },
+      "sentiment_analysis": { "label": "Sentiment Analysis", "tooltip": "Detects customer sentiment in messages." },
+      "smart_reply": { "label": "Smart Reply", "tooltip": "Drafts contextual agent replies." },
+      "kb_generation": { "label": "KB Generation", "tooltip": "Generates knowledge base articles from tickets." },
+      "escalation_analysis": { "label": "Escalation Analysis", "tooltip": "Analyzes escalation risk and routing." },
+      "root_cause_analysis": { "label": "Root Cause Analysis", "tooltip": "Performs incident root cause analysis." },
+      "translation": { "label": "Translation", "tooltip": "Translates support content bidirectionally." },
+      "vault_insights": { "label": "Vault Insights", "tooltip": "Analyzes vault credential security posture." }
+    },
+    "promptLibrary": {
+      "featureLabel": "Core Feature",
+      "editorLabel": "Prompt Template",
+      "historyTitle": "Immutable History Trail",
+      "diffTitle": "Layout Diff",
+      "saveVersion": "Save New Version",
+      "savedVersion": "Admin draft save",
+      "saved": "Prompt version saved.",
+      "saveError": "Failed to save prompt.",
+      "loadError": "Failed to load prompt library.",
+      "rolledBack": "Prompt rolled back successfully.",
+      "rollbackError": "Rollback failed.",
+      "rollback": "Rollback",
+      "versionBadge": "Version",
+      "immutableNote": "Every save creates an immutable version entry. Rollback creates a new version from historical content.",
+      "features": {
+        "ticket_summarization": "Ticket Summary",
+        "kb_generation": "KB Generation",
+        "root_cause_analysis": "Root Cause Analysis",
+        "translation": "Translation"
+      }
+    },
+    "benchmark": {
+      "provider": "Provider",
+      "latency": "Latency (ms)",
+      "costScale": "Cost Scale",
+      "quality": "Quality Rating (%)",
+      "reliability": "Connection Reliability (%)",
+      "status": "Status",
+      "refresh": "Refresh",
+      "lastRefresh": "Last refresh",
+      "empty": "No provider metrics available yet.",
+      "statuses": {
+        "online": "Online",
+        "offline": "Offline",
+        "degraded": "Degraded",
+        "missing_key": "Missing Key"
+      }
+    },
+    "playground": {
+      "description": "Isolated diagnostic workspace — test prompts across multiple models without affecting production routing.",
+      "inputLabel": "Test Input",
+      "inputPlaceholder": "Type a test prompt to compare model outputs…",
+      "modelsLabel": "Target Models",
+      "run": "Execute Test Run",
+      "confidence": "Confidence",
+      "success": "OK",
+      "failed": "Failed"
+    },
+    "personas": {
+      "featureColumn": "Feature",
+      "personaColumn": "Assigned Persona",
+      "supportAgent": {
+        "label": "Support Agent",
+        "tone": "Friendly",
+        "language": "German",
+        "format": "Conversational"
+      },
+      "securityAnalyst": {
+        "label": "Security Analyst",
+        "tone": "Strict",
+        "language": "English",
+        "format": "Short"
+      },
+      "knowledgeWriter": {
+        "label": "Knowledge Writer",
+        "tone": "Formal",
+        "language": "English",
+        "format": "Markdown"
+      },
+      "tones": {
+        "support_agent": "Friendly",
+        "security_analyst": "Strict",
+        "knowledge_writer": "Formal"
+      },
+      "languages": {
+        "support_agent": "German",
+        "security_analyst": "English",
+        "knowledge_writer": "English"
+      },
+      "formats": {
+        "support_agent": "Conversational",
+        "security_analyst": "Short",
+        "knowledge_writer": "Markdown"
+      }
+    },
+    "commandCenter": {
+      "pageTitle": "AI Operations Command Center",
+      "pageSubtitle": "Enterprise orchestrator — governance, routing, compliance, and quality intelligence.",
+      "title": "AI Operations Command Center",
+      "subtitle": "Governance visualization, workflow routing, budget compliance, and quality intelligence.",
+      "governance": {
+        "title": "AI Governance Graph",
+        "description": "Interactive workspace policy tree — click any node for details",
+        "panelSubtitle": "Routing rules, prompts, and cost profile",
+        "routingRules": "Routing Rules",
+        "prompts": "Active Prompts",
+        "costProfile": "Cost Profile",
+        "nodes": {
+          "root": "AI Governance",
+          "policy": "Workspace Policy Node",
+          "tickets": "Tickets",
+          "vault": "GeistVault",
+          "exchange": "GeistExchange"
+        }
+      },
+      "workflow": {
+        "title": "AI Workflow Routing Engine",
+        "description": "Incident-triggered sequential automation timeline",
+        "caption": "Sequential automation pipeline triggered on ticket creation",
+        "ticketCreated": "Ticket Created",
+        "summarize": "Summarize",
+        "sentiment": "Analyze Sentiment",
+        "findKb": "Find KB",
+        "suggestReply": "Suggest Reply",
+        "slaRisk": "Score SLA Risk",
+        "notifyTeam": "Notify Team"
+      },
+      "budget": {
+        "title": "Budget Compliance & Fallback Policy",
+        "description": "EUR ceiling with automatic local LLM failover",
+        "dailyCeiling": "Daily EUR Ceiling",
+        "fallbackNote": "Exceeding this triggers automatic local LLM routing.",
+        "spentToday": "Spent Today",
+        "alertCriticalTitle": "High-Priority Budget Alert",
+        "alertCriticalBody": "Daily EUR ceiling exceeded — all subsequent AI traffic is routed to local free LLM infrastructure.",
+        "alertWarningBody": "Approaching daily EUR ceiling — review usage.",
+        "localActive": "Local Fallback Active",
+        "alertOk": "Within budget",
+        "alertWarning": "Approaching ceiling",
+        "alertCritical": "Ceiling exceeded"
+      },
+      "quality": {
+        "title": "AI Quality Dashboard",
+        "acceptance": "Customer Acceptance Rate",
+        "rejected": "Rejected Suggestions",
+        "hallucination": "Hallucination Flags",
+        "pendingReview": "Pending Review",
+        "totalOutputs": "AI Outputs Today"
+      }
+    }
+  },
   "languages": {
     "de": "Deutsch",
     "en": "English"

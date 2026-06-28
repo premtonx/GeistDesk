@@ -57,6 +57,8 @@ import {
   subscribeOrchestratorConfig,
 } from '../../lib/aiOrchestratorClient';
 import { ProviderPriorityList } from '../ai-orchestrator/ProviderPriorityList';
+import { AiOrchestratorWorkbench } from '../ai-orchestrator/AiOrchestratorWorkbench';
+import { AiOperationsCommandCenter } from '../ai-orchestrator/AiOperationsCommandCenter';
 
 const MODEL_OPTIONS = [
   { value: 'gemini-flash', label: 'Gemini Flash' },
@@ -295,9 +297,11 @@ export default function AISettingsPage() {
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">AI Control Plane</h1>
+            <h1 className="text-2xl font-bold tracking-tight">
+              {t('aiOrchestrator.commandCenter.pageTitle', 'AI Operations Command Center')}
+            </h1>
             <p className="text-muted-foreground text-sm">
-              Enterprise orchestrator — workspace-wide routing, governance, and compliance.
+              {t('aiOrchestrator.commandCenter.pageSubtitle', 'Enterprise orchestrator — governance, routing, compliance, and quality intelligence.')}
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -346,6 +350,18 @@ export default function AISettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        <AiOperationsCommandCenter
+          config={config}
+          readOnly={readOnly}
+          onBudgetEurChange={(dailyBudgetEur) => patchConfig({ dailyBudgetEur })}
+        />
+
+        <AiOrchestratorWorkbench
+          config={config}
+          readOnly={readOnly}
+          onPersonasChange={(featurePersonas) => patchConfig({ featurePersonas })}
+        />
 
         {/* Provider Health */}
         <Card className="rounded-2xl shadow-sm">

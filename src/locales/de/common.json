@@ -2268,6 +2268,179 @@
     "changeLanguageDe": "Sprache wechseln",
     "moreTools": "Weitere Tools"
   },
+  "aiOrchestrator": {
+    "workbench": {
+      "title": "Admin-Steuerungswerkzeuge",
+      "description": "Prompts entwerfen, Anbieter benchmarken, Modelle sicher testen und Personas Feature-Zeilen zuweisen.",
+      "tabs": {
+        "prompts": "Prompt-Bibliothek",
+        "benchmark": "Benchmark-Raster",
+        "playground": "Playground",
+        "personas": "Personas"
+      }
+    },
+    "featureRouting": {
+      "title": "Feature-Routing",
+      "description": "Visuelle Routing-Matrix für alle GeistDesk-KI-Funktionen",
+      "bulkRouter": "Sammel-Modell-Router",
+      "selectModel": "Modell wählen…",
+      "applyToAll": "Auf alle anwenden",
+      "bulkApplied": "Modell auf alle Funktionen angewendet.",
+      "featureColumn": "Funktion",
+      "routedModelColumn": "Geroutetes Modell"
+    },
+    "features": {
+      "ticket_summarization": { "label": "Ticket-Zusammenfassung", "tooltip": "Fasst Ticket-Threads für Agenten zusammen." },
+      "sentiment_analysis": { "label": "Stimmungsanalyse", "tooltip": "Erkennt Kundenstimmung in Nachrichten." },
+      "smart_reply": { "label": "Smart Reply", "tooltip": "Entwirft kontextuelle Agentenantworten." },
+      "kb_generation": { "label": "KB-Generierung", "tooltip": "Erstellt Wissensdatenbank-Artikel aus Tickets." },
+      "escalation_analysis": { "label": "Eskalationsanalyse", "tooltip": "Analysiert Eskalationsrisiko und Routing." },
+      "root_cause_analysis": { "label": "Root-Cause-Analyse", "tooltip": "Führt Incident-Root-Cause-Analysen durch." },
+      "translation": { "label": "Übersetzung", "tooltip": "Übersetzt Support-Inhalte bidirektional." },
+      "vault_insights": { "label": "Vault-Einblicke", "tooltip": "Analysiert Vault-Sicherheitslage." }
+    },
+    "promptLibrary": {
+      "featureLabel": "Kernfunktion",
+      "editorLabel": "Prompt-Vorlage",
+      "historyTitle": "Unveränderlicher Verlauf",
+      "diffTitle": "Layout-Diff",
+      "saveVersion": "Neue Version speichern",
+      "savedVersion": "Admin-Entwurf gespeichert",
+      "saved": "Prompt-Version gespeichert.",
+      "saveError": "Prompt konnte nicht gespeichert werden.",
+      "loadError": "Prompt-Bibliothek konnte nicht geladen werden.",
+      "rolledBack": "Prompt erfolgreich zurückgesetzt.",
+      "rollbackError": "Rollback fehlgeschlagen.",
+      "rollback": "Zurücksetzen",
+      "versionBadge": "Version",
+      "immutableNote": "Jeder Speichervorgang erstellt einen unveränderlichen Versionseintrag. Rollback erzeugt eine neue Version aus historischem Inhalt.",
+      "features": {
+        "ticket_summarization": "Ticket-Zusammenfassung",
+        "kb_generation": "KB-Generierung",
+        "root_cause_analysis": "Root-Cause-Analyse",
+        "translation": "Übersetzung"
+      }
+    },
+    "benchmark": {
+      "provider": "Anbieter",
+      "latency": "Latenz (ms)",
+      "costScale": "Kostenstufe",
+      "quality": "Qualitätsbewertung (%)",
+      "reliability": "Verbindungszuverlässigkeit (%)",
+      "status": "Status",
+      "refresh": "Aktualisieren",
+      "lastRefresh": "Letzte Aktualisierung",
+      "empty": "Noch keine Anbieter-Metriken verfügbar.",
+      "statuses": {
+        "online": "Online",
+        "offline": "Offline",
+        "degraded": "Eingeschränkt",
+        "missing_key": "Schlüssel fehlt"
+      }
+    },
+    "playground": {
+      "description": "Isolierter Diagnose-Workspace — testen Sie Prompts über mehrere Modelle ohne Produktions-Routing zu beeinflussen.",
+      "inputLabel": "Testeingabe",
+      "inputPlaceholder": "Test-Prompt eingeben, um Modellausgaben zu vergleichen…",
+      "modelsLabel": "Zielmodelle",
+      "run": "Testlauf starten",
+      "confidence": "Konfidenz",
+      "success": "OK",
+      "failed": "Fehlgeschlagen"
+    },
+    "personas": {
+      "featureColumn": "Funktion",
+      "personaColumn": "Zugewiesene Persona",
+      "supportAgent": {
+        "label": "Support-Agent",
+        "tone": "Freundlich",
+        "language": "Deutsch",
+        "format": "Konversationell"
+      },
+      "securityAnalyst": {
+        "label": "Sicherheitsanalyst",
+        "tone": "Strikt",
+        "language": "Englisch",
+        "format": "Kurz"
+      },
+      "knowledgeWriter": {
+        "label": "Wissensautor",
+        "tone": "Formell",
+        "language": "Englisch",
+        "format": "Markdown"
+      },
+      "tones": {
+        "support_agent": "Freundlich",
+        "security_analyst": "Strikt",
+        "knowledge_writer": "Formell"
+      },
+      "languages": {
+        "support_agent": "Deutsch",
+        "security_analyst": "Englisch",
+        "knowledge_writer": "Englisch"
+      },
+      "formats": {
+        "support_agent": "Konversationell",
+        "security_analyst": "Kurz",
+        "knowledge_writer": "Markdown"
+      }
+    },
+    "commandCenter": {
+      "pageTitle": "KI-Operations Command Center",
+      "pageSubtitle": "Enterprise-Orchestrator — Governance, Routing, Compliance und Qualitätsintelligenz.",
+      "title": "KI-Operations Command Center",
+      "subtitle": "Governance-Visualisierung, Workflow-Routing, Budget-Compliance und Qualitätsintelligenz.",
+      "governance": {
+        "title": "KI-Governance-Graph",
+        "description": "Interaktiver Workspace-Policy-Baum — Knoten anklicken für Details",
+        "panelSubtitle": "Routing-Regeln, Prompts und Kostenprofil",
+        "routingRules": "Routing-Regeln",
+        "prompts": "Aktive Prompts",
+        "costProfile": "Kostenprofil",
+        "nodes": {
+          "root": "KI-Governance",
+          "policy": "Workspace-Policy-Knoten",
+          "tickets": "Tickets",
+          "vault": "GeistVault",
+          "exchange": "GeistExchange"
+        }
+      },
+      "workflow": {
+        "title": "KI-Workflow-Routing-Engine",
+        "description": "Sequenzielle Automatisierungs-Timeline bei Incidents",
+        "caption": "Sequenzielle Automations-Pipeline bei Ticket-Erstellung",
+        "ticketCreated": "Ticket erstellt",
+        "summarize": "Zusammenfassen",
+        "sentiment": "Stimmung analysieren",
+        "findKb": "KB finden",
+        "suggestReply": "Antwort vorschlagen",
+        "slaRisk": "SLA-Risiko bewerten",
+        "notifyTeam": "Team benachrichtigen"
+      },
+      "budget": {
+        "title": "Budget-Compliance & Fallback-Richtlinie",
+        "description": "EUR-Obergrenze mit automatischem lokalem LLM-Failover",
+        "dailyCeiling": "Tägliche EUR-Obergrenze",
+        "fallbackNote": "Überschreitung leitet automatisch auf lokale LLM-Infrastruktur um.",
+        "spentToday": "Heute ausgegeben",
+        "alertCriticalTitle": "Budget-Warnung mit hoher Priorität",
+        "alertCriticalBody": "Tägliche EUR-Obergrenze überschritten — weiterer KI-Traffic wird auf kostenlose lokale LLMs umgeleitet.",
+        "alertWarningBody": "EUR-Obergrenze fast erreicht — Nutzung prüfen.",
+        "localActive": "Lokaler Fallback aktiv",
+        "alertOk": "Im Budget",
+        "alertWarning": "Obergrenze nahe",
+        "alertCritical": "Obergrenze überschritten"
+      },
+      "quality": {
+        "title": "KI-Qualitäts-Dashboard",
+        "acceptance": "Kundenakzeptanzrate",
+        "rejected": "Abgelehnte Vorschläge",
+        "hallucination": "Halluzinations-Flags",
+        "pendingReview": "Ausstehende Prüfung",
+        "totalOutputs": "KI-Ausgaben heute"
+      }
+    }
+  },
   "languages": {
     "de": "Deutsch",
     "en": "English"

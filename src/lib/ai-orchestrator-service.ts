@@ -18,6 +18,13 @@ import type {
   DetectedLocalModel,
 } from '../types/aiOrchestrator.js';
 import { FEATURE_LABELS as FEATURE_LABELS_CONST } from '../types/aiOrchestrator.js';
+import { isBudgetExceeded } from './ai-budget.js';
+import {
+  runAiRequestLifecycle,
+  type AiLifecycleOptions,
+} from './ai-request-lifecycle.js';
+import { createProductionModelExecutor } from './ai-lifecycle-executor.js';
+import type { AiExecutionContext, AiExecutionResult } from '../types/aiOrchestrator.js';
 
 const PROVIDER_LABELS: Record<string, string> = {
   openai: 'GPT-5',
@@ -31,6 +38,34 @@ const PROVIDER_LABELS: Record<string, string> = {
   'local-llama': 'Local Llama',
   custom_gateway: 'Custom Gateway',
 };
+
+export { isBudgetExceeded } from './ai-budget.js';
+
+/** Production AI execution — routes through lifecycle middleware with live model executor. */
+export async function executeAiFeatureRequest(
+  ctx: AiExecutionContext,
+  options: AiLifecycleOptions = {},
+): Promise<AiExecutionResult> {
+  const workspaceId = ctx.workspaceId ?? 'default';
+  return runAiRequestLifecycle(ctx, {
+    ...options,
+    executor: options.executor ?? createProductionModelExecutor(workspaceId),
+  });
+}
+
+/** Returns model output for completed/review-pending requests; throws on blocked/failed. */
+export function requireLifecycleOutput(result: AiExecutionResult): string {
+  if (result.status === 'blocked' || result.status === 'failed') {
+    throw new Error(result.error ?? `AI request ${result.status}`);
+  }
+  if (result.status === 'pending_approval') {
+    throw new Error('AI generation requires approval before it can be delivered.');
+  }
+  if (!result.output?.trim()) {
+    throw new Error('AI execution returned empty output.');
+  }
+  return result.output;
+}
 
 async function pingLocalEndpoint(url: string, apiKey?: string | null): Promise<{ ok: boolean; latencyMs: number; message?: string }> {
   const start = Date.now();
@@ -150,10 +185,6 @@ export async function detectLocalModels(
   }
 
   return models;
-}
-
-export function isBudgetExceeded(config: AiOrchestratorConfig, costs: { today: number; month: number }): boolean {
-  return costs.today >= config.dailyBudgetUsd || costs.month >= config.monthlyBudgetUsd;
 }
 
 async function fetchUsageAnalytics(workspaceId: string): Promise<AiUsageAnalytics> {

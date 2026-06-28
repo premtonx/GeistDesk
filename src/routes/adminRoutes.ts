@@ -13,8 +13,13 @@ import {
   appendOrchestratorAudit,
   getOrchestratorAudit,
   getOrchestratorConfig,
+  getApprovalPayload,
   listConfigVersions,
+  listExplainabilityLogs,
+  listHumanReviewPool,
+  listPendingApprovals,
   listProviderSecretStatus,
+  resolveApprovalRequest,
   restoreConfigVersion,
   setProviderSecret,
   upsertOrchestratorConfig,
@@ -25,7 +30,32 @@ import {
   testOrchestratorConfiguration,
 } from "../lib/ai-orchestrator-service.js";
 import { orchestratorEventBus } from "../lib/ai-orchestrator-events.js";
-import type { AiFeatureRouting, AiKillSwitch, AiOrchestratorConfig } from "../types/aiOrchestrator.js";
+import {
+  compileOrchestratorPolicy,
+  evaluateEnterpriseAiRiskScore,
+  validateCorporatePolicyRules,
+} from "../lib/ai-orchestrator-policies.js";
+import { resumeApprovedAiRequest } from "../lib/ai-request-lifecycle.js";
+import { getOperationsDashboard } from "../lib/ai-orchestrator-operations.js";
+import { getProviderBenchmarkGrid, runPlaygroundComparison } from "../lib/ai-orchestrator-admin.js";
+import {
+  listPromptTemplates,
+  listPromptVersions,
+  rollbackPromptVersion,
+  savePromptVersion,
+} from "../lib/ai-prompt-library-store.js";
+import type {
+  AiConfidenceThresholds,
+  AiCorporatePolicies,
+  AiDataResidencyPolicy,
+  AiFeaturePersonaMap,
+  AiFeatureRouting,
+  AiKillSwitch,
+  AiMemoryPolicy,
+  AiOrchestratorConfig,
+  AiPromptLibraryFeature,
+  AiTrustLevel,
+} from "../types/aiOrchestrator.js";
 
 const router = Router();
 
@@ -345,10 +375,16 @@ router.get("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]), 
     await migrateLegacyOrchestratorConfig(workspaceId);
     const config = await getOrchestratorConfig(workspaceId);
     const secretStatus = await listProviderSecretStatus(workspaceId);
+    const policyCompilation = compileOrchestratorPolicy(config);
+    const riskAssessment = evaluateEnterpriseAiRiskScore(config);
+    const policyValidation = validateCorporatePolicyRules(config);
     return res.status(200).json({
       ...config,
       secretStatus,
       updatedAt: config.updatedAt,
+      policyCompilation,
+      riskAssessment,
+      policyValidation,
     });
   } catch (error: any) {
     console.error("[Admin Orchestrator GET] Error retrieving config:", error);
@@ -401,6 +437,8 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
       "monthlyBudgetUsd",
       "budgetExceededAction",
       "configVersion",
+      "trustLevel",
+      "dataResidency",
     ];
 
     for (const field of auditFields) {
@@ -429,6 +467,42 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
       });
     }
 
+    if (payload.corporatePolicies) {
+      await appendOrchestratorAudit({
+        workspaceId,
+        userId: req.user?.id,
+        userEmail: req.user?.email,
+        action: "Updated Corporate AI Policies",
+        fieldName: "corporatePolicies",
+        oldValue: JSON.stringify(existing.corporatePolicies),
+        newValue: JSON.stringify(payload.corporatePolicies),
+      });
+    }
+
+    if (payload.dataResidencyPolicy) {
+      await appendOrchestratorAudit({
+        workspaceId,
+        userId: req.user?.id,
+        userEmail: req.user?.email,
+        action: "Updated Data Residency Policy",
+        fieldName: "dataResidencyPolicy",
+        oldValue: JSON.stringify(existing.dataResidencyPolicy),
+        newValue: JSON.stringify(payload.dataResidencyPolicy),
+      });
+    }
+
+    if (payload.trustLevel !== undefined && payload.trustLevel !== existing.trustLevel) {
+      await appendOrchestratorAudit({
+        workspaceId,
+        userId: req.user?.id,
+        userEmail: req.user?.email,
+        action: "Changed trustLevel",
+        fieldName: "trustLevel",
+        oldValue: String(existing.trustLevel),
+        newValue: String(payload.trustLevel),
+      });
+    }
+
     const saved = await upsertOrchestratorConfig(
       {
         workspaceId,
@@ -448,9 +522,16 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
         contentFilteringEnabled: payload.contentFilteringEnabled,
         promptLoggingEnabled: payload.promptLoggingEnabled,
         dataResidency: payload.dataResidency,
+        corporatePolicies: payload.corporatePolicies as AiCorporatePolicies | undefined,
+        trustLevel: payload.trustLevel as AiTrustLevel | undefined,
+        dataResidencyPolicy: payload.dataResidencyPolicy as AiDataResidencyPolicy | undefined,
+        confidenceThresholds: payload.confidenceThresholds as AiConfidenceThresholds | undefined,
+        memoryPolicy: payload.memoryPolicy as AiMemoryPolicy | undefined,
+        featurePersonas: payload.featurePersonas as AiFeaturePersonaMap | undefined,
         killSwitch: payload.killSwitch as AiKillSwitch | undefined,
         dailyBudgetUsd: payload.dailyBudgetUsd,
         monthlyBudgetUsd: payload.monthlyBudgetUsd,
+        dailyBudgetEur: payload.dailyBudgetEur,
         budgetExceededAction: payload.budgetExceededAction,
       },
       updatedBy,
@@ -570,6 +651,210 @@ router.get("/orchestrator/analytics", authenticate, requireRole(["SYSTEM_ADMIN"]
     const workspaceId = String(req.query.workspaceId || "default");
     const health = await getOrchestratorHealth(workspaceId);
     return res.status(200).json({ usage: health.usage, metrics: health.metrics });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5h. GET /api/admin/orchestrator/risk-score
+ * Enterprise AI risk score auditor panel (0–100 with recommendations).
+ */
+router.get("/orchestrator/risk-score", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const config = await getOrchestratorConfig(workspaceId);
+    const riskAssessment = evaluateEnterpriseAiRiskScore(config);
+    const policyCompilation = compileOrchestratorPolicy(config);
+    const policyValidation = validateCorporatePolicyRules(config);
+    return res.status(200).json({
+      riskAssessment,
+      policyCompilation,
+      policyValidation,
+    });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5i. GET /api/admin/orchestrator/approvals — pending manager/engineer approval queue
+ */
+router.get("/orchestrator/approvals", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const approvals = await listPendingApprovals(workspaceId, Math.min(Number(req.query.limit) || 50, 200));
+    return res.status(200).json({ approvals });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5j. POST /api/admin/orchestrator/approvals/:id/resolve — approve or reject queued AI request
+ */
+router.post("/orchestrator/approvals/:id/resolve", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.body.workspaceId || "default");
+    const approvalId = String(req.params.id || "");
+    const decision = req.body.decision === "rejected" ? "rejected" : "approved";
+    const approvedBy = req.user?.email || req.user?.id || "SYSTEM_ADMIN";
+
+    const resolved = await resolveApprovalRequest(approvalId, decision, approvedBy, workspaceId);
+    if (!resolved) return res.status(404).json({ error: "Approval entry not found." });
+
+    if (decision === "rejected") {
+      return res.status(200).json({ success: true, approval: resolved });
+    }
+
+    const payload = await getApprovalPayload(approvalId, workspaceId);
+    if (!payload?.prompt) {
+      return res.status(200).json({ success: true, approval: resolved, warning: "No payload to resume." });
+    }
+
+    const result = await resumeApprovedAiRequest({
+      workspaceId,
+      feature: resolved.feature,
+      prompt: payload.prompt,
+      userEmail: approvedBy,
+      metadata: payload.metadata,
+    });
+
+    return res.status(200).json({ success: true, approval: resolved, execution: result });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5k. GET /api/admin/orchestrator/review-pool — low-confidence human review queue
+ */
+router.get("/orchestrator/review-pool", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const reviews = await listHumanReviewPool(workspaceId, Math.min(Number(req.query.limit) || 50, 200));
+    return res.status(200).json({ reviews });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5l. GET /api/admin/orchestrator/explainability — AI explainability audit log
+ */
+router.get("/orchestrator/explainability", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const logs = await listExplainabilityLogs(workspaceId, Math.min(Number(req.query.limit) || 50, 200));
+    return res.status(200).json({ logs });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5m. GET /api/admin/orchestrator/prompts — version-controlled prompt library
+ */
+router.get("/orchestrator/prompts", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const templates = await listPromptTemplates(workspaceId);
+    return res.status(200).json({ templates });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5n. GET /api/admin/orchestrator/prompts/:feature/versions
+ */
+router.get("/orchestrator/prompts/:feature/versions", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const feature = String(req.params.feature) as AiPromptLibraryFeature;
+    const versions = await listPromptVersions(feature, workspaceId);
+    const templates = await listPromptTemplates(workspaceId);
+    const current = templates.find((t) => t.feature === feature);
+    return res.status(200).json({ feature, current, versions });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5o. POST /api/admin/orchestrator/prompts/:feature — save new prompt version
+ */
+router.post("/orchestrator/prompts/:feature", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.body.workspaceId || "default");
+    const feature = String(req.params.feature) as AiPromptLibraryFeature;
+    const body = String(req.body.body || "");
+    if (!body.trim()) return res.status(400).json({ error: "body is required" });
+    const updatedBy = req.user?.email || req.user?.id || "SYSTEM_ADMIN";
+    const template = await savePromptVersion(feature, body, updatedBy, workspaceId, req.body.changeNote);
+    const versions = await listPromptVersions(feature, workspaceId);
+    return res.status(200).json({ success: true, template, versions });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5p. POST /api/admin/orchestrator/prompts/:feature/rollback
+ */
+router.post("/orchestrator/prompts/:feature/rollback", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.body.workspaceId || "default");
+    const feature = String(req.params.feature) as AiPromptLibraryFeature;
+    const versionId = String(req.body.versionId || "");
+    if (!versionId) return res.status(400).json({ error: "versionId is required" });
+    const restoredBy = req.user?.email || req.user?.id || "SYSTEM_ADMIN";
+    const template = await rollbackPromptVersion(feature, versionId, restoredBy, workspaceId);
+    const versions = await listPromptVersions(feature, workspaceId);
+    return res.status(200).json({ success: true, template, versions });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5q. GET /api/admin/orchestrator/benchmark — provider performance grid
+ */
+router.get("/orchestrator/benchmark", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const rows = await getProviderBenchmarkGrid(workspaceId);
+    return res.status(200).json({ rows, refreshedAt: new Date().toISOString() });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5r. POST /api/admin/orchestrator/playground — multi-model diagnostic run
+ */
+router.post("/orchestrator/playground", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.body.workspaceId || "default");
+    const prompt = String(req.body.prompt || "");
+    const models = Array.isArray(req.body.models) ? req.body.models.map(String) : [];
+    if (!prompt.trim()) return res.status(400).json({ error: "prompt is required" });
+    if (models.length === 0) return res.status(400).json({ error: "At least one model is required" });
+    const results = await runPlaygroundComparison({ prompt, models, workspaceId });
+    return res.status(200).json({ results });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5s. GET /api/admin/orchestrator/operations-dashboard — command center reporting suite
+ */
+router.get("/orchestrator/operations-dashboard", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const dashboard = await getOperationsDashboard(workspaceId);
+    return res.status(200).json(dashboard);
   } catch (error: any) {
     return res.status(500).json({ error: "Internal Server Error", details: error.message });
   }
