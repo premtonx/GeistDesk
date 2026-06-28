@@ -3,7 +3,7 @@
  */
 
 import { getCachedLegacyAiConfig, getCachedOrchestratorConfig } from "../aiOrchestratorClient";
-import { executeViaLifecycle, resolveLifecycleOutput } from "../aiLifecycleClient";
+import { executeViaLifecycle, resolveLifecycleOutput, resolveOperatorLanguage } from "../aiLifecycleClient";
 import type { AiExecutionContext, AiFeatureId } from "../../types/aiOrchestrator";
 import type { AIConfig } from "../module-config";
 
@@ -104,7 +104,12 @@ export class AIAdapter {
     prompt: string,
     ctx: Partial<AiExecutionContext> = {},
   ): Promise<string> {
-    const result = await executeViaLifecycle({ feature, prompt, ...ctx });
+    const result = await executeViaLifecycle({
+      feature,
+      prompt,
+      operatorLanguage: resolveOperatorLanguage(),
+      ...ctx,
+    });
     return resolveLifecycleOutput(result);
   }
 

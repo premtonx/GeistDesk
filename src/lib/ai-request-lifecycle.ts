@@ -17,6 +17,7 @@ import {
 import { compileOrchestratorPolicy, validateCorporatePolicyRules } from './ai-orchestrator-policies.js';
 import { isBudgetExceeded, isLocalFallbackForced } from './ai-budget.js';
 import { createProductionModelExecutor } from './ai-lifecycle-executor.js';
+import { buildLifecycleSystemInstruction, resolvePersonaForFeature } from './ai-system-prompt.js';
 import {
   enqueueApprovalRequest,
   enqueueHumanReview,
@@ -31,6 +32,7 @@ export type AiModelExecutor = (input: {
   prompt: string;
   feature: AiFeatureId;
   workspaceId: string;
+  systemInstruction?: string;
 }) => Promise<{ output: string; confidence: number; costUsd?: number; promptTokens?: number; completionTokens?: number }>;
 
 export interface AiLifecycleOptions {
@@ -318,8 +320,16 @@ export async function runAiRequestLifecycle(
 
     recordStep(steps, 'approval_gate', 'passed', gate === 'automatic' ? 'Automatic — no hold' : 'Pre-approved', t);
 
-    // 8. Execute
+    // 8. Execute — merge persona skills + operator locale into systemInstruction
     t = Date.now();
+    const personaId = resolvePersonaForFeature(config, ctx.feature);
+    const systemInstruction = buildLifecycleSystemInstruction(config, ctx.feature, ctx.operatorLanguage);
+    const skillProfile = config.personaSkills?.[personaId];
+    policiesChecked.push('persona_system_prompt', 'operator_language');
+    if (skillProfile?.skillsContent?.trim()) {
+      policiesChecked.push('persona_skill_file');
+    }
+
     const executor = options.executor ?? createProductionModelExecutor(workspaceId);
     let output: string;
     let confidence: number;
@@ -331,11 +341,18 @@ export async function runAiRequestLifecycle(
         prompt: redactedPrompt,
         feature: ctx.feature,
         workspaceId,
+        systemInstruction,
       });
       output = execResult.output;
       confidence = execResult.confidence;
       costUsd = execResult.costUsd ?? 0;
-      recordStep(steps, 'execute', 'passed', `confidence=${confidence.toFixed(3)}`, t);
+      recordStep(
+        steps,
+        'execute',
+        'passed',
+        `confidence=${confidence.toFixed(3)} persona=${personaId} lang=${ctx.operatorLanguage ?? 'en'}`,
+        t,
+      );
 
       if (!options.skipPersistence) {
         await logAiUsage({

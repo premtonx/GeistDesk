@@ -2351,6 +2351,13 @@
     "personas": {
       "featureColumn": "Funktion",
       "personaColumn": "Zugewiesene Persona",
+      "uploadSkill": "Skill-Datei hochladen (.md) / Upload Skill File (.md)",
+      "clearSkill": "Entfernen",
+      "skillAttached": "Angehängt",
+      "skillsInvalidType": "Nur Markdown-Dateien (.md) werden unterstützt.",
+      "skillsTooLarge": "Skill-Datei überschreitet das Limit von 64 KB.",
+      "skillsLoaded": "Skill-Datei geladen — Workspace speichern zum Persistieren.",
+      "skillsReadError": "Skill-Datei konnte nicht gelesen werden.",
       "supportAgent": {
         "label": "Support-Agent",
         "tone": "Freundlich",

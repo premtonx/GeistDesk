@@ -1,6 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { authenticate } from '../middleware/authMiddleware.js';
-import { AI_DECISION_ENGINE_FLOW, type AiExecutionContext, type AiFeatureId } from '../types/aiOrchestrator.js';
+import { AI_DECISION_ENGINE_FLOW, type AiExecutionContext, type AiFeatureId, type AiOperatorLanguage } from '../types/aiOrchestrator.js';
 import { executeAiFeatureRequest } from '../lib/ai-orchestrator-service.js';
 
 const router = Router();
@@ -15,6 +15,14 @@ const VALID_FEATURES = new Set<string>([
   'translation',
   'vault_insights',
 ]);
+
+function resolveOperatorLanguage(req: Request): AiOperatorLanguage {
+  const fromBody = String(req.body.operatorLanguage || '').toLowerCase();
+  if (fromBody === 'de' || fromBody === 'en') return fromBody;
+  const accept = String(req.headers['accept-language'] || '').toLowerCase();
+  if (accept.startsWith('de')) return 'de';
+  return 'en';
+}
 
 /**
  * GET /api/ai/lifecycle/flow
@@ -51,6 +59,7 @@ router.post('/execute', authenticate, async (req: Request, res: Response) => {
       customerScope: req.body.customerScope,
       ticketId: req.body.ticketId ? String(req.body.ticketId) : undefined,
       ticketClosed: req.body.ticketClosed === true,
+      operatorLanguage: resolveOperatorLanguage(req),
       metadata: req.body.metadata,
     };
 
@@ -86,6 +95,7 @@ router.post('/execute/resume', authenticate, async (req: Request, res: Response)
       customerId: req.body.customerId ? String(req.body.customerId) : undefined,
       customerScope: req.body.customerScope,
       ticketId: req.body.ticketId ? String(req.body.ticketId) : undefined,
+      operatorLanguage: resolveOperatorLanguage(req),
       metadata: req.body.metadata,
     };
 

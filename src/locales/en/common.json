@@ -2071,6 +2071,13 @@
     "personas": {
       "featureColumn": "Feature",
       "personaColumn": "Assigned Persona",
+      "uploadSkill": "Skill-Datei hochladen (.md) / Upload Skill File (.md)",
+      "clearSkill": "Clear",
+      "skillAttached": "Attached",
+      "skillsInvalidType": "Only Markdown (.md) skill files are supported.",
+      "skillsTooLarge": "Skill file exceeds the 64 KB limit.",
+      "skillsLoaded": "Skill file loaded — save workspace to persist.",
+      "skillsReadError": "Could not read skill file.",
       "supportAgent": {
         "label": "Support Agent",
         "tone": "Friendly",

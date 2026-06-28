@@ -118,6 +118,8 @@ export type AiExecutionStatus =
 
 export type AiCustomerScope = 'standard' | 'vip' | 'enterprise';
 
+export type AiOperatorLanguage = 'de' | 'en';
+
 export interface AiExecutionContext {
   workspaceId?: string;
   feature: AiFeatureId;
@@ -129,6 +131,8 @@ export interface AiExecutionContext {
   customerScope?: AiCustomerScope;
   ticketId?: string;
   ticketClosed?: boolean;
+  /** Active UI locale of the operator initiating the request (de/en). */
+  operatorLanguage?: AiOperatorLanguage;
   metadata?: Record<string, unknown>;
 }
 
@@ -229,7 +233,18 @@ export interface AiPersonaDefinition {
   languageKey: string;
   formatKey: string;
   systemPromptSuffix: string;
+  /** Optional uploaded Markdown skill instructions (workspace-persisted). */
+  skillsContent?: string;
+  skillsFileName?: string;
 }
+
+/** Workspace-persisted Markdown skill file per persona. */
+export interface AiPersonaSkillProfile {
+  skillsContent?: string;
+  skillsFileName?: string;
+}
+
+export type AiPersonaSkillsMap = Partial<Record<AiPersonaId, AiPersonaSkillProfile>>;
 
 export type AiFeaturePersonaMap = Partial<Record<AiFeatureId, AiPersonaId>>;
 
@@ -365,6 +380,8 @@ export interface AiOrchestratorConfig {
   memoryPolicy: AiMemoryPolicy;
   /** Persona assignments per AI feature row. */
   featurePersonas: AiFeaturePersonaMap;
+  /** Uploaded Markdown skill files keyed by persona id. */
+  personaSkills: AiPersonaSkillsMap;
   killSwitch: AiKillSwitch;
   dailyBudgetUsd: number;
   monthlyBudgetUsd: number;
@@ -751,6 +768,7 @@ export const DEFAULT_ORCHESTRATOR_CONFIG: AiOrchestratorConfig = {
   confidenceThresholds: DEFAULT_CONFIDENCE_THRESHOLDS,
   memoryPolicy: DEFAULT_MEMORY_POLICY,
   featurePersonas: DEFAULT_FEATURE_PERSONAS,
+  personaSkills: {},
   killSwitch: DEFAULT_KILL_SWITCH,
   dailyBudgetUsd: 10,
   monthlyBudgetUsd: 300,

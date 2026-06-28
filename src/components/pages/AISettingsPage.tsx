@@ -550,6 +550,7 @@ export default function AISettingsPage() {
           config={config}
           readOnly={readOnly}
           onPersonasChange={(featurePersonas) => patchConfig({ featurePersonas })}
+          onPersonaSkillsChange={(personaSkills) => patchConfig({ personaSkills })}
         />
 
         <AiOperationsCommandCenter

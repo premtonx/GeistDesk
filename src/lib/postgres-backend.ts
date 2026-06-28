@@ -221,6 +221,7 @@ export async function initDb() {
     );
     CREATE INDEX IF NOT EXISTS idx_ai_prompt_versions_template ON ai_prompt_versions(template_id, version_number DESC);
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS feature_personas_json JSONB NOT NULL DEFAULT '{"ticket_summarization":"support_agent","smart_reply":"support_agent","kb_generation":"knowledge_writer","root_cause_analysis":"security_analyst","translation":"knowledge_writer"}';
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS persona_skills_json JSONB NOT NULL DEFAULT '{}';
   `);
   console.log("[DB Engine] PostgreSQL Tables Verified.");
 }
