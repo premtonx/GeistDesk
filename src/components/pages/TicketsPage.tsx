@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, useCallback, type MouseEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { 
   Filter, 
@@ -329,6 +329,7 @@ export default function TicketsPage() {
   
   const [isCreateTicketOpen, setIsCreateTicketOpen] = useState(false);
   const { companies: createTicketCompanies, agents: createTicketAgents } = useCreateTicketCatalog();
+
   // Default to closed so mobile lands on the ticket list (not the pipeline
   // navigator). When true on small screens the list is `hidden`, which made
   // mobile users see zero tickets. Desktop shows the sidebar via `md:flex`
@@ -1126,6 +1127,20 @@ export default function TicketsPage() {
     navigate('/tickets');
   };
 
+  const closeCreateTicket = useCallback(() => {
+    setIsCreateTicketOpen(false);
+  }, []);
+
+  const openCreateTicket = useCallback(() => {
+    if (selectedTicketId) {
+      ticketService.setPresence(selectedTicketId, false);
+    }
+    setDrawerTicketId(null);
+    setSelectedTicketId(null);
+    navigate('/tickets');
+    setIsCreateTicketOpen(true);
+  }, [navigate, selectedTicketId]);
+
   const handleTicketSelect = (id: string) => {
     if (selectedTicketIds.length > 0) {
       toggleTicketSelection(id);
@@ -1682,7 +1697,29 @@ export default function TicketsPage() {
         "min-h-0 bg-background text-foreground flex flex-col",
         isMobileSidebarOpen ? "hidden md:flex md:flex-1" : "w-full flex-1 flex flex-col min-h-0"
       )}>
-        {selectedTicketId ? (
+        {isCreateTicketOpen ? (
+          <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#F8F9FB] overflow-hidden">
+            <div className="px-4 md:px-6 pt-4 md:pt-5 pb-3 border-b border-slate-100 bg-white shrink-0">
+              <button
+                type="button"
+                onClick={closeCreateTicket}
+                className="flex items-center gap-1 text-slate-500 hover:text-slate-800 font-extrabold text-xs cursor-pointer transition-colors select-none group"
+              >
+                <ChevronLeft className="w-3.5 h-3.5 text-slate-450 group-hover:text-slate-650 transition-colors" />
+                {t('tickets.detail.backToList', 'Back to tickets')}
+              </button>
+            </div>
+            <ScrollArea className="flex-1 min-h-0">
+              <CreateTicketDialog
+                isOpen={isCreateTicketOpen}
+                onClose={closeCreateTicket}
+                presentation="inline"
+                prefetchedCompanies={createTicketCompanies}
+                prefetchedAgents={createTicketAgents}
+              />
+            </ScrollArea>
+          </div>
+        ) : selectedTicketId ? (
           /* Detail View */
           <div className="flex-1 flex flex-col min-w-0 min-h-0 relative">
             {selectedTicket ? (
@@ -2148,7 +2185,7 @@ export default function TicketsPage() {
                           allTickets={allTickets}
                           onLinkToBug={linkToBug}
                           onCreateBugLink={() => {
-                            setIsCreateTicketOpen(true);
+                            openCreateTicket();
                             toast.info(t('tickets.relations.createBugHint', 'Create a bug ticket, then link it here.'));
                           }}
                         />
@@ -3509,7 +3546,7 @@ export default function TicketsPage() {
                 <ModuleCreateButton
                   ariaLabelKey="actions.createTicket"
                   ariaLabelDefault="Create Ticket"
-                  onClick={() => setIsCreateTicketOpen(true)}
+                  onClick={openCreateTicket}
                   iconOnly
                 />
               }
@@ -4042,7 +4079,7 @@ export default function TicketsPage() {
                   onOpenAiSuggestions={() => {
                     document.getElementById('tickets-ai-chip')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
                   }}
-                  onCreateTicket={() => setIsCreateTicketOpen(true)}
+                  onCreateTicket={openCreateTicket}
                 />
               ) : layoutMode === 'kanban' ? (
                 <TicketsKanbanBoard
@@ -4522,7 +4559,7 @@ export default function TicketsPage() {
               }}
               onLinkToBug={linkToBug}
               onCreateBugLink={() => {
-                setIsCreateTicketOpen(true);
+                openCreateTicket();
                 toast.info(t('tickets.relations.createBugHint', 'Create a bug ticket, then link it here.'));
               }}
             />
@@ -4629,15 +4666,6 @@ export default function TicketsPage() {
           </motion.div>
         )}
       </AnimatePresence>
-
-      {/* Modals & Overlays */}
-      <CreateTicketDialog 
-        isOpen={isCreateTicketOpen} 
-        onClose={() => setIsCreateTicketOpen(false)}
-        presentation="drawer"
-        prefetchedCompanies={createTicketCompanies}
-        prefetchedAgents={createTicketAgents}
-      />
 
       {/* The Unifier: Merge Tickets Dialog */}
       <Dialog open={isMergeDialogOpen} onOpenChange={setIsMergeDialogOpen}>

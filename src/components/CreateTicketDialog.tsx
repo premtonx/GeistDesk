@@ -60,13 +60,16 @@ import { useWorkspace } from '../lib/context/WorkspaceContext';
 interface CreateTicketDialogProps {
   isOpen: boolean;
   onClose: () => void;
-  presentation?: 'dialog' | 'drawer';
+  presentation?: 'dialog' | 'drawer' | 'inline';
   prefetchedCompanies?: Company[];
   prefetchedAgents?: User[];
 }
 
 const SHELL_CLASS =
   'w-full h-full max-w-full max-h-screen sm:max-w-[1100px] sm:max-h-[95vh] rounded-none sm:rounded-xl flex flex-col p-0 overflow-hidden bg-[#F8F9FB] border-none shadow-2xl';
+
+const INLINE_CLASS =
+  'w-full flex flex-col bg-[#F8F9FB] min-h-full border-none shadow-none';
 
 export function CreateTicketDialog({
   isOpen,
@@ -680,6 +683,11 @@ export function CreateTicketDialog({
         </div>
     </>
   );
+
+  if (presentation === 'inline') {
+    if (!isOpen) return null;
+    return <div className={INLINE_CLASS}>{content}</div>;
+  }
 
   if (presentation === 'drawer') {
     return (
