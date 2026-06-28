@@ -27,6 +27,7 @@ import { PIIShield } from "./pii-shield.js";
 import { generateAzureAIAnswer } from "./azure-ai-orchestrator.js";
 import { authenticate, requireRole } from "./src/middleware/authMiddleware";
 import adminRoutes from "./src/routes/adminRoutes.js";
+import aiRoutes from "./src/routes/aiRoutes.js";
 import vaultRoutes from "./src/routes/vaultRoutes.js";
 import { orchestratorEventBus } from "./src/lib/ai-orchestrator-events.js";
 import { hashPassword, verifyPassword } from "./src/lib/crypto.js";
@@ -297,6 +298,7 @@ async function startServer() {
 
   // Mount Admin User Management Router
   app.use("/api/admin", adminRoutes);
+  app.use("/api/ai", aiRoutes);
 
   // Workspace AI orchestrator — read-only config for all authenticated modules
   app.get("/api/ai/config", authenticate, async (req: any, res) => {

@@ -81,6 +81,7 @@
     "start": "node dist/server.cjs",
     "seed": "tsx src/db/seed.ts",
     "seed:prod": "node dist/seed.cjs",
-    "lint": "tsc --noEmit"
+    "lint": "tsc --noEmit",
+    "test:lifecycle": "tsx scripts/test-ai-lifecycle.ts"
   }
 }

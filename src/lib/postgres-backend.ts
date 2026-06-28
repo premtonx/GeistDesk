@@ -153,6 +153,50 @@ export async function initDb() {
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS corporate_policies_json JSONB NOT NULL DEFAULT '{"customerPiiNeverLeavesWorkspace":true,"vaultAnalysisMustStayLocal":false,"rootCauseAnalysisRequiresAuditLogging":true,"promptLoggingRequiresExplicitConsent":true,"cloudFallbackRequiresApproval":false}';
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS trust_level INTEGER NOT NULL DEFAULT 3;
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS data_residency_policy_json JSONB NOT NULL DEFAULT '{"allowedRegions":["Germany","EU"],"customerDataNeverLeavesEU":true}';
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS confidence_thresholds_json JSONB NOT NULL DEFAULT '{"ticket_summarization":0.75,"sentiment_analysis":0.7,"smart_reply":0.85,"kb_generation":0.8,"escalation_analysis":0.85,"root_cause_analysis":0.9,"translation":0.8,"vault_insights":0.85}';
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS memory_policy_json JSONB NOT NULL DEFAULT '{"rememberContext30Days":true,"doNotRememberVipData":true,"purgeMemoryOnTicketClose":true}';
+    CREATE TABLE IF NOT EXISTS ai_approval_queue (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
+      request_id UUID NOT NULL,
+      feature VARCHAR(64) NOT NULL,
+      approval_role VARCHAR(32) NOT NULL,
+      status VARCHAR(32) NOT NULL DEFAULT 'pending',
+      prompt_hash TEXT,
+      payload_json JSONB,
+      requested_by VARCHAR(255),
+      approved_by VARCHAR(255),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      resolved_at TIMESTAMPTZ
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_approval_queue_ws ON ai_approval_queue(workspace_id, status, created_at DESC);
+    CREATE TABLE IF NOT EXISTS ai_human_review_pool (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
+      request_id UUID NOT NULL,
+      feature VARCHAR(64) NOT NULL,
+      confidence FLOAT NOT NULL,
+      threshold FLOAT NOT NULL,
+      output_text TEXT,
+      status VARCHAR(32) NOT NULL DEFAULT 'pending',
+      assigned_to VARCHAR(255),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_human_review_ws ON ai_human_review_pool(workspace_id, status, created_at DESC);
+    CREATE TABLE IF NOT EXISTS ai_explainability_log (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
+      request_id UUID NOT NULL,
+      feature VARCHAR(64) NOT NULL,
+      model_chosen VARCHAR(128),
+      model_choice_reason TEXT,
+      policies_checked JSONB,
+      cost_usd NUMERIC(12, 6) DEFAULT 0,
+      latency_ms INTEGER DEFAULT 0,
+      log_line TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_explainability_ws ON ai_explainability_log(workspace_id, created_at DESC);
   `);
   console.log("[DB Engine] PostgreSQL Tables Verified.");
 }

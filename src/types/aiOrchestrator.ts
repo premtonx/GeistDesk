@@ -81,6 +81,116 @@ export interface AiPolicyCompilationResult {
   violations: string[];
 }
 
+/** Approval gate modes for AI generation workflow intervention hooks. */
+export type AiApprovalGateMode = 'automatic' | 'manager_approval' | 'engineer_approval';
+
+/** Per-feature minimum confidence threshold (0–1 float). */
+export type AiConfidenceThresholds = Record<AiFeatureId, number>;
+
+/** Contextual memory lifecycle bindings for AI session data. */
+export interface AiMemoryPolicy {
+  rememberContext30Days: boolean;
+  doNotRememberVipData: boolean;
+  purgeMemoryOnTicketClose: boolean;
+}
+
+/** Programmatic decision-engine pipeline steps for every AI request. */
+export type AiDecisionEngineStep =
+  | 'request_received'
+  | 'detect_feature_context'
+  | 'audit_department_customer_scope'
+  | 'check_pii_shields'
+  | 'match_data_residency_region'
+  | 'evaluate_budget_capacity'
+  | 'assign_compliant_model'
+  | 'approval_gate'
+  | 'execute'
+  | 'confidence_threshold_check'
+  | 'memory_policy'
+  | 'file_audit_log';
+
+export type AiExecutionStatus =
+  | 'completed'
+  | 'pending_approval'
+  | 'pending_review'
+  | 'blocked'
+  | 'failed';
+
+export type AiCustomerScope = 'standard' | 'vip' | 'enterprise';
+
+export interface AiExecutionContext {
+  workspaceId?: string;
+  feature: AiFeatureId;
+  prompt: string;
+  userId?: string;
+  userEmail?: string;
+  departmentId?: string;
+  customerId?: string;
+  customerScope?: AiCustomerScope;
+  ticketId?: string;
+  ticketClosed?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface AiDecisionStepRecord {
+  step: AiDecisionEngineStep;
+  status: 'passed' | 'blocked' | 'skipped' | 'pending';
+  detail?: string;
+  durationMs?: number;
+}
+
+export interface AiExplainabilityEntry {
+  requestId: string;
+  feature: AiFeatureId;
+  modelChosen: string;
+  modelChoiceReason: string;
+  policiesChecked: string[];
+  costUsd: number;
+  latencyMs: number;
+  logLine: string;
+}
+
+export interface AiExecutionResult {
+  requestId: string;
+  status: AiExecutionStatus;
+  feature: AiFeatureId;
+  module: AiModuleId;
+  output?: string;
+  confidence?: number;
+  assignedModel?: string;
+  approvalQueueId?: string;
+  reviewPoolId?: string;
+  steps: AiDecisionStepRecord[];
+  explainability?: AiExplainabilityEntry;
+  error?: string;
+  redactedPrompt?: string;
+}
+
+export interface AiApprovalQueueEntry {
+  id: string;
+  requestId: string;
+  workspaceId: string;
+  feature: AiFeatureId;
+  approvalRole: 'manager' | 'engineer';
+  status: 'pending' | 'approved' | 'rejected';
+  requestedBy?: string;
+  approvedBy?: string;
+  createdAt: string;
+  resolvedAt?: string;
+}
+
+export interface AiHumanReviewEntry {
+  id: string;
+  requestId: string;
+  workspaceId: string;
+  feature: AiFeatureId;
+  confidence: number;
+  threshold: number;
+  outputText?: string;
+  status: 'pending' | 'reviewed' | 'dismissed';
+  createdAt: string;
+}
+
 export interface AiKillSwitch {
   master: boolean;
   smartReply: boolean;
@@ -126,6 +236,10 @@ export interface AiOrchestratorConfig {
   trustLevel: AiTrustLevel;
   /** Structured data residency router configuration. */
   dataResidencyPolicy: AiDataResidencyPolicy;
+  /** Minimum confidence thresholds per feature (0–1). */
+  confidenceThresholds: AiConfidenceThresholds;
+  /** Contextual memory lifecycle bindings. */
+  memoryPolicy: AiMemoryPolicy;
   killSwitch: AiKillSwitch;
   dailyBudgetUsd: number;
   monthlyBudgetUsd: number;
@@ -327,6 +441,51 @@ export const PROVIDER_RESIDENCY_MAP: Record<string, AiDataResidencyRegion[]> = {
 
 export const LOCAL_PROVIDER_IDS = new Set(['local-llama', 'local']);
 
+/** Step-by-step decision engine flow chart for every incoming AI prompt. */
+export const AI_DECISION_ENGINE_FLOW: Array<{ step: AiDecisionEngineStep; label: string }> = [
+  { step: 'request_received', label: 'Request' },
+  { step: 'detect_feature_context', label: 'Detect Feature Context' },
+  { step: 'audit_department_customer_scope', label: 'Audit Department/Customer Scope' },
+  { step: 'check_pii_shields', label: 'Check PII Shields' },
+  { step: 'match_data_residency_region', label: 'Match Data Residency Region' },
+  { step: 'evaluate_budget_capacity', label: 'Evaluate Budget Capacity' },
+  { step: 'assign_compliant_model', label: 'Assign Compliant Model' },
+  { step: 'approval_gate', label: 'Approval Workflow Gate' },
+  { step: 'execute', label: 'Execute' },
+  { step: 'confidence_threshold_check', label: 'Confidence Threshold Check' },
+  { step: 'memory_policy', label: 'Memory & Explainability Policies' },
+  { step: 'file_audit_log', label: 'File Audit Log' },
+];
+
+/** Feature-specific approval workflow gates (intervention hooks). */
+export const DEFAULT_APPROVAL_WORKFLOW_GATES: Record<AiFeatureId, AiApprovalGateMode> = {
+  ticket_summarization: 'automatic',
+  sentiment_analysis: 'automatic',
+  smart_reply: 'automatic',
+  kb_generation: 'manager_approval',
+  escalation_analysis: 'automatic',
+  root_cause_analysis: 'engineer_approval',
+  translation: 'automatic',
+  vault_insights: 'automatic',
+};
+
+export const DEFAULT_CONFIDENCE_THRESHOLDS: AiConfidenceThresholds = {
+  ticket_summarization: 0.75,
+  sentiment_analysis: 0.7,
+  smart_reply: 0.85,
+  kb_generation: 0.8,
+  escalation_analysis: 0.85,
+  root_cause_analysis: 0.9,
+  translation: 0.8,
+  vault_insights: 0.85,
+};
+
+export const DEFAULT_MEMORY_POLICY: AiMemoryPolicy = {
+  rememberContext30Days: true,
+  doNotRememberVipData: true,
+  purgeMemoryOnTicketClose: true,
+};
+
 export const DEFAULT_KILL_SWITCH: AiKillSwitch = {
   master: false,
   smartReply: false,
@@ -391,6 +550,8 @@ export const DEFAULT_ORCHESTRATOR_CONFIG: AiOrchestratorConfig = {
   corporatePolicies: DEFAULT_CORPORATE_POLICIES,
   trustLevel: 3,
   dataResidencyPolicy: DEFAULT_DATA_RESIDENCY_POLICY,
+  confidenceThresholds: DEFAULT_CONFIDENCE_THRESHOLDS,
+  memoryPolicy: DEFAULT_MEMORY_POLICY,
   killSwitch: DEFAULT_KILL_SWITCH,
   dailyBudgetUsd: 10,
   monthlyBudgetUsd: 300,

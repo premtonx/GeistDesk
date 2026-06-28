@@ -1,16 +1,24 @@
 import crypto from 'crypto';
 import { queryDb } from './postgres-backend.js';
 import {
+  DEFAULT_CONFIDENCE_THRESHOLDS,
   DEFAULT_CORPORATE_POLICIES,
   DEFAULT_DATA_RESIDENCY_POLICY,
   DEFAULT_FEATURE_ROUTING,
   DEFAULT_KILL_SWITCH,
+  DEFAULT_MEMORY_POLICY,
   DEFAULT_ORCHESTRATOR_CONFIG,
   DEFAULT_PROVIDER_PRIORITY,
+  type AiApprovalQueueEntry,
+  type AiConfidenceThresholds,
   type AiCorporatePolicies,
   type AiDataResidencyPolicy,
+  type AiExplainabilityEntry,
+  type AiFeatureId,
   type AiFeatureRouting,
+  type AiHumanReviewEntry,
   type AiKillSwitch,
+  type AiMemoryPolicy,
   type AiOrchestratorAuditEntry,
   type AiOrchestratorConfig,
   type AiOrchestratorVersion,
@@ -75,6 +83,16 @@ function parseDataResidencyPolicy(row: Record<string, unknown>): AiDataResidency
   return mergeDataResidencyPolicy(raw);
 }
 
+function parseConfidenceThresholds(row: Record<string, unknown>): AiConfidenceThresholds {
+  const raw = parseJson<Partial<AiConfidenceThresholds>>(row.confidence_thresholds_json, {});
+  return { ...DEFAULT_CONFIDENCE_THRESHOLDS, ...raw };
+}
+
+function parseMemoryPolicy(row: Record<string, unknown>): AiMemoryPolicy {
+  const raw = parseJson<Partial<AiMemoryPolicy>>(row.memory_policy_json, {});
+  return { ...DEFAULT_MEMORY_POLICY, ...raw };
+}
+
 function rowToConfig(row: Record<string, unknown>): AiOrchestratorConfig {
   const routing = parseJson(row.feature_routing_json, DEFAULT_FEATURE_ROUTING);
   const fallbacks = parseJson<string[]>(row.fallback_models, DEFAULT_ORCHESTRATOR_CONFIG.fallbackModels);
@@ -103,6 +121,8 @@ function rowToConfig(row: Record<string, unknown>): AiOrchestratorConfig {
     corporatePolicies: parseCorporatePolicies(row),
     trustLevel: parseTrustLevel(row.trust_level),
     dataResidencyPolicy: parseDataResidencyPolicy(row),
+    confidenceThresholds: parseConfidenceThresholds(row),
+    memoryPolicy: parseMemoryPolicy(row),
     killSwitch: parseKillSwitch(row),
     dailyBudgetUsd: Number(row.daily_budget_usd ?? DEFAULT_ORCHESTRATOR_CONFIG.dailyBudgetUsd),
     monthlyBudgetUsd: Number(row.monthly_budget_usd ?? DEFAULT_ORCHESTRATOR_CONFIG.monthlyBudgetUsd),
@@ -140,10 +160,11 @@ async function insertOrchestratorConfig(config: AiOrchestratorConfig, updatedBy:
       pii_enabled, auto_escalation_enabled, audit_enabled, config_locked,
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
       data_residency, corporate_policies_json, trust_level, data_residency_policy_json,
+      confidence_thresholds_json, memory_policy_json,
       kill_switch_json, daily_budget_usd, monthly_budget_usd,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NOW()
     )
     ON CONFLICT (workspace_id) DO NOTHING`,
     configInsertParams(config, updatedBy),
@@ -172,6 +193,8 @@ function configInsertParams(config: AiOrchestratorConfig, updatedBy: string): un
     JSON.stringify(config.corporatePolicies),
     config.trustLevel,
     JSON.stringify(config.dataResidencyPolicy),
+    JSON.stringify(config.confidenceThresholds),
+    JSON.stringify(config.memoryPolicy),
     JSON.stringify(config.killSwitch),
     config.dailyBudgetUsd,
     config.monthlyBudgetUsd,
@@ -202,6 +225,12 @@ export async function upsertOrchestratorConfig(
     dataResidencyPolicy: config.dataResidencyPolicy
       ? { ...existing.dataResidencyPolicy, ...config.dataResidencyPolicy }
       : existing.dataResidencyPolicy,
+    confidenceThresholds: config.confidenceThresholds
+      ? { ...existing.confidenceThresholds, ...config.confidenceThresholds }
+      : existing.confidenceThresholds,
+    memoryPolicy: config.memoryPolicy
+      ? { ...existing.memoryPolicy, ...config.memoryPolicy }
+      : existing.memoryPolicy,
     killSwitch: config.killSwitch ? { ...existing.killSwitch, ...config.killSwitch } : existing.killSwitch,
   };
 
@@ -217,10 +246,11 @@ export async function upsertOrchestratorConfig(
       pii_enabled, auto_escalation_enabled, audit_enabled, config_locked,
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
       data_residency, corporate_policies_json, trust_level, data_residency_policy_json,
+      confidence_thresholds_json, memory_policy_json,
       kill_switch_json, daily_budget_usd, monthly_budget_usd,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NOW()
     )
     ON CONFLICT (workspace_id) DO UPDATE SET
       scope = EXCLUDED.scope,
@@ -242,6 +272,8 @@ export async function upsertOrchestratorConfig(
       corporate_policies_json = EXCLUDED.corporate_policies_json,
       trust_level = EXCLUDED.trust_level,
       data_residency_policy_json = EXCLUDED.data_residency_policy_json,
+      confidence_thresholds_json = EXCLUDED.confidence_thresholds_json,
+      memory_policy_json = EXCLUDED.memory_policy_json,
       kill_switch_json = EXCLUDED.kill_switch_json,
       daily_budget_usd = EXCLUDED.daily_budget_usd,
       monthly_budget_usd = EXCLUDED.monthly_budget_usd,
@@ -446,6 +478,208 @@ export async function getOrchestratorAudit(
     fieldName: row.field_name ? String(row.field_name) : undefined,
     oldValue: row.old_value ? String(row.old_value) : undefined,
     newValue: row.new_value ? String(row.new_value) : undefined,
+    createdAt: new Date(row.created_at).toISOString(),
+  }));
+}
+
+export async function enqueueApprovalRequest(entry: {
+  workspaceId?: string;
+  requestId: string;
+  feature: AiFeatureId;
+  approvalRole: 'manager' | 'engineer';
+  prompt: string;
+  requestedBy?: string;
+  metadata?: Record<string, unknown>;
+}): Promise<string> {
+  const promptHash = crypto.createHash('sha256').update(entry.prompt).digest('hex');
+  const res = await queryDb(
+    `INSERT INTO ai_approval_queue
+     (workspace_id, request_id, feature, approval_role, prompt_hash, payload_json, requested_by)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)
+     RETURNING id`,
+    [
+      entry.workspaceId ?? 'default',
+      entry.requestId,
+      entry.feature,
+      entry.approvalRole,
+      promptHash,
+      JSON.stringify({ prompt: entry.prompt, metadata: entry.metadata ?? {} }),
+      entry.requestedBy ?? null,
+    ],
+  );
+  return String(res.rows[0].id);
+}
+
+export async function listPendingApprovals(
+  workspaceId = 'default',
+  limit = 50,
+): Promise<AiApprovalQueueEntry[]> {
+  const res = await queryDb(
+    `SELECT id, request_id, workspace_id, feature, approval_role, status, requested_by, approved_by, created_at, resolved_at
+     FROM ai_approval_queue
+     WHERE workspace_id = $1 AND status = 'pending'
+     ORDER BY created_at ASC
+     LIMIT $2`,
+    [workspaceId, limit],
+  );
+  return res.rows.map((row) => ({
+    id: String(row.id),
+    requestId: String(row.request_id),
+    workspaceId: String(row.workspace_id),
+    feature: row.feature as AiFeatureId,
+    approvalRole: row.approval_role as 'manager' | 'engineer',
+    status: row.status as AiApprovalQueueEntry['status'],
+    requestedBy: row.requested_by ? String(row.requested_by) : undefined,
+    approvedBy: row.approved_by ? String(row.approved_by) : undefined,
+    createdAt: new Date(row.created_at).toISOString(),
+    resolvedAt: row.resolved_at ? new Date(row.resolved_at).toISOString() : undefined,
+  }));
+}
+
+export async function resolveApprovalRequest(
+  approvalId: string,
+  decision: 'approved' | 'rejected',
+  approvedBy: string,
+  workspaceId = 'default',
+): Promise<AiApprovalQueueEntry | null> {
+  const res = await queryDb(
+    `UPDATE ai_approval_queue
+     SET status = $1, approved_by = $2, resolved_at = NOW()
+     WHERE id = $3 AND workspace_id = $4
+     RETURNING id, request_id, workspace_id, feature, approval_role, status, requested_by, approved_by, created_at, resolved_at`,
+    [decision, approvedBy, approvalId, workspaceId],
+  );
+  if (!res.rows[0]) return null;
+  const row = res.rows[0];
+  return {
+    id: String(row.id),
+    requestId: String(row.request_id),
+    workspaceId: String(row.workspace_id),
+    feature: row.feature as AiFeatureId,
+    approvalRole: row.approval_role as 'manager' | 'engineer',
+    status: row.status as AiApprovalQueueEntry['status'],
+    requestedBy: row.requested_by ? String(row.requested_by) : undefined,
+    approvedBy: row.approved_by ? String(row.approved_by) : undefined,
+    createdAt: new Date(row.created_at).toISOString(),
+    resolvedAt: row.resolved_at ? new Date(row.resolved_at).toISOString() : undefined,
+  };
+}
+
+export async function getApprovalPayload(
+  approvalId: string,
+  workspaceId = 'default',
+): Promise<{ prompt: string; metadata: Record<string, unknown> } | null> {
+  const res = await queryDb(
+    'SELECT payload_json FROM ai_approval_queue WHERE id = $1 AND workspace_id = $2',
+    [approvalId, workspaceId],
+  );
+  if (!res.rows[0]?.payload_json) return null;
+  const payload = parseJson<{ prompt?: string; metadata?: Record<string, unknown> }>(res.rows[0].payload_json, {});
+  return { prompt: payload.prompt ?? '', metadata: payload.metadata ?? {} };
+}
+
+export async function enqueueHumanReview(entry: {
+  workspaceId?: string;
+  requestId: string;
+  feature: AiFeatureId;
+  confidence: number;
+  threshold: number;
+  outputText?: string;
+}): Promise<string> {
+  const res = await queryDb(
+    `INSERT INTO ai_human_review_pool
+     (workspace_id, request_id, feature, confidence, threshold, output_text)
+     VALUES ($1,$2,$3,$4,$5,$6)
+     RETURNING id`,
+    [
+      entry.workspaceId ?? 'default',
+      entry.requestId,
+      entry.feature,
+      entry.confidence,
+      entry.threshold,
+      entry.outputText ?? null,
+    ],
+  );
+  return String(res.rows[0].id);
+}
+
+export async function listHumanReviewPool(
+  workspaceId = 'default',
+  limit = 50,
+): Promise<AiHumanReviewEntry[]> {
+  const res = await queryDb(
+    `SELECT id, request_id, workspace_id, feature, confidence, threshold, output_text, status, created_at
+     FROM ai_human_review_pool
+     WHERE workspace_id = $1 AND status = 'pending'
+     ORDER BY created_at ASC
+     LIMIT $2`,
+    [workspaceId, limit],
+  );
+  return res.rows.map((row) => ({
+    id: String(row.id),
+    requestId: String(row.request_id),
+    workspaceId: String(row.workspace_id),
+    feature: row.feature as AiFeatureId,
+    confidence: Number(row.confidence),
+    threshold: Number(row.threshold),
+    outputText: row.output_text ? String(row.output_text) : undefined,
+    status: row.status as AiHumanReviewEntry['status'],
+    createdAt: new Date(row.created_at).toISOString(),
+  }));
+}
+
+export async function saveExplainabilityLog(entry: {
+  workspaceId?: string;
+  requestId: string;
+  feature: AiFeatureId;
+  modelChosen: string;
+  modelChoiceReason: string;
+  policiesChecked: string[];
+  costUsd: number;
+  latencyMs: number;
+  logLine: string;
+}): Promise<void> {
+  await queryDb(
+    `INSERT INTO ai_explainability_log
+     (workspace_id, request_id, feature, model_chosen, model_choice_reason, policies_checked, cost_usd, latency_ms, log_line)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+    [
+      entry.workspaceId ?? 'default',
+      entry.requestId,
+      entry.feature,
+      entry.modelChosen,
+      entry.modelChoiceReason,
+      JSON.stringify(entry.policiesChecked),
+      entry.costUsd,
+      entry.latencyMs,
+      entry.logLine,
+    ],
+  );
+  console.info(entry.logLine);
+}
+
+export async function listExplainabilityLogs(
+  workspaceId = 'default',
+  limit = 50,
+): Promise<Array<AiExplainabilityEntry & { id: string; createdAt: string }>> {
+  const res = await queryDb(
+    `SELECT id, request_id, feature, model_chosen, model_choice_reason, policies_checked, cost_usd, latency_ms, log_line, created_at
+     FROM ai_explainability_log
+     WHERE workspace_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [workspaceId, limit],
+  );
+  return res.rows.map((row) => ({
+    id: String(row.id),
+    requestId: String(row.request_id),
+    feature: row.feature as AiFeatureId,
+    modelChosen: String(row.model_chosen ?? ''),
+    modelChoiceReason: String(row.model_choice_reason ?? ''),
+    policiesChecked: parseJson<string[]>(row.policies_checked, []),
+    costUsd: Number(row.cost_usd ?? 0),
+    latencyMs: Number(row.latency_ms ?? 0),
+    logLine: String(row.log_line ?? ''),
     createdAt: new Date(row.created_at).toISOString(),
   }));
 }

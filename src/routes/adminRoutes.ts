@@ -13,8 +13,13 @@ import {
   appendOrchestratorAudit,
   getOrchestratorAudit,
   getOrchestratorConfig,
+  getApprovalPayload,
   listConfigVersions,
+  listExplainabilityLogs,
+  listHumanReviewPool,
+  listPendingApprovals,
   listProviderSecretStatus,
+  resolveApprovalRequest,
   restoreConfigVersion,
   setProviderSecret,
   upsertOrchestratorConfig,
@@ -30,11 +35,14 @@ import {
   evaluateEnterpriseAiRiskScore,
   validateCorporatePolicyRules,
 } from "../lib/ai-orchestrator-policies.js";
+import { resumeApprovedAiRequest } from "../lib/ai-request-lifecycle.js";
 import type {
+  AiConfidenceThresholds,
   AiCorporatePolicies,
   AiDataResidencyPolicy,
   AiFeatureRouting,
   AiKillSwitch,
+  AiMemoryPolicy,
   AiOrchestratorConfig,
   AiTrustLevel,
 } from "../types/aiOrchestrator.js";
@@ -507,6 +515,8 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
         corporatePolicies: payload.corporatePolicies as AiCorporatePolicies | undefined,
         trustLevel: payload.trustLevel as AiTrustLevel | undefined,
         dataResidencyPolicy: payload.dataResidencyPolicy as AiDataResidencyPolicy | undefined,
+        confidenceThresholds: payload.confidenceThresholds as AiConfidenceThresholds | undefined,
+        memoryPolicy: payload.memoryPolicy as AiMemoryPolicy | undefined,
         killSwitch: payload.killSwitch as AiKillSwitch | undefined,
         dailyBudgetUsd: payload.dailyBudgetUsd,
         monthlyBudgetUsd: payload.monthlyBudgetUsd,
@@ -650,6 +660,81 @@ router.get("/orchestrator/risk-score", authenticate, requireRole(["SYSTEM_ADMIN"
       policyCompilation,
       policyValidation,
     });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5i. GET /api/admin/orchestrator/approvals — pending manager/engineer approval queue
+ */
+router.get("/orchestrator/approvals", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const approvals = await listPendingApprovals(workspaceId, Math.min(Number(req.query.limit) || 50, 200));
+    return res.status(200).json({ approvals });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5j. POST /api/admin/orchestrator/approvals/:id/resolve — approve or reject queued AI request
+ */
+router.post("/orchestrator/approvals/:id/resolve", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.body.workspaceId || "default");
+    const approvalId = String(req.params.id || "");
+    const decision = req.body.decision === "rejected" ? "rejected" : "approved";
+    const approvedBy = req.user?.email || req.user?.id || "SYSTEM_ADMIN";
+
+    const resolved = await resolveApprovalRequest(approvalId, decision, approvedBy, workspaceId);
+    if (!resolved) return res.status(404).json({ error: "Approval entry not found." });
+
+    if (decision === "rejected") {
+      return res.status(200).json({ success: true, approval: resolved });
+    }
+
+    const payload = await getApprovalPayload(approvalId, workspaceId);
+    if (!payload?.prompt) {
+      return res.status(200).json({ success: true, approval: resolved, warning: "No payload to resume." });
+    }
+
+    const result = await resumeApprovedAiRequest({
+      workspaceId,
+      feature: resolved.feature,
+      prompt: payload.prompt,
+      userEmail: approvedBy,
+      metadata: payload.metadata,
+    });
+
+    return res.status(200).json({ success: true, approval: resolved, execution: result });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5k. GET /api/admin/orchestrator/review-pool — low-confidence human review queue
+ */
+router.get("/orchestrator/review-pool", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const reviews = await listHumanReviewPool(workspaceId, Math.min(Number(req.query.limit) || 50, 200));
+    return res.status(200).json({ reviews });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5l. GET /api/admin/orchestrator/explainability — AI explainability audit log
+ */
+router.get("/orchestrator/explainability", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const logs = await listExplainabilityLogs(workspaceId, Math.min(Number(req.query.limit) || 50, 200));
+    return res.status(200).json({ logs });
   } catch (error: any) {
     return res.status(500).json({ error: "Internal Server Error", details: error.message });
   }
