@@ -2159,6 +2159,38 @@
         "pendingReview": "Pending Review",
         "totalOutputs": "AI Outputs Today"
       }
+    },
+    "zones": {
+      "navLabel": "Command center sections",
+      "cockpit": "Cockpit & Overview",
+      "routing": "Traffic Routing",
+      "guardrails": "Guardrails & Policies",
+      "providers": "Providers & Auditing"
+    },
+    "sections": {
+      "configScore": "Configuration Score",
+      "configScoreDesc": "Composite health of providers, policies, and budget posture",
+      "aiOverview": "AI Overview",
+      "aiOverviewDesc": "Workspace command summary",
+      "costAnalytics": "Cost Analytics",
+      "usageAnalytics": "AI Usage Analytics",
+      "auditTrail": "Audit Trail",
+      "auditEmpty": "No configuration changes recorded yet.",
+      "tokenProtection": "AI Token Protection",
+      "dailyBudgetUsd": "Daily Budget (USD)",
+      "monthlyBudgetUsd": "Monthly Budget (USD)",
+      "budgetExceeded": "When Budget Exceeded",
+      "localFallback": "Fallback to Local Llama",
+      "disableNonCritical": "Disable Non-Critical Features",
+      "providerHealth": "Provider Health",
+      "configScope": "Configuration Scope",
+      "lockConfig": "Lock AI Configuration",
+      "testResults": "Test Results"
+    },
+    "actions": {
+      "test": "Test AI Configuration",
+      "save": "Save Workspace Configuration",
+      "saving": "Synchronizing…"
     }
   },
   "languages": {

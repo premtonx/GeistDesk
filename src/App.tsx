@@ -14,7 +14,7 @@ import InsightsPage from './components/pages/InsightsPage';
 import AuditLogPage from './components/pages/AuditLogPage';
 import GeistDeskMigratorPage from './components/pages/GeistDeskMigratorPage';
 import EmailChannelsPage from './components/pages/EmailChannelsPage';
-import AISettingsPage from './components/pages/AISettingsPage';
+import AiOrchestratorPage from './pages/AiOrchestrator';
 import LegalSettingsPage from './components/pages/LegalSettingsPage';
 import AdminHubPage from './components/pages/AdminHubPage';
 import NotificationEnginePage from './components/pages/NotificationEnginePage';
@@ -106,7 +106,7 @@ export default function App() {
                     <Route path="settings" element={<SettingsPage />} />
                     <Route path="admin" element={<AdminRoute><AdminHubPage /></AdminRoute>} />
                     <Route path="admin/mcp" element={<AdminRoute><MCPHubPage /></AdminRoute>} />
-                    <Route path="admin/ai" element={<AdminRoute><AISettingsPage /></AdminRoute>} />
+                    <Route path="admin/ai" element={<AdminRoute><AiOrchestratorPage /></AdminRoute>} />
                     <Route path="admin/legal" element={<AdminRoute><LegalSettingsPage /></AdminRoute>} />
                     <Route path="admin/notifications" element={<AdminRoute><NotificationEnginePage /></AdminRoute>} />
                     <Route path="admin/schema" element={<AdminRoute><CompanySchemaPage /></AdminRoute>} />

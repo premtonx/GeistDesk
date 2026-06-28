@@ -2439,6 +2439,38 @@
         "pendingReview": "Ausstehende Prüfung",
         "totalOutputs": "KI-Ausgaben heute"
       }
+    },
+    "zones": {
+      "navLabel": "Command-Center-Bereiche",
+      "cockpit": "Cockpit & Übersicht",
+      "routing": "Traffic-Routing",
+      "guardrails": "Guardrails & Richtlinien",
+      "providers": "Provider & Audit"
+    },
+    "sections": {
+      "configScore": "Konfigurations-Score",
+      "configScoreDesc": "Gesamtgesundheit von Providern, Richtlinien und Budget",
+      "aiOverview": "KI-Übersicht",
+      "aiOverviewDesc": "Workspace-Befehlsübersicht",
+      "costAnalytics": "Kostenanalyse",
+      "usageAnalytics": "KI-Nutzungsanalyse",
+      "auditTrail": "Audit-Trail",
+      "auditEmpty": "Noch keine Konfigurationsänderungen protokolliert.",
+      "tokenProtection": "KI-Token-Schutz",
+      "dailyBudgetUsd": "Tagesbudget (USD)",
+      "monthlyBudgetUsd": "Monatsbudget (USD)",
+      "budgetExceeded": "Bei Budgetüberschreitung",
+      "localFallback": "Fallback auf lokales Llama",
+      "disableNonCritical": "Nicht-kritische Funktionen deaktivieren",
+      "providerHealth": "Provider-Status",
+      "configScope": "Konfigurationsbereich",
+      "lockConfig": "KI-Konfiguration sperren",
+      "testResults": "Testergebnisse"
+    },
+    "actions": {
+      "test": "Testen",
+      "save": "Workspace-Konfiguration speichern",
+      "saving": "Synchronisiere…"
     }
   },
   "languages": {
