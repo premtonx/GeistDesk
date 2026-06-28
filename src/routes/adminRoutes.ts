@@ -25,7 +25,19 @@ import {
   testOrchestratorConfiguration,
 } from "../lib/ai-orchestrator-service.js";
 import { orchestratorEventBus } from "../lib/ai-orchestrator-events.js";
-import type { AiFeatureRouting, AiKillSwitch, AiOrchestratorConfig } from "../types/aiOrchestrator.js";
+import {
+  compileOrchestratorPolicy,
+  evaluateEnterpriseAiRiskScore,
+  validateCorporatePolicyRules,
+} from "../lib/ai-orchestrator-policies.js";
+import type {
+  AiCorporatePolicies,
+  AiDataResidencyPolicy,
+  AiFeatureRouting,
+  AiKillSwitch,
+  AiOrchestratorConfig,
+  AiTrustLevel,
+} from "../types/aiOrchestrator.js";
 
 const router = Router();
 
@@ -345,10 +357,16 @@ router.get("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]), 
     await migrateLegacyOrchestratorConfig(workspaceId);
     const config = await getOrchestratorConfig(workspaceId);
     const secretStatus = await listProviderSecretStatus(workspaceId);
+    const policyCompilation = compileOrchestratorPolicy(config);
+    const riskAssessment = evaluateEnterpriseAiRiskScore(config);
+    const policyValidation = validateCorporatePolicyRules(config);
     return res.status(200).json({
       ...config,
       secretStatus,
       updatedAt: config.updatedAt,
+      policyCompilation,
+      riskAssessment,
+      policyValidation,
     });
   } catch (error: any) {
     console.error("[Admin Orchestrator GET] Error retrieving config:", error);
@@ -401,6 +419,8 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
       "monthlyBudgetUsd",
       "budgetExceededAction",
       "configVersion",
+      "trustLevel",
+      "dataResidency",
     ];
 
     for (const field of auditFields) {
@@ -429,6 +449,42 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
       });
     }
 
+    if (payload.corporatePolicies) {
+      await appendOrchestratorAudit({
+        workspaceId,
+        userId: req.user?.id,
+        userEmail: req.user?.email,
+        action: "Updated Corporate AI Policies",
+        fieldName: "corporatePolicies",
+        oldValue: JSON.stringify(existing.corporatePolicies),
+        newValue: JSON.stringify(payload.corporatePolicies),
+      });
+    }
+
+    if (payload.dataResidencyPolicy) {
+      await appendOrchestratorAudit({
+        workspaceId,
+        userId: req.user?.id,
+        userEmail: req.user?.email,
+        action: "Updated Data Residency Policy",
+        fieldName: "dataResidencyPolicy",
+        oldValue: JSON.stringify(existing.dataResidencyPolicy),
+        newValue: JSON.stringify(payload.dataResidencyPolicy),
+      });
+    }
+
+    if (payload.trustLevel !== undefined && payload.trustLevel !== existing.trustLevel) {
+      await appendOrchestratorAudit({
+        workspaceId,
+        userId: req.user?.id,
+        userEmail: req.user?.email,
+        action: "Changed trustLevel",
+        fieldName: "trustLevel",
+        oldValue: String(existing.trustLevel),
+        newValue: String(payload.trustLevel),
+      });
+    }
+
     const saved = await upsertOrchestratorConfig(
       {
         workspaceId,
@@ -448,6 +504,9 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
         contentFilteringEnabled: payload.contentFilteringEnabled,
         promptLoggingEnabled: payload.promptLoggingEnabled,
         dataResidency: payload.dataResidency,
+        corporatePolicies: payload.corporatePolicies as AiCorporatePolicies | undefined,
+        trustLevel: payload.trustLevel as AiTrustLevel | undefined,
+        dataResidencyPolicy: payload.dataResidencyPolicy as AiDataResidencyPolicy | undefined,
         killSwitch: payload.killSwitch as AiKillSwitch | undefined,
         dailyBudgetUsd: payload.dailyBudgetUsd,
         monthlyBudgetUsd: payload.monthlyBudgetUsd,
@@ -570,6 +629,27 @@ router.get("/orchestrator/analytics", authenticate, requireRole(["SYSTEM_ADMIN"]
     const workspaceId = String(req.query.workspaceId || "default");
     const health = await getOrchestratorHealth(workspaceId);
     return res.status(200).json({ usage: health.usage, metrics: health.metrics });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5h. GET /api/admin/orchestrator/risk-score
+ * Enterprise AI risk score auditor panel (0–100 with recommendations).
+ */
+router.get("/orchestrator/risk-score", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const config = await getOrchestratorConfig(workspaceId);
+    const riskAssessment = evaluateEnterpriseAiRiskScore(config);
+    const policyCompilation = compileOrchestratorPolicy(config);
+    const policyValidation = validateCorporatePolicyRules(config);
+    return res.status(200).json({
+      riskAssessment,
+      policyCompilation,
+      policyValidation,
+    });
   } catch (error: any) {
     return res.status(500).json({ error: "Internal Server Error", details: error.message });
   }

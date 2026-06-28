@@ -14,6 +14,73 @@ export type AiFeatureId =
 
 export type AiBudgetExceededAction = 'local_fallback' | 'disable_non_critical';
 
+/** Corporate boolean policy rule keys enforced globally by workspace admins. */
+export type AiCorporatePolicyRuleKey =
+  | 'customerPiiNeverLeavesWorkspace'
+  | 'vaultAnalysisMustStayLocal'
+  | 'rootCauseAnalysisRequiresAuditLogging'
+  | 'promptLoggingRequiresExplicitConsent'
+  | 'cloudFallbackRequiresApproval';
+
+/** Admin-configurable boolean rule matrix (corporate defaults). */
+export interface AiCorporatePolicies {
+  customerPiiNeverLeavesWorkspace: boolean;
+  vaultAnalysisMustStayLocal: boolean;
+  rootCauseAnalysisRequiresAuditLogging: boolean;
+  promptLoggingRequiresExplicitConsent: boolean;
+  cloudFallbackRequiresApproval: boolean;
+}
+
+/** Execution trust level (1–5 stars). */
+export type AiTrustLevel = 1 | 2 | 3 | 4 | 5;
+
+export interface AiTrustLevelDefinition {
+  stars: AiTrustLevel;
+  label: string;
+  description: string;
+  localOnly: boolean;
+  requiresHumanApproval: boolean;
+  mandatoryAuditLogging: boolean;
+  /** Cloud model IDs permitted at this trust tier; empty = local only. */
+  allowedCloudProviders: string[];
+}
+
+/** Allowed data residency regions for cloud model routing. */
+export type AiDataResidencyRegion = 'Germany' | 'EU' | 'USA' | 'Asia';
+
+export interface AiDataResidencyPolicy {
+  /** Region vector — only endpoints in these regions may be compiled into runs. */
+  allowedRegions: AiDataResidencyRegion[];
+  /** When true, non-EU cloud model endpoints are excluded during compilation. */
+  customerDataNeverLeavesEU: boolean;
+}
+
+export interface AiPolicyValidationResult {
+  valid: boolean;
+  violations: Array<{ rule: AiCorporatePolicyRuleKey; message: string }>;
+}
+
+export interface AiRiskScoreFactor {
+  id: string;
+  label: string;
+  impact: number;
+}
+
+export interface AiRiskScoreAssessment {
+  score: number;
+  level: 'low' | 'moderate' | 'elevated' | 'critical';
+  factors: AiRiskScoreFactor[];
+  recommendations: string[];
+}
+
+export interface AiPolicyCompilationResult {
+  providerPriority: string[];
+  excludedProviders: string[];
+  enforcedAuditLogging: boolean;
+  requiresHumanApproval: boolean;
+  violations: string[];
+}
+
 export interface AiKillSwitch {
   master: boolean;
   smartReply: boolean;
@@ -51,7 +118,14 @@ export interface AiOrchestratorConfig {
   reasoningLevel: 'fast' | 'balanced' | 'deep';
   contentFilteringEnabled: boolean;
   promptLoggingEnabled: boolean;
+  /** Legacy residency hint (kept for backward compatibility). */
   dataResidency: string;
+  /** Corporate boolean policy rule matrix. */
+  corporatePolicies: AiCorporatePolicies;
+  /** Execution trust tier (1–5 stars). */
+  trustLevel: AiTrustLevel;
+  /** Structured data residency router configuration. */
+  dataResidencyPolicy: AiDataResidencyPolicy;
   killSwitch: AiKillSwitch;
   dailyBudgetUsd: number;
   monthlyBudgetUsd: number;
@@ -152,6 +226,107 @@ export interface DetectedLocalModel {
   size?: string;
 }
 
+export const AI_CORPORATE_POLICY_RULES: Record<
+  AiCorporatePolicyRuleKey,
+  { label: string; description: string }
+> = {
+  customerPiiNeverLeavesWorkspace: {
+    label: 'Customer PII never leaves Workspace',
+    description: 'Blocks cloud routing when PII redaction is disabled or data may egress.',
+  },
+  vaultAnalysisMustStayLocal: {
+    label: 'Vault Analysis must stay 100% Local',
+    description: 'Forces vault_insights routing to local LLM endpoints only.',
+  },
+  rootCauseAnalysisRequiresAuditLogging: {
+    label: 'Root Cause Analysis requires Audit Logging',
+    description: 'Requires audit trail before root_cause_analysis may execute.',
+  },
+  promptLoggingRequiresExplicitConsent: {
+    label: 'Prompt logging requires explicit consent',
+    description: 'Prompt logging may only be enabled with corporate consent flag.',
+  },
+  cloudFallbackRequiresApproval: {
+    label: 'Cloud fallback requires approval',
+    description: 'Failover to cloud providers requires human approval at elevated trust tiers.',
+  },
+};
+
+export const DEFAULT_CORPORATE_POLICIES: AiCorporatePolicies = {
+  customerPiiNeverLeavesWorkspace: true,
+  vaultAnalysisMustStayLocal: false,
+  rootCauseAnalysisRequiresAuditLogging: true,
+  promptLoggingRequiresExplicitConsent: true,
+  cloudFallbackRequiresApproval: false,
+};
+
+export const AI_TRUST_LEVEL_DEFINITIONS: Record<AiTrustLevel, AiTrustLevelDefinition> = {
+  5: {
+    stars: 5,
+    label: 'Critical Infrastructure',
+    description: 'Local LLMs only, mandatory human approval, explicit audit logging.',
+    localOnly: true,
+    requiresHumanApproval: true,
+    mandatoryAuditLogging: true,
+    allowedCloudProviders: [],
+  },
+  4: {
+    stars: 4,
+    label: 'Business Operations',
+    description: 'Balanced cloud architectures (GPT-5, Claude, Gemini) with audit logging.',
+    localOnly: false,
+    requiresHumanApproval: false,
+    mandatoryAuditLogging: true,
+    allowedCloudProviders: ['gpt-5', 'claude', 'gemini-flash', 'gemini-pro'],
+  },
+  3: {
+    stars: 3,
+    label: 'Standard Operations',
+    description: 'Default enterprise parameters with standard cloud failover.',
+    localOnly: false,
+    requiresHumanApproval: false,
+    mandatoryAuditLogging: false,
+    allowedCloudProviders: ['gpt-5', 'claude', 'gemini-flash', 'gemini-pro', 'local-llama'],
+  },
+  2: {
+    stars: 2,
+    label: 'Documentation / Experimental',
+    description: 'Relaxed routing for non-production documentation and experiments.',
+    localOnly: false,
+    requiresHumanApproval: false,
+    mandatoryAuditLogging: false,
+    allowedCloudProviders: ['gpt-5', 'claude', 'gemini-flash', 'gemini-pro', 'local-llama'],
+  },
+  1: {
+    stars: 1,
+    label: 'Sandbox',
+    description: 'Unrestricted sandbox tier for internal testing only.',
+    localOnly: false,
+    requiresHumanApproval: false,
+    mandatoryAuditLogging: false,
+    allowedCloudProviders: ['gpt-5', 'claude', 'gemini-flash', 'gemini-pro', 'local-llama'],
+  },
+};
+
+export const AI_DATA_RESIDENCY_REGIONS: AiDataResidencyRegion[] = ['Germany', 'EU', 'USA', 'Asia'];
+
+export const DEFAULT_DATA_RESIDENCY_POLICY: AiDataResidencyPolicy = {
+  allowedRegions: ['Germany', 'EU'],
+  customerDataNeverLeavesEU: true,
+};
+
+/** Maps orchestrator model IDs to residency regions for compilation filtering. */
+export const PROVIDER_RESIDENCY_MAP: Record<string, AiDataResidencyRegion[]> = {
+  'gpt-5': ['USA'],
+  claude: ['USA'],
+  'gemini-flash': ['USA', 'EU', 'Asia'],
+  'gemini-pro': ['USA', 'EU', 'Asia'],
+  'local-llama': ['Germany', 'EU'],
+  local: ['Germany', 'EU'],
+};
+
+export const LOCAL_PROVIDER_IDS = new Set(['local-llama', 'local']);
+
 export const DEFAULT_KILL_SWITCH: AiKillSwitch = {
   master: false,
   smartReply: false,
@@ -213,6 +388,9 @@ export const DEFAULT_ORCHESTRATOR_CONFIG: AiOrchestratorConfig = {
   contentFilteringEnabled: true,
   promptLoggingEnabled: false,
   dataResidency: 'eu',
+  corporatePolicies: DEFAULT_CORPORATE_POLICIES,
+  trustLevel: 3,
+  dataResidencyPolicy: DEFAULT_DATA_RESIDENCY_POLICY,
   killSwitch: DEFAULT_KILL_SWITCH,
   dailyBudgetUsd: 10,
   monthlyBudgetUsd: 300,

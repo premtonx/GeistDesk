@@ -1,16 +1,22 @@
 import crypto from 'crypto';
 import { queryDb } from './postgres-backend.js';
 import {
+  DEFAULT_CORPORATE_POLICIES,
+  DEFAULT_DATA_RESIDENCY_POLICY,
   DEFAULT_FEATURE_ROUTING,
   DEFAULT_KILL_SWITCH,
   DEFAULT_ORCHESTRATOR_CONFIG,
   DEFAULT_PROVIDER_PRIORITY,
+  type AiCorporatePolicies,
+  type AiDataResidencyPolicy,
   type AiFeatureRouting,
   type AiKillSwitch,
   type AiOrchestratorAuditEntry,
   type AiOrchestratorConfig,
   type AiOrchestratorVersion,
+  type AiTrustLevel,
 } from '../types/aiOrchestrator.js';
+import { mergeCorporatePolicies, mergeDataResidencyPolicy } from './ai-orchestrator-policies.js';
 
 const SECRET_KEY = process.env.AI_SECRETS_KEY || process.env.JWT_SECRET || 'geistdesk-dev-secrets-key';
 
@@ -53,6 +59,22 @@ function parseKillSwitch(row: Record<string, unknown>): AiKillSwitch {
   return { ...DEFAULT_KILL_SWITCH, ...raw };
 }
 
+function parseTrustLevel(val: unknown): AiTrustLevel {
+  const n = Number(val ?? 3);
+  if (n >= 1 && n <= 5) return n as AiTrustLevel;
+  return 3;
+}
+
+function parseCorporatePolicies(row: Record<string, unknown>): AiCorporatePolicies {
+  const raw = parseJson<Partial<AiCorporatePolicies>>(row.corporate_policies_json, {});
+  return mergeCorporatePolicies(raw);
+}
+
+function parseDataResidencyPolicy(row: Record<string, unknown>): AiDataResidencyPolicy {
+  const raw = parseJson<Partial<AiDataResidencyPolicy>>(row.data_residency_policy_json, {});
+  return mergeDataResidencyPolicy(raw);
+}
+
 function rowToConfig(row: Record<string, unknown>): AiOrchestratorConfig {
   const routing = parseJson(row.feature_routing_json, DEFAULT_FEATURE_ROUTING);
   const fallbacks = parseJson<string[]>(row.fallback_models, DEFAULT_ORCHESTRATOR_CONFIG.fallbackModels);
@@ -78,6 +100,9 @@ function rowToConfig(row: Record<string, unknown>): AiOrchestratorConfig {
     contentFilteringEnabled: row.content_filtering_enabled !== false,
     promptLoggingEnabled: row.prompt_logging_enabled === true,
     dataResidency: String(row.data_residency ?? 'eu'),
+    corporatePolicies: parseCorporatePolicies(row),
+    trustLevel: parseTrustLevel(row.trust_level),
+    dataResidencyPolicy: parseDataResidencyPolicy(row),
     killSwitch: parseKillSwitch(row),
     dailyBudgetUsd: Number(row.daily_budget_usd ?? DEFAULT_ORCHESTRATOR_CONFIG.dailyBudgetUsd),
     monthlyBudgetUsd: Number(row.monthly_budget_usd ?? DEFAULT_ORCHESTRATOR_CONFIG.monthlyBudgetUsd),
@@ -114,10 +139,11 @@ async function insertOrchestratorConfig(config: AiOrchestratorConfig, updatedBy:
       fallback_models, provider_priority, feature_routing_json, endpoint_url,
       pii_enabled, auto_escalation_enabled, audit_enabled, config_locked,
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
-      data_residency, kill_switch_json, daily_budget_usd, monthly_budget_usd,
+      data_residency, corporate_policies_json, trust_level, data_residency_policy_json,
+      kill_switch_json, daily_budget_usd, monthly_budget_usd,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,NOW()
     )
     ON CONFLICT (workspace_id) DO NOTHING`,
     configInsertParams(config, updatedBy),
@@ -143,6 +169,9 @@ function configInsertParams(config: AiOrchestratorConfig, updatedBy: string): un
     config.contentFilteringEnabled,
     config.promptLoggingEnabled,
     config.dataResidency,
+    JSON.stringify(config.corporatePolicies),
+    config.trustLevel,
+    JSON.stringify(config.dataResidencyPolicy),
     JSON.stringify(config.killSwitch),
     config.dailyBudgetUsd,
     config.monthlyBudgetUsd,
@@ -167,6 +196,12 @@ export async function upsertOrchestratorConfig(
     workspaceId,
     configVersion: nextVersion,
     providerPriority: config.providerPriority ?? existing.providerPriority,
+    corporatePolicies: config.corporatePolicies
+      ? { ...existing.corporatePolicies, ...config.corporatePolicies }
+      : existing.corporatePolicies,
+    dataResidencyPolicy: config.dataResidencyPolicy
+      ? { ...existing.dataResidencyPolicy, ...config.dataResidencyPolicy }
+      : existing.dataResidencyPolicy,
     killSwitch: config.killSwitch ? { ...existing.killSwitch, ...config.killSwitch } : existing.killSwitch,
   };
 
@@ -181,10 +216,11 @@ export async function upsertOrchestratorConfig(
       fallback_models, provider_priority, feature_routing_json, endpoint_url,
       pii_enabled, auto_escalation_enabled, audit_enabled, config_locked,
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
-      data_residency, kill_switch_json, daily_budget_usd, monthly_budget_usd,
+      data_residency, corporate_policies_json, trust_level, data_residency_policy_json,
+      kill_switch_json, daily_budget_usd, monthly_budget_usd,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,NOW()
     )
     ON CONFLICT (workspace_id) DO UPDATE SET
       scope = EXCLUDED.scope,
@@ -203,6 +239,9 @@ export async function upsertOrchestratorConfig(
       content_filtering_enabled = EXCLUDED.content_filtering_enabled,
       prompt_logging_enabled = EXCLUDED.prompt_logging_enabled,
       data_residency = EXCLUDED.data_residency,
+      corporate_policies_json = EXCLUDED.corporate_policies_json,
+      trust_level = EXCLUDED.trust_level,
+      data_residency_policy_json = EXCLUDED.data_residency_policy_json,
       kill_switch_json = EXCLUDED.kill_switch_json,
       daily_budget_usd = EXCLUDED.daily_budget_usd,
       monthly_budget_usd = EXCLUDED.monthly_budget_usd,
