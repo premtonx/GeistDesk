@@ -7,6 +7,7 @@ import {
   DEFAULT_FEATURE_ROUTING,
   DEFAULT_KILL_SWITCH,
   DEFAULT_MEMORY_POLICY,
+  DEFAULT_FEATURE_PERSONAS,
   DEFAULT_ORCHESTRATOR_CONFIG,
   DEFAULT_PROVIDER_PRIORITY,
   type AiApprovalQueueEntry,
@@ -15,6 +16,7 @@ import {
   type AiDataResidencyPolicy,
   type AiExplainabilityEntry,
   type AiFeatureId,
+  type AiFeaturePersonaMap,
   type AiFeatureRouting,
   type AiHumanReviewEntry,
   type AiKillSwitch,
@@ -93,6 +95,11 @@ function parseMemoryPolicy(row: Record<string, unknown>): AiMemoryPolicy {
   return { ...DEFAULT_MEMORY_POLICY, ...raw };
 }
 
+function parseFeaturePersonas(row: Record<string, unknown>): AiFeaturePersonaMap {
+  const raw = parseJson<Partial<AiFeaturePersonaMap>>(row.feature_personas_json, {});
+  return { ...DEFAULT_FEATURE_PERSONAS, ...raw };
+}
+
 function rowToConfig(row: Record<string, unknown>): AiOrchestratorConfig {
   const routing = parseJson(row.feature_routing_json, DEFAULT_FEATURE_ROUTING);
   const fallbacks = parseJson<string[]>(row.fallback_models, DEFAULT_ORCHESTRATOR_CONFIG.fallbackModels);
@@ -123,6 +130,7 @@ function rowToConfig(row: Record<string, unknown>): AiOrchestratorConfig {
     dataResidencyPolicy: parseDataResidencyPolicy(row),
     confidenceThresholds: parseConfidenceThresholds(row),
     memoryPolicy: parseMemoryPolicy(row),
+    featurePersonas: parseFeaturePersonas(row),
     killSwitch: parseKillSwitch(row),
     dailyBudgetUsd: Number(row.daily_budget_usd ?? DEFAULT_ORCHESTRATOR_CONFIG.dailyBudgetUsd),
     monthlyBudgetUsd: Number(row.monthly_budget_usd ?? DEFAULT_ORCHESTRATOR_CONFIG.monthlyBudgetUsd),
@@ -160,11 +168,11 @@ async function insertOrchestratorConfig(config: AiOrchestratorConfig, updatedBy:
       pii_enabled, auto_escalation_enabled, audit_enabled, config_locked,
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
       data_residency, corporate_policies_json, trust_level, data_residency_policy_json,
-      confidence_thresholds_json, memory_policy_json,
+      confidence_thresholds_json, memory_policy_json, feature_personas_json,
       kill_switch_json, daily_budget_usd, monthly_budget_usd,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,NOW()
     )
     ON CONFLICT (workspace_id) DO NOTHING`,
     configInsertParams(config, updatedBy),
@@ -195,6 +203,7 @@ function configInsertParams(config: AiOrchestratorConfig, updatedBy: string): un
     JSON.stringify(config.dataResidencyPolicy),
     JSON.stringify(config.confidenceThresholds),
     JSON.stringify(config.memoryPolicy),
+    JSON.stringify(config.featurePersonas),
     JSON.stringify(config.killSwitch),
     config.dailyBudgetUsd,
     config.monthlyBudgetUsd,
@@ -231,6 +240,9 @@ export async function upsertOrchestratorConfig(
     memoryPolicy: config.memoryPolicy
       ? { ...existing.memoryPolicy, ...config.memoryPolicy }
       : existing.memoryPolicy,
+    featurePersonas: config.featurePersonas
+      ? { ...existing.featurePersonas, ...config.featurePersonas }
+      : existing.featurePersonas,
     killSwitch: config.killSwitch ? { ...existing.killSwitch, ...config.killSwitch } : existing.killSwitch,
   };
 
@@ -246,11 +258,11 @@ export async function upsertOrchestratorConfig(
       pii_enabled, auto_escalation_enabled, audit_enabled, config_locked,
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
       data_residency, corporate_policies_json, trust_level, data_residency_policy_json,
-      confidence_thresholds_json, memory_policy_json,
+      confidence_thresholds_json, memory_policy_json, feature_personas_json,
       kill_switch_json, daily_budget_usd, monthly_budget_usd,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,NOW()
     )
     ON CONFLICT (workspace_id) DO UPDATE SET
       scope = EXCLUDED.scope,
@@ -274,6 +286,7 @@ export async function upsertOrchestratorConfig(
       data_residency_policy_json = EXCLUDED.data_residency_policy_json,
       confidence_thresholds_json = EXCLUDED.confidence_thresholds_json,
       memory_policy_json = EXCLUDED.memory_policy_json,
+      feature_personas_json = EXCLUDED.feature_personas_json,
       kill_switch_json = EXCLUDED.kill_switch_json,
       daily_budget_usd = EXCLUDED.daily_budget_usd,
       monthly_budget_usd = EXCLUDED.monthly_budget_usd,

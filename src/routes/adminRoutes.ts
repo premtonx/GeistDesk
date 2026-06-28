@@ -36,14 +36,23 @@ import {
   validateCorporatePolicyRules,
 } from "../lib/ai-orchestrator-policies.js";
 import { resumeApprovedAiRequest } from "../lib/ai-request-lifecycle.js";
+import { getProviderBenchmarkGrid, runPlaygroundComparison } from "../lib/ai-orchestrator-admin.js";
+import {
+  listPromptTemplates,
+  listPromptVersions,
+  rollbackPromptVersion,
+  savePromptVersion,
+} from "../lib/ai-prompt-library-store.js";
 import type {
   AiConfidenceThresholds,
   AiCorporatePolicies,
   AiDataResidencyPolicy,
+  AiFeaturePersonaMap,
   AiFeatureRouting,
   AiKillSwitch,
   AiMemoryPolicy,
   AiOrchestratorConfig,
+  AiPromptLibraryFeature,
   AiTrustLevel,
 } from "../types/aiOrchestrator.js";
 
@@ -517,6 +526,7 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
         dataResidencyPolicy: payload.dataResidencyPolicy as AiDataResidencyPolicy | undefined,
         confidenceThresholds: payload.confidenceThresholds as AiConfidenceThresholds | undefined,
         memoryPolicy: payload.memoryPolicy as AiMemoryPolicy | undefined,
+        featurePersonas: payload.featurePersonas as AiFeaturePersonaMap | undefined,
         killSwitch: payload.killSwitch as AiKillSwitch | undefined,
         dailyBudgetUsd: payload.dailyBudgetUsd,
         monthlyBudgetUsd: payload.monthlyBudgetUsd,
@@ -735,6 +745,101 @@ router.get("/orchestrator/explainability", authenticate, requireRole(["SYSTEM_AD
     const workspaceId = String(req.query.workspaceId || "default");
     const logs = await listExplainabilityLogs(workspaceId, Math.min(Number(req.query.limit) || 50, 200));
     return res.status(200).json({ logs });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5m. GET /api/admin/orchestrator/prompts — version-controlled prompt library
+ */
+router.get("/orchestrator/prompts", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const templates = await listPromptTemplates(workspaceId);
+    return res.status(200).json({ templates });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5n. GET /api/admin/orchestrator/prompts/:feature/versions
+ */
+router.get("/orchestrator/prompts/:feature/versions", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const feature = String(req.params.feature) as AiPromptLibraryFeature;
+    const versions = await listPromptVersions(feature, workspaceId);
+    const templates = await listPromptTemplates(workspaceId);
+    const current = templates.find((t) => t.feature === feature);
+    return res.status(200).json({ feature, current, versions });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5o. POST /api/admin/orchestrator/prompts/:feature — save new prompt version
+ */
+router.post("/orchestrator/prompts/:feature", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.body.workspaceId || "default");
+    const feature = String(req.params.feature) as AiPromptLibraryFeature;
+    const body = String(req.body.body || "");
+    if (!body.trim()) return res.status(400).json({ error: "body is required" });
+    const updatedBy = req.user?.email || req.user?.id || "SYSTEM_ADMIN";
+    const template = await savePromptVersion(feature, body, updatedBy, workspaceId, req.body.changeNote);
+    const versions = await listPromptVersions(feature, workspaceId);
+    return res.status(200).json({ success: true, template, versions });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5p. POST /api/admin/orchestrator/prompts/:feature/rollback
+ */
+router.post("/orchestrator/prompts/:feature/rollback", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.body.workspaceId || "default");
+    const feature = String(req.params.feature) as AiPromptLibraryFeature;
+    const versionId = String(req.body.versionId || "");
+    if (!versionId) return res.status(400).json({ error: "versionId is required" });
+    const restoredBy = req.user?.email || req.user?.id || "SYSTEM_ADMIN";
+    const template = await rollbackPromptVersion(feature, versionId, restoredBy, workspaceId);
+    const versions = await listPromptVersions(feature, workspaceId);
+    return res.status(200).json({ success: true, template, versions });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5q. GET /api/admin/orchestrator/benchmark — provider performance grid
+ */
+router.get("/orchestrator/benchmark", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.query.workspaceId || "default");
+    const rows = await getProviderBenchmarkGrid(workspaceId);
+    return res.status(200).json({ rows, refreshedAt: new Date().toISOString() });
+  } catch (error: any) {
+    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+  }
+});
+
+/**
+ * 5r. POST /api/admin/orchestrator/playground — multi-model diagnostic run
+ */
+router.post("/orchestrator/playground", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const workspaceId = String(req.body.workspaceId || "default");
+    const prompt = String(req.body.prompt || "");
+    const models = Array.isArray(req.body.models) ? req.body.models.map(String) : [];
+    if (!prompt.trim()) return res.status(400).json({ error: "prompt is required" });
+    if (models.length === 0) return res.status(400).json({ error: "At least one model is required" });
+    const results = await runPlaygroundComparison({ prompt, models, workspaceId });
+    return res.status(200).json({ results });
   } catch (error: any) {
     return res.status(500).json({ error: "Internal Server Error", details: error.message });
   }

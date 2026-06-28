@@ -197,6 +197,29 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_ai_explainability_ws ON ai_explainability_log(workspace_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS ai_prompt_templates (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
+      feature VARCHAR(64) NOT NULL,
+      name VARCHAR(255) NOT NULL,
+      current_version INTEGER NOT NULL DEFAULT 1,
+      body TEXT NOT NULL,
+      updated_by VARCHAR(255),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, feature)
+    );
+    CREATE TABLE IF NOT EXISTS ai_prompt_versions (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      template_id UUID NOT NULL,
+      feature VARCHAR(64) NOT NULL,
+      version_number INTEGER NOT NULL,
+      body TEXT NOT NULL,
+      change_note TEXT,
+      created_by VARCHAR(255),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_prompt_versions_template ON ai_prompt_versions(template_id, version_number DESC);
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS feature_personas_json JSONB NOT NULL DEFAULT '{"ticket_summarization":"support_agent","smart_reply":"support_agent","kb_generation":"knowledge_writer","root_cause_analysis":"security_analyst","translation":"knowledge_writer"}';
   `);
   console.log("[DB Engine] PostgreSQL Tables Verified.");
 }

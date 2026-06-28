@@ -191,6 +191,70 @@ export interface AiHumanReviewEntry {
   createdAt: string;
 }
 
+/** Core features managed in the version-controlled prompt library. */
+export type AiPromptLibraryFeature =
+  | 'ticket_summarization'
+  | 'kb_generation'
+  | 'root_cause_analysis'
+  | 'translation';
+
+export interface AiPromptTemplate {
+  id: string;
+  workspaceId: string;
+  feature: AiPromptLibraryFeature;
+  name: string;
+  currentVersion: number;
+  body: string;
+  updatedAt: string;
+  updatedBy?: string;
+}
+
+export interface AiPromptVersion {
+  id: string;
+  templateId: string;
+  feature: AiPromptLibraryFeature;
+  versionNumber: number;
+  body: string;
+  createdBy?: string;
+  createdAt: string;
+  changeNote?: string;
+}
+
+export type AiPersonaId = 'support_agent' | 'security_analyst' | 'knowledge_writer';
+
+export interface AiPersonaDefinition {
+  id: AiPersonaId;
+  labelKey: string;
+  toneKey: string;
+  languageKey: string;
+  formatKey: string;
+  systemPromptSuffix: string;
+}
+
+export type AiFeaturePersonaMap = Partial<Record<AiFeatureId, AiPersonaId>>;
+
+export type AiCostScale = '$' | '$$' | '$$$' | '$$$$';
+
+export interface AiProviderBenchmarkRow {
+  provider: string;
+  label: string;
+  latencyMs: number | null;
+  costScale: AiCostScale;
+  qualityRating: number;
+  connectionReliability: number;
+  status: AiProviderHealth['status'];
+}
+
+export interface AiPlaygroundRunResult {
+  model: string;
+  label: string;
+  output: string;
+  latencyMs: number;
+  confidence: number;
+  success: boolean;
+  error?: string;
+}
+
 export interface AiKillSwitch {
   master: boolean;
   smartReply: boolean;
@@ -240,6 +304,8 @@ export interface AiOrchestratorConfig {
   confidenceThresholds: AiConfidenceThresholds;
   /** Contextual memory lifecycle bindings. */
   memoryPolicy: AiMemoryPolicy;
+  /** Persona assignments per AI feature row. */
+  featurePersonas: AiFeaturePersonaMap;
   killSwitch: AiKillSwitch;
   dailyBudgetUsd: number;
   monthlyBudgetUsd: number;
@@ -486,6 +552,77 @@ export const DEFAULT_MEMORY_POLICY: AiMemoryPolicy = {
   purgeMemoryOnTicketClose: true,
 };
 
+export const PROMPT_LIBRARY_FEATURES: AiPromptLibraryFeature[] = [
+  'ticket_summarization',
+  'kb_generation',
+  'root_cause_analysis',
+  'translation',
+];
+
+export const DEFAULT_PROMPT_BODIES: Record<AiPromptLibraryFeature, string> = {
+  ticket_summarization:
+    'You are a support operations assistant. Summarize the ticket thread below into:\n- Current status\n- Key customer concern\n- Actions taken\n- Recommended next step\n\nKeep the summary under 150 words.',
+  kb_generation:
+    'You are a technical writer. Convert the support resolution below into a knowledge base article with:\n- Title\n- Problem description\n- Resolution steps\n- Prevention tips\n\nUse clear Markdown formatting.',
+  root_cause_analysis:
+    'You are a senior SRE. Perform root cause analysis on the incident data below:\n- Timeline of events\n- Probable root cause\n- Contributing factors\n- Remediation recommendations',
+  translation:
+    'Translate the following support content accurately. Preserve technical terms and tone. Output only the translation.',
+};
+
+export const AI_PERSONA_DEFINITIONS: Record<AiPersonaId, AiPersonaDefinition> = {
+  support_agent: {
+    id: 'support_agent',
+    labelKey: 'aiOrchestrator.personas.supportAgent.label',
+    toneKey: 'aiOrchestrator.personas.supportAgent.tone',
+    languageKey: 'aiOrchestrator.personas.supportAgent.language',
+    formatKey: 'aiOrchestrator.personas.supportAgent.format',
+    systemPromptSuffix: 'Respond warmly in German as a helpful support agent.',
+  },
+  security_analyst: {
+    id: 'security_analyst',
+    labelKey: 'aiOrchestrator.personas.securityAnalyst.label',
+    toneKey: 'aiOrchestrator.personas.securityAnalyst.tone',
+    languageKey: 'aiOrchestrator.personas.securityAnalyst.language',
+    formatKey: 'aiOrchestrator.personas.securityAnalyst.format',
+    systemPromptSuffix: 'Respond concisely with a security-first mindset. Keep answers short.',
+  },
+  knowledge_writer: {
+    id: 'knowledge_writer',
+    labelKey: 'aiOrchestrator.personas.knowledgeWriter.label',
+    toneKey: 'aiOrchestrator.personas.knowledgeWriter.tone',
+    languageKey: 'aiOrchestrator.personas.knowledgeWriter.language',
+    formatKey: 'aiOrchestrator.personas.knowledgeWriter.format',
+    systemPromptSuffix: 'Write formal documentation using structured Markdown headings and lists.',
+  },
+};
+
+export const DEFAULT_FEATURE_PERSONAS: AiFeaturePersonaMap = {
+  ticket_summarization: 'support_agent',
+  smart_reply: 'support_agent',
+  kb_generation: 'knowledge_writer',
+  root_cause_analysis: 'security_analyst',
+  translation: 'knowledge_writer',
+};
+
+export const PLAYGROUND_MODEL_OPTIONS = [
+  { value: 'gpt-5', label: 'GPT-5' },
+  { value: 'claude', label: 'Claude Sonnet' },
+  { value: 'gemini-flash', label: 'Gemini Flash' },
+  { value: 'local-llama', label: 'Local Llama' },
+] as const;
+
+export const FEATURE_ROUTING_KEYS: Array<keyof AiFeatureRouting> = [
+  'ticket_summarization',
+  'sentiment_analysis',
+  'smart_reply',
+  'kb_generation',
+  'escalation_analysis',
+  'root_cause_analysis',
+  'translation',
+  'vault_insights',
+];
+
 export const DEFAULT_KILL_SWITCH: AiKillSwitch = {
   master: false,
   smartReply: false,
@@ -552,6 +689,7 @@ export const DEFAULT_ORCHESTRATOR_CONFIG: AiOrchestratorConfig = {
   dataResidencyPolicy: DEFAULT_DATA_RESIDENCY_POLICY,
   confidenceThresholds: DEFAULT_CONFIDENCE_THRESHOLDS,
   memoryPolicy: DEFAULT_MEMORY_POLICY,
+  featurePersonas: DEFAULT_FEATURE_PERSONAS,
   killSwitch: DEFAULT_KILL_SWITCH,
   dailyBudgetUsd: 10,
   monthlyBudgetUsd: 300,

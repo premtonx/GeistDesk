@@ -57,6 +57,7 @@ import {
   subscribeOrchestratorConfig,
 } from '../../lib/aiOrchestratorClient';
 import { ProviderPriorityList } from '../ai-orchestrator/ProviderPriorityList';
+import { AiOrchestratorWorkbench } from '../ai-orchestrator/AiOrchestratorWorkbench';
 
 const MODEL_OPTIONS = [
   { value: 'gemini-flash', label: 'Gemini Flash' },
@@ -346,6 +347,12 @@ export default function AISettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        <AiOrchestratorWorkbench
+          config={config}
+          readOnly={readOnly}
+          onPersonasChange={(featurePersonas) => patchConfig({ featurePersonas })}
+        />
 
         {/* Provider Health */}
         <Card className="rounded-2xl shadow-sm">
