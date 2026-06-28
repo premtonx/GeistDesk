@@ -19,7 +19,6 @@ import {
   deleteDocDirect,
   getTicketStats
 } from "./src/lib/postgres-backend.js";
-import { GoogleGenAI } from "@google/genai";
 import { jsPDF } from "jspdf";
 import { createTeamsBotAdapter, GeistDeskTeamsAgent } from "./src/services/teamsBotService";
 import { graphTranscriptService } from "./src/services/graphTranscriptService";
@@ -1157,18 +1156,13 @@ async function startServer() {
       const messagesSnap = await db.collection("tickets").doc(id).collection("messages").orderBy("createdAt", "asc").get();
       const messagesText = messagesSnap.docs.map(d => `${d.data().senderName || 'Staff'} (${d.data().senderType}): ${d.data().content}`).join("\n---\n");
 
-      const config = await getServerAiConfig();
-      const apiKey = config.apiKey || process.env.GEMINI_API_KEY || "";
-
       let aiSummary = "";
       let aiInsights: string[] = [];
       let aiRootCause = "";
       let aiChecklist: { task: string; completed: boolean }[] = [];
       let aiSentiment = "Neutral";
 
-      if (apiKey) {
-        const aiObj = new GoogleGenAI({ apiKey });
-        const prompt = `You are an elite Sovereign AI Support operations engineer. Perform a deep-dive analysis on the following GeistDesk support ticket.
+      const prompt = `You are an elite Sovereign AI Support operations engineer. Perform a deep-dive analysis on the following GeistDesk support ticket.
         
 SUBJECT: ${ticket.subject}
 DESCRIPTION: ${ticket.description}
@@ -1185,36 +1179,20 @@ The JSON object must have exactly these keys:
 
 Respond only with the raw valid JSON payload.`;
 
-        const result = await aiObj.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json"
-          }
-        });
-
-        const parsed = JSON.parse(result.text || "{}");
-        aiSummary = parsed.aiSummary || "";
-        aiInsights = parsed.aiInsights || [];
-        aiRootCause = parsed.aiRootCause || "";
-        aiChecklist = parsed.aiChecklist || [];
-        aiSentiment = parsed.aiSentiment || "Neutral";
-
-        try {
-          const { logAiUsageFromServer } = await import("./src/lib/ai-orchestrator-service.js");
-          await logAiUsageFromServer({
-            module: "tickets",
-            feature: "ticket_summarization",
-            model: "gemini-2.5-flash",
-            promptTokens: 200,
-            completionTokens: 80,
-            success: true,
-          });
-        } catch (logErr) {
-          console.warn("[AI Usage Log] Failed:", logErr);
+      try {
+        const lifecycle = await runServerLifecycleAi('ticket_summarization', prompt, { ticketId: id });
+        if ((lifecycle.status === 'completed' || lifecycle.status === 'pending_review') && lifecycle.output) {
+          const parsed = JSON.parse(lifecycle.output);
+          aiSummary = parsed.aiSummary || "";
+          aiInsights = parsed.aiInsights || [];
+          aiRootCause = parsed.aiRootCause || "";
+          aiChecklist = parsed.aiChecklist || [];
+          aiSentiment = parsed.aiSentiment || "Neutral";
+        } else {
+          throw new Error(lifecycle.error ?? `Lifecycle status: ${lifecycle.status}`);
         }
-      } else {
-        // Safe Sovereign local fallback
+      } catch (lifecycleErr) {
+        console.warn(`[AI Lifecycle] Ticket analysis fallback for ${id}:`, lifecycleErr);
         aiSummary = `Summary of the incident regarding: ${ticket.subject}. The system detected configuration issues and identity providers are awaiting handshake.`;
         aiInsights = [
           "Microsoft Entra handshake delay identified.",
@@ -1459,9 +1437,6 @@ Respond only with the raw valid JSON payload.`;
       const messagesSnap = await db.collection("tickets").doc(ticketId).collection("messages").orderBy("createdAt", "desc").limit(20).get();
       const messages = messagesSnap.docs.map(d => `${d.data().senderName} (${d.data().senderType}): ${d.data().content}`).join("\n---\n");
 
-      const config = await getServerAiConfig();
-      const isGoogle = config.deepThinkingModel?.includes('gemini');
-
       const prompt = `You are an expert support supervisor. Generate a high-priority handoff briefing for a ticket that is being transferred to a new agent.
       
       TICKET SUBJECT: ${ticket.subject}
@@ -1477,47 +1452,11 @@ Respond only with the raw valid JSON payload.`;
       Keep it professional, direct, and "GeistDesk Sovereign" styled.
       `;
 
-      let data: any = {};
-
-      if (isGoogle) {
-        const apiKey = config.apiKey || process.env.GEMINI_API_KEY || "";
-        if (!apiKey) {
-          return res.status(500).json({ error: "Gemini API key is not configured" });
-        }
-        const ai = new GoogleGenAI({ apiKey });
-        const result = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json"
-          }
-        });
-        data = JSON.parse(result.text || "{}");
-      } else {
-        const endpoint = config.localEndpoint || "http://localhost:11434/v1";
-        const modelName = config.deepThinkingModel === 'custom-local'
-          ? (config.customThinkingModelName || "qwen:36b")
-          : (config.deepThinkingModel === 'qwen-36b' ? "qwen:36b" : "llama3:70b");
-
-        const response = await fetch(`${endpoint}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${config.customApiKey || "ollama"}`
-          },
-          body: JSON.stringify({
-            model: modelName,
-            messages: [
-              { role: "system", content: "You are a professional support coordinator. Respond only in JSON." },
-              { role: "user", content: prompt + "\nProvide structured JSON with exactly 'customerGoal' and 'effortSoFar'." }
-            ],
-            response_format: { type: "json_object" }
-          })
-        });
-        const rdata = await response.json();
-        data = JSON.parse(rdata.choices[0].message.content || "{}");
+      const lifecycle = await runServerLifecycleAi('ticket_summarization', prompt, { ticketId });
+      if (!lifecycle.output || lifecycle.status === 'blocked' || lifecycle.status === 'failed') {
+        return res.status(503).json({ error: lifecycle.error ?? 'AI handoff generation blocked by enterprise policy.' });
       }
-
+      const data = JSON.parse(lifecycle.output);
       res.json(data);
     } catch (error) {
       console.error("Handoff Summary Error:", error);
@@ -1550,9 +1489,6 @@ Respond only with the raw valid JSON payload.`;
     const { concept, variables, tone } = req.body;
 
     try {
-      const config = await getServerAiConfig();
-      const isGoogle = config.deepThinkingModel?.includes('gemini');
-
       const prompt = `You are a professional communications assistant for GeistDesk Sovereign. 
       Draft an automated email notification template based on the following:
       
@@ -1568,45 +1504,11 @@ Respond only with the raw valid JSON payload.`;
       Respond in JSON format with keys: "subject" and "body".
       `;
 
-      let data: any = {};
-
-      if (isGoogle) {
-        const apiKey = config.apiKey || process.env.GEMINI_API_KEY || "";
-        if (!apiKey) {
-          return res.status(500).json({ error: "Gemini API key is not configured" });
-        }
-        const ai = new GoogleGenAI({ apiKey });
-        const result = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-          config: { responseMimeType: "application/json" }
-        });
-        data = JSON.parse(result.text || "{}");
-      } else {
-        const endpoint = config.localEndpoint || "http://localhost:11434/v1";
-        const modelName = config.deepThinkingModel === 'custom-local'
-          ? (config.customThinkingModelName || "qwen:36b")
-          : (config.deepThinkingModel === 'qwen-36b' ? "qwen:36b" : "llama3:70b");
-
-        const response = await fetch(`${endpoint}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${config.customApiKey || "ollama"}`
-          },
-          body: JSON.stringify({
-            model: modelName,
-            messages: [
-              { role: "system", content: "You are an automated email draft designer. Respond only in JSON." },
-              { role: "user", content: prompt + "\nProvide formatted JSON with 'subject' and 'body' keys." }
-            ],
-            response_format: { type: "json_object" }
-          })
-        });
-        const rdata = await response.json();
-        data = JSON.parse(rdata.choices[0].message.content || "{}");
+      const lifecycle = await runServerLifecycleAi('smart_reply', prompt);
+      if (!lifecycle.output || lifecycle.status === 'blocked' || lifecycle.status === 'failed') {
+        return res.status(503).json({ error: lifecycle.error ?? 'AI draft generation blocked by enterprise policy.' });
       }
-
+      const data = JSON.parse(lifecycle.output);
       res.json(data);
     } catch (error) {
       console.error("AI Draft Error:", error);
@@ -1618,9 +1520,6 @@ Respond only with the raw valid JSON payload.`;
     const { text } = req.body;
 
     try {
-      const config = await getServerAiConfig();
-      const isGoogle = config.sentimentModel?.includes('gemini');
-
       const prompt = `Analyze the tone of this email template. 
       Flag if it sounds too robotic, unfriendly, or overly complex for a customer or agent.
       
@@ -1634,45 +1533,11 @@ Respond only with the raw valid JSON payload.`;
       - "suggestion": One clear sentence on how to improve it.
       `;
 
-      let data: any = {};
-
-      if (isGoogle) {
-        const apiKey = config.apiKey || process.env.GEMINI_API_KEY || "";
-        if (!apiKey) {
-          return res.status(500).json({ error: "Gemini API key is not configured" });
-        }
-        const ai = new GoogleGenAI({ apiKey });
-        const result = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: prompt,
-          config: { responseMimeType: "application/json" }
-        });
-        data = JSON.parse(result.text || "{}");
-      } else {
-        const endpoint = config.localEndpoint || "http://localhost:11434/v1";
-        const modelName = config.sentimentModel === 'custom-local'
-          ? (config.customSentimentModelName || "gemma")
-          : (config.sentimentModel === 'local-gemma' ? "gemma" : "llama3");
-
-        const response = await fetch(`${endpoint}/chat/completions`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Authorization": `Bearer ${config.customApiKey || "ollama"}`
-          },
-          body: JSON.stringify({
-            model: modelName,
-            messages: [
-              { role: "system", content: "You are a communication and tone auditing expert. Respond only in JSON." },
-              { role: "user", content: prompt + "\nProvide JSON with fields rating, isRobotic, isUnfriendly, suggestion." }
-            ],
-            response_format: { type: "json_object" }
-          })
-        });
-        const rdata = await response.json();
-        data = JSON.parse(rdata.choices[0].message.content || "{}");
+      const lifecycle = await runServerLifecycleAi('sentiment_analysis', prompt);
+      if (!lifecycle.output || lifecycle.status === 'blocked' || lifecycle.status === 'failed') {
+        return res.status(503).json({ error: lifecycle.error ?? 'Tone analysis blocked by enterprise policy.' });
       }
-
+      const data = JSON.parse(lifecycle.output);
       res.json(data);
     } catch (error) {
       console.error("Tone Critique Error:", error);
@@ -1688,12 +1553,6 @@ Respond only with the raw valid JSON payload.`;
     }
 
     try {
-      const config = await getServerAiConfig();
-      const apiKey = config.apiKey || process.env.GEMINI_API_KEY || "";
-      if (!apiKey) {
-        return res.status(500).json({ error: "Gemini API key is not configured" });
-      }
-
       const prompt = `You are an expert enterprise knowledge graph relationship analyzer.
 Analyze this supporting article or SOP content to extract connections/relationships between entities.
 We want to represent these connections as elements in a knowledge graph directory.
@@ -1744,14 +1603,13 @@ Example output format:
 ]
 `;
 
-      const ai = new GoogleGenAI({ apiKey });
-      const result = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: { responseMimeType: "application/json" }
+      const lifecycle = await runServerLifecycleAi('vault_insights', prompt, {
+        metadata: { articleId, articleTitle },
       });
-
-      const cleaned = (result.text || "[]").replace(/^\s*```json\s*/i, "").replace(/\s*```\s*$/, "");
+      if (!lifecycle.output || lifecycle.status === 'blocked' || lifecycle.status === 'failed') {
+        return res.status(503).json({ error: lifecycle.error ?? 'Relationship extraction blocked by enterprise policy.' });
+      }
+      const cleaned = lifecycle.output.replace(/^\s*```json\s*/i, "").replace(/\s*```\s*$/, "");
       const rdata = JSON.parse(cleaned);
 
       res.json({ success: true, relationships: rdata });
@@ -1818,13 +1676,24 @@ Example output format:
   });
 }
 
+async function runServerLifecycleAi(
+  feature: import("./src/types/aiOrchestrator.js").AiFeatureId,
+  prompt: string,
+  ctx: Partial<import("./src/types/aiOrchestrator.js").AiExecutionContext> = {},
+) {
+  const { executeAiFeatureRequest } = await import("./src/lib/ai-orchestrator-service.js");
+  return executeAiFeatureRequest({
+    workspaceId: "default",
+    feature,
+    prompt,
+    ...ctx,
+  });
+}
+
 async function processAiTriage(ticketId: string, emailBody: string, subject: string) {
   const db = getDb();
 
   try {
-    const config = await getServerAiConfig();
-    const isGoogle = config.sentimentModel?.includes('gemini');
-
     // 1. Fetch relevant KB context (simplified: top 5 articles)
     const kbSnap = await db.collection("kb_articles").limit(5).get();
     const kbContext = kbSnap.docs.map(d => `${d.data().title}: ${d.data().content}`).join("\n---\n");
@@ -1845,47 +1714,12 @@ async function processAiTriage(ticketId: string, emailBody: string, subject: str
     - "reasoningPath": a brief string explaining the logical steps taken (e.g. "Detected 'login' intent -> Matched KB Article 'Resetting passwords' -> Drafted response")
     `;
 
-    let data: any = {};
-
-    if (isGoogle) {
-      const apiKey = config.apiKey || process.env.GEMINI_API_KEY || "";
-      if (!apiKey) {
-        console.warn("AI Triage skipped: Gemini API key not configured");
-        return;
-      }
-      const ai = new GoogleGenAI({ apiKey });
-      const result = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json"
-        }
-      });
-      data = JSON.parse(result.text || "{}");
-    } else {
-      const endpoint = config.localEndpoint || "http://localhost:11434/v1";
-      const modelName = config.sentimentModel === 'custom-local'
-        ? (config.customSentimentModelName || "gemma")
-        : (config.sentimentModel === 'local-gemma' ? "gemma" : "llama3");
-
-      const response = await fetch(`${endpoint}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${config.customApiKey || "ollama"}`
-        },
-        body: JSON.stringify({
-          model: modelName,
-          messages: [
-            { role: "system", content: "You are an incoming email routing and auto-draft analyst. Respond only in JSON." },
-            { role: "user", content: prompt }
-          ],
-          response_format: { type: "json_object" }
-        })
-      });
-      const rdata = await response.json();
-      data = JSON.parse(rdata.choices[0].message.content || "{}");
+    const lifecycle = await runServerLifecycleAi('smart_reply', prompt, { ticketId });
+    if (!lifecycle.output || lifecycle.status === 'blocked' || lifecycle.status === 'failed') {
+      console.warn("AI Triage skipped:", lifecycle.error ?? lifecycle.status);
+      return;
     }
+    const data = JSON.parse(lifecycle.output);
 
     await db.collection("tickets").doc(ticketId).update({
       priority: data.priority || "medium",

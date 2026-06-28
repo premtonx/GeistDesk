@@ -7,6 +7,7 @@ import {
 import { buildProviderHealth, getOrchestratorHealth } from './ai-orchestrator-service.js';
 import { getOrchestratorConfig } from './ai-orchestrator-store.js';
 import { runAiRequestLifecycle } from './ai-request-lifecycle.js';
+import { createProductionModelExecutor } from './ai-lifecycle-executor.js';
 
 const MODEL_LABELS: Record<string, string> = Object.fromEntries(
   PLAYGROUND_MODEL_OPTIONS.map((m) => [m.value, m.label]),
@@ -99,6 +100,7 @@ export async function runPlaygroundComparison(input: {
       const label = MODEL_LABELS[model] ?? model;
       const start = Date.now();
       try {
+        const prodExec = createProductionModelExecutor(workspaceId);
         const lifecycle = await runAiRequestLifecycle(
           {
             workspaceId,
@@ -109,14 +111,8 @@ export async function runPlaygroundComparison(input: {
           {
             skipPersistence: true,
             skipApprovalGate: true,
-            executor: async ({ prompt: p }) => {
-              await new Promise((r) => setTimeout(r, 120 + Math.random() * 280));
-              return {
-                output: `[${label}] ${p.slice(0, 400)}${p.length > 400 ? '…' : ''}`,
-                confidence: 0.78 + Math.random() * 0.18,
-                costUsd: model === 'local-llama' ? 0.0001 : model === 'gpt-5' ? 0.008 : 0.003,
-              };
-            },
+            executor: ({ prompt: p, feature, workspaceId: wsId }) =>
+              prodExec({ model, prompt: p, feature, workspaceId: wsId }),
           },
         );
 

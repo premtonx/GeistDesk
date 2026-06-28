@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { AI_DECISION_ENGINE_FLOW, type AiExecutionContext, type AiFeatureId } from '../types/aiOrchestrator.js';
-import { runAiRequestLifecycle, resumeApprovedAiRequest } from '../lib/ai-request-lifecycle.js';
+import { executeAiFeatureRequest } from '../lib/ai-orchestrator-service.js';
 
 const router = Router();
 
@@ -54,7 +54,7 @@ router.post('/execute', authenticate, async (req: Request, res: Response) => {
       metadata: req.body.metadata,
     };
 
-    const result = await runAiRequestLifecycle(ctx);
+    const result = await executeAiFeatureRequest(ctx);
     return res.status(200).json(result);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
@@ -89,7 +89,7 @@ router.post('/execute/resume', authenticate, async (req: Request, res: Response)
       metadata: req.body.metadata,
     };
 
-    const result = await resumeApprovedAiRequest(ctx);
+    const result = await executeAiFeatureRequest(ctx, { approvalAlreadyGranted: true });
     return res.status(200).json(result);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

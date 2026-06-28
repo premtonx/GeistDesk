@@ -15,6 +15,8 @@ import {
   isAiFeatureEnabled,
 } from '../types/aiOrchestrator.js';
 import { compileOrchestratorPolicy, validateCorporatePolicyRules } from './ai-orchestrator-policies.js';
+import { isBudgetExceeded, isLocalFallbackForced } from './ai-budget.js';
+import { createProductionModelExecutor } from './ai-lifecycle-executor.js';
 import {
   enqueueApprovalRequest,
   enqueueHumanReview,
@@ -23,10 +25,6 @@ import {
   logAiUsage,
   saveExplainabilityLog,
 } from './ai-orchestrator-store.js';
-
-function isBudgetExceeded(config: AiOrchestratorConfig, costs: { today: number; month: number }): boolean {
-  return costs.today >= config.dailyBudgetUsd || costs.month >= config.monthlyBudgetUsd;
-}
 
 export type AiModelExecutor = (input: {
   model: string;
@@ -251,12 +249,16 @@ export async function runAiRequestLifecycle(
     t = Date.now();
     const costs = options.skipPersistence ? { today: 0, month: 0 } : await getUsageCostTotals(workspaceId);
     const budgetExceeded = isBudgetExceeded(config, costs);
+    const forceLocalFallback = isLocalFallbackForced(config, costs);
     if (budgetExceeded) {
       policiesChecked.push('budget_exceeded');
       if (config.budgetExceededAction === 'disable_non_critical' && ctx.feature !== 'smart_reply') {
         throw new AiLifecycleError('Daily/monthly AI budget exceeded.', 'evaluate_budget_capacity', 'blocked');
       }
-      recordStep(steps, 'evaluate_budget_capacity', 'passed', `${config.budgetExceededAction} — proceeding with constraints`, t);
+      const budgetDetail = forceLocalFallback
+        ? 'Budget exceeded — local fallback enforced'
+        : `${config.budgetExceededAction} — proceeding with constraints`;
+      recordStep(steps, 'evaluate_budget_capacity', 'passed', budgetDetail, t);
     } else {
       policiesChecked.push('budget_ok');
       recordStep(steps, 'evaluate_budget_capacity', 'passed', `today=$${costs.today.toFixed(2)} month=$${costs.month.toFixed(2)}`, t);
@@ -265,8 +267,13 @@ export async function runAiRequestLifecycle(
     // 6. Assign Compliant Model
     t = Date.now();
     const modelAssignment = assignModelForFeature(config, ctx.feature, compilation);
-    assignedModel = modelAssignment.model;
-    modelChoiceReason = modelAssignment.reason;
+    if (forceLocalFallback && budgetExceeded) {
+      assignedModel = 'local-llama';
+      modelChoiceReason = 'Daily budget exceeded — local fallback model enforced';
+    } else {
+      assignedModel = modelAssignment.model;
+      modelChoiceReason = modelAssignment.reason;
+    }
     policiesChecked.push('feature_routing', 'provider_compilation');
     recordStep(steps, 'assign_compliant_model', 'passed', `model=${assignedModel}`, t);
 
@@ -313,7 +320,7 @@ export async function runAiRequestLifecycle(
 
     // 8. Execute
     t = Date.now();
-    const executor = options.executor ?? stubAiModelExecutor;
+    const executor = options.executor ?? createProductionModelExecutor(workspaceId);
     let output: string;
     let confidence: number;
     let costUsd = 0;
