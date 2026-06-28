@@ -25,6 +25,14 @@ if (!LOCAL_JWT_SECRET) {
 // Extend Express Request type locally for safety
 export type AuthenticatedRequest = any;
 
+/** Beta-stage auto-admin on the server: mirrors client VITE_BETA_AUTO_ADMIN (default: enabled). */
+function isServerBetaAutoAdminEnabled(): boolean {
+  if (process.env.BETA_AUTO_ADMIN === 'false') {
+    return false;
+  }
+  return true;
+}
+
 /**
  * Retrieves the signing key from Microsoft Entra JWKS
  */
@@ -179,6 +187,11 @@ export async function authenticate(req: AuthenticatedRequest, res: Response, nex
     }
 
     if (computedRole === "admin" || computedRole === "SYSTEM_ADMIN" || isAdminClaim) {
+      computedRole = "SYSTEM_ADMIN";
+      isAdminClaim = true;
+    }
+
+    if (isServerBetaAutoAdminEnabled()) {
       computedRole = "SYSTEM_ADMIN";
       isAdminClaim = true;
     }

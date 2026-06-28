@@ -14,6 +14,25 @@ import { userService } from '../services/userService';
 import { applySessionAuthHeader } from './session-auth';
 import { applyBetaAdminSession, isBetaAutoAdminEnabled } from './beta-admin-bypass';
 
+function readCachedAdminSession(): boolean {
+  try {
+    const savedProfile = localStorage.getItem('geistdesk_cached_user_profile');
+    const savedRole = localStorage.getItem('geistdesk_cached_user_role');
+    if (!savedProfile) return false;
+    const profile = JSON.parse(savedProfile) as { is_admin?: boolean; role?: string };
+    const role = savedRole ? JSON.parse(savedRole) as { name?: string; id?: string } : null;
+    return (
+      profile.is_admin === true ||
+      profile.role === 'admin' ||
+      role?.name === 'admin' ||
+      role?.id === 'guest-admin' ||
+      role?.id === 'beta-admin'
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -71,6 +90,13 @@ export function useAdmin() {
         setChecking(false);
         return;
       }
+
+      if (readCachedAdminSession()) {
+        setIsAdmin(true);
+        setChecking(false);
+        return;
+      }
+
       try {
         // Admin status is derived strictly from the database role; there is no
         // hardcoded email bootstrap.
