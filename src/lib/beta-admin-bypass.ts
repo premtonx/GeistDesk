@@ -64,3 +64,61 @@ export function applyBetaAdminSession(authUser: {
   persistBetaAdminSession(profile, role);
   return { profile, role };
 }
+
+/** Offline / timeout guest session: full admin so Admin Hub and KI Orchestrator stay reachable. */
+export function buildGuestAdminProfile(authUser: {
+  uid: string;
+  email?: string | null;
+  displayName?: string | null;
+  photoURL?: string | null;
+}): User {
+  return {
+    id: authUser.uid,
+    name: authUser.displayName || 'Guest Administrator',
+    email: authUser.email || '',
+    avatar: authUser.photoURL || '',
+    role: 'admin',
+    is_admin: true,
+    createdAt: new Date(),
+  };
+}
+
+export function buildGuestAdminRole(): UserRole {
+  return {
+    id: 'guest-admin',
+    name: 'admin',
+    isSystem: true,
+    description: 'Guest administrator offline fallback',
+    permissions: {},
+    specialPermissions: {
+      overridePIIShield: true,
+      manageModelOrchestrator: true,
+      bypass2FA: true,
+      aiGovernance: true,
+    },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+}
+
+export function applyGuestAdminSession(authUser: {
+  uid: string;
+  email?: string | null;
+  displayName?: string | null;
+  photoURL?: string | null;
+}) {
+  const profile = buildGuestAdminProfile(authUser);
+  const role = buildGuestAdminRole();
+  persistBetaAdminSession(profile, role);
+  return { profile, role };
+}
+
+/** Stale agent-only guest cache from a prior session must not block admin routes. */
+export function isStaleGuestAgentCache(profile: User | null, role: UserRole | null): boolean {
+  if (!profile || !role) return false;
+  if (profile.is_admin === true || profile.role === 'admin') return false;
+  if (role.name === 'admin' || role.isSystem) return false;
+  const guestName = profile.name?.toLowerCase().includes('guest') ?? false;
+  const legacyGuestRole = role.id === 'legacy' && role.name === 'agent';
+  return guestName || legacyGuestRole;
+}

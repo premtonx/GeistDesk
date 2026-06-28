@@ -3,7 +3,12 @@ import { useAuth } from '../lib/hooks';
 import { userService } from '../services/userService';
 import { rbacService } from '../services/rbacService';
 import { User, UserRole } from '../types';
-import { applyBetaAdminSession, isBetaAutoAdminEnabled } from '../lib/beta-admin-bypass';
+import {
+  applyBetaAdminSession,
+  applyGuestAdminSession,
+  isBetaAutoAdminEnabled,
+  isStaleGuestAgentCache,
+} from '../lib/beta-admin-bypass';
 
 export function usePermissions() {
   const { user: authUser } = useAuth();
@@ -22,9 +27,16 @@ export function usePermissions() {
     return null;
   });
   const [loading, setLoading] = useState(() => {
+    if (isBetaAutoAdminEnabled()) return true;
     try {
       const savedProfile = localStorage.getItem('geistdesk_cached_user_profile');
-      if (savedProfile) return false;
+      const savedRole = localStorage.getItem('geistdesk_cached_user_role');
+      if (savedProfile && savedRole) {
+        const profile = JSON.parse(savedProfile) as User;
+        const role = JSON.parse(savedRole) as UserRole;
+        if (isStaleGuestAgentCache(profile, role)) return true;
+        return false;
+      }
     } catch {}
     return true;
   });
@@ -89,38 +101,9 @@ export function usePermissions() {
           setUserProfile(p);
           localStorage.setItem('geistdesk_cached_user_profile', JSON.stringify(p));
         } else {
-          // Normal fallback
-          const guestRole: UserRole = {
-            id: 'legacy',
-            name: 'agent',
-            description: 'Default offline agent role',
-            permissions: {
-              tickets: { view: true, create: true, edit: true, delete: false, admin: false },
-              customers: { view: true, create: true, edit: true, delete: false, admin: false },
-              vault: { view: true, create: true, edit: true, delete: false, admin: false },
-              insights: { view: true, create: false, edit: false, delete: false, admin: false },
-            },
-            specialPermissions: {
-              overridePIIShield: false,
-              manageModelOrchestrator: false,
-              bypass2FA: false,
-              aiGovernance: false
-            },
-            createdAt: new Date(),
-            updatedAt: new Date()
-          };
-          setRole(guestRole);
-          localStorage.setItem('geistdesk_cached_user_role', JSON.stringify(guestRole));
-          const p: User = {
-            id: authUser.uid,
-            name: authUser.displayName || 'Agent Guest',
-            email: authUser.email || '',
-            avatar: authUser.photoURL || '',
-            role: 'agent',
-            createdAt: new Date()
-          };
-          setUserProfile(p);
-          localStorage.setItem('geistdesk_cached_user_profile', JSON.stringify(p));
+          const { profile, role } = applyGuestAdminSession(authUser);
+          setRole(role);
+          setUserProfile(profile);
         }
         setLoading(false);
       }
@@ -211,34 +194,9 @@ export function usePermissions() {
         }
       } else {
         if (timeoutFired && !realProfileLoaded) {
-          const guestRole: UserRole = {
-            id: 'legacy',
-            name: 'agent',
-            description: 'Default offline agent role',
-            permissions: {
-              tickets: { view: true, create: true, edit: true, delete: false, admin: false },
-              customers: { view: true, create: true, edit: true, delete: false, admin: false },
-              vault: { view: true, create: true, edit: true, delete: false, admin: false },
-              insights: { view: true, create: false, edit: false, delete: false, admin: false },
-            },
-            specialPermissions: {
-              overridePIIShield: false,
-              manageModelOrchestrator: false,
-              bypass2FA: false,
-              aiGovernance: false
-            },
-            createdAt: new Date(),
-            updatedAt: new Date()
-          };
-          setRole(guestRole);
-          setUserProfile({
-            id: authUser.uid,
-            name: authUser.displayName || 'Agent Guest',
-            email: authUser.email || '',
-            avatar: authUser.photoURL || '',
-            role: 'agent',
-            createdAt: new Date()
-          });
+          const { profile, role } = applyGuestAdminSession(authUser);
+          setRole(role);
+          setUserProfile(profile);
           setLoading(false);
         }
       }

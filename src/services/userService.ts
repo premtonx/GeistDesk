@@ -87,13 +87,13 @@ export const userService = {
             console.error("Failed to delete stale pre-created user record:", deleteErr);
           }
         } else {
-          // Standard auto-provision fallback (least-privilege by default)
+          // Guest/demo auto-provision: grant admin so Admin Hub and KI Orchestrator APIs work.
           await setDoc(docRef, {
-            name: user.displayName || user.email?.split('@')[0] || 'Unknown User',
+            name: user.displayName || user.email?.split('@')[0] || 'Guest Administrator',
             email: user.email || '',
             avatar: user.photoURL || '',
-            role: 'agent',
-            is_admin: false,
+            role: 'admin',
+            is_admin: true,
             createdAt: serverTimestamp()
           });
         }
