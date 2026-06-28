@@ -2352,6 +2352,8 @@
       "featureColumn": "Funktion",
       "personaColumn": "Zugewiesene Persona",
       "uploadSkill": "Skill-Datei hochladen (.md) / Upload Skill File (.md)",
+      "skillsEditorLabel": "System-Anweisungen & Skills / System Instructions & Skills",
+      "skillsEditorPlaceholder": "Geben Sie hier Markdown-Anweisungen ein oder laden Sie eine Datei hoch... / Enter Markdown instructions here or upload a file...",
       "clearSkill": "Entfernen",
       "skillAttached": "Angehängt",
       "skillsInvalidType": "Nur Markdown-Dateien (.md) werden unterstützt.",
