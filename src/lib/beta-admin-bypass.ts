@@ -122,3 +122,18 @@ export function isStaleGuestAgentCache(profile: User | null, role: UserRole | nu
   const legacyGuestRole = role.id === 'legacy' && role.name === 'agent';
   return guestName || legacyGuestRole;
 }
+
+/** Single source of truth for admin route and nav visibility checks. */
+export function isSystemAdminSession(
+  isAdmin: boolean,
+  userProfile: User | null | undefined,
+  role: UserRole | null | undefined,
+): boolean {
+  return (
+    isAdmin ||
+    userProfile?.role === 'admin' ||
+    userProfile?.is_admin === true ||
+    role?.name === 'admin' ||
+    role?.isSystem === true
+  );
+}

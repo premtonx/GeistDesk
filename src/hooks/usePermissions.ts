@@ -11,7 +11,7 @@ import {
 } from '../lib/beta-admin-bypass';
 
 export function usePermissions() {
-  const { user: authUser } = useAuth();
+  const { user: authUser, loading: authLoading } = useAuth();
   const [userProfile, setUserProfile] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('geistdesk_cached_user_profile');
@@ -26,22 +26,14 @@ export function usePermissions() {
     } catch {}
     return null;
   });
-  const [loading, setLoading] = useState(() => {
-    if (isBetaAutoAdminEnabled()) return true;
-    try {
-      const savedProfile = localStorage.getItem('geistdesk_cached_user_profile');
-      const savedRole = localStorage.getItem('geistdesk_cached_user_role');
-      if (savedProfile && savedRole) {
-        const profile = JSON.parse(savedProfile) as User;
-        const role = JSON.parse(savedRole) as UserRole;
-        if (isStaleGuestAgentCache(profile, role)) return true;
-        return false;
-      }
-    } catch {}
-    return true;
-  });
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) {
+      setLoading(true);
+      return;
+    }
+
     if (!authUser) {
       setUserProfile(null);
       setRole(null);
@@ -57,6 +49,12 @@ export function usePermissions() {
       setRole(role);
       setLoading(false);
       return;
+    }
+
+    if (isStaleGuestAgentCache(userProfile, role)) {
+      const guestSession = applyGuestAdminSession(authUser);
+      setUserProfile(guestSession.profile);
+      setRole(guestSession.role);
     }
 
     // Privileges are derived strictly from the database role; there is no
@@ -206,7 +204,7 @@ export function usePermissions() {
       clearTimeout(safetyTimeout);
       unsub();
     };
-  }, [authUser]);
+  }, [authUser, authLoading]);
 
   const hasPermission = (module: string, action: 'view' | 'create' | 'edit' | 'delete' | 'admin') => {
     // 1. Direct user-level overrides (derived from the database profile only)
