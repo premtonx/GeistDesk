@@ -54,6 +54,7 @@ import {
 import { useAdmin, useAuth } from '../../lib/hooks';
 import { useSidebar } from '../../lib/context/SidebarContext';
 import { usePermissions } from '../../hooks/usePermissions';
+import { isSystemAdminSession } from '../../lib/beta-admin-bypass';
 
 import { CreateTicketDialog } from '../CreateTicketDialog';
 import { CommandPalette } from '../CommandPalette';
@@ -85,10 +86,7 @@ export default function MainLayout() {
   const { user } = useAuth();
   const { role, userProfile, hasPermission } = usePermissions();
 
-  const isSystemAdmin = isAdmin || 
-                        userProfile?.role === 'admin' || 
-                        userProfile?.is_admin === true || 
-                        role?.name === 'admin';
+  const isSystemAdmin = isSystemAdminSession(isAdmin, userProfile, role);
 
   const visibleNavItems = useMemo(() => {
     return navItems.filter((item) => {

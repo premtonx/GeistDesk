@@ -32,16 +32,19 @@ import HelpCenterPage from './components/pages/HelpCenterPage';
 import SecretViewerPage from './components/pages/SecretViewerPage';
 import { useAuth, useAdmin } from './lib/hooks';
 import { usePermissions } from './hooks/usePermissions';
+import { isSystemAdminSession } from './lib/beta-admin-bypass';
+import { AuthProvider } from './lib/context/AuthContext';
 import { SidebarProvider } from './lib/context/SidebarContext';
 import { WorkspaceProvider } from './lib/context/WorkspaceContext';
 import { ThemeProvider } from './lib/context/ThemeContext';
 import { I18nProvider } from './lib/context/I18nContext';
 
 function AdminRoute({ children }: { children: ReactNode }) {
+  const { loading: authLoading } = useAuth();
   const { isAdmin, checking } = useAdmin();
   const { role, userProfile, loading } = usePermissions();
 
-  if (checking || loading) {
+  if (authLoading || checking || loading) {
     return (
       <div className="h-full w-full flex items-center justify-center p-20 bg-background">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -49,12 +52,7 @@ function AdminRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  const isAuthorized = isAdmin || 
-                       userProfile?.role === 'admin' || 
-                       userProfile?.is_admin === true || 
-                       role?.name === 'admin';
-
-  if (!isAuthorized) {
+  if (!isSystemAdminSession(isAdmin, userProfile, role)) {
     return <Navigate to="/dashboard" replace />;
   }
 
@@ -62,6 +60,18 @@ function AdminRoute({ children }: { children: ReactNode }) {
 }
 
 export default function App() {
+  return (
+    <I18nProvider>
+      <ThemeProvider>
+        <AuthProvider>
+          <AppRoutes />
+        </AuthProvider>
+      </ThemeProvider>
+    </I18nProvider>
+  );
+}
+
+function AppRoutes() {
   const { user, loading } = useAuth();
 
   if (loading) {
@@ -79,8 +89,6 @@ export default function App() {
   }
 
   return (
-    <I18nProvider>
-      <ThemeProvider>
         <SidebarProvider>
           <WorkspaceProvider>
           <TooltipProvider>
@@ -127,7 +135,5 @@ export default function App() {
           </TooltipProvider>
           </WorkspaceProvider>
         </SidebarProvider>
-      </ThemeProvider>
-    </I18nProvider>
   );
 }
