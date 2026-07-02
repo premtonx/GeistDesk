@@ -13,6 +13,7 @@ import {
   Zap,
   ChevronDown,
   ChevronRight,
+  ChevronLeft,
   Bookmark,
   MoreHorizontal,
   Calendar,
@@ -99,6 +100,7 @@ import { KBPageHeader } from '../kb/KBPageHeader';
 import { KBKpiCards } from '../kb/KBKpiCards';
 import { KBSearchSection } from '../kb/KBSearchSection';
 import { KBSearchAiOverlay } from '../kb/KBSearchAiOverlay';
+import { KBArticleEditorWorkspace } from '../kb/KBArticleEditorWorkspace';
 import { truncateRagSnippet } from '../kb/kbSearchUtils';
 import { ragService, type RAGResult } from '../../services/ragService';
 import { AIAdapter } from '../../lib/ai/provider-adapter';
@@ -115,8 +117,6 @@ import {
   resolveArticleCategoryId,
   articleMatchesCategoryId,
 } from '../kb/kbCategoryUtils';
-import { KBRichTextEditor } from '../kb/KBRichTextEditor';
-import { KBBulkActionBar } from '../kb/KBBulkActionBar';
 import { KBCategoryDeleteModal, type CategoryDeleteStrategy } from '../kb/KBCategoryDeleteModal';
 import { useWorkspace } from '../../lib/context/WorkspaceContext';
 import { KBImporter } from '../KBImporter';
@@ -918,6 +918,11 @@ export default function KBPage() {
       toast.error("Validation error: Title and content block are mandatory.");
     }
   };
+
+  const closeArticleDraft = useCallback(() => {
+    setIsAddingArticle(false);
+    setEditingArticleId(null);
+  }, []);
 
   const handleEditArticle = (article: any) => {
     setEditingArticleId(article.id);
@@ -1972,6 +1977,33 @@ export default function KBPage() {
               onNavigate={handleKbNavigate}
               counts={sidebarCounts}
             />
+            {isAddingArticle ? (
+              <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#F8F9FB] overflow-hidden">
+                <div className="px-4 sm:px-6 pt-4 pb-3 border-b border-slate-100 bg-white shrink-0">
+                  <button
+                    type="button"
+                    onClick={closeArticleDraft}
+                    className="flex items-center gap-1 text-slate-500 hover:text-slate-800 font-extrabold text-xs cursor-pointer transition-colors select-none group"
+                  >
+                    <ChevronLeft className="w-3.5 h-3.5 text-slate-450 group-hover:text-slate-650 transition-colors" />
+                    {t('kb.editor.backToOverview', 'Back to knowledge base')}
+                  </button>
+                </div>
+                <KBArticleEditorWorkspace
+                  editingArticleId={editingArticleId}
+                  selectedCategory={selectedCategory}
+                  newArticle={newArticle}
+                  onNewArticleChange={setNewArticle}
+                  tagInput={tagInput}
+                  onTagInputChange={setTagInput}
+                  categories={categories}
+                  enterpriseUsers={ENTERPRISE_USERS}
+                  onClose={closeArticleDraft}
+                  onSave={handleSaveArticle}
+                  className="flex-1 min-h-0"
+                />
+              </div>
+            ) : (
             <ScrollArea className="flex-1 min-w-0">
               <div className="flex flex-col xl:flex-row gap-0 min-h-full">
                 <main className="flex-1 min-w-0 px-4 sm:px-6 py-6 space-y-6 pb-10">
@@ -2187,6 +2219,7 @@ export default function KBPage() {
                 ) : null}
               </div>
             </ScrollArea>
+            )}
           </div>
         )}
 
@@ -2201,202 +2234,6 @@ export default function KBPage() {
         </DialogContent>
       </Dialog>
 
-      {/* ======================================================== */}
-      {/* ENTERPRISE EDITOR DIALOG MODAL                         */}
-      {/* ======================================================== */}
-      <Dialog open={isAddingArticle} onOpenChange={setIsAddingArticle}>
-        <DialogContent className="max-w-6xl rounded-3xl p-0 h-[85vh] flex flex-col overflow-hidden border-none shadow-2xl">
-          <div className="flex h-full flex-col lg:flex-row">
-            
-            {/* Editor Canvas Block */}
-            <div className="flex-1 flex flex-col min-w-0 bg-white">
-              <DialogHeader className="px-6 py-4.5 border-b shrink-0 flex flex-row items-center justify-between">
-                <div>
-                  <DialogTitle className="text-sm font-black text-slate-800 uppercase tracking-widest flex items-center gap-2">
-                    <PenLine className="w-4.5 h-4.5 text-indigo-500" />
-                    {editingArticleId ? 'Revise Article Draft Payload' : 'Create Article Draft Payload'}
-                  </DialogTitle>
-                  <DialogDescription className="text-[11px] text-slate-400 font-semibold mt-0.5">
-                    Authoring new guidelines for selected directory: <span className="text-indigo-600 font-bold">{selectedCategory}</span>
-                  </DialogDescription>
-                </div>
-                <button onClick={() => setIsAddingArticle(false)} className="text-slate-400 hover:text-slate-600 p-1.5 rounded-lg border">
-                   <X className="w-4 h-4" />
-                </button>
-              </DialogHeader>
-
-              {/* Editor Workspace scrolling area */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-6">
-                
-                {/* Title */}
-                <div className="space-y-1">
-                   <Label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Document Master Title</Label>
-                   <Input 
-                     value={newArticle.title}
-                     onChange={(e) => setNewArticle({...newArticle, title: e.target.value})}
-                     placeholder="Enter descriptive article title, e.g. AWS SMTP Relay failover protocol..."
-                     className="h-11 text-md font-bold rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-150-all placeholder:text-slate-300"
-                   />
-                </div>
-
-                {/* Nested Category allocation options */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <Label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Category destination</Label>
-                    <select 
-                      value={newArticle.category}
-                      onChange={(e) => setNewArticle({...newArticle, category: e.target.value})}
-                      className="w-full h-11 border border-slate-200 rounded-xl px-3 text-xs bg-slate-50 font-bold cursor-pointer"
-                    >
-                       {categories.map((cat) => (
-                         <option key={cat.id} value={cat.id}>{cat.name}</option>
-                       ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <Label className="text-[10px] font-extrabold uppercase text-slate-400 tracking-wider">Subcategory folder node</Label>
-                    <Input 
-                      value={newArticle.subCategory}
-                      onChange={(e) => setNewArticle({...newArticle, subCategory: e.target.value})}
-                      placeholder="e.g. Workspace Setup, RBAC, Webhooks"
-                      className="h-11 text-xs font-bold rounded-xl border-slate-200 bg-slate-50"
-                    />
-                  </div>
-                </div>
-
-                {/* Content Editor block */}
-                <div className="flex-1 flex flex-col space-y-2 min-h-[250px]">
-                   <div className="flex justify-between items-center text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
-                      <span>Article documentation body</span>
-                      <span className="flex items-center gap-1 text-indigo-500 bg-indigo-50 px-2 py-0.5 rounded-md font-black">
-                         <Sparkles className="w-3 h-3 animate-pulse" /> Auto-Assist Enabled
-                      </span>
-                   </div>
-
-                   <KBRichTextEditor
-                     value={newArticle.content}
-                     onChange={(c) => setNewArticle({...newArticle, content: c})}
-                     placeholder={t('kb.editor.placeholder', 'Type / for blocks, or start writing…')}
-                     className="flex-1 min-h-[200px]"
-                   />
-                </div>
-
-              </div>
-
-              {/* Action buttons footer */}
-              <div className="px-6 py-4.5 border-t bg-slate-55 flex items-center justify-between shrink-0">
-                <Button 
-                  variant="ghost" 
-                  className="rounded-xl px-4 text-xs font-extrabold text-slate-400 hover:text-slate-600"
-                  onClick={() => setIsAddingArticle(false)}
-                >
-                   Close Draft
-                </Button>
-
-                <Button 
-                  className="bg-indigo-650 hover:bg-indigo-700 text-white font-extrabold px-6 h-10 rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
-                  onClick={handleSaveArticle}
-                >
-                  <Check className="w-4 h-4" />
-                  <span>{editingArticleId ? 'Save Guidelines Amendments' : 'Publish Document Live'}</span>
-                </Button>
-              </div>
-
-            </div>
-
-            {/* Enterprise settings sidebar */}
-            <aside className="w-full lg:w-[320px] bg-slate-50/70 border-l border-slate-150 p-6 flex flex-col gap-5 shrink-0 overflow-y-auto">
-               
-               <div className="flex items-center gap-2 pb-4 border-b">
-                 <Settings className="w-4 h-4 text-indigo-500" />
-                 <h4 className="text-xs font-black uppercase text-slate-800">Article Publishing parameters</h4>
-               </div>
-
-               {/* Access visibility */}
-               <div className="space-y-2">
-                 <Label className="text-[9.5px] uppercase font-black text-slate-400 tracking-wider">Access Scope Visibility</Label>
-                 <div className="flex items-center justify-between p-3 bg-white border rounded-xl shadow-3xs">
-                    <div className="flex flex-col">
-                      <span className="text-xs font-black text-slate-800">Public Portal access</span>
-                      <span className="text-[10px] text-slate-400 font-semibold mt-0.5">Dispatched to help desk hubs</span>
-                    </div>
-                    <Switch 
-                      checked={newArticle.visibility === 'Public'}
-                      onCheckedChange={(checked) => setNewArticle({...newArticle, visibility: checked ? 'Public' : 'Private'})}
-                    />
-                 </div>
-               </div>
-
-               {/* Custom Owner allocator */}
-               <div className="space-y-2">
-                 <Label className="text-[9.5px] uppercase font-black text-slate-400 tracking-wider">Document Metadata Owner</Label>
-                 <select 
-                   value={newArticle.owner}
-                   onChange={(e) => setNewArticle({...newArticle, owner: e.target.value})}
-                   className="w-full h-10 bg-white border rounded-xl px-2.5 text-xs font-bold"
-                 >
-                    {ENTERPRISE_USERS.map((user, uidx) => (
-                      <option key={uidx} value={user.name}>{user.name} ({user.role})</option>
-                    ))}
-                 </select>
-               </div>
-
-               {/* Reviewer allocator */}
-               <div className="space-y-2">
-                 <Label className="text-[9.5px] uppercase font-black text-slate-400 tracking-wider">Assigned Auditor Representative</Label>
-                 <select 
-                   value={newArticle.reviewer}
-                   onChange={(e) => setNewArticle({...newArticle, reviewer: e.target.value})}
-                   className="w-full h-10 bg-white border rounded-xl px-2.5 text-xs font-bold"
-                 >
-                    {ENTERPRISE_USERS.map((user, uidx) => (
-                      <option key={uidx} value={user.name}>{user.name} ({user.role})</option>
-                    ))}
-                 </select>
-               </div>
-
-               {/* Publishing State Status */}
-               <div className="space-y-2">
-                 <Label className="text-[9.5px] uppercase font-black text-slate-400 tracking-wider">Active Workflow Status</Label>
-                 <select 
-                   value={newArticle.status}
-                   onChange={(e) => setNewArticle({...newArticle, status: e.target.value})}
-                   className="w-full h-10 bg-white border rounded-xl px-2.5 text-xs font-bold"
-                 >
-                    <option value="Published">Published &amp; Live</option>
-                    <option value="Draft">Draft Workspace Cache</option>
-                    <option value="Needs Review">Under Auditor Verification</option>
-                    <option value="Outdated">Annotated Outdated Guidelines</option>
-                    <option value="Archived">Secure Archive Folder</option>
-                    <option value="AI Generated">Raw AI Suggested draft</option>
-                    <option value="Under Revision">Active Hot-fix overhaul</option>
-                 </select>
-               </div>
-
-               {/* Tags */}
-               <div className="space-y-2">
-                 <Label className="text-[9.5px] uppercase font-black text-slate-400 tracking-wider">Tags (comma separated)</Label>
-                 <Input 
-                   value={tagInput}
-                   onChange={(e) => setTagInput(e.target.value)}
-                   placeholder="e.g. guide, active, network"
-                   className="h-10 bg-white border text-xs font-bold rounded-xl"
-                 />
-                 <div className="flex flex-wrap gap-1 mt-1.5">
-                   {tagInput.split(',').map(t => t.trim()).filter(Boolean).map((t, idx) => (
-                     <Badge key={idx} className="bg-slate-200 text-slate-600 font-extrabold uppercase text-[7.5px] py-0 px-1 border-none rounded-md">
-                        #{t}
-                     </Badge>
-                   ))}
-                 </div>
-               </div>
-
-            </aside>
-
-          </div>
-        </DialogContent>
-      </Dialog>
 
       {/* ======================================================== */}
       {/* ENTERPRISE CATEGORY CONFIGURATION DIALOG MODAL           */}
