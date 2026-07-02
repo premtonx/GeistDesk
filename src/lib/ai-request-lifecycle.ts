@@ -14,10 +14,22 @@ import {
   type AiOrchestratorConfig,
   isAiFeatureEnabled,
 } from '../types/aiOrchestrator.js';
-import { compileOrchestratorPolicy, validateCorporatePolicyRules } from './ai-orchestrator-policies.js';
+import { compileOrchestratorPolicy, requiresCloudDataAnonymization, validateCorporatePolicyRules } from './ai-orchestrator-policies.js';
 import { isBudgetExceeded, isLocalFallbackForced } from './ai-budget.js';
 import { createProductionModelExecutor } from './ai-lifecycle-executor.js';
 import { buildLifecycleSystemInstruction, resolvePersonaForFeature } from './ai-system-prompt.js';
+import {
+  consumeRequestTokenMap,
+  clearRequestTokenMap,
+  peekRequestTokenMap,
+  rehydrateResponseData,
+  scrubSensitiveData,
+  storeRequestTokenMap,
+} from './ai-data-anonymization.js';
+import {
+  loadVaultFingerprintsForWorkspace,
+  resolveWorkspaceNameForScrubbing,
+} from './ai-vault-fingerprints.js';
 import {
   enqueueApprovalRequest,
   enqueueHumanReview,
@@ -129,6 +141,20 @@ function applyMemoryPolicyBindings(
   return { storeContext: false, detail: 'Memory persistence disabled by policy.' };
 }
 
+function rehydrateModelOutput(requestId: string, output: string): { text: string; replacements: number } {
+  const tokenMap = peekRequestTokenMap(requestId);
+  if (!tokenMap || Object.keys(tokenMap).length === 0) {
+    return { text: output, replacements: 0 };
+  }
+  const { rehydratedText, replacements } = rehydrateResponseData(output, tokenMap);
+  return { text: rehydratedText, replacements };
+}
+
+function finalizeRequestTokens(requestId: string): void {
+  consumeRequestTokenMap(requestId);
+  clearRequestTokenMap(requestId);
+}
+
 /** Default stub executor for dry-run / test pipelines (no external API calls). */
 export const stubAiModelExecutor: AiModelExecutor = async ({ feature, prompt }) => {
   const confidenceByFeature: Partial<Record<AiFeatureId, number>> = {
@@ -163,6 +189,7 @@ export async function runAiRequestLifecycle(
   const policiesChecked: string[] = [];
   let redactedPrompt = ctx.prompt;
   let config: AiOrchestratorConfig;
+  let policyCompilation: ReturnType<typeof compileOrchestratorPolicy> | undefined;
 
   try {
     recordStep(steps, 'request_received', 'passed', `requestId=${requestId}`);
@@ -198,20 +225,56 @@ export async function runAiRequestLifecycle(
       t,
     );
 
-    // 3. Check PII Shields
+    // 3. Check PII Shields + cloud egress anonymization
     t = Date.now();
+    policyCompilation = compileOrchestratorPolicy(config);
+    const projectedModel = assignModelForFeature(config, ctx.feature, policyCompilation).model;
+    const cloudAnonymizationRequired = requiresCloudDataAnonymization(config, projectedModel);
+
     if (config.piiEnabled) {
       const { PIIShield } = await import('../../pii-shield.js');
       const shield = await PIIShield.redact(ctx.prompt);
       redactedPrompt = shield.cleanText;
       policiesChecked.push('pii_shield');
-      recordStep(
-        steps,
-        'check_pii_shields',
-        'passed',
-        shield.wasScrubbed ? 'PII patterns redacted locally' : 'No PII detected',
-        t,
-      );
+
+      if (cloudAnonymizationRequired) {
+        const [vaultFingerprints, workspaceName] = await Promise.all([
+          loadVaultFingerprintsForWorkspace(workspaceId, options.skipPersistence),
+          resolveWorkspaceNameForScrubbing(workspaceId, ctx.metadata, options.skipPersistence),
+        ]);
+        const vaultFromMetadata = Array.isArray(ctx.metadata?.vaultFingerprints)
+          ? (ctx.metadata?.vaultFingerprints as string[])
+          : [];
+        const scrub = scrubSensitiveData(redactedPrompt, {
+          workspaceName,
+          vaultFingerprints: [...vaultFromMetadata, ...vaultFingerprints],
+        });
+        redactedPrompt = scrub.scrubbedText;
+        if (scrub.tokenCount > 0) {
+          storeRequestTokenMap(requestId, scrub.tokenMap);
+          policiesChecked.push('cloud_data_anonymization');
+        }
+        recordStep(
+          steps,
+          'check_pii_shields',
+          'passed',
+          scrub.wasScrubbed || shield.wasScrubbed
+            ? `PII shield + cloud token map (${scrub.tokenCount} reversible placeholders)`
+            : 'PII shield active — no sensitive fingerprints detected',
+          t,
+        );
+      } else {
+        policiesChecked.push('local_route_no_cloud_scrub');
+        recordStep(
+          steps,
+          'check_pii_shields',
+          'passed',
+          shield.wasScrubbed
+            ? 'PII patterns redacted locally (local/firewalled route — token map skipped)'
+            : 'Local route — reversible cloud scrub skipped',
+          t,
+        );
+      }
     } else {
       policiesChecked.push('pii_shield_disabled');
       recordStep(steps, 'check_pii_shields', 'skipped', 'PII shield disabled in config', t);
@@ -219,7 +282,7 @@ export async function runAiRequestLifecycle(
 
     // 4. Match Data Residency Region
     t = Date.now();
-    const compilation = compileOrchestratorPolicy(config);
+    const compilation = policyCompilation;
     policiesChecked.push('data_residency', 'trust_level', 'corporate_policies');
 
     if (compilation.providerPriority.length === 0) {
@@ -344,13 +407,18 @@ export async function runAiRequestLifecycle(
         systemInstruction,
       });
       output = execResult.output;
+      const rehydrated = rehydrateModelOutput(requestId, output);
+      output = rehydrated.text;
+      if (rehydrated.replacements > 0) {
+        policiesChecked.push('response_rehydration');
+      }
       confidence = execResult.confidence;
       costUsd = execResult.costUsd ?? 0;
       recordStep(
         steps,
         'execute',
         'passed',
-        `confidence=${confidence.toFixed(3)} persona=${personaId} lang=${ctx.operatorLanguage ?? 'en'}`,
+        `confidence=${confidence.toFixed(3)} persona=${personaId} lang=${ctx.operatorLanguage ?? 'en'}${rehydrated.replacements > 0 ? ` rehydrated=${rehydrated.replacements}` : ''}`,
         t,
       );
 
@@ -496,6 +564,8 @@ export async function runAiRequestLifecycle(
       error: msg,
       redactedPrompt,
     };
+  } finally {
+    finalizeRequestTokens(requestId);
   }
 }
 
