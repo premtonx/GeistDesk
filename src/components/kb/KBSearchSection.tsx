@@ -1,8 +1,9 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Sparkles, Mic, SlidersHorizontal, Search } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
+import { isQuestionLikeQuery } from './kbSearchUtils';
 
 interface KBSearchSectionProps {
   searchQuery: string;
@@ -10,6 +11,7 @@ interface KBSearchSectionProps {
   onAdvancedFilters?: () => void;
   showFilters?: boolean;
   onPopularSearch?: (term: string) => void;
+  onAskAi?: (query: string) => void;
   className?: string;
 }
 
@@ -26,9 +28,47 @@ export function KBSearchSection({
   onAdvancedFilters,
   showFilters,
   onPopularSearch,
+  onAskAi,
   className,
 }: KBSearchSectionProps) {
   const { t } = useTranslation();
+  const inputRef = useRef<HTMLInputElement>(null);
+  const showAskAiBadge = isQuestionLikeQuery(searchQuery);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        e.stopPropagation();
+        inputRef.current?.focus();
+        inputRef.current?.select();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown, true);
+    return () => window.removeEventListener('keydown', handleKeyDown, true);
+  }, []);
+
+  const applyPopularSearch = (term: string) => {
+    onSearchChange(term);
+    onPopularSearch?.(term);
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+      inputRef.current?.setSelectionRange(term.length, term.length);
+    });
+  };
+
+  const handleAskAi = () => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed || !isQuestionLikeQuery(trimmed)) return;
+    onAskAi?.(trimmed);
+  };
+
+  const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && showAskAiBadge) {
+      e.preventDefault();
+      handleAskAi();
+    }
+  };
 
   return (
     <section
@@ -47,9 +87,11 @@ export function KBSearchSection({
       <div className="relative">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
         <input
+          ref={inputRef}
           type="search"
           value={searchQuery}
           onChange={(e) => onSearchChange(e.target.value)}
+          onKeyDown={handleInputKeyDown}
           placeholder={t('kb.aiSearchPlaceholder', 'Ask Geist AI or search documentation...')}
           className={cn(
             'w-full h-12 pl-11 pr-36 rounded-xl border border-slate-200/80 bg-white',
@@ -86,18 +128,42 @@ export function KBSearchSection({
         </div>
       </div>
 
+      {showAskAiBadge ? (
+        <div className="flex flex-wrap items-center gap-2 mt-2">
+          <button
+            type="button"
+            onClick={handleAskAi}
+            className="inline-flex items-center gap-1.5 text-[11px] font-semibold px-2.5 py-1 rounded-full border border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100 hover:border-violet-300 transition-colors"
+          >
+            <Sparkles className="w-3 h-3" />
+            {t('kb.askGeistAi', 'Ask Geist AI')}
+          </button>
+          <span className="text-[10px] text-slate-400">
+            {t('kb.askGeistAiHint', 'Press Enter or click to get an AI summary')}
+          </span>
+        </div>
+      ) : null}
+
       <div className="flex flex-wrap items-center gap-2 mt-3">
         <span className="text-[11px] font-medium text-slate-500">{t('kb.popularLabel', 'Popular')}:</span>
-        {POPULAR_KEYS.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => onPopularSearch?.(t(item.key, item.defaultLabel))}
-            className="text-[11px] font-medium px-2.5 py-1 rounded-full border border-slate-200/80 bg-white text-slate-600 hover:border-blue-200 hover:text-blue-700 transition-colors"
-          >
-            {t(item.key, item.defaultLabel)}
-          </button>
-        ))}
+        {POPULAR_KEYS.map((item) => {
+          const label = t(item.key, item.defaultLabel);
+          return (
+            <button
+              key={item.key}
+              type="button"
+              onClick={() => applyPopularSearch(label)}
+              className={cn(
+                'text-[11px] font-medium px-2.5 py-1 rounded-full border transition-colors',
+                searchQuery === label
+                  ? 'border-blue-300 bg-blue-50 text-blue-700'
+                  : 'border-slate-200/80 bg-white text-slate-600 hover:border-blue-200 hover:text-blue-700',
+              )}
+            >
+              {label}
+            </button>
+          );
+        })}
       </div>
     </section>
   );

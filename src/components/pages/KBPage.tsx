@@ -98,6 +98,10 @@ import { ModuleToolbarSelect } from '../ui/module-page';
 import { KBPageHeader } from '../kb/KBPageHeader';
 import { KBKpiCards } from '../kb/KBKpiCards';
 import { KBSearchSection } from '../kb/KBSearchSection';
+import { KBSearchAiOverlay } from '../kb/KBSearchAiOverlay';
+import { truncateRagSnippet } from '../kb/kbSearchUtils';
+import { ragService, type RAGResult } from '../../services/ragService';
+import { AIAdapter } from '../../lib/ai/provider-adapter';
 import { KBCategoryGrid } from '../kb/KBCategoryGrid';
 import { KBActivitySidebar, buildRecentActivity, buildTopContributors } from '../kb/KBActivitySidebar';
 import { KBViewModeSelector, type KBArticleViewMode } from '../kb/KBViewModeSelector';
@@ -555,6 +559,15 @@ export default function KBPage() {
   const [filterVisibility, setFilterVisibility] = useState<string>('All');
   const [filterLanguage, setFilterLanguage] = useState<string>('All');
   const [filterTag, setFilterTag] = useState<string>('All');
+
+  const [aiSearchQuery, setAiSearchQuery] = useState<string | null>(null);
+  const [aiSearchSummary, setAiSearchSummary] = useState<string | null>(null);
+  const [aiSearchSources, setAiSearchSources] = useState<RAGResult[]>([]);
+  const [isAiSearchLoading, setIsAiSearchLoading] = useState(false);
+  const [aiSearchError, setAiSearchError] = useState<string | null>(null);
+
+  const aiAdapter = useMemo(() => new AIAdapter(), []);
+  const isAiSearchReady = useMemo(() => aiAdapter.isConfigured, [aiAdapter]);
   
   // Advanced side panels & creation states
   const [isAddingCategory, setIsAddingCategory] = useState(false);
@@ -1170,7 +1183,59 @@ export default function KBPage() {
     setActiveSubTab('All');
     setSelectedCategory('All');
     setKbNav({ type: 'workspace', id: 'overview' });
+    setAiSearchQuery(null);
+    setAiSearchSummary(null);
+    setAiSearchSources([]);
+    setAiSearchError(null);
   };
+
+  const dismissAiSearchOverlay = () => {
+    setAiSearchQuery(null);
+    setAiSearchSummary(null);
+    setAiSearchSources([]);
+    setAiSearchError(null);
+  };
+
+  const handlePopularSearch = (term: string) => {
+    setSearchQuery(term);
+    dismissAiSearchOverlay();
+  };
+
+  const handleAskGeistAi = useCallback(
+    async (query: string) => {
+      setAiSearchQuery(query);
+      setAiSearchSummary(null);
+      setAiSearchError(null);
+      setIsAiSearchLoading(true);
+
+      const scopedArticles = filterArticlesByWorkspace(articles, workspace);
+      const ragHits = ragService.findRelevantContext(query, scopedArticles, []);
+      const minimizedSnippets = ragHits.map((hit) => ({
+        ...hit,
+        text: truncateRagSnippet(hit.text),
+      }));
+      setAiSearchSources(minimizedSnippets);
+
+      if (!isAiSearchReady) {
+        setAiSearchError(
+          t('kb.aiNotConfigured', 'Geist AI is not configured. Connect a model in AI Orchestrator settings.'),
+        );
+        setIsAiSearchLoading(false);
+        return;
+      }
+
+      try {
+        const summary = await aiAdapter.answerKnowledgeQuery(query, minimizedSnippets);
+        setAiSearchSummary(summary);
+      } catch (err) {
+        const message = err instanceof Error ? err.message : t('kb.aiAnswerFailed', 'Could not generate an AI answer.');
+        setAiSearchError(message);
+      } finally {
+        setIsAiSearchLoading(false);
+      }
+    },
+    [articles, workspace, isAiSearchReady, aiAdapter, t],
+  );
 
   // Helper translations for preview reading
   const getLocalizedTitle = (art: any, lang: string) => {
@@ -1936,34 +2001,63 @@ export default function KBPage() {
 
                   <KBSearchSection
                     searchQuery={searchQuery}
-                    onSearchChange={setSearchQuery}
+                    onSearchChange={(value) => {
+                      setSearchQuery(value);
+                      if (!value.trim()) dismissAiSearchOverlay();
+                    }}
                     onAdvancedFilters={() => setShowAdvancedFilters((v) => !v)}
                     showFilters={showAdvancedFilters}
-                    onPopularSearch={setSearchQuery}
+                    onPopularSearch={handlePopularSearch}
+                    onAskAi={handleAskGeistAi}
                   />
+
+                  <KBSearchAiOverlay
+                    query={aiSearchQuery ?? ''}
+                    summary={aiSearchSummary}
+                    sources={aiSearchSources}
+                    isLoading={isAiSearchLoading}
+                    error={aiSearchError}
+                    onDismiss={dismissAiSearchOverlay}
+                    className="mt-3"
+                  />
+
+                  <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl border border-slate-200/80 bg-white">
+                    <ModuleToolbarSelect value={filterOwner} onChange={setFilterOwner} aria-label={t('kb.owner', 'Owner')}>
+                      <option value="All">{t('kb.allOwners', 'All owners')}</option>
+                      {Array.from(new Set(workspaceArticles.map((a) => a.owner).filter(Boolean))).map((ownerName: string, idx) => (
+                        <option key={idx} value={ownerName}>{ownerName}</option>
+                      ))}
+                    </ModuleToolbarSelect>
+                    <ModuleToolbarSelect value={filterVisibility} onChange={setFilterVisibility} aria-label={t('kb.allAccess', 'Access')}>
+                      <option value="All">{t('kb.allAccess', 'All access')}</option>
+                      <option value="Public">{t('kb.publicPortal', 'Public')}</option>
+                      <option value="Private">{t('kb.internalSopsOnly', 'Internal')}</option>
+                    </ModuleToolbarSelect>
+                    {isDeveloperWorkspace ? (
+                      <span className="text-[11px] text-violet-600 font-medium px-2 py-1 rounded-lg bg-violet-50 border border-violet-100">
+                        {t('kb.workspaceDeveloperHint', 'Developer workspace — internal docs & runbooks')}
+                      </span>
+                    ) : (
+                      <span className="text-[11px] text-blue-600 font-medium px-2 py-1 rounded-lg bg-blue-50 border border-blue-100">
+                        {t('kb.workspaceSupportHint', 'Support workspace — public customer FAQs')}
+                      </span>
+                    )}
+                  </div>
 
                   {showAdvancedFilters ? (
                     <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl border border-slate-200/80 bg-white">
-                      <ModuleToolbarSelect value={filterOwner} onChange={setFilterOwner} aria-label={t('kb.owner', 'Owner')}>
-                        <option value="All">{t('kb.allOwners', 'All owners')}</option>
-                        {Array.from(new Set(workspaceArticles.map((a) => a.owner).filter(Boolean))).map((ownerName: string, idx) => (
-                          <option key={idx} value={ownerName}>{ownerName}</option>
+                      <ModuleToolbarSelect value={filterLanguage} onChange={setFilterLanguage} aria-label={t('kb.language', 'Language')}>
+                        <option value="All">{t('kb.allLanguages', 'All languages')}</option>
+                        {Array.from(new Set(workspaceArticles.map((a) => a.language).filter(Boolean))).map((lang: string, idx) => (
+                          <option key={idx} value={lang}>{lang}</option>
                         ))}
                       </ModuleToolbarSelect>
-                      <ModuleToolbarSelect value={filterVisibility} onChange={setFilterVisibility} aria-label={t('kb.allAccess', 'Access')}>
-                        <option value="All">{t('kb.allAccess', 'All access')}</option>
-                        <option value="Public">{t('kb.publicPortal', 'Public')}</option>
-                        <option value="Private">{t('kb.internalSopsOnly', 'Internal')}</option>
+                      <ModuleToolbarSelect value={filterTag} onChange={setFilterTag} aria-label={t('kb.tag', 'Tag')}>
+                        <option value="All">{t('kb.allTags', 'All tags')}</option>
+                        {Array.from(new Set(workspaceArticles.flatMap((a) => a.tags || []))).map((tag: string, idx) => (
+                          <option key={idx} value={tag}>{tag}</option>
+                        ))}
                       </ModuleToolbarSelect>
-                      {isDeveloperWorkspace ? (
-                        <span className="text-[11px] text-violet-600 font-medium px-2 py-1 rounded-lg bg-violet-50 border border-violet-100">
-                          {t('kb.workspaceDeveloperHint', 'Developer workspace — internal docs & runbooks')}
-                        </span>
-                      ) : (
-                        <span className="text-[11px] text-blue-600 font-medium px-2 py-1 rounded-lg bg-blue-50 border border-blue-100">
-                          {t('kb.workspaceSupportHint', 'Support workspace — public customer FAQs')}
-                        </span>
-                      )}
                     </div>
                   ) : null}
 

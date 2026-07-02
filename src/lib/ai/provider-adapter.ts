@@ -207,6 +207,40 @@ Translate the following text to ${targetLanguage}:\n\n${text}`;
     }
   }
 
+  /**
+   * Answers a KB search question using workspace-scoped RAG snippets only.
+   * Uses ticket_summarization (automatic) to avoid manager-approval gates on kb_generation.
+   */
+  async answerKnowledgeQuery(
+    query: string,
+    ragSnippets: { sourceTitle: string; source: string; text: string }[],
+  ): Promise<string> {
+    const contextBlock =
+      ragSnippets.length > 0
+        ? ragSnippets
+            .map((s) => `[${s.source}: ${s.sourceTitle}]\n${s.text}`)
+            .join("\n\n")
+        : "No matching documentation found in this workspace.";
+
+    const prompt = `You are Geist AI, a knowledge base assistant. Answer the user's question using ONLY the provided workspace documentation excerpts.
+If the excerpts do not contain enough information, say so clearly and suggest what to search for.
+Do not invent facts or reference data outside the provided context.
+
+USER QUESTION: ${query}
+
+WORKSPACE DOCUMENTATION:
+${contextBlock}
+
+Provide a concise, helpful answer in 2-4 short paragraphs or bullet points.`;
+
+    try {
+      return await this.runLifecycleFeature("ticket_summarization", prompt);
+    } catch (error) {
+      console.error("KB semantic search AI error:", error);
+      throw error;
+    }
+  }
+
   async improveTone(text: string, tone: string = "Professional"): Promise<string> {
     if (!text || !text.trim()) return "";
 
