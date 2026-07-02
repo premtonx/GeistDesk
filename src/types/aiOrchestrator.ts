@@ -490,7 +490,8 @@ export const AI_CORPORATE_POLICY_RULES: Record<
 > = {
   customerPiiNeverLeavesWorkspace: {
     label: 'Customer PII never leaves Workspace',
-    description: 'Blocks cloud routing when PII redaction is disabled or data may egress.',
+    description:
+      'Blocks cloud routing when PII redaction is disabled. When enabled, public cloud egress uses reversible {{GD_TOKEN_*}} anonymization at lifecycle Step 4.',
   },
   vaultAnalysisMustStayLocal: {
     label: 'Vault Analysis must stay 100% Local',

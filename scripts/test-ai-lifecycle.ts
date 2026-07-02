@@ -13,6 +13,11 @@ import {
   resumeApprovedAiRequest,
   stubAiModelExecutor,
 } from '../src/lib/ai-request-lifecycle.js';
+import {
+  rehydrateResponseData,
+  resetEphemeralTokenStores,
+  scrubSensitiveData,
+} from '../src/lib/ai-data-anonymization.js';
 
 let passed = 0;
 let failed = 0;
@@ -147,6 +152,96 @@ async function testKillSwitchBlocks(): Promise<void> {
   assert(result.status === 'blocked', 'blocked by kill switch');
 }
 
+async function testScrubRehydrateUtilities(): Promise<void> {
+  console.log('\n[10] Anonymization utilities — scrub and rehydrate roundtrip');
+  resetEphemeralTokenStores();
+  const source =
+    'Acme Corp VPN uses db-primary.internal.corp at 10.20.1.44 postgres://admin:SecretPass99@db-primary.internal.corp/prod';
+  const scrub = scrubSensitiveData(source, { workspaceName: 'Acme Corp' });
+  assert(scrub.wasScrubbed, 'scrub detects sensitive fingerprints');
+  assert(scrub.scrubbedText.includes('{{GD_TOKEN_'), 'placeholder tokens injected');
+  assert(!scrub.scrubbedText.includes('SecretPass99'), 'password removed from outbound text');
+
+  const modelEcho = `Please use ${Object.keys(scrub.tokenMap)[0]} for the database connection.`;
+  const restored = rehydrateResponseData(modelEcho, scrub.tokenMap);
+  assert(restored.replacements > 0, 'rehydration replaces placeholders');
+  assert(!restored.rehydratedText.includes('{{GD_TOKEN_'), 'placeholders removed from client output');
+}
+
+async function testCloudLifecycleScrubAndRehydrate(): Promise<void> {
+  console.log('\n[11] Cloud route — lifecycle scrub + response rehydration');
+  resetEphemeralTokenStores();
+  const echoExecutor = async ({ prompt }: { prompt: string }) => {
+    const hostToken = prompt.match(/\{\{GD_TOKEN_HOST_\d+\}\}/)?.[0] ?? '{{GD_TOKEN_HOST_1}}';
+    return {
+      output: `Connect using host ${hostToken} and report status.`,
+      confidence: 0.95,
+      costUsd: 0.001,
+    };
+  };
+
+  const cloudConfig = {
+    ...DEFAULT_ORCHESTRATOR_CONFIG,
+    featureRouting: {
+      ...DEFAULT_ORCHESTRATOR_CONFIG.featureRouting,
+      smart_reply: 'gemini-flash',
+    },
+    providerPriority: ['gemini-flash', 'local-llama'],
+    primaryModel: 'gemini-flash',
+    trustLevel: 4 as const,
+  };
+
+  const result = await runAiRequestLifecycle(
+    {
+      feature: 'smart_reply',
+      prompt: 'Troubleshoot db-primary.internal.corp latency for Acme Corp operators.',
+      metadata: { workspaceName: 'Acme Corp' },
+    },
+    {
+      config: cloudConfig,
+      skipPersistence: true,
+      skipApprovalGate: true,
+      executor: echoExecutor,
+    },
+  );
+
+  assert(result.status === 'completed', 'cloud lifecycle completes');
+  assert(result.redactedPrompt?.includes('{{GD_TOKEN_'), 'outbound prompt tokenized');
+  assert(result.output?.includes('db-primary.internal.corp'), 'hostname rehydrated in response');
+  assert(result.steps.some((s) => s.step === 'check_pii_shields' && s.detail?.includes('token map')), 'PII step records token map');
+}
+
+async function testLocalRouteSkipsReversibleScrub(): Promise<void> {
+  console.log('\n[12] Local Llama route — skips reversible cloud token map');
+  resetEphemeralTokenStores();
+  const localConfig = {
+    ...DEFAULT_ORCHESTRATOR_CONFIG,
+    featureRouting: {
+      ...DEFAULT_ORCHESTRATOR_CONFIG.featureRouting,
+      smart_reply: 'local-llama',
+    },
+    providerPriority: ['local-llama'],
+    primaryModel: 'local-llama',
+    trustLevel: 5 as const,
+  };
+
+  const result = await runAiRequestLifecycle(
+    { feature: 'smart_reply', prompt: 'password: LocalOnlySecret99 on db.internal.corp' },
+    {
+      config: localConfig,
+      skipPersistence: true,
+      skipApprovalGate: true,
+      executor: stubAiModelExecutor,
+    },
+  );
+
+  assert(result.status === 'completed', 'local lifecycle completes');
+  assert(
+    result.steps.some((s) => s.step === 'check_pii_shields' && s.detail?.includes('token map skipped')),
+    'local route skips reversible scrub',
+  );
+}
+
 async function main(): Promise<void> {
   console.log('AI Request Lifecycle — dry-run test suite');
   console.log('='.repeat(50));
@@ -160,6 +255,9 @@ async function main(): Promise<void> {
   await testDecisionEngineFlow();
   await testResumeAfterApproval();
   await testKillSwitchBlocks();
+  await testScrubRehydrateUtilities();
+  await testCloudLifecycleScrubAndRehydrate();
+  await testLocalRouteSkipsReversibleScrub();
 
   console.log('\n' + '='.repeat(50));
   console.log(`Results: ${passed} passed, ${failed} failed`);
