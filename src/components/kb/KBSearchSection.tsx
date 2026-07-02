@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from 'react';
-import { Sparkles, Mic, SlidersHorizontal, Search } from 'lucide-react';
+import { Sparkles, SlidersHorizontal, Search } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
@@ -94,24 +94,15 @@ export function KBSearchSection({
           onKeyDown={handleInputKeyDown}
           placeholder={t('kb.aiSearchPlaceholder', 'Ask Geist AI or search documentation...')}
           className={cn(
-            'w-full h-12 pl-11 pr-36 rounded-xl border border-slate-200/80 bg-white',
+            'w-full h-12 pl-11 pr-28 sm:pr-32 rounded-xl border border-slate-200/80 bg-white',
             'text-sm text-slate-800 placeholder:text-slate-400 shadow-sm',
             'focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-300 transition-all',
           )}
         />
-        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
           <kbd className="hidden sm:inline-flex h-6 items-center rounded-md border border-slate-200 bg-slate-50 px-1.5 text-[10px] font-medium text-slate-400">
             ⌘K
           </kbd>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 rounded-lg text-slate-500 hover:text-blue-600 hover:bg-blue-50"
-            aria-label={t('kb.voiceSearch', 'Voice search')}
-          >
-            <Mic className="w-4 h-4" />
-          </Button>
           <Button
             type="button"
             variant="outline"
