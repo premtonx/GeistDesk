@@ -328,7 +328,7 @@ Hosted inside `AiOrchestratorWorkbench.tsx` (tabbed sandbox utilities):
 | **Prompt-Bibliothek** | Prompt Library | `AiPromptLibraryPanel` | `GET/POST /api/admin/orchestrator/prompts/*` |
 | **Benchmark-Raster** | Benchmark Grid | `AiProviderBenchmarkGrid` | `GET /api/admin/orchestrator/benchmark` |
 | **Playground** | Playground | `AiPlaygroundPanel` | `POST /api/admin/orchestrator/playground` |
-| **Personas** | Personas | `AiPersonasSelector` | Config `personaSkills` + inline Markdown editor (64KB) |
+| **Personas Engine** | Personas | `AiPersonasSelector` | Handles custom roles (Support Agent, Security Analyst, Knowledge Writer) with resizable monospace textareas (6 rows min). Uses a FileReader workflow to populate `skillsContent` and `skillsFileName` from `.md` uploads, enforcing a strict 64 KB state machine threshold with synchronous data updates via existing `onSkillsChange` handlers. |
 
 **Prompt versioning:** Immutable history per feature; actions: `Neue Version speichern`, rollback via `POST .../prompts/:feature/rollback`  
 **Storage:** `ai_prompt_templates`, `ai_prompt_versions` tables
