@@ -234,6 +234,24 @@ function requirePool(): pg.Pool {
   return pgPool;
 }
 
+/** Run a callback inside a single PostgreSQL transaction. */
+export async function withPgTransaction<T>(
+  fn: (client: pg.PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await requirePool().connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 /** Execute parameterized SQL against the live pool. */
 export async function queryDb(sql: string, params: unknown[] = []): Promise<pg.QueryResult> {
   return requirePool().query(sql, params);

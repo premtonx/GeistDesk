@@ -8,6 +8,7 @@ import {
   updateDocDirect,
   deleteDocDirect,
   getDocsDirect,
+  withPgTransaction,
 } from "../lib/postgres-backend.js";
 import {
   encryptString,
@@ -168,6 +169,93 @@ async function markVaultItemBurned(item: any, viewCount?: number): Promise<void>
   });
 }
 
+type VaultRevealClaimResult =
+  | {
+      ok: true;
+      item: any;
+      nextViewCount: number;
+      shouldBurnMaterial: boolean;
+      encryptedShares: EncryptedPayload[] | null;
+      encryptedContent: EncryptedPayload | null;
+    }
+  | { ok: false; status: 404 | 410 };
+
+/**
+ * Atomically claim one reveal view slot under row lock.
+ * Encrypted material is read before destructive burn/delete in the same transaction.
+ */
+async function claimVaultRevealSlot(itemId: string): Promise<VaultRevealClaimResult> {
+  return withPgTransaction(async (client) => {
+    const itemRes = await client.query(
+      'SELECT data FROM geistdesk_documents WHERE collection = $1 AND id = $2 FOR UPDATE',
+      [VAULT_ITEMS, itemId],
+    );
+
+    if (!itemRes.rowCount) {
+      return { ok: false, status: 404 };
+    }
+
+    const raw = itemRes.rows[0].data;
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    const item = { id: itemId, ...parsed };
+
+    if (resolveVaultBurned(item)) {
+      return { ok: false, status: 410 };
+    }
+
+    let encryptedShares: EncryptedPayload[] | null = null;
+    let encryptedContent: EncryptedPayload | null = null;
+
+    if (item.secretRef) {
+      const secretRes = await client.query(
+        'SELECT data FROM geistdesk_documents WHERE collection = $1 AND id = $2',
+        [VAULT_SECRETS, item.secretRef],
+      );
+      if (secretRes.rowCount) {
+        const secretRaw = secretRes.rows[0].data;
+        const secretParsed = typeof secretRaw === 'string' ? JSON.parse(secretRaw) : secretRaw;
+        encryptedShares = secretParsed.encryptedShares ?? null;
+        encryptedContent = secretParsed.encryptedContent ?? null;
+      }
+    }
+
+    const nextViewCount = getViewCount(item) + 1;
+    const maxViews = getMaxViews(item);
+    const shouldBurnMaterial = nextViewCount >= maxViews || item.expirationType === 'read';
+    const burnedAt = new Date().toISOString();
+
+    const nextData = {
+      ...parsed,
+      viewCount: nextViewCount,
+      ...(shouldBurnMaterial
+        ? { isBurned: true, is_active: false, burnedAt }
+        : {}),
+    };
+    delete nextData.id;
+
+    await client.query(
+      'UPDATE geistdesk_documents SET data = $3::jsonb, updated_at = NOW() WHERE collection = $1 AND id = $2',
+      [VAULT_ITEMS, itemId, JSON.stringify(nextData)],
+    );
+
+    if (shouldBurnMaterial && item.secretRef) {
+      await client.query(
+        'DELETE FROM geistdesk_documents WHERE collection = $1 AND id = $2',
+        [VAULT_SECRETS, item.secretRef],
+      );
+    }
+
+    return {
+      ok: true,
+      item: { id: itemId, ...nextData },
+      nextViewCount,
+      shouldBurnMaterial,
+      encryptedShares,
+      encryptedContent,
+    };
+  });
+}
+
 /**
  * POST /api/vault/secrets — create an encrypted secret.
  * Encrypts shares with AES-256-GCM and stores them in a separate collection.
@@ -304,35 +392,33 @@ router.post("/secrets/:id/reveal", async (req: Request, res: Response): Promise<
       });
     }
 
-    const secret = item.secretRef ? await getDocDirect(VAULT_SECRETS, item.secretRef) : null;
-    const shares = secret?.encryptedShares ? decryptStringArray(secret.encryptedShares as EncryptedPayload[]) : [];
-    const content = secret?.encryptedContent ? decryptString(secret.encryptedContent as EncryptedPayload) : null;
-
-    const nextViewCount = getViewCount(item) + 1;
-    const maxViews = getMaxViews(item);
-    const shouldBurnMaterial = nextViewCount >= maxViews || item.expirationType === "read";
-
-    if (shouldBurnMaterial) {
-      if (item.secretRef) {
-        await deleteDocDirect(VAULT_SECRETS, item.secretRef);
-      }
-      await markVaultItemBurned(item, nextViewCount);
-    } else {
-      await updateDocDirect(VAULT_ITEMS, item.id, { viewCount: nextViewCount });
+    const claim = await claimVaultRevealSlot(req.params.id);
+    if (claim.ok === false) {
+      return res.status(claim.status).json({
+        error: claim.status === 404 ? 'Not found' : 'This secret has already been burned or expired.',
+        isBurned: claim.status === 410,
+      });
     }
 
-    if (item.metadata?.notifyOnView) {
+    const { item: claimedItem, nextViewCount, shouldBurnMaterial, encryptedShares, encryptedContent } = claim;
+
+    const shares = encryptedShares ? decryptStringArray(encryptedShares) : [];
+    const content = encryptedContent ? decryptString(encryptedContent) : null;
+
+    const maxViews = getMaxViews(claimedItem);
+
+    if (claimedItem.metadata?.notifyOnView) {
       console.info(
-        `[Vault] View notification queued for creator ${item.createdBy} on item ${item.id} (view ${nextViewCount}/${Number.isFinite(maxViews) ? maxViews : "∞"})`
+        `[Vault] View notification queued for creator ${claimedItem.createdBy} on item ${claimedItem.id} (view ${nextViewCount}/${Number.isFinite(maxViews) ? maxViews : '∞'})`,
       );
     }
 
     return res.json({
-      id: item.id,
-      type: item.type,
+      id: claimedItem.id,
+      type: claimedItem.type,
       shares,
       content,
-      metadata: item.metadata || {},
+      metadata: claimedItem.metadata || {},
       viewCount: nextViewCount,
       maxViews: Number.isFinite(maxViews) ? maxViews : null,
       burned: shouldBurnMaterial,
