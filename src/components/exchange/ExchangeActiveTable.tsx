@@ -1,4 +1,4 @@
-import React from 'react';
+import { type MouseEvent } from 'react';
 import { Lock, Upload, Building2, MoreHorizontal, Copy, Trash2, Zap, Eye } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
@@ -31,7 +31,7 @@ import {
 interface ExchangeActiveTableProps {
   items: ExchangeItemRow[];
   selectedItemId?: string | null;
-  onRowSelect?: (item: ExchangeItemRow, event?: React.MouseEvent) => void;
+  onRowSelect?: (item: ExchangeItemRow, event?: MouseEvent) => void;
   onCopyLink?: (item: ExchangeItemRow) => void;
   onQuickAction?: (item: ExchangeItemRow) => void;
   onDeleteRequest?: (item: ExchangeItemRow) => void;
@@ -66,7 +66,7 @@ export function ExchangeActiveTable({
     ? t('exchange.focusedFilter.empty', 'No entries found for this filter.')
     : t('exchange.activeExchanges.empty', 'No active exchanges match your filters.');
 
-  const handleOpenDetails = (item: ExchangeItemRow, event: React.MouseEvent) => {
+  const handleOpenDetails = (item: ExchangeItemRow, event: MouseEvent) => {
     event.preventDefault();
     event.stopPropagation();
     onRowSelect?.(item, event);
