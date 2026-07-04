@@ -1,8 +1,8 @@
 import type { ExchangeItemRowSeed } from './exchange-template-utils';
 
-/** True only in local development — mock exchange rows must never ship to production. */
+/** True only in development — mock exchange rows must never appear in production builds. */
 export function isExchangeDevSeedEnabled(): boolean {
-  return import.meta.env.DEV;
+  return process.env.NODE_ENV === 'development';
 }
 
 const DEV_MOCK_UPLOADS: ExchangeItemRowSeed[] = [

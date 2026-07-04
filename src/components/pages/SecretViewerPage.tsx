@@ -22,7 +22,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { combine } from 'shamir-secret-sharing';
 import { useTranslation } from '../../lib/context/I18nContext';
 
-type ViewerLoadState = 'loading' | 'ready' | 'not_found' | 'expired';
+type ViewerLoadState = 'loading' | 'ready' | 'unavailable';
 
 export default function SecretViewerPage() {
   const { id } = useParams<{ id: string }>();
@@ -54,14 +54,14 @@ export default function SecretViewerPage() {
     setReconstructedContent(null);
 
     const data = await vaultService.getItem(vaultId);
-    if (!data) {
+    if (!data || data.isBurned) {
       setItem(null);
-      setLoadState('not_found');
+      setLoadState('unavailable');
       return;
     }
 
     setItem(data);
-    setLoadState(data.isBurned ? 'expired' : 'ready');
+    setLoadState('ready');
   };
 
   const handleReveal = async () => {
@@ -87,14 +87,15 @@ export default function SecretViewerPage() {
     setRevealing(false);
 
     if (!revealed) {
-      toast.error(t('exchange.createSecret.viewer.expired', 'This secret has already been burned or has expired.'));
-      setItem({ ...item, isBurned: true });
-      setLoadState('expired');
+      toast.error(t('exchange.createSecret.viewer.unavailable', 'This secret has expired or could not be found.'));
+      setItem(null);
+      setLoadState('unavailable');
       return;
     }
 
     if (revealed.preview) {
-      toast.error(t('exchange.createSecret.viewer.expired', 'This secret has already been burned or has expired.'));
+      toast.error(t('exchange.createSecret.viewer.unavailable', 'This secret has expired or could not be found.'));
+      setLoadState('unavailable');
       return;
     }
 
@@ -122,7 +123,7 @@ export default function SecretViewerPage() {
 
     if (revealed.burned) {
       setItem({ ...item, isBurned: true, viewCount: revealed.viewCount });
-      setLoadState('expired');
+      setLoadState('unavailable');
       toast.info(t('exchange.createSecret.viewer.finalView', 'Final view consumed. This link is now expired.'));
     } else {
       setItem({
@@ -163,45 +164,23 @@ export default function SecretViewerPage() {
     );
   }
 
-  if (loadState === 'not_found') {
+  if (loadState === 'unavailable') {
     return (
       <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4 text-center">
         <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-6">
           <ShieldAlert className="w-10 h-10 text-slate-500" />
         </div>
         <h1 className="text-2xl font-bold text-slate-900 mb-2">
-          {t('exchange.createSecret.viewer.notFound', 'Secret Not Found')}
+          {t('exchange.createSecret.viewer.unavailable', 'Secret Expired or Not Found')}
         </h1>
         <p className="text-slate-500 max-w-md mb-8">
           {t(
-            'exchange.createSecret.viewer.notFoundDesc',
-            'This link is invalid or the secret has been removed. Verify the URL with the sender.',
+            'exchange.createSecret.viewer.unavailableDesc',
+            'This link is invalid, has expired, or the view quota has been consumed. Contact the sender for a new secure link.',
           )}
         </p>
         <Badge variant="outline" className="bg-white border-slate-200 text-slate-600 px-4 py-1">
-          {t('exchange.createSecret.viewer.notFoundCode', 'Code 404: Not Found')}
-        </Badge>
-      </div>
-    );
-  }
-
-  if (loadState === 'expired' || !item || item.isBurned) {
-    return (
-      <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4 text-center">
-        <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-6">
-          <ShieldAlert className="w-10 h-10 text-red-500" />
-        </div>
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">
-          {t('exchange.createSecret.viewer.phantomExpired', 'Secret Expired')}
-        </h1>
-        <p className="text-slate-500 max-w-md mb-8">
-          {t(
-            'exchange.createSecret.viewer.phantomExpiredDesc',
-            'This data has already been burned, the view quota was consumed, or the link has expired.',
-          )}
-        </p>
-        <Badge variant="outline" className="bg-white border-red-200 text-red-600 px-4 py-1">
-          {t('exchange.createSecret.viewer.goneCode', 'Code 410: Gone')}
+          {t('exchange.createSecret.viewer.unavailableCode', 'Code 404: Not Found')}
         </Badge>
       </div>
     );
