@@ -620,6 +620,7 @@ export default function KBPage() {
     }
   };
   const [activeReadingLanguage, setActiveReadingLanguage] = useState<string>('English');
+  const [articleTranslations, setArticleTranslations] = useState<Record<string, Record<string, string>>>({});
 
   const dismissArticleDetail = useCallback(() => {
     setViewingArticle(null);
@@ -994,23 +995,75 @@ export default function KBPage() {
     toast.success(`Status updated to "${newStats}" successfully.`);
   };
 
-  const handleCopyUrl = (title: string) => {
-    const slug = title.toLowerCase().replace(/\s+/g, '-').replace(/[^\w-]+/g, '');
-    const url = `${window.location.origin}/kb/docs/${slug}`;
-    navigator.clipboard.writeText(url);
-    toast.success("Document canonical URI pinned to host clipboard!");
+  const handleCopyArticleLink = (articleId: string) => {
+    const url = `${window.location.origin}/kb/article/${articleId}`;
+    void navigator.clipboard.writeText(url).then(() => {
+      toast.success('Link kopiert!');
+    }).catch(() => {
+      toast.error('Could not copy link to clipboard.');
+    });
   };
 
-  const handleTranslateArticle = (lang: string) => {
+  const handleTranslateArticle = async (targetLang: string) => {
+    if (!viewingArticle) return;
+
+    const baseLanguage = viewingArticle.language || 'English';
+    if (targetLang === baseLanguage || targetLang === 'English') {
+      setActiveReadingLanguage(targetLang);
+      return;
+    }
+
+    const cached = articleTranslations[viewingArticle.id]?.[targetLang];
+    if (cached) {
+      setActiveReadingLanguage(targetLang);
+      toast.success(`Showing ${targetLang} translation.`);
+      return;
+    }
+
+    if (!isAiSearchReady) {
+      toast.error(t('kb.aiNotConfigured', 'Geist AI is not configured. Connect a model in AI Orchestrator settings.'));
+      return;
+    }
+
     setIsTranslating(true);
-    toast.info(`Orchestrating premium AI Translation of "${viewingArticle.title}" into ${lang}...`);
-    
-    // Simulate translate loop
-    setTimeout(() => {
+    toast.info(`Orchestrating AI translation into ${targetLang}…`);
+
+    try {
+      const source = viewingArticle.content || '';
+      const plainSource = source.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+      const translated = await aiAdapter.translate(plainSource, targetLang, 'Professional');
+      const htmlTranslated = `<div class="kb-translated-body">${translated.replace(/\n/g, '<br/>')}</div>`;
+
+      setArticleTranslations((prev) => ({
+        ...prev,
+        [viewingArticle.id]: {
+          ...(prev[viewingArticle.id] || {}),
+          [targetLang]: htmlTranslated,
+        },
+      }));
+      setActiveReadingLanguage(targetLang);
+      toast.success(`Article successfully localized to ${targetLang}.`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Translation failed.';
+      toast.error(message);
+      throw error;
+    } finally {
       setIsTranslating(false);
-      setActiveReadingLanguage(lang);
-      toast.success(`Article successfully localized! Dynamic translations rendered under ML-KEM Shield.`);
-    }, 1500);
+    }
+  };
+
+  const handleAiExplainArticle = async (): Promise<string> => {
+    if (!viewingArticle) return '';
+
+    if (!isAiSearchReady) {
+      throw new Error(t('kb.aiNotConfigured', 'Geist AI is not configured. Connect a model in AI Orchestrator settings.'));
+    }
+
+    return aiAdapter.explainArticleLayout(
+      viewingArticle.title,
+      viewingArticle.content || '',
+      viewingArticle.id,
+    );
   };
 
   // Global search & tags & owner matching logic
@@ -1776,12 +1829,18 @@ export default function KBPage() {
   };
 
   const getLocalizedContent = (art: any, lang: string) => {
-     if (!art) return '';
-     if (lang === 'German') return `<h3>Souveränitäts-Verschlüsselungsprüfung</h3><p>Automatisch übersetzte Version des Artikels unter Beibehaltung aller Kernschlüsselvariablen.</p>${art.content}`;
-     if (lang === 'French') return `<h3>Vérification du chiffrement souverain</h3><p>Version traduite automatiquement du document préservant les paramètres cryptographiques d'origine.</p>${art.content}`;
-     if (lang === 'Spanish') return `<h3>Verificación del sistema de protección</h3><p>Documento localizado con traducciones simuladas por IA manteniendo los bloques técnicos intactos.</p>${art.content}`;
-     if (lang === 'Japanese') return `<h3>暗号化およびセキュアチャネル仕様書</h3><p>英語の原文をインテリジェントに直訳したリファレンスドキュメントです。</p>${art.content}`;
-     return art.content;
+    if (!art) return '';
+    const baseLanguage = art.language || 'English';
+    if (lang === baseLanguage) return art.content;
+
+    const cached = articleTranslations[art.id]?.[lang];
+    if (cached) return cached;
+
+    if (lang === 'German') return `<h3>Souveränitäts-Verschlüsselungsprüfung</h3><p>Automatisch übersetzte Version des Artikels unter Beibehaltung aller Kernschlüsselvariablen.</p>${art.content}`;
+    if (lang === 'French') return `<h3>Vérification du chiffrement souverain</h3><p>Version traduite automatiquement du document préservant les paramètres cryptographiques d'origine.</p>${art.content}`;
+    if (lang === 'Spanish') return `<h3>Verificación del sistema de protección</h3><p>Documento localizado con traducciones simuladas por IA manteniendo los bloques técnicos intactos.</p>${art.content}`;
+    if (lang === 'Japanese') return `<h3>暗号化およびセキュアチャネル仕様書</h3><p>英語の原文をインテリジェントに直訳したリファレンスドキュメントです。</p>${art.content}`;
+    return art.content;
   };
 
   const renderArticleDetailView = () => {
@@ -1847,8 +1906,10 @@ export default function KBPage() {
         onBack={() => {
           dismissArticleDetail();
         }}
-        onCopyLink={() => handleCopyUrl(viewingArticle.title)}
-        onTranslate={() => handleTranslateArticle(activeReadingLanguage)}
+        onCopyLink={() => handleCopyArticleLink(viewingArticle.id)}
+        onTranslate={handleTranslateArticle}
+        onAiExplain={handleAiExplainArticle}
+        isTranslating={isTranslating}
         onSaveContent={handleSaveContent}
         onHelpful={handleHelpful}
         onUnhelpful={handleUnhelpful}

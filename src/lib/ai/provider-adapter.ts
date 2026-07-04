@@ -215,6 +215,30 @@ Translate the following text to ${targetLanguage}:\n\n${text}`;
   }
 
   /**
+   * Simplified layout analysis for KB article detail "AI Explain" toolbar action.
+   */
+  async explainArticleLayout(title: string, content: string, articleId: string): Promise<string> {
+    const plain = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const prompt = `You are a documentation analyst. Produce a simplified layout analysis of this knowledge base article for support operators.
+
+Structure your response with these sections:
+1. Document Purpose (1-2 sentences)
+2. Section Overview (bullet list of main topics)
+3. Key Dependencies & Permissions
+4. Recommended Reader Actions
+
+Use clear, accessible language. Do not invent facts not present in the article.
+
+Article Title: ${title}
+Article Content:
+${plain.slice(0, 14000)}`;
+
+    return await this.runLifecycleFeature('ticket_summarization', prompt, {
+      metadata: { entityId: `kb-explain-${articleId}`, kbArticleId: articleId },
+    });
+  }
+
+  /**
    * Answers a KB search question using workspace-scoped RAG snippets only.
    * Uses ticket_summarization (automatic) to avoid manager-approval gates on kb_generation.
    */
