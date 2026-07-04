@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   Sparkles,
   CheckCircle2,
@@ -210,7 +211,7 @@ function PanelCard({
 }: {
   title: string;
   icon: typeof Sparkles;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
     <section className="rounded-xl border border-slate-200/80 bg-white p-4">
