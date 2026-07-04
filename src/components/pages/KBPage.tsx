@@ -1208,9 +1208,11 @@ export default function KBPage() {
   };
 
   const handleAskGeistAi = useCallback(
-    async (query: string) => {
+    async (query: string, options?: { forceRefresh?: boolean }) => {
       setAiSearchQuery(query);
-      setAiSearchSummary(null);
+      if (!options?.forceRefresh) {
+        setAiSearchSummary(null);
+      }
       setAiSearchError(null);
       setIsAiSearchLoading(true);
 
@@ -1230,8 +1232,13 @@ export default function KBPage() {
         return;
       }
 
+      const cacheEntityId = `kb-search-${query.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 96)}`;
+
       try {
-        const summary = await aiAdapter.answerKnowledgeQuery(query, minimizedSnippets);
+        const summary = await aiAdapter.answerKnowledgeQuery(query, minimizedSnippets, {
+          entityId: cacheEntityId,
+          forceRefresh: options?.forceRefresh,
+        });
         setAiSearchSummary(summary);
       } catch (err) {
         const message = err instanceof Error ? err.message : t('kb.aiAnswerFailed', 'Could not generate an AI answer.');
@@ -2051,6 +2058,11 @@ export default function KBPage() {
                     isLoading={isAiSearchLoading}
                     error={aiSearchError}
                     onDismiss={dismissAiSearchOverlay}
+                    onRefresh={
+                      aiSearchQuery
+                        ? () => handleAskGeistAi(aiSearchQuery, { forceRefresh: true })
+                        : undefined
+                    }
                     className="mt-3"
                   />
 

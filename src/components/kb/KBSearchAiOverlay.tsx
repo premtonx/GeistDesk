@@ -1,4 +1,4 @@
-import { Loader2, Sparkles, X, BookOpen } from 'lucide-react';
+import { Loader2, RefreshCw, Sparkles, X, BookOpen } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
@@ -11,6 +11,7 @@ interface KBSearchAiOverlayProps {
   isLoading: boolean;
   error: string | null;
   onDismiss: () => void;
+  onRefresh?: () => void;
   className?: string;
 }
 
@@ -21,6 +22,7 @@ export function KBSearchAiOverlay({
   isLoading,
   error,
   onDismiss,
+  onRefresh,
   className,
 }: KBSearchAiOverlayProps) {
   const { t } = useTranslation();
@@ -49,16 +51,30 @@ export function KBSearchAiOverlay({
             </span>
           ) : null}
         </div>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 shrink-0 text-slate-400 hover:text-slate-700"
-          onClick={onDismiss}
-          aria-label={t('actions.close', 'Close')}
-        >
-          <X className="w-4 h-4" />
-        </Button>
+        <div className="flex items-center gap-1 shrink-0">
+          {summary && onRefresh && !isLoading ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-slate-400 hover:text-violet-700"
+              onClick={onRefresh}
+              aria-label={t('kb.aiAnswerRefresh', 'Regenerate answer')}
+            >
+              <RefreshCw className="w-4 h-4" />
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 shrink-0 text-slate-400 hover:text-slate-700"
+            onClick={onDismiss}
+            aria-label={t('actions.close', 'Close')}
+          >
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (

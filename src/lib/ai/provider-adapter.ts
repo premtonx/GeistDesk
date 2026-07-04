@@ -20,6 +20,7 @@ export interface ModelProfile {
 export interface TicketContext {
   subject: string;
   description: string;
+  ticketId?: string;
   kbContent?: string;
   threadHistory?: string[];
   customerMetadata?: Record<string, any>;
@@ -130,6 +131,7 @@ Return JSON:`;
 
     try {
       const output = await this.runLifecycleFeature('smart_reply', `${systemPrompt}\n\n${userPrompt}`, {
+        ticketId: context.ticketId,
         customerScope: context.customerMetadata?.vip ? 'vip' : undefined,
       });
       const body = JSON.parse(output);
@@ -143,12 +145,17 @@ Return JSON:`;
     }
   }
 
-  async summarizeThread(history: string[], options?: { format?: 'bullets' | 'paragraph'; count?: number }): Promise<string> {
+  async summarizeThread(
+    history: string[],
+    options?: { format?: 'bullets' | 'paragraph'; count?: number; ticketId?: string },
+  ): Promise<string> {
     const format = options?.format === 'bullets' ? `into ${options.count || 3} bullet points` : "into a concise paragraph";
     const prompt = `Summarize the following support thread ${format}:\n\n${history.join("\n")}`;
 
     try {
-      return await this.runLifecycleFeature('ticket_summarization', prompt);
+      return await this.runLifecycleFeature('ticket_summarization', prompt, {
+        ticketId: options?.ticketId,
+      });
     } catch (e) {
       console.error("Lifecycle summarization error:", e);
       return "AI summarization failed.";

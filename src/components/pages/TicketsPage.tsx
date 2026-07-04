@@ -78,6 +78,16 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { suggestNeuralLinks, SuggestedLink } from '../../services/neuralLinkService';
 import axios from 'axios';
+import {
+  executeTicketDeepDiveAnalysis,
+  resolveLifecycleOutput,
+} from '../../lib/aiLifecycleClient';
+import {
+  buildTicketDeepDivePrompt,
+  buildTicketMessagesText,
+  parseTicketAnalysisOutput,
+  ticketAnalysisPatch,
+} from '../../lib/ticket-ai-analysis';
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
@@ -1020,8 +1030,7 @@ export default function TicketsPage() {
 
   const updateSummary = async (forceRefresh = false) => {
     if (!selectedTicketId || !selectedTicket) return;
-    
-    // Condition A (Cache Hit Client-side): check if our selected ticket already has a cached aiSummary
+
     if (!forceRefresh && selectedTicket.aiSummary) {
       setAiSummary(selectedTicket.aiSummary);
       return;
@@ -1029,13 +1038,32 @@ export default function TicketsPage() {
 
     try {
       setIsAiDrafting(true);
-      const response = await axios.get(`/api/tickets/${selectedTicketId}${forceRefresh ? '?refresh=true' : ''}`);
-      if (response.data && response.data.aiSummary) {
-        setAiSummary(response.data.aiSummary);
+      const messagesText = buildTicketMessagesText(messages);
+      const prompt = buildTicketDeepDivePrompt(selectedTicket, messagesText);
+      const lifecycleResult = await executeTicketDeepDiveAnalysis(selectedTicketId, prompt, {
+        forceRefresh,
+      });
+
+      if (lifecycleResult.status === 'pending_approval') {
+        toast.info('AI analysis requires approval before it can be delivered.');
+        return;
       }
+      if (lifecycleResult.status === 'pending_review') {
+        toast.info('AI analysis is queued for human review.');
+      }
+
+      const rawOutput = resolveLifecycleOutput(lifecycleResult);
+      const analysis = parseTicketAnalysisOutput(rawOutput, selectedTicket);
+      setAiSummary(analysis.aiSummary);
+
+      const patch = ticketAnalysisPatch(analysis);
+      await ticketService.updateTicket(selectedTicketId, patch);
+      setAllTickets((prev) =>
+        prev.map((t) => (t.id === selectedTicketId ? { ...t, ...patch } : t)),
+      );
     } catch (e) {
-      console.error("Failed to load/generate AI summary from backend cache pipeline:", e);
-      setAiSummary("Unable to generate summary. Check AI configuration.");
+      console.error('Failed to load/generate AI summary via lifecycle cache pipeline:', e);
+      setAiSummary('Unable to generate summary. Check AI configuration.');
     } finally {
       setIsAiDrafting(false);
     }
@@ -1231,6 +1259,7 @@ export default function TicketsPage() {
       const response = await ai.generateDraft({
         subject: ticket.subject,
         description: ticket.description,
+        ticketId: ticket.id,
         kbContent: kbContent,
         threadHistory: messages.map(m => m.content),
         customerMetadata: currentContact?.metadata
@@ -1385,6 +1414,7 @@ export default function TicketsPage() {
       const response = await ai.generateDraft({
         subject: selectedTicket.subject,
         description: selectedTicket.description,
+        ticketId: selectedTicket.id,
         kbContent: kbContent,
         threadHistory: messages.map(m => m.content)
       });

@@ -5,6 +5,7 @@ import {
   type AiFeatureId,
   type AiModuleId,
 } from '../types/aiOrchestrator.js';
+import { parseTicketAnalysisOutput, ticketAnalysisPatch } from './ticket-ai-analysis.js';
 
 export interface AiEntityRef {
   collection: string;
@@ -173,6 +174,10 @@ export async function persistAiResponseCache(
       },
       aiCacheUpdatedAt: entry.cachedAt,
     };
+
+    if (ctx.feature === 'ticket_summarization' && ref.module === 'tickets') {
+      Object.assign(patch, ticketAnalysisPatch(parseTicketAnalysisOutput(entry.output)));
+    }
 
     const legacyField = LEGACY_FIELD_BY_FEATURE[ctx.feature];
     if (
