@@ -1,3 +1,5 @@
+export type VaultAuthorityScope = 'personal' | 'department' | 'team' | 'global';
+
 export type VaultPermission = 'Owner' | 'Admin' | 'Editor' | 'Viewer';
 
 export interface VaultDefinition {
@@ -7,15 +9,24 @@ export interface VaultDefinition {
   defaultName: string;
   permissionKey: string;
   defaultPermission: VaultPermission;
+  scope?: VaultAuthorityScope;
+  isDynamic?: boolean;
 }
 
 export const VAULT_DEFINITIONS: VaultDefinition[] = [
-  { id: 'local', emoji: '🔒', nameKey: 'vault.vaults.personal', defaultName: 'Personal Vault', permissionKey: 'vault.permissions.owner', defaultPermission: 'Owner' },
-  { id: 'shared-company', emoji: '👥', nameKey: 'vault.vaults.sharedCompany', defaultName: 'Shared Company Vault', permissionKey: 'vault.permissions.admin', defaultPermission: 'Admin' },
-  { id: 'it-dept', emoji: '🏢', nameKey: 'vault.vaults.itDept', defaultName: 'IT Department Vault', permissionKey: 'vault.permissions.editor', defaultPermission: 'Editor' },
-  { id: 'infra', emoji: '⚙', nameKey: 'vault.vaults.infrastructure', defaultName: 'Infrastructure Vault', permissionKey: 'vault.permissions.admin', defaultPermission: 'Admin' },
-  { id: 'devops', emoji: '🚀', nameKey: 'vault.vaults.devops', defaultName: 'DevOps Vault', permissionKey: 'vault.permissions.editor', defaultPermission: 'Editor' },
-  { id: 'support', emoji: '📞', nameKey: 'vault.vaults.support', defaultName: 'Support Team Vault', permissionKey: 'vault.permissions.viewer', defaultPermission: 'Viewer' },
+  { id: 'local', emoji: '🔒', nameKey: 'vault.vaults.personal', defaultName: 'Personal Vault', permissionKey: 'vault.permissions.owner', defaultPermission: 'Owner', scope: 'personal' },
+  { id: 'shared-company', emoji: '👥', nameKey: 'vault.vaults.sharedCompany', defaultName: 'Shared Company Vault', permissionKey: 'vault.permissions.admin', defaultPermission: 'Admin', scope: 'global' },
+  { id: 'it-dept', emoji: '🏢', nameKey: 'vault.vaults.itDept', defaultName: 'IT Department Vault', permissionKey: 'vault.permissions.editor', defaultPermission: 'Editor', scope: 'department' },
+  { id: 'infra', emoji: '⚙', nameKey: 'vault.vaults.infrastructure', defaultName: 'Infrastructure Vault', permissionKey: 'vault.permissions.admin', defaultPermission: 'Admin', scope: 'team' },
+  { id: 'devops', emoji: '🚀', nameKey: 'vault.vaults.devops', defaultName: 'DevOps Vault', permissionKey: 'vault.permissions.editor', defaultPermission: 'Editor', scope: 'team' },
+  { id: 'support', emoji: '📞', nameKey: 'vault.vaults.support', defaultName: 'Support Team Vault', permissionKey: 'vault.permissions.viewer', defaultPermission: 'Viewer', scope: 'department' },
+];
+
+export const VAULT_AUTHORITY_SCOPES: { id: VaultAuthorityScope; nameKey: string; defaultLabel: string }[] = [
+  { id: 'personal', nameKey: 'vault.authorities.personal', defaultLabel: 'Personal' },
+  { id: 'department', nameKey: 'vault.authorities.department', defaultLabel: 'Department' },
+  { id: 'team', nameKey: 'vault.authorities.team', defaultLabel: 'Shared Team' },
+  { id: 'global', nameKey: 'vault.authorities.global', defaultLabel: 'Company Global' },
 ];
 
 export interface AccessCategoryDef {
@@ -39,13 +50,17 @@ export const ACCESS_CATEGORIES: AccessCategoryDef[] = [
   { id: 'apps', emoji: '📱', nameKey: 'vault.categories.applications', defaultName: 'Applications', types: ['slack', 'k8s'] },
 ];
 
-export function resolveCredVaultId(cred: { vaultId?: string }, index: number): string {
-  if (cred.vaultId && cred.vaultId !== 'local') {
+export function resolveCredVaultId(cred: { vaultId?: string }, _index?: number): string {
+  if (cred.vaultId) {
     if (cred.vaultId === 'shared') return 'shared-company';
     return cred.vaultId;
   }
-  const ids = VAULT_DEFINITIONS.map((v) => v.id);
-  return ids[index % ids.length];
+  return 'local';
+}
+
+export function resolveVaultScope(vaultId: string, vaultDefinitions: VaultDefinition[]): VaultAuthorityScope {
+  const match = vaultDefinitions.find((v) => v.id === vaultId);
+  return match?.scope ?? 'personal';
 }
 
 export function isWeakCred(cred: { notes?: string; label: string; username: string }): boolean {

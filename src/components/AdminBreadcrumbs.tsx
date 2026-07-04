@@ -26,6 +26,8 @@ export function AdminBreadcrumbs() {
       integrations: 'Integrations',
       notifications: 'Notifications',
       schema: 'Company Schema',
+      groups: 'Functional Teams',
+      'vault-portfolio': 'Vault-Portfoliomanagement',
       settings: 'Settings'
     };
 

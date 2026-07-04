@@ -114,13 +114,24 @@ import { VaultViewModeSelector, type VaultAssetViewMode } from '../vault/VaultVi
 import { VaultAssetViews } from '../vault/VaultAssetViews';
 import { VaultFabMenu } from '../vault/VaultFabMenu';
 import { VaultEntryCreateWorkspace } from '../vault/VaultEntryCreateWorkspace';
+import { VaultImportDialog } from '../vault/VaultImportDialog';
 import {
   ACCESS_CATEGORIES,
   VAULT_DEFINITIONS,
   resolveCredVaultId,
+  resolveVaultScope,
   isWeakCred,
   isExpiringCred,
+  type VaultDefinition,
+  type VaultAuthorityScope,
 } from '../vault/vault-utils';
+import {
+  credentialVaultService,
+  roleToDefaultPermission,
+  roleToPermissionKey,
+  type AccessibleVaultPortfolio,
+} from '../../lib/vault-service';
+import { processVaultImport, type VaultImportFormat } from '../../lib/vault-import-processor';
 
 // --- Database Schema ---
 interface Credential {
@@ -257,14 +268,48 @@ export default function CredentialVaultPage() {
   const { isAdmin } = useAdmin();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeVaultId, setActiveVaultId] = useState<string>('local');
+  const [activeVaultScope, setActiveVaultScope] = useState<VaultAuthorityScope | 'all'>('all');
   const [accessCategory, setAccessCategory] = useState<string>('all');
   const [smartFilter, setSmartFilter] = useState<VaultSmartFilter | null>(null);
   const [assetViewMode, setAssetViewMode] = useState<VaultAssetViewMode>('table');
-  const [sharedVaults, setSharedVaults] = useState<any[]>([]);
+  const [dynamicPortfolios, setDynamicPortfolios] = useState<AccessibleVaultPortfolio[]>([]);
+  const [isImportOpen, setIsImportOpen] = useState(false);
+  const [isImporting, setIsImporting] = useState(false);
+  const [isCreateVaultOpen, setIsCreateVaultOpen] = useState(false);
+  const [newVaultName, setNewVaultName] = useState('');
+  const [newVaultDescription, setNewVaultDescription] = useState('');
+  const [newVaultScope, setNewVaultScope] = useState<VaultAuthorityScope>('personal');
+  const [isCreatingVault, setIsCreatingVault] = useState(false);
 
   useEffect(() => {
     startOrchestratorConfigSync();
   }, []);
+
+  const portfolioVaultDefinitions: VaultDefinition[] = dynamicPortfolios.map((p) => ({
+    id: p.id,
+    emoji: p.emoji || '🔒',
+    nameKey: `vault.dynamic.${p.id}`,
+    defaultName: p.name,
+    permissionKey: roleToPermissionKey(p.userRole),
+    defaultPermission: roleToDefaultPermission(p.userRole),
+    scope: p.scope,
+    isDynamic: true,
+  }));
+
+  const staticVaultIds = new Set(VAULT_DEFINITIONS.map((v) => v.id));
+  const allVaultDefinitions: VaultDefinition[] = [
+    ...VAULT_DEFINITIONS,
+    ...portfolioVaultDefinitions.filter((v) => !staticVaultIds.has(v.id)),
+  ];
+
+  const loadAccessiblePortfolios = async () => {
+    try {
+      const { portfolios } = await credentialVaultService.listMyPortfolios();
+      setDynamicPortfolios(portfolios);
+    } catch (err) {
+      console.warn('Could not load vault portfolios', err);
+    }
+  };
   
   const [isLocked, setIsLocked] = useState(true);
   const [masterPassword, setMasterPassword] = useState('password123'); // Preset password123 for seamless testing!
@@ -277,6 +322,12 @@ export default function CredentialVaultPage() {
   const [selectedType, setSelectedType] = useState<string>('all');
   const [isCreatingEntry, setIsCreatingEntry] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    if (!isLocked && user) {
+      loadAccessiblePortfolios();
+    }
+  }, [isLocked, user]);
 
   useEffect(() => {
     if (searchParams.get('action') === 'create') {
@@ -553,6 +604,84 @@ export default function CredentialVaultPage() {
       setShowAddCategoryModal(false);
     } catch (err) {
       toast.error("Failed to write category to database storage.");
+    }
+  };
+
+  const handleImportCredentials = async (file: File, format: VaultImportFormat) => {
+    if (!derivedKey) {
+      toast.error(t('vault.import.unlockFirst', 'Unlock the vault before importing.'));
+      return;
+    }
+    setIsImporting(true);
+    try {
+      const content = await file.text();
+      const result = processVaultImport(file.name, content);
+      if (result.entries.length === 0) {
+        toast.error(result.warnings[0] || t('vault.import.noEntries', 'No importable entries found.'));
+        return;
+      }
+
+      let imported = 0;
+      for (const entry of result.entries) {
+        const encryptedPassword = await encryptData(entry.password, derivedKey);
+        await localDB.credentials.add({
+          type: entry.type,
+          label: entry.label,
+          username: entry.username,
+          encryptedPassword,
+          host: entry.host || '',
+          notes: entry.notes || '',
+          updatedAt: Date.now(),
+          lastModifiedBy: 'Import',
+          favorite: false,
+          deleted: false,
+          vaultId: activeVaultId,
+          tags: entry.tags,
+        });
+        imported++;
+      }
+
+      logAudit({
+        module: 'credentials',
+        action: 'credentials_imported',
+        details: { format, count: imported, vaultId: activeVaultId },
+      });
+      toast.success(
+        t('vault.import.success', 'Imported {{count}} credentials into vault.').replace('{{count}}', String(imported)),
+      );
+      setIsImportOpen(false);
+    } catch (err) {
+      toast.error(t('vault.import.failed', 'Import failed. Check file format.'));
+    } finally {
+      setIsImporting(false);
+    }
+  };
+
+  const handleCreateVaultInstance = async () => {
+    if (!newVaultName.trim()) {
+      toast.error(t('vault.create.nameRequired', 'Vault name is required'));
+      return;
+    }
+    setIsCreatingVault(true);
+    try {
+      const { portfolio } = await credentialVaultService.createPortfolio({
+        name: newVaultName.trim(),
+        description: newVaultDescription.trim(),
+        scope: newVaultScope,
+      });
+      await loadAccessiblePortfolios();
+      setActiveVaultId(portfolio.id);
+      setActiveVaultScope(portfolio.scope);
+      setNewVaultName('');
+      setNewVaultDescription('');
+      setNewVaultScope('personal');
+      setIsCreateVaultOpen(false);
+      toast.success(t('vault.create.success', 'New vault instance created'));
+      logAudit({ module: 'credentials', action: 'vault_instance_created', details: { vaultId: portfolio.id } });
+    } catch (err: any) {
+      toast.error(err.message || t('vault.create.failed', 'Failed to create vault'));
+    } finally {
+      setIsCreatingVault(false);
     }
   };
 
@@ -847,7 +976,15 @@ export default function CredentialVaultPage() {
       }
 
       // Vault scope
-      list = list.filter((c, idx) => resolveCredVaultId(c, idx) === activeVaultId);
+      list = list.filter((c) => resolveCredVaultId(c) === activeVaultId);
+
+      // Authority clearance tier
+      if (activeVaultScope !== 'all') {
+        list = list.filter((c) => {
+          const vaultId = resolveCredVaultId(c);
+          return resolveVaultScope(vaultId, allVaultDefinitions) === activeVaultScope;
+        });
+      }
 
       // Access category
       if (accessCategory !== 'all') {
@@ -884,8 +1021,18 @@ export default function CredentialVaultPage() {
 
   const currentList = getFilteredCredentials();
 
-  const vaultCounts = VAULT_DEFINITIONS.reduce<Record<string, number>>((acc, v) => {
-    acc[v.id] = nonDeletedItems.filter((c, idx) => resolveCredVaultId(c, idx) === v.id).length;
+  const vaultCounts = allVaultDefinitions.reduce<Record<string, number>>((acc, v) => {
+    acc[v.id] = nonDeletedItems.filter((c) => resolveCredVaultId(c) === v.id).length;
+    return acc;
+  }, {});
+
+  const scopeCounts = (['personal', 'department', 'team', 'global'] as VaultAuthorityScope[]).reduce<
+    Partial<Record<VaultAuthorityScope, number>>
+  >((acc, scope) => {
+    acc[scope] = nonDeletedItems.filter((c) => {
+      const vaultId = resolveCredVaultId(c);
+      return resolveVaultScope(vaultId, allVaultDefinitions) === scope;
+    }).length;
     return acc;
   }, {});
 
@@ -922,16 +1069,12 @@ export default function CredentialVaultPage() {
     closeCreateEntry();
   };
 
-  // Sync mechanisms: subscribe to firestore placeholders
+  // Sync mechanisms: legacy firestore placeholder (superseded by portfolio API)
   useEffect(() => {
     if (!user) return;
     const qCol = query(collection(db, 'vaults'));
-    const unsub = onSnapshot(qCol, (snap) => {
-      const list: any[] = [];
-      snap.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() });
-      });
-      setSharedVaults(list);
+    const unsub = onSnapshot(qCol, () => {
+      // Portfolio assignments are loaded via credentialVaultService.listMyPortfolios()
     });
     return unsub;
   }, [user]);
@@ -1009,14 +1152,38 @@ export default function CredentialVaultPage() {
       ) : (
         <div className="flex flex-1 min-h-0 w-full overflow-y-auto">
           <VaultLeftSidebar
+            vaultDefinitions={allVaultDefinitions}
             activeVaultId={activeVaultId}
-            onVaultChange={(id) => { setActiveVaultId(id); setSmartFilter(null); }}
+            onVaultChange={(id) => {
+              setActiveVaultId(id);
+              setSmartFilter(null);
+              setIsCreatingEntry(false);
+              const vault = allVaultDefinitions.find((v) => v.id === id);
+              if (vault?.scope) setActiveVaultScope(vault.scope);
+            }}
             vaultCounts={vaultCounts}
             selectedCategory={accessCategory}
-            onCategoryChange={(id) => { setAccessCategory(id); setSelectedType('all'); setSmartFilter(null); }}
+            onCategoryChange={(id) => {
+              setAccessCategory(id);
+              setSelectedType('all');
+              setSmartFilter(null);
+              setIsCreatingEntry(false);
+            }}
             categoryCounts={categoryCounts}
+            activeVaultScope={activeVaultScope}
+            onVaultScopeChange={(scope) => {
+              setActiveVaultScope(scope);
+              setSmartFilter(null);
+              setIsCreatingEntry(false);
+            }}
+            scopeCounts={scopeCounts}
             smartFilter={smartFilter}
-            onSmartFilterChange={(f) => { setSmartFilter(f); if (f === 'archived') setSelectedView('trash'); else setSelectedView('all'); }}
+            onSmartFilterChange={(f) => {
+              setSmartFilter(f);
+              if (f === 'archived') setSelectedView('trash');
+              else setSelectedView('all');
+              setIsCreatingEntry(false);
+            }}
             smartCounts={smartCounts}
           />
 
@@ -1082,7 +1249,10 @@ export default function CredentialVaultPage() {
                   <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl text-xs" onClick={() => setVaultViewMode('emergency')}>
                     {t('vault.breakGlass', 'Break Glass Emergency')}
                   </Button>
-                  <VaultFabMenu onNewAsset={openNewAsset} onImport={handleImportDummyData} />
+                  <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl text-xs" onClick={() => setIsCreateVaultOpen(true)}>
+                    {t('vault.createVault', 'New Vault')}
+                  </Button>
+                  <VaultFabMenu onNewAsset={openNewAsset} onImport={() => setIsImportOpen(true)} />
                 </div>
               </div>
 
@@ -1330,6 +1500,56 @@ export default function CredentialVaultPage() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      <VaultImportDialog
+        open={isImportOpen}
+        onOpenChange={setIsImportOpen}
+        onImport={handleImportCredentials}
+        isImporting={isImporting}
+      />
+
+      <Dialog open={isCreateVaultOpen} onOpenChange={setIsCreateVaultOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle>{t('vault.create.title', 'Create New Vault')}</DialogTitle>
+            <DialogDescription>
+              {t('vault.create.description', 'Create an independent KeePass-style vault instance with its own encryption salt.')}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2">
+            <Input
+              value={newVaultName}
+              onChange={(e) => setNewVaultName(e.target.value)}
+              placeholder={t('vault.create.namePlaceholder', 'Vault name')}
+              className="rounded-xl"
+            />
+            <Textarea
+              value={newVaultDescription}
+              onChange={(e) => setNewVaultDescription(e.target.value)}
+              placeholder={t('vault.create.descPlaceholder', 'Description (optional)')}
+              className="rounded-xl min-h-[64px] text-sm"
+            />
+            <ModuleToolbarSelect
+              value={newVaultScope}
+              onChange={(v) => setNewVaultScope(v as VaultAuthorityScope)}
+              aria-label={t('vault.portfolio.clearanceTier', 'Clearance tier')}
+            >
+              <option value="personal">{t('vault.authorities.personal', 'Personal')}</option>
+              <option value="department">{t('vault.authorities.department', 'Department')}</option>
+              <option value="team">{t('vault.authorities.team', 'Shared Team')}</option>
+              <option value="global">{t('vault.authorities.global', 'Company Global')}</option>
+            </ModuleToolbarSelect>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsCreateVaultOpen(false)} disabled={isCreatingVault}>
+              {t('actions.cancel', 'Cancel')}
+            </Button>
+            <Button type="button" onClick={handleCreateVaultInstance} disabled={isCreatingVault}>
+              {isCreatingVault ? t('vault.create.creating', 'Creating...') : t('vault.create.button', 'Create Vault')}
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -28,6 +28,7 @@ import { authenticate, requireRole } from "./src/middleware/authMiddleware";
 import adminRoutes from "./src/routes/adminRoutes.js";
 import aiRoutes from "./src/routes/aiRoutes.js";
 import vaultRoutes from "./src/routes/vaultRoutes.js";
+import credentialVaultRoutes from "./src/routes/credentialVaultRoutes.js";
 import { orchestratorEventBus } from "./src/lib/ai-orchestrator-events.js";
 import { hashPassword, verifyPassword } from "./src/lib/crypto.js";
 import { calculateCoverage, getDashboardData } from "./src/services/coverageEngine.js";
@@ -375,6 +376,7 @@ async function startServer() {
 
   // Mount hardened GeistVault router (server-side AES-256-GCM, split storage)
   app.use("/api/vault", vaultRoutes);
+  app.use("/api/credential-vault", credentialVaultRoutes);
 
   // Authoritative, SQL-computed ticket metrics for dashboards.
   app.get("/api/stats/tickets", authenticate, async (req: any, res) => {

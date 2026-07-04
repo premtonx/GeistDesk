@@ -121,6 +121,17 @@ const categories = [
         module: 'groups'
       },
       {
+        title: 'Vault-Portfoliomanagement',
+        description: 'Create KeePass-style vault instances, assign users, and manage RBAC clearance tiers.',
+        icon: Lock,
+        path: '/admin/vault-portfolio',
+        color: 'text-blue-600',
+        bgColor: 'bg-blue-50',
+        borderColor: 'border-blue-105',
+        badge: 'GeistVault',
+        module: 'vault'
+      },
+      {
         title: 'Companies Directory',
         description: 'Manage corporate organizational accounts, domains, SLA tiers, and credentials.',
         icon: Building2,

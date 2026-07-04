@@ -2,20 +2,25 @@ import { type ReactNode } from 'react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import {
-  VAULT_DEFINITIONS,
   ACCESS_CATEGORIES,
+  VAULT_AUTHORITY_SCOPES,
   type VaultDefinition,
+  type VaultAuthorityScope,
 } from './vault-utils';
 
 export type VaultSmartFilter = 'favorites' | 'recently' | 'pinned' | 'expiring' | 'alerts' | 'archived';
 
 interface VaultLeftSidebarProps {
+  vaultDefinitions: VaultDefinition[];
   activeVaultId: string;
   onVaultChange: (id: string) => void;
   vaultCounts: Record<string, number>;
   selectedCategory: string;
   onCategoryChange: (id: string) => void;
   categoryCounts: Record<string, number>;
+  activeVaultScope: VaultAuthorityScope | 'all';
+  onVaultScopeChange: (scope: VaultAuthorityScope | 'all') => void;
+  scopeCounts: Partial<Record<VaultAuthorityScope, number>>;
   smartFilter: VaultSmartFilter | null;
   onSmartFilterChange: (filter: VaultSmartFilter) => void;
   smartCounts: Partial<Record<VaultSmartFilter, number>>;
@@ -56,8 +61,7 @@ function NavButton({
   );
 }
 
-function PermissionBadge({ vault, active }: { vault: VaultDefinition; active?: boolean }) {
-  const { t } = useTranslation();
+function PermissionBadge({ label, active }: { label: string; active?: boolean }) {
   return (
     <span
       className={cn(
@@ -65,30 +69,27 @@ function PermissionBadge({ vault, active }: { vault: VaultDefinition; active?: b
         active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500',
       )}
     >
-      {t(vault.permissionKey, vault.defaultPermission)}
+      {label}
     </span>
   );
 }
 
 export function VaultLeftSidebar({
+  vaultDefinitions,
   activeVaultId,
   onVaultChange,
   vaultCounts,
   selectedCategory,
   onCategoryChange,
   categoryCounts,
+  activeVaultScope,
+  onVaultScopeChange,
+  scopeCounts,
   smartFilter,
   onSmartFilterChange,
   smartCounts,
 }: VaultLeftSidebarProps) {
   const { t } = useTranslation();
-
-  const authorities = [
-    { key: 'personal', label: t('vault.authorities.personal', 'Personal'), vaults: 1, permission: t('vault.permissions.owner', 'Owner') },
-    { key: 'department', label: t('vault.authorities.department', 'Department'), vaults: 2, permission: t('vault.permissions.editor', 'Editor') },
-    { key: 'team', label: t('vault.authorities.team', 'Shared Team'), vaults: 2, permission: t('vault.permissions.admin', 'Admin') },
-    { key: 'global', label: t('vault.authorities.global', 'Company Global'), vaults: 1, permission: t('vault.permissions.viewer', 'Viewer') },
-  ];
 
   const smartFilters: { id: VaultSmartFilter; emoji: string; labelKey: string; defaultLabel: string }[] = [
     { id: 'favorites', emoji: '⭐', labelKey: 'vault.filters.favorites', defaultLabel: 'Favorites' },
@@ -101,10 +102,10 @@ export function VaultLeftSidebar({
 
   return (
     <aside className="w-[240px] shrink-0 border-r border-slate-200/80 bg-white flex flex-col">
-      <div className="p-3 flex-1">
+      <div className="p-3 flex-1 overflow-y-auto custom-scrollbar">
         <SectionTitle>{t('vault.sections.vaults', 'Vaults')}</SectionTitle>
         <div className="space-y-0.5">
-          {VAULT_DEFINITIONS.map((vault) => {
+          {vaultDefinitions.map((vault) => {
             const active = activeVaultId === vault.id;
             const count = vaultCounts[vault.id] ?? 0;
             return (
@@ -115,7 +116,10 @@ export function VaultLeftSidebar({
                 trailing={
                   <span className="flex items-center gap-1 shrink-0">
                     <span className={cn('text-[10px] tabular-nums', active ? 'text-white/80' : 'text-slate-400')}>{count}</span>
-                    <PermissionBadge vault={vault} active={active} />
+                    <PermissionBadge
+                      label={t(vault.permissionKey, vault.defaultPermission)}
+                      active={active}
+                    />
                   </span>
                 }
               >
@@ -153,18 +157,31 @@ export function VaultLeftSidebar({
         </div>
 
         <SectionTitle>{t('vault.sections.authorities', 'Vault Authorities')}</SectionTitle>
-        <div className="space-y-2 px-1">
-          {authorities.map((auth) => (
-            <div key={auth.key} className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-2">
-              <p className="text-xs font-semibold text-slate-800">{auth.label}</p>
-              <p className="text-[10px] text-slate-500 mt-0.5">
-                {t('vault.authorities.vaultCount', '{{count}} vaults · {{permission}}')
-                  .replace('{{count}}', String(auth.vaults))
-                  .replace('{{permission}}', auth.permission)}
-              </p>
-              <p className="text-[10px] text-emerald-600 font-medium mt-1">{t('vault.authorities.secure', 'Secure')}</p>
-            </div>
-          ))}
+        <div className="space-y-0.5">
+          <NavButton
+            active={activeVaultScope === 'all'}
+            onClick={() => onVaultScopeChange('all')}
+          >
+            {t('vault.authorities.allScopes', 'All clearance tiers')}
+          </NavButton>
+          {VAULT_AUTHORITY_SCOPES.map((auth) => {
+            const active = activeVaultScope === auth.id;
+            const count = scopeCounts[auth.id] ?? 0;
+            return (
+              <NavButton
+                key={auth.id}
+                active={active}
+                onClick={() => onVaultScopeChange(auth.id)}
+                trailing={
+                  <span className={cn('text-[10px] tabular-nums', active ? 'text-white/80' : 'text-slate-400')}>
+                    {count}
+                  </span>
+                }
+              >
+                {t(auth.nameKey, auth.defaultLabel)}
+              </NavButton>
+            );
+          })}
         </div>
 
         <SectionTitle>{t('vault.sections.smartFilters', 'Smart Filters')}</SectionTitle>
