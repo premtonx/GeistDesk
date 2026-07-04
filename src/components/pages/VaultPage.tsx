@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { createPortal } from 'react-dom';
 import { startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
 import { 
   Lock, 
@@ -720,9 +721,15 @@ export default function VaultPage() {
     [t],
   );
 
+  const handleOpenExchangeDetail = useCallback((item: ExchangeItemRow, event?: MouseEvent) => {
+    event?.preventDefault();
+    event?.stopPropagation();
+    setSelectedExchangeItem(item);
+  }, []);
+
   const exchangeTableProps = {
     selectedItemId: selectedExchangeItem?.id ?? null,
-    onRowSelect: setSelectedExchangeItem,
+    onRowSelect: handleOpenExchangeDetail,
     onCopyLink: handleCopyExchangeLink,
     onQuickAction: handleQuickExchangeAction,
     onDeleteRequest: setDeleteTargetItem,
@@ -1358,11 +1365,6 @@ export default function VaultPage() {
           </AnimatePresence>
             </div>
 
-          <ExchangeDetailDrawer
-            item={selectedExchangeItem}
-            onClose={() => setSelectedExchangeItem(null)}
-            onDownloadSecure={handleDownloadSecure}
-          />
             </div>
 
             <ExchangeSecuritySidebar className="hidden xl:flex" expiringItems={expiringSidebarRows} />
@@ -1381,6 +1383,21 @@ export default function VaultPage() {
         onClose={() => setDeleteTargetItem(null)}
         onConfirm={handleDeleteExchangeItem}
       />
+
+      {createPortal(
+        <ExchangeDetailDrawer
+          item={selectedExchangeItem}
+          onClose={() => setSelectedExchangeItem(null)}
+          onDownloadSecure={handleDownloadSecure}
+          onRotateToken={(id) => {
+            const row = allExchangeItems.find((exchangeItem) => exchangeItem.id === id);
+            if (row) {
+              handleRotateAccessToken(row);
+            }
+          }}
+        />,
+        document.body,
+      )}
 
       {/* EMERGENCY BYPASS OPTIONAL MODAL */}
       <AnimatePresence>

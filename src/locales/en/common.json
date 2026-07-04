@@ -1290,6 +1290,7 @@
       "copySuccess": "Link copied successfully.",
       "copyError": "Unable to copy link to clipboard.",
       "copyLink": "Copy link",
+      "viewDetails": "View details",
       "quickAction": "Quick action",
       "delete": "Delete",
       "moreOptions": "More options",

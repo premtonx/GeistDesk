@@ -1,5 +1,5 @@
 import React from 'react';
-import { Lock, Upload, Building2, MoreHorizontal, Copy, Trash2, Zap } from 'lucide-react';
+import { Lock, Upload, Building2, MoreHorizontal, Copy, Trash2, Zap, Eye } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
@@ -31,7 +31,7 @@ import {
 interface ExchangeActiveTableProps {
   items: ExchangeItemRow[];
   selectedItemId?: string | null;
-  onRowSelect?: (item: ExchangeItemRow) => void;
+  onRowSelect?: (item: ExchangeItemRow, event?: React.MouseEvent) => void;
   onCopyLink?: (item: ExchangeItemRow) => void;
   onQuickAction?: (item: ExchangeItemRow) => void;
   onDeleteRequest?: (item: ExchangeItemRow) => void;
@@ -65,6 +65,12 @@ export function ExchangeActiveTable({
   const emptyMessage = quickFilter
     ? t('exchange.focusedFilter.empty', 'No entries found for this filter.')
     : t('exchange.activeExchanges.empty', 'No active exchanges match your filters.');
+
+  const handleOpenDetails = (item: ExchangeItemRow, event: React.MouseEvent) => {
+    event.preventDefault();
+    event.stopPropagation();
+    onRowSelect?.(item, event);
+  };
 
   return (
     <section className={cn(exchangePanelClass(), 'overflow-hidden', className)}>
@@ -103,7 +109,7 @@ export function ExchangeActiveTable({
                 return (
                   <tr
                     key={item.id}
-                    onClick={() => onRowSelect?.(item)}
+                    onClick={(event) => handleOpenDetails(item, event)}
                     className={cn(
                       'transition-colors group cursor-pointer',
                       selectedItemId === item.id
@@ -159,6 +165,19 @@ export function ExchangeActiveTable({
                     </td>
                     <td className="px-5 py-3 text-right" onClick={(e) => e.stopPropagation()}>
                       <div className="flex justify-end gap-1 opacity-80 group-hover:opacity-100">
+                        {onRowSelect ? (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="h-7 w-7 text-[#1A73E8]"
+                            title={t('exchange.actions.viewDetails', 'View details')}
+                            aria-label={t('exchange.actions.viewDetails', 'View details')}
+                            onClick={(event) => handleOpenDetails(item, event)}
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </Button>
+                        ) : null}
                         {onCopyLink ? (
                           <Button
                             variant="ghost"
