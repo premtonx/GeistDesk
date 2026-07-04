@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { vaultService } from '../../services/vaultService';
 import { VaultItem } from '../../types';
-import { isDemoExchangeId } from '../../components/exchange/exchange-status-utils';
 import {
   ShieldCheck,
   Lock,
@@ -23,11 +22,13 @@ import { motion, AnimatePresence } from 'motion/react';
 import { combine } from 'shamir-secret-sharing';
 import { useTranslation } from '../../lib/context/I18nContext';
 
+type ViewerLoadState = 'loading' | 'ready' | 'not_found' | 'expired';
+
 export default function SecretViewerPage() {
   const { id } = useParams<{ id: string }>();
   const { t } = useTranslation();
   const [item, setItem] = useState<VaultItem | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loadState, setLoadState] = useState<ViewerLoadState>('loading');
   const [viewed, setViewed] = useState(false);
   const [copying, setCopying] = useState(false);
   const [reconstructedContent, setReconstructedContent] = useState<string | null>(null);
@@ -37,7 +38,7 @@ export default function SecretViewerPage() {
 
   useEffect(() => {
     if (id) {
-      void loadItem();
+      void loadItem(id);
     }
   }, [id]);
 
@@ -47,20 +48,24 @@ export default function SecretViewerPage() {
     return Math.max(0, item.maxViews - used);
   }, [item]);
 
-  const loadItem = async () => {
-    setLoading(true);
-    if (id && isDemoExchangeId(id)) {
+  const loadItem = async (vaultId: string) => {
+    setLoadState('loading');
+    setViewed(false);
+    setReconstructedContent(null);
+
+    const data = await vaultService.getItem(vaultId);
+    if (!data) {
       setItem(null);
-      setLoading(false);
+      setLoadState('not_found');
       return;
     }
-    const data = await vaultService.getItem(id!);
+
     setItem(data);
-    setLoading(false);
+    setLoadState(data.isBurned ? 'expired' : 'ready');
   };
 
   const handleReveal = async () => {
-    if (!item || item.isBurned || revealing) return;
+    if (!item || item.isBurned || revealing || loadState !== 'ready') return;
 
     if (item.passphraseRequired && !passphrase.trim()) {
       toast.error(t('exchange.createSecret.viewer.passphraseRequired', 'Enter the additional passphrase to continue.'));
@@ -81,9 +86,15 @@ export default function SecretViewerPage() {
 
     setRevealing(false);
 
-    if (!revealed || revealed.preview) {
+    if (!revealed) {
       toast.error(t('exchange.createSecret.viewer.expired', 'This secret has already been burned or has expired.'));
       setItem({ ...item, isBurned: true });
+      setLoadState('expired');
+      return;
+    }
+
+    if (revealed.preview) {
+      toast.error(t('exchange.createSecret.viewer.expired', 'This secret has already been burned or has expired.'));
       return;
     }
 
@@ -111,6 +122,7 @@ export default function SecretViewerPage() {
 
     if (revealed.burned) {
       setItem({ ...item, isBurned: true, viewCount: revealed.viewCount });
+      setLoadState('expired');
       toast.info(t('exchange.createSecret.viewer.finalView', 'Final view consumed. This link is now expired.'));
     } else {
       setItem({
@@ -136,7 +148,7 @@ export default function SecretViewerPage() {
     toast.success(t('exchange.createSecret.viewer.copied', 'Copied to clipboard.'));
   };
 
-  if (loading) {
+  if (loadState === 'loading') {
     return (
       <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4">
         <div className="flex -space-x-2 animate-pulse mb-4">
@@ -151,33 +163,46 @@ export default function SecretViewerPage() {
     );
   }
 
-  if (!item || item.isBurned) {
+  if (loadState === 'not_found') {
+    return (
+      <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4 text-center">
+        <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-6">
+          <ShieldAlert className="w-10 h-10 text-slate-500" />
+        </div>
+        <h1 className="text-2xl font-bold text-slate-900 mb-2">
+          {t('exchange.createSecret.viewer.notFound', 'Secret Not Found')}
+        </h1>
+        <p className="text-slate-500 max-w-md mb-8">
+          {t(
+            'exchange.createSecret.viewer.notFoundDesc',
+            'This link is invalid or the secret has been removed. Verify the URL with the sender.',
+          )}
+        </p>
+        <Badge variant="outline" className="bg-white border-slate-200 text-slate-600 px-4 py-1">
+          {t('exchange.createSecret.viewer.notFoundCode', 'Code 404: Not Found')}
+        </Badge>
+      </div>
+    );
+  }
+
+  if (loadState === 'expired' || !item || item.isBurned) {
     return (
       <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4 text-center">
         <div className="w-20 h-20 bg-red-50 rounded-full flex items-center justify-center mb-6">
           <ShieldAlert className="w-10 h-10 text-red-500" />
         </div>
         <h1 className="text-2xl font-bold text-slate-900 mb-2">
-          {id && isDemoExchangeId(id)
-            ? t('exchange.createSecret.viewer.demoExpired', 'Demo Link — Not Live')
-            : t('exchange.createSecret.viewer.phantomExpired', 'Phantom Link Expired')}
+          {t('exchange.createSecret.viewer.phantomExpired', 'Secret Expired')}
         </h1>
         <p className="text-slate-500 max-w-md mb-8">
-          {id && isDemoExchangeId(id)
-            ? t(
-                'exchange.createSecret.viewer.demoExpiredDesc',
-                'This dashboard row is seeded for demo filters and has no vault payload.',
-              )
-            : t(
-                'exchange.createSecret.viewer.phantomExpiredDesc',
-                'This data has already been burned, the view quota was consumed, or the link was invalid.',
-              )}
+          {t(
+            'exchange.createSecret.viewer.phantomExpiredDesc',
+            'This data has already been burned, the view quota was consumed, or the link has expired.',
+          )}
         </p>
-        {!isDemoExchangeId(id ?? '') && (
-          <Badge variant="outline" className="bg-white border-red-200 text-red-600 px-4 py-1">
-            {t('exchange.createSecret.viewer.goneCode', 'Code 410: Gone')}
-          </Badge>
-        )}
+        <Badge variant="outline" className="bg-white border-red-200 text-red-600 px-4 py-1">
+          {t('exchange.createSecret.viewer.goneCode', 'Code 410: Gone')}
+        </Badge>
       </div>
     );
   }
@@ -300,7 +325,7 @@ export default function SecretViewerPage() {
                             toast.success(
                               t('exchange.createSecret.viewer.uploadSuccess', 'Payload delivered successfully.'),
                             );
-                            void loadItem();
+                            void loadItem(item.id);
                           };
                           reader.readAsText(file);
                         }

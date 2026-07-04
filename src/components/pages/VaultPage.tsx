@@ -79,8 +79,9 @@ import {
 } from '../exchange/exchange-create-secret-utils';
 import { copyExchangeLinkToClipboard } from '../exchange/exchange-actions';
 import { isExchangeExpiringSoon, matchesExchangeSearch } from '../exchange/exchange-filter-utils';
-import { isDemoExchangeId, resolveExchangeStatus } from '../exchange/exchange-status-utils';
+import { resolveExchangeStatus } from '../exchange/exchange-status-utils';
 import { buildExpiringSoonSeedItems, type ExchangeItemRowSeed } from '../exchange/exchange-template-utils';
+import { getDevMockUploads, isDevSeedExchangeId } from '../exchange/exchange-dev-seed';
 import type { ExchangeNavId, ExchangeQuickFilter, ExchangeItemRow } from '../exchange/exchange-utils';
 import {
   isExchangeFocusedFilterMode,
@@ -145,51 +146,7 @@ export default function VaultPage() {
   const [isEmergencyModalOpen, setIsEmergencyModalOpen] = useState(false);
   const [emergencyPhone, setEmergencyPhone] = useState('');
 
-  // Static/Initial mock data list to merge with real DB for richer UI
-  const [mockUploads, setMockUploads] = useState<ExchangeItemRowSeed[]>([
-    {
-      id: 'upload-mock-1',
-      name: 'log_router_error_dump.zip',
-      recipient: 'john.doe@example.com',
-      company: 'CyberDyne Systems',
-      ticketId: 'TKT-108',
-      status: 'Uploaded',
-      expires: '2 days ago',
-      expiresAt: null,
-      views: 3,
-      type: 'request',
-      size: '142 MB',
-      createdAt: new Date(Date.now() - 3600000 * 5),
-    },
-    {
-      id: 'upload-mock-2',
-      name: 'production_db_dump.sql',
-      recipient: 'engineering-review@geistdesk.com',
-      company: 'Acme Global Solutions',
-      ticketId: 'TKT-443',
-      status: 'Completed',
-      expires: 'Expired',
-      expiresAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-      views: 1,
-      type: 'request',
-      size: '1.2 GB',
-      createdAt: new Date(Date.now() - 3600000 * 24),
-    },
-    {
-      id: 'upload-mock-3',
-      name: 'firewall-screenshot-failure.png',
-      recipient: 'security-leads@intel.com',
-      company: 'Intel Corp',
-      ticketId: 'TKT-882',
-      status: 'Active',
-      expires: 'in 10d',
-      expiresAt: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000),
-      views: 0,
-      type: 'request',
-      size: '4.8 MB',
-      createdAt: new Date(),
-    },
-  ]);
+  const [mockUploads, setMockUploads] = useState<ExchangeItemRowSeed[]>(() => getDevMockUploads());
 
   const {
     customTemplates,
@@ -599,33 +556,35 @@ export default function VaultPage() {
 
   const handleQuickExchangeAction = useCallback(
     async (item: ExchangeItemRow) => {
-      if (item.id.startsWith('upload-mock')) {
-        setMockUploads((prev) =>
-          prev.map((row) =>
-            row.id === item.id
-              ? {
-                  ...row,
-                  status: 'Active',
-                  expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
-                  expires: 'in 48h',
-                }
-              : row,
-          ),
-        );
-      } else if (item.id.startsWith('seed-expiring-')) {
-        setSeedExpiringItems((prev) =>
-          prev.map((row) =>
-            row.id === item.id
-              ? {
-                  ...row,
-                  expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000),
-                  expires: 'in 72h',
-                  status: 'Active',
-                }
-              : row,
-          ),
-        );
-      } else if (!isDemoExchangeId(item.id)) {
+      if (isDevSeedExchangeId(item.id)) {
+        if (item.id.startsWith('upload-mock')) {
+          setMockUploads((prev) =>
+            prev.map((row) =>
+              row.id === item.id
+                ? {
+                    ...row,
+                    status: 'Active',
+                    expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+                    expires: 'in 48h',
+                  }
+                : row,
+            ),
+          );
+        } else if (item.id.startsWith('seed-expiring-')) {
+          setSeedExpiringItems((prev) =>
+            prev.map((row) =>
+              row.id === item.id
+                ? {
+                    ...row,
+                    expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000),
+                    expires: 'in 72h',
+                    status: 'Active',
+                  }
+                : row,
+            ),
+          );
+        }
+      } else {
         await logAudit({
           module: 'vault',
           action: 'EXCHANGE_COMPLIANCE_REFRESH',
@@ -676,10 +635,12 @@ export default function VaultPage() {
     if (selectedExchangeItem?.id === id) {
       setSelectedExchangeItem(null);
     }
-    if (id.startsWith('upload-mock')) {
-      setMockUploads((prev) => prev.filter((p) => p.id !== id));
-    } else if (id.startsWith('seed-expiring-')) {
-      setSeedExpiringItems((prev) => prev.filter((p) => p.id !== id));
+    if (isDevSeedExchangeId(id)) {
+      if (id.startsWith('upload-mock')) {
+        setMockUploads((prev) => prev.filter((p) => p.id !== id));
+      } else if (id.startsWith('seed-expiring-')) {
+        setSeedExpiringItems((prev) => prev.filter((p) => p.id !== id));
+      }
     } else {
       await vaultService.deleteItem(id);
     }

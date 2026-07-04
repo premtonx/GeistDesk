@@ -68,12 +68,16 @@ export const vaultService = {
         headers: { Accept: 'application/json' },
       });
       if (res.status === 404) return null;
+      const data = await res.json().catch(() => ({}));
       if (res.status === 410) {
-        const data = await res.json().catch(() => ({}));
         return { ...(data as VaultItem), id, isBurned: true };
       }
-      const data = await parse(res);
-      return data as VaultItem;
+      if (!res.ok) return null;
+      const item = data as VaultItem;
+      if (item.isBurned) {
+        return { ...item, id, isBurned: true };
+      }
+      return item;
     } catch (error) {
       console.error('[vaultService.getItem]', error);
       return null;
@@ -100,7 +104,14 @@ export const vaultService = {
   revealItem: async (
     id: string,
     options?: { passphrase?: string; viewerEmail?: string },
-  ): Promise<{ shares: string[]; content: string | null; preview?: boolean; viewCount?: number; maxViews?: number | null; burned?: boolean } | null> => {
+  ): Promise<{
+    shares: string[];
+    content: string | null;
+    preview?: boolean;
+    viewCount?: number;
+    maxViews?: number | null;
+    burned?: boolean;
+  } | null> => {
     try {
       const res = await fetch(`/api/vault/secrets/${encodeURIComponent(id)}/reveal`, {
         method: 'POST',
@@ -119,7 +130,13 @@ export const vaultService = {
         return { shares: [], content: null, preview: true };
       }
       await logAudit({ module: 'vault', action: 'VAULT_ITEM_ACCESSED', severity: 'low', details: { itemId: id } });
-      return { shares: data.shares || [], content: data.content ?? null };
+      return {
+        shares: data.shares || [],
+        content: data.content ?? null,
+        viewCount: data.viewCount,
+        maxViews: data.maxViews ?? null,
+        burned: data.burned,
+      };
     } catch (error) {
       console.error('[vaultService.revealItem]', error);
       return null;
