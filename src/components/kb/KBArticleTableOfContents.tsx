@@ -1,3 +1,4 @@
+import { useRef, type RefObject } from 'react';
 import { cn } from '../../lib/utils';
 import type { ArticleHeading } from './kb-article-detail-utils';
 
@@ -5,14 +6,31 @@ interface KBArticleTableOfContentsProps {
   headings: ArticleHeading[];
   activeId?: string;
   className?: string;
+  scrollContainerRef?: RefObject<HTMLElement | null>;
 }
 
-export function KBArticleTableOfContents({ headings, activeId, className }: KBArticleTableOfContentsProps) {
+export function KBArticleTableOfContents({
+  headings,
+  activeId,
+  className,
+  scrollContainerRef,
+}: KBArticleTableOfContentsProps) {
   if (headings.length === 0) return null;
 
   const scrollTo = (id: string) => {
     const el = document.getElementById(id);
-    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!el) return;
+
+    const container = scrollContainerRef?.current;
+    if (container) {
+      const containerTop = container.getBoundingClientRect().top;
+      const elementTop = el.getBoundingClientRect().top;
+      const offset = elementTop - containerTop + container.scrollTop - 112;
+      container.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' });
+      return;
+    }
+
+    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   return (

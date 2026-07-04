@@ -620,6 +620,11 @@ export default function KBPage() {
     }
   };
   const [activeReadingLanguage, setActiveReadingLanguage] = useState<string>('English');
+
+  const dismissArticleDetail = useCallback(() => {
+    setViewingArticle(null);
+    setActiveReadingLanguage('English');
+  }, []);
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
   
   const [newArticle, setNewArticle] = useState<KBArticleDraft>({
@@ -1190,6 +1195,7 @@ export default function KBPage() {
 
   const handleKbNavigate = (filter: KBNavFilter) => {
     closeArticleDraft();
+    dismissArticleDetail();
     setKbNav(filter);
     if (filter.type === 'category') {
       setSelectedCategory(filter.id);
@@ -1204,6 +1210,7 @@ export default function KBPage() {
 
   const resetFilters = () => {
     closeArticleDraft();
+    dismissArticleDetail();
     setFilterOwner('All');
     setFilterVisibility('All');
     setFilterTag('All');
@@ -1226,6 +1233,7 @@ export default function KBPage() {
   };
 
   const handlePopularSearch = (term: string) => {
+    dismissArticleDetail();
     setSearchQuery(term);
     dismissAiSearchOverlay();
   };
@@ -1809,6 +1817,27 @@ export default function KBPage() {
       toast.success('Feedback recorded. Trust metrics adjusted.');
     };
 
+    const handleSaveContent = async (content: string) => {
+      if (!viewingArticle) return;
+
+      if (viewingArticle.id.startsWith('seed-')) {
+        setArticles((prev) =>
+          prev.map((a) =>
+            a.id === viewingArticle.id
+              ? { ...a, content, updatedAt: { toDate: () => new Date() } }
+              : a,
+          ),
+        );
+        setViewingArticle((prev) => (prev ? { ...prev, content } : null));
+      } else {
+        await kbService.updateArticle(viewingArticle.id, { content }, viewingArticle.tags || []);
+        setArticles((prev) =>
+          prev.map((a) => (a.id === viewingArticle.id ? { ...a, content } : a)),
+        );
+        setViewingArticle((prev) => (prev ? { ...prev, content } : null));
+      }
+    };
+
     return (
       <KBArticleDetailView
         article={viewingArticle}
@@ -1816,12 +1845,11 @@ export default function KBPage() {
         htmlContent={getLocalizedContent(viewingArticle, activeReadingLanguage)}
         activeReadingLanguage={activeReadingLanguage}
         onBack={() => {
-          setViewingArticle(null);
-          setActiveReadingLanguage('English');
+          dismissArticleDetail();
         }}
-        onEdit={() => handleEditArticle(viewingArticle)}
         onCopyLink={() => handleCopyUrl(viewingArticle.title)}
         onTranslate={() => handleTranslateArticle(activeReadingLanguage)}
+        onSaveContent={handleSaveContent}
         onHelpful={handleHelpful}
         onUnhelpful={handleUnhelpful}
         onTrustScoreUpdated={(newScore) => {
@@ -1905,6 +1933,7 @@ export default function KBPage() {
                   <KBSearchSection
                     searchQuery={searchQuery}
                     onSearchChange={(value) => {
+                      if (value !== searchQuery) dismissArticleDetail();
                       setSearchQuery(value);
                       if (!value.trim()) dismissAiSearchOverlay();
                     }}

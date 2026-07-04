@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
 import { ScrollArea } from '../ui/scroll-area';
 import { Button } from '../ui/button';
@@ -16,10 +16,9 @@ export interface KBArticleDetailViewProps {
   htmlContent: string;
   activeReadingLanguage: string;
   onBack: () => void;
-  onEdit: () => void;
   onCopyLink: () => void;
   onTranslate: () => void;
-  onDelete?: () => void;
+  onSaveContent: (content: string) => Promise<void>;
   onHelpful: () => Promise<void>;
   onUnhelpful: () => Promise<void>;
   onTrustScoreUpdated?: (score: number) => void;
@@ -30,18 +29,75 @@ export function KBArticleDetailView({
   title,
   htmlContent,
   onBack,
-  onEdit,
   onCopyLink,
   onTranslate,
+  onSaveContent,
   onHelpful,
   onUnhelpful,
   onTrustScoreUpdated,
 }: KBArticleDetailViewProps) {
-  const headings = useMemo(() => extractArticleHeadings(htmlContent), [htmlContent]);
-  const enrichedHtml = useMemo(() => injectHeadingIds(htmlContent, headings), [htmlContent, headings]);
+  const [isEditing, setIsEditing] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [editedContent, setEditedContent] = useState(article.content ?? htmlContent);
+  const [displayContent, setDisplayContent] = useState(article.content ?? htmlContent);
+  const scrollContainerRef = useRef<HTMLElement | null>(null);
+  const scrollAreaRootRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const nextContent = article.content ?? htmlContent;
+    setDisplayContent(nextContent);
+    if (!isEditing) {
+      setEditedContent(nextContent);
+    }
+  }, [article.content, htmlContent, isEditing]);
+
+  useEffect(() => {
+    const viewport = scrollAreaRootRef.current
+      ?.closest('[data-slot="scroll-area"]')
+      ?.querySelector('[data-slot="scroll-area-viewport"]') as HTMLElement | null;
+    scrollContainerRef.current = viewport;
+  }, []);
+
+  const headings = useMemo(() => extractArticleHeadings(displayContent), [displayContent]);
+  const enrichedHtml = useMemo(
+    () => injectHeadingIds(displayContent, headings),
+    [displayContent, headings],
+  );
+
+  const handleToggleEdit = () => {
+    if (isEditing) {
+      setEditedContent(displayContent);
+      setIsEditing(false);
+      return;
+    }
+    setEditedContent(displayContent);
+    setIsEditing(true);
+  };
+
+  const handleSave = async () => {
+    if (!editedContent.trim()) {
+      toast.error('Article content cannot be empty.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await onSaveContent(editedContent);
+      setDisplayContent(editedContent);
+      setIsEditing(false);
+      toast.success('Artikel erfolgreich aktualisiert!');
+    } catch {
+      toast.error('Failed to save article. Please try again.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   const toolbarHandlers = {
-    onEdit,
+    isEditing,
+    isSaving,
+    onEdit: handleToggleEdit,
+    onSave: () => void handleSave(),
     onShare: () => toast.info('Share link copied to collaboration clipboard.'),
     onHistory: () => toast.info('Opening article revision history.'),
     onCompare: () => toast.info('Compare mode: select a second article version.'),
@@ -64,7 +120,7 @@ export function KBArticleDetailView({
       {/* Middle column — 70% article workspace */}
       <div className="flex-[7] min-w-0 flex flex-col min-h-0 border-r border-slate-200/80">
         <ScrollArea className="flex-1 min-h-0">
-          <div className="max-w-[850px] mx-auto px-5 sm:px-6 py-6 pb-12">
+          <div ref={scrollAreaRootRef} className="max-w-[850px] mx-auto px-5 sm:px-6 py-6 pb-12">
             <KBArticleDetailHeader
               title={title}
               category={article.category}
@@ -76,8 +132,19 @@ export function KBArticleDetailView({
             <KBArticleDetailToolbar className="mt-4" {...toolbarHandlers} />
 
             <div className="flex gap-6 mt-6">
-              <KBArticleTableOfContents headings={headings} />
-              <KBArticleDetailBody htmlContent={enrichedHtml} />
+              {!isEditing ? (
+                <KBArticleTableOfContents
+                  headings={headings}
+                  scrollContainerRef={scrollContainerRef}
+                />
+              ) : null}
+              <KBArticleDetailBody
+                htmlContent={enrichedHtml}
+                isEditing={isEditing}
+                editedContent={editedContent}
+                onContentChange={setEditedContent}
+                showCalloutSamples={!isEditing}
+              />
             </div>
 
             <div className="mt-8 rounded-xl border border-slate-200/80 bg-white p-4 flex flex-col sm:flex-row items-center justify-between gap-4">

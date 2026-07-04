@@ -4,6 +4,22 @@ export interface ArticleHeading {
   level: 2 | 3;
 }
 
+function slugifyHeadingText(text: string): string {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9\s-]/g, '')
+    .trim()
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-')
+    .slice(0, 48) || 'section';
+}
+
+export function buildHeadingId(text: string, index: number): string {
+  return `${index + 1}-${slugifyHeadingText(text)}`;
+}
+
 export function extractArticleHeadings(html: string): ArticleHeading[] {
   if (!html) return [];
   const headings: ArticleHeading[] = [];
@@ -14,7 +30,7 @@ export function extractArticleHeadings(html: string): ArticleHeading[] {
     const level = Number(match[1]) as 2 | 3;
     const text = match[2].replace(/<[^>]+>/g, '').trim();
     if (!text) continue;
-    const id = `section-${index++}`;
+    const id = buildHeadingId(text, index++);
     headings.push({ id, text, level });
   }
   return headings;
@@ -84,7 +100,8 @@ export function deriveArticleBadges(article: {
 export const KB_DETAIL_PROSE_CLASS =
   'kb-article-prose prose prose-slate max-w-none text-[15px] leading-[1.75] tracking-normal ' +
   'prose-headings:font-semibold prose-headings:text-slate-900 prose-headings:tracking-tight ' +
-  'prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-base prose-h3:mt-6 prose-h3:mb-2 ' +
+  'prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h2:scroll-mt-28 ' +
+  'prose-h3:text-base prose-h3:mt-6 prose-h3:mb-2 prose-h3:scroll-mt-28 ' +
   'prose-p:text-slate-600 prose-p:mb-4 prose-li:text-slate-600 ' +
   'prose-img:rounded-xl prose-img:border prose-img:border-slate-200 ' +
   'prose-table:border prose-table:border-slate-200 prose-table:rounded-xl prose-table:overflow-hidden ' +

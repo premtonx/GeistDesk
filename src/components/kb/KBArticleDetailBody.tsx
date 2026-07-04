@@ -1,5 +1,6 @@
 import { AlertTriangle, Info, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { Textarea } from '../ui/textarea';
 import { KB_DETAIL_PROSE_CLASS } from './kb-article-detail-utils';
 
 const CALLOUT_EXAMPLES = [
@@ -59,18 +60,41 @@ const CALLOUT_STYLES = {
 interface KBArticleDetailBodyProps {
   htmlContent: string;
   showCalloutSamples?: boolean;
+  isEditing?: boolean;
+  editedContent?: string;
+  onContentChange?: (value: string) => void;
 }
 
-export function KBArticleDetailBody({ htmlContent, showCalloutSamples = true }: KBArticleDetailBodyProps) {
+export function KBArticleDetailBody({
+  htmlContent,
+  showCalloutSamples = true,
+  isEditing = false,
+  editedContent = '',
+  onContentChange,
+}: KBArticleDetailBodyProps) {
   return (
     <div className="flex-1 min-w-0 space-y-6">
-      <article
-        className={cn(KB_DETAIL_PROSE_CLASS, 'rounded-xl border border-slate-200/80 bg-white p-6')}
-      >
-        <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
-      </article>
+      {isEditing ? (
+        <div className="rounded-xl border-2 border-blue-200 bg-white p-4 shadow-sm">
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 mb-2">
+            Editing article content
+          </p>
+          <Textarea
+            value={editedContent}
+            onChange={(event) => onContentChange?.(event.target.value)}
+            className="min-h-[420px] font-mono text-sm leading-relaxed border-slate-200 rounded-xl resize-y focus-visible:ring-blue-500"
+            placeholder="Enter article HTML or markdown content..."
+          />
+        </div>
+      ) : (
+        <article
+          className={cn(KB_DETAIL_PROSE_CLASS, 'rounded-xl border border-slate-200/80 bg-white p-6')}
+        >
+          <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
+        </article>
+      )}
 
-      {showCalloutSamples ? (
+      {!isEditing && showCalloutSamples ? (
         <div className="space-y-3">
           {CALLOUT_EXAMPLES.map((callout) => {
             const style = CALLOUT_STYLES[callout.type];
