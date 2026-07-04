@@ -1,4 +1,4 @@
-import React from 'react';
+import { useState } from 'react';
 import {
   X,
   Sparkles,
@@ -12,6 +12,7 @@ import {
   Lock,
   Upload,
   Building2,
+  Loader2,
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
@@ -31,7 +32,7 @@ interface ExchangeDetailDrawerProps {
   onClose: () => void;
   onRotateToken?: (id: string) => void;
   onRevokeAccess?: (id: string) => void;
-  onDownloadSecure?: (id: string) => void;
+  onDownloadSecure?: (id: string) => Promise<void>;
 }
 
 function recipientDomain(email: string): string {
@@ -78,6 +79,7 @@ export function ExchangeDetailDrawer({
   onDownloadSecure,
 }: ExchangeDetailDrawerProps) {
   const { t } = useTranslation();
+  const [isDownloading, setIsDownloading] = useState(false);
 
   const resolvedStatus = item ? resolveExchangeStatus(item) : null;
   const statusLabel = resolvedStatus
@@ -87,7 +89,17 @@ export function ExchangeDetailDrawer({
   const securityPolicy =
     item?.type === 'secret'
       ? t('exchange.policy.burnAfterRead', 'Burn after read')
-      : t('exchange.policy.malwareScan', 'Malware scan + 48h');
+      : item?.size || t('exchange.policy.malwareScan', 'Malware scan + 48h');
+
+  const handleSecureDownload = async () => {
+    if (!item || !onDownloadSecure || isDownloading) return;
+    setIsDownloading(true);
+    try {
+      await onDownloadSecure(item.id);
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -98,9 +110,9 @@ export function ExchangeDetailDrawer({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 0.18 }}
+            transition={{ duration: 0.2 }}
             onClick={onClose}
-            className="absolute inset-0 z-30 bg-black/20 backdrop-blur-[1px]"
+            className="fixed inset-0 z-[80] bg-black/40 backdrop-blur-sm"
             aria-hidden
           />
           <motion.aside
@@ -108,28 +120,28 @@ export function ExchangeDetailDrawer({
             initial={{ x: '100%' }}
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
-            transition={{ type: 'spring', damping: 28, stiffness: 260 }}
-            className="absolute inset-y-0 right-0 z-40 w-full max-w-[420px] bg-white border-l border-slate-200/80 shadow-2xl flex flex-col overflow-hidden"
+            transition={{ type: 'spring', damping: 30, stiffness: 280 }}
+            className="fixed inset-y-0 right-0 z-[90] w-full max-w-4xl sm:w-[min(896px,92vw)] bg-white border-l border-slate-200/80 shadow-2xl flex flex-col overflow-hidden"
             role="dialog"
             aria-modal="true"
             aria-label={t('exchange.drawer.ariaLabel', 'Exchange item details')}
           >
-            <header className="px-5 py-4 border-b border-slate-100 bg-[#FAFBFC] shrink-0">
-              <div className="flex items-start justify-between gap-3">
+            <header className="px-6 py-5 border-b border-slate-100 bg-[#FAFBFC] shrink-0">
+              <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2 mb-2">
                     <div
                       className={cn(
-                        'w-8 h-8 rounded-lg flex items-center justify-center border shrink-0',
+                        'w-9 h-9 rounded-lg flex items-center justify-center border shrink-0',
                         item.type === 'secret'
                           ? 'bg-blue-50 border-blue-100 text-blue-600'
                           : 'bg-violet-50 border-violet-100 text-violet-600',
                       )}
                     >
                       {item.type === 'secret' ? (
-                        <Lock className="w-3.5 h-3.5" />
+                        <Lock className="w-4 h-4" />
                       ) : (
-                        <Upload className="w-3.5 h-3.5" />
+                        <Upload className="w-4 h-4" />
                       )}
                     </div>
                     <span
@@ -141,16 +153,19 @@ export function ExchangeDetailDrawer({
                       {statusLabel}
                     </span>
                   </div>
-                  <h2 className="text-base font-bold text-slate-900 leading-snug break-words">{item.name}</h2>
-                  <p className="text-[11px] text-slate-500 mt-1 flex items-center gap-1">
-                    <Building2 className="w-3 h-3 shrink-0" />
+                  <h2 className="text-xl font-bold text-slate-900 leading-snug break-words">{item.name}</h2>
+                  <p className="text-xs text-slate-500 mt-1.5 flex items-center gap-1.5">
+                    <Building2 className="w-3.5 h-3.5 shrink-0" />
                     {item.company}
                   </p>
+                  {item.type === 'request' && item.size ? (
+                    <p className="text-[11px] font-semibold text-violet-700 mt-1">{item.size}</p>
+                  ) : null}
                 </div>
                 <button
                   type="button"
                   onClick={onClose}
-                  className="h-8 w-8 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-500 shrink-0 transition-colors"
+                  className="h-9 w-9 rounded-xl hover:bg-slate-100 flex items-center justify-center text-slate-500 shrink-0 transition-colors"
                   aria-label={t('exchange.drawer.close', 'Close')}
                 >
                   <X className="w-4 h-4" />
@@ -158,12 +173,12 @@ export function ExchangeDetailDrawer({
               </div>
             </header>
 
-            <div className="flex-1 overflow-y-auto p-5 space-y-4">
-              <section className={cn(exchangePanelClass(), 'p-4 space-y-3')}>
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              <section className={cn(exchangePanelClass(), 'p-5 space-y-4')}>
                 <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
                   {t('exchange.drawer.diagnostics', 'Diagnostics & Security')}
                 </h3>
-                <div className="grid grid-cols-2 gap-3 text-xs">
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                   <div className="rounded-xl bg-slate-50 border border-slate-100 p-3">
                     <div className="flex items-center gap-1.5 text-slate-400 mb-1">
                       <Shield className="w-3.5 h-3.5" />
@@ -182,7 +197,7 @@ export function ExchangeDetailDrawer({
                     </div>
                     <p className="font-semibold text-slate-800 tabular-nums">{item.views}</p>
                   </div>
-                  <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 col-span-2">
+                  <div className="rounded-xl bg-slate-50 border border-slate-100 p-3 lg:col-span-2">
                     <div className="flex items-center gap-1.5 text-slate-400 mb-1">
                       <Clock className="w-3.5 h-3.5" />
                       <span className="text-[10px] font-semibold uppercase tracking-wide">
@@ -190,13 +205,13 @@ export function ExchangeDetailDrawer({
                       </span>
                     </div>
                     <p className="font-semibold text-slate-800">
-                      {item ? formatExchangeExpirationDisplay(item.expires, t) : ''}
+                      {formatExchangeExpirationDisplay(item.expires, t)}
                     </p>
                   </div>
                 </div>
               </section>
 
-              <section className={cn(exchangePanelClass(), 'p-4 space-y-2')}>
+              <section className={cn(exchangePanelClass(), 'p-5 space-y-2')}>
                 <h3 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                   <Mail className="w-3.5 h-3.5" />
                   {t('exchange.drawer.authorizedRecipients', 'Authorized recipients')}
@@ -221,7 +236,7 @@ export function ExchangeDetailDrawer({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 rounded-xl text-[11px] font-semibold border-slate-200"
+                  className="h-9 rounded-xl text-[11px] font-semibold border-slate-200"
                   onClick={() => {
                     onRotateToken?.(item.id);
                     toast.success(t('exchange.drawer.rotateSuccess', 'Token rotation queued.'));
@@ -234,7 +249,7 @@ export function ExchangeDetailDrawer({
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="h-8 rounded-xl text-[11px] font-semibold border-rose-200 text-rose-700 hover:bg-rose-50"
+                  className="h-9 rounded-xl text-[11px] font-semibold border-rose-200 text-rose-700 hover:bg-rose-50"
                   onClick={() => {
                     onRevokeAccess?.(item.id);
                     toast.success(t('exchange.drawer.revokeSuccess', 'Access revocation initiated.'));
@@ -248,19 +263,23 @@ export function ExchangeDetailDrawer({
                     type="button"
                     variant="outline"
                     size="sm"
-                    className="h-8 rounded-xl text-[11px] font-semibold border-blue-200 text-blue-700 hover:bg-blue-50"
-                    onClick={() => {
-                      onDownloadSecure?.(item.id);
-                      toast.success(t('exchange.drawer.downloadSuccess', 'Secure download channel opened.'));
-                    }}
+                    disabled={isDownloading || !onDownloadSecure}
+                    className="h-9 rounded-xl text-[11px] font-semibold border-blue-200 text-blue-700 hover:bg-blue-50"
+                    onClick={() => void handleSecureDownload()}
                   >
-                    <Download className="w-3.5 h-3.5 mr-1.5" />
-                    {t('exchange.drawer.downloadSecure', 'Download File Securely')}
+                    {isDownloading ? (
+                      <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <Download className="w-3.5 h-3.5 mr-1.5" />
+                    )}
+                    {isDownloading
+                      ? t('exchange.drawer.downloading', 'Preparing secure download...')
+                      : t('exchange.drawer.downloadSecure', 'Download File Securely')}
                   </Button>
                 ) : null}
               </section>
 
-              <section className="rounded-2xl border border-violet-200/60 bg-gradient-to-br from-violet-50 to-indigo-50/80 p-4">
+              <section className="rounded-2xl border border-violet-200/60 bg-gradient-to-br from-violet-50 to-indigo-50/80 p-5">
                 <h3 className="text-xs font-bold text-indigo-800 flex items-center gap-1.5 mb-2">
                   <Sparkles className="w-4 h-4" />
                   {t('exchange.drawer.aiAnalysis', 'AI Analysis')}

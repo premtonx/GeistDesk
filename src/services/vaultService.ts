@@ -196,6 +196,48 @@ export const vaultService = {
     await parse(res);
   },
 
+  /** Recover and download an uploaded dropzone payload for the authenticated owner. */
+  downloadDropzoneFile: async (id: string): Promise<string> => {
+    const res = await fetch(`/api/vault/dropzones/download?id=${encodeURIComponent(id)}`, {
+      method: 'GET',
+      headers: authHeaders(),
+    });
+
+    if (res.status === 410) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(
+        (data as { error?: string }).error ||
+          'Uploaded file material was wiped by automated purge cycles.',
+      );
+    }
+
+    if (res.status === 404) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error((data as { error?: string }).error || 'Dropzone file not found.');
+    }
+
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error((data as { error?: string }).error || `Download failed (${res.status})`);
+    }
+
+    const blob = await res.blob();
+    const disposition = res.headers.get('Content-Disposition') || '';
+    const fileNameMatch = disposition.match(/filename="?([^";]+)"?/i);
+    const filename = fileNameMatch?.[1] ? decodeURIComponent(fileNameMatch[1]) : `dropzone-${id}.bin`;
+
+    const url = window.URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    window.URL.revokeObjectURL(url);
+
+    return filename;
+  },
+
   /** Subscribe to vault history via PostgreSQL-backed API polling. */
   subscribeToHistory: (callback: (items: VaultItem[]) => void) => {
     let cancelled = false;

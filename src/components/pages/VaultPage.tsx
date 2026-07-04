@@ -513,6 +513,32 @@ export default function VaultPage() {
     [t],
   );
 
+  const handleDownloadSecure = useCallback(
+    async (itemId: string) => {
+      if (isDevSeedExchangeId(itemId)) {
+        toast.error(
+          t(
+            'exchange.drawer.downloadUnavailableDemo',
+            'Demo exchange rows do not contain recoverable uploaded file material.',
+          ),
+        );
+        return;
+      }
+
+      try {
+        await vaultService.downloadDropzoneFile(itemId);
+        toast.info(t('exchange.drawer.downloadStarted', 'Datei-Download gestartet...'));
+      } catch (error) {
+        const message =
+          error instanceof Error
+            ? error.message
+            : t('exchange.drawer.downloadFailed', 'Secure download could not be completed.');
+        toast.error(message);
+      }
+    },
+    [t],
+  );
+
   const handleRotateAccessToken = useCallback(
     (_item: ExchangeItemRow) => {
       toast.success(t('exchange.drawer.rotateSuccess', 'Token rotation queued.'));
@@ -1335,6 +1361,7 @@ export default function VaultPage() {
           <ExchangeDetailDrawer
             item={selectedExchangeItem}
             onClose={() => setSelectedExchangeItem(null)}
+            onDownloadSecure={handleDownloadSecure}
           />
             </div>
 

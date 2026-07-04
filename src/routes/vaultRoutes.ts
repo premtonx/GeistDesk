@@ -106,6 +106,27 @@ function emailDomainAllowed(email: string, domains: string[] | undefined): boole
   return domains.some((allowed) => domain === allowed || domain.endsWith(`.${allowed}`));
 }
 
+function decodeStoredDropzonePayload(plaintext: string): { buffer: Buffer; mimeType: string } {
+  const trimmed = plaintext.trim();
+  if (trimmed.startsWith("data:")) {
+    const comma = trimmed.indexOf(",");
+    const header = trimmed.slice(0, comma);
+    const body = trimmed.slice(comma + 1);
+    const mimeMatch = header.match(/^data:([^;]+)/);
+    const mimeType = mimeMatch?.[1] || "application/octet-stream";
+    if (header.includes(";base64")) {
+      return { buffer: Buffer.from(body, "base64"), mimeType };
+    }
+    return { buffer: Buffer.from(decodeURIComponent(body), "utf8"), mimeType };
+  }
+  return { buffer: Buffer.from(trimmed, "utf8"), mimeType: "text/plain" };
+}
+
+function sanitizeDownloadFilename(name: string): string {
+  const base = name.replace(/[/\\?%*:|"<>]/g, "_").trim();
+  return base || "dropzone-payload.bin";
+}
+
 function validateRevealSecurity(item: any, req: Request): { ok: true } | { ok: false; status: number; error: string } {
   const metadata = item.metadata || {};
   if (metadata.ipRestrictionEnabled && metadata.ipAllowlist) {
@@ -540,6 +561,53 @@ router.post("/secrets/:id/content", authenticate, async (req: any, res: Response
     return res.json({ success: true });
   } catch (e: any) {
     return res.status(500).json({ error: "Failed to store encrypted content." });
+  }
+});
+
+/**
+ * GET /api/vault/dropzones/download?id= — authenticated dropzone file recovery.
+ * Decrypts stored upload payload and streams it as a downloadable attachment.
+ */
+router.get("/dropzones/download", authenticate, async (req: any, res: Response): Promise<any> => {
+  const itemId = typeof req.query.id === "string" ? req.query.id.trim() : "";
+  if (!itemId) return res.status(400).json({ error: "id query parameter is required" });
+
+  try {
+    const item = await getDocDirect(VAULT_ITEMS, itemId);
+    if (!item || !isDropzoneItem(item)) {
+      return res.status(404).json({ error: "Dropzone not found" });
+    }
+    if (item.createdBy !== req.user.id && req.user.role !== "SYSTEM_ADMIN") {
+      return res.status(403).json({ error: "Forbidden: you cannot download this dropzone payload." });
+    }
+
+    if (!item.secretRef) {
+      return res.status(410).json({
+        error: "No uploaded file is available. The payload may have been purged by automated retention.",
+      });
+    }
+
+    const secretRecord = await getDocDirect(VAULT_SECRETS, item.secretRef);
+    if (!secretRecord?.encryptedContent) {
+      return res.status(410).json({
+        error: "Uploaded file material was wiped by automated purge cycles.",
+      });
+    }
+
+    const decrypted = decryptString(secretRecord.encryptedContent);
+    const { buffer, mimeType } = decodeStoredDropzonePayload(decrypted);
+    const metadata = item.metadata || {};
+    const filename = sanitizeDownloadFilename(
+      metadata.filename || metadata.requestName || `dropzone-${item.id}.bin`,
+    );
+
+    res.setHeader("Content-Type", mimeType || "application/octet-stream");
+    res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+    res.setHeader("Content-Length", String(buffer.length));
+    return res.status(200).send(buffer);
+  } catch (e: any) {
+    console.error("[Vault] Dropzone download failed:", e?.message || e);
+    return res.status(500).json({ error: "Failed to recover dropzone file." });
   }
 });
 
