@@ -587,6 +587,24 @@ export default function KBPage() {
   const [isAddingArticle, setIsAddingArticle] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
   const [viewingArticle, setViewingArticle] = useState<any>(null);
+
+  // Restore native scroll if legacy modal code left the document body locked.
+  useEffect(() => {
+    if (!viewingArticle) return;
+    document.body.style.overflow = '';
+    document.body.style.position = '';
+    document.body.style.top = '';
+    document.body.style.width = '';
+  }, [viewingArticle]);
+
+  useEffect(() => {
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.top = '';
+      document.body.style.width = '';
+    };
+  }, []);
   
   const handleSelectArticleByTitle = (title: string) => {
     const matched = articles.find(a => a.title.toLowerCase() === title.toLowerCase());
@@ -1754,13 +1772,13 @@ export default function KBPage() {
   };
 
   return (
-    <div className="flex flex-col h-full w-full bg-[#FAFBFC] overflow-hidden text-slate-800 font-sans">
+    <div className="flex flex-col flex-1 min-h-0 w-full bg-[#FAFBFC] overflow-hidden text-slate-800 font-sans">
 
 
         {viewMode === 'coverage' ? (
           renderCoverageDashboard()
         ) : viewingArticle ? (
-          <div className="flex-1 bg-white flex flex-col animate-in fade-in duration-250">
+          <div className="flex-1 min-h-0 overflow-y-auto bg-white animate-in fade-in duration-250 custom-scrollbar">
             {/* Header / Breadcrumb navigation */}
             <div className="px-8 pt-8 pb-4 border-b border-slate-100 space-y-4">
               <div className="flex items-center justify-between">
@@ -1888,11 +1906,11 @@ export default function KBPage() {
 
             </div>
 
-            {/* Split Column Layout for content mapping + Trust Score */}
-            <div className="flex-1 px-8 py-6 w-full max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Dual-column article body + trust sidebar (fluid flex, not height-clamped grid) */}
+            <div className="px-8 py-6 w-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-6 pb-10">
               
               {/* Left Column: Read Canvas & Helpful Feed */}
-              <div className="lg:col-span-7 space-y-8">
+              <div className="flex-1 min-w-0 space-y-8">
                 <div className="prose prose-indigo max-w-none prose-h2:text-lg prose-h2:font-black prose-p:text-slate-600 prose-p:leading-relaxed text-sm bg-white p-6 rounded-2xl border border-slate-100">
                   <div dangerouslySetInnerHTML={{ __html: getLocalizedContent(viewingArticle, activeReadingLanguage) }} />
                 </div>
@@ -1965,7 +1983,7 @@ export default function KBPage() {
               </div>
 
               {/* Right Column: Real-time Trust Score Dashboard panel */}
-              <div className="lg:col-span-5 space-y-6">
+              <aside className="w-full lg:w-[380px] lg:shrink-0 space-y-6">
                 <KBArticleTrustPanel 
                   article={viewingArticle} 
                   onScoreUpdated={(newScore) => {
@@ -1974,7 +1992,7 @@ export default function KBPage() {
                     setViewingArticle(prev => prev ? { ...prev, trustScore: newScore } : null);
                   }}
                 />
-              </div>
+              </aside>
 
             </div>
           </div>
