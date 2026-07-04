@@ -123,10 +123,6 @@ export function formatExchangeExpirationDisplay(
   return expires;
 }
 
-export function isDemoExchangeId(id: string): boolean {
-  return id.startsWith('seed-expiring-') || id.startsWith('upload-mock');
-}
-
 export function buildExchangeSecureUrl(id: string): string {
   if (typeof window === 'undefined') {
     return `/v/${id}`;

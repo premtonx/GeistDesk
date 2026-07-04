@@ -90,8 +90,12 @@ export function buildExchangeTemplate(input: CreateExchangeTemplateInput): Excha
   };
 }
 
-/** Seed demo rows so Schnellfilter badge counts align with visible table rows. */
+import { isExchangeDevSeedEnabled } from './exchange-dev-seed';
+
+/** Seed demo rows in development only so Schnellfilter badge counts align with visible table rows. */
 export function buildExpiringSoonSeedItems(): ExchangeItemRowSeed[] {
+  if (!isExchangeDevSeedEnabled()) return [];
+
   const offsetsHours = [23, 30, 36, 42, 48, 120, 144];
   return offsetsHours.map((hours, index) => {
     const expiresAt = new Date(Date.now() + hours * 60 * 60 * 1000);

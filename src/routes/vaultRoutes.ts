@@ -251,8 +251,15 @@ async function handleSecretMetadata(req: Request, res: Response): Promise<any> {
 
     const payload = formatVaultItemMetadata(item);
 
-    if (req.method === "HEAD") {
+    if (req.method === 'HEAD') {
       return res.status(payload.isBurned ? 410 : 200).end();
+    }
+
+    if (payload.isBurned) {
+      return res.status(410).json({
+        error: "This secret has already been burned or expired.",
+        ...payload,
+      });
     }
 
     return res.json(payload);
