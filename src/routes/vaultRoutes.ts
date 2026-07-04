@@ -501,6 +501,14 @@ router.post("/secrets/:id/upload", async (req: Request, res: Response): Promise<
       return res.status(400).json({ error: `File type .${ext} is not allowed for this dropzone.` });
     }
 
+    const alreadyUploaded =
+      (typeof metadata.uploadCount === "number" && metadata.uploadCount > 0) ||
+      Boolean(metadata.filename) ||
+      Boolean(metadata.lastUploadAt);
+    if (alreadyUploaded) {
+      return res.status(410).json({ error: "This dropzone has already received its upload and is closed." });
+    }
+
     const maxSizeMb = Number(metadata.maxSizeMb) || 2048;
     const maxBytes = maxSizeMb * 1024 * 1024;
     if (fileSizeBytes > 0 && fileSizeBytes > maxBytes) {
@@ -525,6 +533,8 @@ router.post("/secrets/:id/upload", async (req: Request, res: Response): Promise<
         size: fileSizeBytes || content.length,
         lastUploadAt: new Date().toISOString(),
         uploadCount: (metadata.uploadCount ?? 0) + 1,
+        uploadStatus: "uploaded",
+        acceptingUploads: false,
       },
       viewCount: getViewCount(item) + 1,
     });

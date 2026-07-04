@@ -9,6 +9,23 @@ export function isDropzoneVaultItem(
   return item.type === 'request' || item.metadata?.vaultKind === DROPZONE_VAULT_KIND;
 }
 
+export function hasDropzoneUploadedPayload(
+  item: Pick<VaultItem, 'metadata'> | null | undefined,
+): boolean {
+  if (!item?.metadata) return false;
+  const metadata = item.metadata;
+  return (
+    (typeof metadata.uploadCount === 'number' && metadata.uploadCount > 0) ||
+    Boolean(metadata.filename) ||
+    Boolean(metadata.lastUploadAt)
+  );
+}
+
+export function getDropzoneUploadedFilename(metadata: VaultItem['metadata'] | undefined): string | null {
+  if (!metadata?.filename) return null;
+  return metadata.filename;
+}
+
 const PRESET_UPLOAD_LIMIT_MB: Record<string, number> = {
   '100MB': 100,
   '500MB': 500,

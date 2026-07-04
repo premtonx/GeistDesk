@@ -258,7 +258,7 @@ export function ExchangeDetailDrawer({
                   <Ban className="w-3.5 h-3.5 mr-1.5" />
                   {t('exchange.drawer.revokeAccess', 'Revoke Access immediately')}
                 </Button>
-                {item.type === 'request' ? (
+                {item.type === 'request' && (item.status === 'Uploaded' || item.status === 'Completed') ? (
                   <Button
                     type="button"
                     variant="outline"
@@ -276,6 +276,10 @@ export function ExchangeDetailDrawer({
                       ? t('exchange.drawer.downloading', 'Preparing secure download...')
                       : t('exchange.drawer.downloadSecure', 'Download File Securely')}
                   </Button>
+                ) : item.type === 'request' ? (
+                  <span className="inline-flex items-center h-9 px-3 rounded-xl text-[11px] font-semibold border border-slate-200 text-slate-500 bg-slate-50">
+                    {t('exchange.drawer.awaitingUpload', 'Awaiting client upload')}
+                  </span>
                 ) : null}
               </section>
 

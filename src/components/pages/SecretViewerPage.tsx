@@ -26,6 +26,8 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import {
   formatUploadLimitLabel,
   getAllowedFileExtensions,
+  getDropzoneUploadedFilename,
+  hasDropzoneUploadedPayload,
   isDropzoneVaultItem,
   validateDropzoneFile,
 } from '../../lib/vault-dropzone-utils';
@@ -70,6 +72,7 @@ export default function SecretViewerPage() {
     setLoadState('ready');
     if (isDropzoneVaultItem(data)) {
       setViewed(true);
+      setIsUploadSuccess(hasDropzoneUploadedPayload(data));
     }
   }, []);
 
@@ -97,7 +100,7 @@ export default function SecretViewerPage() {
   const maxSizeMb = item?.metadata?.maxSizeMb ?? 2048;
 
   const handleDropzoneUpload = async (file: File) => {
-    if (!item || !isDropzone || isUploadSuccess) return;
+    if (!item || !isDropzone || isUploadSuccess || hasDropzoneUploadedPayload(item)) return;
 
     const validation = validateDropzoneFile(file, allowedTypes, maxSizeMb);
     if (validation.valid === false) {
@@ -131,6 +134,10 @@ export default function SecretViewerPage() {
         fileSizeBytes: file.size,
       });
 
+      const refreshed = await vaultService.getItem(item.id);
+      if (refreshed) {
+        setItem(refreshed);
+      }
       setIsUploadSuccess(true);
       toast.success(t('exchange.createSecret.viewer.uploadSuccess', 'Payload delivered successfully.'));
     } catch (error) {
@@ -275,6 +282,11 @@ export default function SecretViewerPage() {
     );
   }
 
+  const uploadedFilename = useMemo(
+    () => getDropzoneUploadedFilename(item?.metadata),
+    [item?.metadata],
+  );
+
   if (isDropzone && item) {
     return (
       <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4">
@@ -334,10 +346,21 @@ export default function SecretViewerPage() {
                   <h2 className="text-lg font-bold text-emerald-900">
                     {t('exchange.createSecret.viewer.uploadCompletedTitle', 'Upload Completed Successfully ⚡')}
                   </h2>
+                  {uploadedFilename ? (
+                    <p className="text-sm font-semibold text-emerald-900/90">
+                      {t('exchange.createSecret.viewer.uploadedFile', 'Received file')}: {uploadedFilename}
+                    </p>
+                  ) : null}
                   <p className="text-sm text-emerald-800/90 leading-relaxed">
                     {t(
                       'exchange.createSecret.viewer.uploadCompletedDesc',
                       'Your diagnostic data has been encrypted and securely transferred to the IT security team. This one-time upload quota has now been consumed.',
+                    )}
+                  </p>
+                  <p className="text-xs text-emerald-700/80 leading-relaxed">
+                    {t(
+                      'exchange.createSecret.viewer.uploadCompletedAdminHint',
+                      'The support team can recover this payload from the GeistVault admin dashboard using “Download File Securely”.',
                     )}
                   </p>
                 </div>
