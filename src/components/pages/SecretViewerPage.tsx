@@ -14,6 +14,7 @@ import {
   ArrowRight,
   Upload,
   FileUp,
+  CheckCircle2,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -23,10 +24,10 @@ import { motion, AnimatePresence } from 'motion/react';
 import { combine } from 'shamir-secret-sharing';
 import { useTranslation } from '../../lib/context/I18nContext';
 import {
-  fileMatchesAllowedTypes,
   formatUploadLimitLabel,
   getAllowedFileExtensions,
   isDropzoneVaultItem,
+  validateDropzoneFile,
 } from '../../lib/vault-dropzone-utils';
 
 type ViewerLoadState = 'loading' | 'ready' | 'unavailable';
@@ -43,7 +44,8 @@ export default function SecretViewerPage() {
   const [viewerEmail, setViewerEmail] = useState('');
   const [isRevealing, setIsRevealing] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
-  const [uploadComplete, setUploadComplete] = useState(false);
+  const [isUploadSuccess, setIsUploadSuccess] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   const hasRevealedRef = useRef(false);
   const revealInFlightRef = useRef(false);
 
@@ -52,7 +54,8 @@ export default function SecretViewerPage() {
   const loadItem = useCallback(async (vaultId: string) => {
     setLoadState('loading');
     setViewed(false);
-    setUploadComplete(false);
+    setIsUploadSuccess(false);
+    setValidationError(null);
     setReconstructedContent(null);
     hasRevealedRef.current = false;
 
@@ -91,27 +94,28 @@ export default function SecretViewerPage() {
     return formatUploadLimitLabel(limit);
   }, [item?.metadata]);
 
+  const maxSizeMb = item?.metadata?.maxSizeMb ?? 2048;
+
   const handleDropzoneUpload = async (file: File) => {
-    if (!item || !isDropzone) return;
+    if (!item || !isDropzone || isUploadSuccess) return;
 
-    if (!fileMatchesAllowedTypes(file.name, allowedTypes)) {
-      toast.error(
-        t(
-          'exchange.createSecret.viewer.invalidFileType',
-          'This file type is not accepted by the dropzone policy.',
-        ),
-      );
+    const validation = validateDropzoneFile(file, allowedTypes, maxSizeMb);
+    if (validation.valid === false) {
+      const message =
+        validation.reason === 'file_size'
+          ? t('exchange.createSecret.viewer.fileTooLarge', 'File too large: Maximum {{maxSize}} MB allowed (Selected: {{actualSize}} MB).')
+              .replace('{{maxSize}}', String(validation.maxSizeMb))
+              .replace('{{actualSize}}', String(validation.actualSizeMb))
+          : t(
+              'exchange.createSecret.viewer.invalidFileType',
+              'Invalid file type: This dropzone only accepts {{allowedTypes}}.',
+            ).replace('{{allowedTypes}}', validation.allowedTypes.join(', '));
+      setValidationError(message);
+      toast.error(message ?? t('exchange.createSecret.viewer.invalidFileType', 'Invalid file type.'));
       return;
     }
 
-    const maxSizeMb = item.metadata?.maxSizeMb ?? 2048;
-    if (file.size > maxSizeMb * 1024 * 1024) {
-      toast.error(
-        t('exchange.createSecret.viewer.fileTooLarge', 'File exceeds the dropzone upload capacity limit.'),
-      );
-      return;
-    }
-
+    setValidationError(null);
     setIsUploading(true);
     try {
       const content = await new Promise<string>((resolve, reject) => {
@@ -127,11 +131,11 @@ export default function SecretViewerPage() {
         fileSizeBytes: file.size,
       });
 
-      setUploadComplete(true);
+      setIsUploadSuccess(true);
       toast.success(t('exchange.createSecret.viewer.uploadSuccess', 'Payload delivered successfully.'));
-      void loadItem(item.id);
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Upload failed.';
+      setValidationError(message);
       toast.error(message);
     } finally {
       setIsUploading(false);
@@ -312,29 +316,73 @@ export default function SecretViewerPage() {
             ) : null}
           </div>
 
-          <div className="p-10 rounded-3xl bg-[#F3E8FF]/40 border-2 border-dashed border-violet-200 flex flex-col items-center justify-center gap-4">
-            <FileUp className="w-10 h-10 text-violet-600" />
-            <p className="text-sm font-bold text-slate-800">
-              {uploadComplete
-                ? t('exchange.createSecret.viewer.uploadDelivered', 'Secure payload delivered')
-                : t('exchange.createSecret.viewer.selectPayload', 'SELECT PAYLOAD')}
-            </p>
-            <Input
-              type="file"
-              className="max-w-xs text-xs"
-              disabled={isUploading}
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) void handleDropzoneUpload(file);
-                e.target.value = '';
-              }}
-            />
-            {isUploading ? (
-              <p className="text-xs text-violet-600 font-semibold animate-pulse">
-                {t('exchange.createSecret.viewer.uploading', 'Encrypting and transmitting payload...')}
-              </p>
-            ) : null}
-          </div>
+          <AnimatePresence mode="wait">
+            {isUploadSuccess ? (
+              <motion.div
+                key="dropzone-success"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                className="p-8 rounded-3xl bg-emerald-50 border border-emerald-200 space-y-4"
+              >
+                <div className="flex justify-center">
+                  <div className="w-16 h-16 bg-white rounded-full flex items-center justify-center shadow-sm border border-emerald-100">
+                    <CheckCircle2 className="w-9 h-9 text-emerald-600" />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <h2 className="text-lg font-bold text-emerald-900">
+                    {t('exchange.createSecret.viewer.uploadCompletedTitle', 'Upload Completed Successfully ⚡')}
+                  </h2>
+                  <p className="text-sm text-emerald-800/90 leading-relaxed">
+                    {t(
+                      'exchange.createSecret.viewer.uploadCompletedDesc',
+                      'Your diagnostic data has been encrypted and securely transferred to the IT security team. This one-time upload quota has now been consumed.',
+                    )}
+                  </p>
+                </div>
+              </motion.div>
+            ) : (
+              <motion.div
+                key="dropzone-upload"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                className="space-y-3"
+              >
+                {validationError ? (
+                  <div
+                    role="alert"
+                    className="rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-left text-sm font-medium text-rose-800"
+                  >
+                    {validationError}
+                  </div>
+                ) : null}
+
+                <div className="p-10 rounded-3xl bg-[#F3E8FF]/40 border-2 border-dashed border-violet-200 flex flex-col items-center justify-center gap-4">
+                  <FileUp className="w-10 h-10 text-violet-600" />
+                  <p className="text-sm font-bold text-slate-800">
+                    {t('exchange.createSecret.viewer.selectPayload', 'SELECT PAYLOAD')}
+                  </p>
+                  <Input
+                    type="file"
+                    className="max-w-xs text-xs"
+                    disabled={isUploading}
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleDropzoneUpload(file);
+                      e.target.value = '';
+                    }}
+                  />
+                  {isUploading ? (
+                    <p className="text-xs text-violet-600 font-semibold animate-pulse">
+                      {t('exchange.createSecret.viewer.uploading', 'Encrypting and transmitting payload...')}
+                    </p>
+                  ) : null}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
 
           <div className="pt-4 border-t border-slate-50 flex items-center justify-center gap-6">
             <div className="flex items-center gap-1.5 grayscale opacity-50">

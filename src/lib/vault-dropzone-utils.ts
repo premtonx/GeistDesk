@@ -44,6 +44,37 @@ export function fileMatchesAllowedTypes(fileName: string, allowedTypes: string[]
   return allowedTypes.some((type) => type.toUpperCase() === ext);
 }
 
+export function fileSizeMb(file: File): number {
+  return Math.round((file.size / (1024 * 1024)) * 100) / 100;
+}
+
+export type DropzoneFileValidationResult =
+  | { valid: true }
+  | { valid: false; reason: 'file_type'; extension: string; allowedTypes: string[] }
+  | { valid: false; reason: 'file_size'; maxSizeMb: number; actualSizeMb: number };
+
+export function validateDropzoneFile(
+  file: File,
+  allowedTypes: string[],
+  maxSizeMb: number,
+): DropzoneFileValidationResult {
+  if (allowedTypes.length > 0 && !fileMatchesAllowedTypes(file.name, allowedTypes)) {
+    return {
+      valid: false,
+      reason: 'file_type',
+      extension: file.name.split('.').pop()?.toUpperCase() ?? '',
+      allowedTypes,
+    };
+  }
+
+  const actualSizeMb = fileSizeMb(file);
+  if (file.size > maxSizeMb * 1024 * 1024) {
+    return { valid: false, reason: 'file_size', maxSizeMb, actualSizeMb };
+  }
+
+  return { valid: true };
+}
+
 export interface DropzoneFormSnapshot {
   requestName: string;
   requestDescription: string;
