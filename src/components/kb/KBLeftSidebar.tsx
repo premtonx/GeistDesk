@@ -145,7 +145,7 @@ export function KBLeftSidebar({ active, onNavigate, counts, healthScore, classNa
   return (
     <aside
       className={cn(
-        'w-[220px] shrink-0 border-r border-slate-200/80 bg-white flex flex-col min-h-0 hidden lg:flex',
+        'w-[220px] shrink-0 border-r border-slate-200/80 bg-white flex flex-col min-h-0 hidden lg:flex print:hidden',
         className,
       )}
     >

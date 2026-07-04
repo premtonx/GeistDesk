@@ -124,6 +124,7 @@ import { KBImporter } from '../KBImporter';
 import { KBAutopilotDashboard } from '../KBAutopilotDashboard';
 import { KBArticle } from '../../types';
 import { KBArticleDetailView } from '../kb/KBArticleDetailView';
+import { buildKbArticleDeepLink } from '../kb/kb-content-format';
 import { trustScoreService, generateDefaultTrustScore } from '../../services/trustScoreService';
 import { AIRelationshipGraph2 } from '../AIRelationshipGraph2';
 
@@ -612,20 +613,32 @@ export default function KBPage() {
     setIsAddingArticle(false);
     setEditingArticleId(null);
   }, []);
-  
-  const handleSelectArticleByTitle = (title: string) => {
-    const matched = articles.find(a => a.title.toLowerCase() === title.toLowerCase());
-    if (matched) {
-      setViewingArticle(matched);
-    }
-  };
+
   const [activeReadingLanguage, setActiveReadingLanguage] = useState<string>('English');
   const [articleTranslations, setArticleTranslations] = useState<Record<string, Record<string, string>>>({});
 
   const dismissArticleDetail = useCallback(() => {
     setViewingArticle(null);
     setActiveReadingLanguage('English');
-  }, []);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('article');
+      return next;
+    }, { replace: true });
+  }, [setSearchParams]);
+
+  const openArticleView = useCallback((article: any) => {
+    closeArticleDraft();
+    setViewingArticle(article);
+    setSearchParams({ article: article.id }, { replace: true });
+  }, [setSearchParams, closeArticleDraft]);
+
+  const handleSelectArticleByTitle = (title: string) => {
+    const matched = articles.find((a) => a.title.toLowerCase() === title.toLowerCase());
+    if (matched) {
+      openArticleView(matched);
+    }
+  };
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
   
   const [newArticle, setNewArticle] = useState<KBArticleDraft>({
@@ -692,6 +705,18 @@ export default function KBPage() {
     });
     setArticles(merged);
   }, [firestoreArticles]);
+
+  useEffect(() => {
+    const articleId = searchParams.get('article');
+    if (!articleId || articles.length === 0) return;
+    if (viewingArticle?.id === articleId) return;
+
+    const matched = articles.find((a) => a.id === articleId);
+    if (matched) {
+      closeArticleDraft();
+      setViewingArticle(matched);
+    }
+  }, [searchParams, articles, viewingArticle?.id, closeArticleDraft]);
 
   const stripHtml = (html: string) => {
     const tmp = document.createElement("DIV");
@@ -996,7 +1021,7 @@ export default function KBPage() {
   };
 
   const handleCopyArticleLink = (articleId: string) => {
-    const url = `${window.location.origin}/kb/article/${articleId}`;
+    const url = buildKbArticleDeepLink(articleId);
     void navigator.clipboard.writeText(url).then(() => {
       toast.success('Link kopiert!');
     }).catch(() => {
@@ -1145,7 +1170,7 @@ export default function KBPage() {
     if (!article) return;
     schedulePermanentDelete([article]);
     showUndoDeleteToast(1);
-    if (viewingArticle?.id === id) setViewingArticle(null);
+    if (viewingArticle?.id === id) dismissArticleDetail();
   };
 
   const toggleArticleSelection = (id: string) => {
@@ -1660,7 +1685,7 @@ export default function KBPage() {
                               onClick={() => {
                                 const found = articles.find(a => a.id === topic.matchedArticles[0].id || a.title === topic.matchedArticles[0].title);
                                 if (found) {
-                                  setViewingArticle(found);
+                                  openArticleView(found);
                                   setViewMode('standard');
                                 } else {
                                   toast.error("Original source article is currently undergoing SOC2 revision.");
@@ -1928,7 +1953,7 @@ export default function KBPage() {
         {viewMode === 'coverage' ? (
           renderCoverageDashboard()
         ) : (
-          <div className="flex-1 flex min-h-0 overflow-hidden bg-[#F8F9FA]">
+          <div className="flex-1 flex min-h-0 overflow-hidden bg-[#F8F9FA] print:block print:overflow-visible print:bg-white">
             <KBLeftSidebar
               active={kbNav}
               onNavigate={handleKbNavigate}
@@ -2098,7 +2123,7 @@ export default function KBPage() {
                         onToggleSelect={toggleArticleSelection}
                         onToggleSelectAll={toggleSelectAllArticles}
                         viewMode={viewLayout}
-                        onSelect={(art) => setViewingArticle(art)}
+                        onSelect={(art) => openArticleView(art)}
                         onEdit={handleEditArticle}
                         onDuplicate={handleDuplicateArticle}
                         onDelete={handleDeleteArticle}
@@ -2155,7 +2180,7 @@ export default function KBPage() {
                         onToggleSelect={toggleArticleSelection}
                         onToggleSelectAll={toggleSelectAllArticles}
                         viewMode={viewLayout}
-                        onSelect={(art) => setViewingArticle(art)}
+                        onSelect={(art) => openArticleView(art)}
                         onEdit={handleEditArticle}
                         onDuplicate={handleDuplicateArticle}
                         onDelete={handleDeleteArticle}

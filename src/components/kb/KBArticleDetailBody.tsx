@@ -1,7 +1,7 @@
 import { AlertTriangle, Info, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Textarea } from '../ui/textarea';
-import { KB_DETAIL_PROSE_CLASS } from './kb-article-detail-utils';
+import { KB_ARTICLE_CONTENT_WRAP_CLASS, KB_DETAIL_PROSE_CLASS } from './kb-article-detail-utils';
 
 const CALLOUT_EXAMPLES = [
   {
@@ -73,29 +73,40 @@ export function KBArticleDetailBody({
   onContentChange,
 }: KBArticleDetailBodyProps) {
   return (
-    <div className="flex-1 min-w-0 space-y-6">
+    <div className={cn('flex-1 min-w-0 max-w-full space-y-6 overflow-x-hidden', KB_ARTICLE_CONTENT_WRAP_CLASS)}>
       {isEditing ? (
-        <div className="rounded-xl border-2 border-blue-200 bg-white p-4 shadow-sm">
+        <div className="rounded-xl border-2 border-blue-200 bg-white p-4 shadow-sm min-w-0 max-w-full overflow-hidden">
           <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 mb-2">
-            Editing article content
+            Editing article content (Markdown)
           </p>
           <Textarea
             value={editedContent}
             onChange={(event) => onContentChange?.(event.target.value)}
-            className="min-h-[420px] font-mono text-sm leading-relaxed border-slate-200 rounded-xl resize-y focus-visible:ring-blue-500"
-            placeholder="Enter article HTML or markdown content..."
+            className={cn(
+              'min-h-[420px] w-full max-w-full font-mono text-sm leading-relaxed border-slate-200 rounded-xl resize-y focus-visible:ring-blue-500',
+              KB_ARTICLE_CONTENT_WRAP_CLASS,
+            )}
+            placeholder="Enter article markdown content..."
           />
         </div>
       ) : (
         <article
-          className={cn(KB_DETAIL_PROSE_CLASS, 'rounded-xl border border-slate-200/80 bg-white p-6')}
+          className={cn(
+            KB_DETAIL_PROSE_CLASS,
+            KB_ARTICLE_CONTENT_WRAP_CLASS,
+            'rounded-xl border border-slate-200/80 bg-white p-6',
+            'print:w-full print:max-w-none print:shadow-none print:border-none print:p-0 print:bg-white',
+          )}
         >
-          <div dangerouslySetInnerHTML={{ __html: htmlContent }} />
+          <div
+            className={cn(KB_ARTICLE_CONTENT_WRAP_CLASS, '[&_pre]:break-all [&_code]:break-all')}
+            dangerouslySetInnerHTML={{ __html: htmlContent }}
+          />
         </article>
       )}
 
       {!isEditing && showCalloutSamples ? (
-        <div className="space-y-3">
+        <div className="space-y-3 print:hidden">
           {CALLOUT_EXAMPLES.map((callout) => {
             const style = CALLOUT_STYLES[callout.type];
             const Icon = style.icon;

@@ -10,6 +10,7 @@ import { KBArticleDetailBody } from './KBArticleDetailBody';
 import { KBKnowledgeIntelligencePanel } from './KBKnowledgeIntelligencePanel';
 import { KBArticleToolbarPanels, type KBArticleToolbarPanel } from './KBArticleToolbarPanels';
 import { extractArticleHeadings, injectHeadingIds } from './kb-article-detail-utils';
+import { buildKbArticleDeepLink, toEditableMarkdown, toRenderableHtml } from './kb-content-format';
 
 export interface KBArticleDetailViewProps {
   article: any;
@@ -44,24 +45,24 @@ export function KBArticleDetailView({
 }: KBArticleDetailViewProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [editedContent, setEditedContent] = useState(article.content ?? htmlContent);
-  const [displayContent, setDisplayContent] = useState(article.content ?? htmlContent);
+  const [editedContent, setEditedContent] = useState('');
   const [activePanel, setActivePanel] = useState<KBArticleToolbarPanel>(null);
   const [aiExplainContent, setAiExplainContent] = useState('');
   const [isAiExplainLoading, setIsAiExplainLoading] = useState(false);
   const scrollContainerRef = useRef<HTMLElement | null>(null);
   const scrollAreaRootRef = useRef<HTMLDivElement>(null);
 
-  const articleUrl = useMemo(
-    () => `${window.location.origin}/kb/article/${article.id}`,
-    [article.id],
-  );
+  const articleUrl = useMemo(() => buildKbArticleDeepLink(article.id), [article.id]);
 
-  useEffect(() => {
-    if (isEditing) return;
-    setDisplayContent(htmlContent);
-    setEditedContent(article.content ?? htmlContent);
-  }, [htmlContent, article.content, isEditing]);
+  const viewSourceContent = article.content ?? htmlContent;
+
+  const renderedHtml = useMemo(() => {
+    const displayHtml = toRenderableHtml(htmlContent);
+    const headings = extractArticleHeadings(displayHtml);
+    return injectHeadingIds(displayHtml, headings);
+  }, [htmlContent]);
+
+  const headings = useMemo(() => extractArticleHeadings(toRenderableHtml(htmlContent)), [htmlContent]);
 
   useEffect(() => {
     const viewport = scrollAreaRootRef.current
@@ -73,23 +74,17 @@ export function KBArticleDetailView({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && isEditing) {
-        setEditedContent(displayContent);
+        setEditedContent(toEditableMarkdown(viewSourceContent));
         setIsEditing(false);
       }
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [isEditing, displayContent]);
-
-  const headings = useMemo(() => extractArticleHeadings(displayContent), [displayContent]);
-  const enrichedHtml = useMemo(
-    () => injectHeadingIds(displayContent, headings),
-    [displayContent, headings],
-  );
+  }, [isEditing, viewSourceContent]);
 
   const handleToggleEdit = () => {
     if (isEditing) return;
-    setEditedContent(displayContent);
+    setEditedContent(toEditableMarkdown(viewSourceContent));
     setIsEditing(true);
   };
 
@@ -101,8 +96,7 @@ export function KBArticleDetailView({
 
     setIsSaving(true);
     try {
-      await onSaveContent(editedContent);
-      setDisplayContent(editedContent);
+      await onSaveContent(editedContent.trim());
       setIsEditing(false);
       toast.success('Artikel erfolgreich aktualisiert!');
     } catch {
@@ -144,22 +138,14 @@ export function KBArticleDetailView({
   );
 
   return (
-    <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden bg-[#FAFBFC]">
-      <style>{`
-        @media print {
-          .kb-detail-no-print { display: none !important; }
-          .kb-article-print-root { max-width: 100% !important; padding: 0 !important; }
-          aside.kb-detail-no-print { display: none !important; }
-        }
-      `}</style>
-
-      <div className="flex-[7] min-w-0 flex flex-col min-h-0 border-r border-slate-200/80">
-        <ScrollArea className="flex-1 min-h-0">
+    <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden bg-[#FAFBFC] print:block print:overflow-visible print:bg-white">
+      <div className="flex-[7] min-w-0 flex flex-col min-h-0 border-r border-slate-200/80 print:w-full print:max-w-none print:border-none print:min-h-0">
+        <ScrollArea className="flex-1 min-h-0 print:overflow-visible print:h-auto">
           <div
             ref={scrollAreaRootRef}
-            className="kb-article-print-root max-w-[850px] mx-auto px-5 sm:px-6 py-6 pb-12"
+            className="kb-article-print-root max-w-[850px] mx-auto px-5 sm:px-6 py-6 pb-12 min-w-0 overflow-x-hidden print:w-full print:max-w-none print:shadow-none print:border-none print:p-0 print:mx-0 print:bg-white"
           >
-            <div className="kb-detail-no-print">
+            <div className="kb-detail-no-print print:hidden">
               <KBArticleDetailHeader
                 title={title}
                 category={article.category}
@@ -169,24 +155,33 @@ export function KBArticleDetailView({
               />
             </div>
 
-            <KBArticleDetailToolbar
-              className="mt-4"
-              isEditing={isEditing}
-              isSaving={isSaving}
-              isTranslating={isTranslating}
-              activeLanguage={activeReadingLanguage}
-              onEdit={handleToggleEdit}
-              onSave={() => void handleSave()}
-              onShare={() => setActivePanel('share')}
-              onHistory={() => setActivePanel('history')}
-              onCompare={() => setActivePanel('compare')}
-              onTranslate={(lang) => void handleTranslate(lang)}
-              onAiExplain={() => void handleAiExplain()}
-              onExportPdf={handleExportPdf}
-              onCopyLink={onCopyLink}
-            />
+            <div className="print:hidden">
+              <KBArticleDetailToolbar
+                className="mt-4"
+                isEditing={isEditing}
+                isSaving={isSaving}
+                isTranslating={isTranslating}
+                activeLanguage={activeReadingLanguage}
+                onEdit={handleToggleEdit}
+                onSave={() => void handleSave()}
+                onShare={() => setActivePanel('share')}
+                onHistory={() => setActivePanel('history')}
+                onCompare={() => setActivePanel('compare')}
+                onTranslate={(lang) => void handleTranslate(lang)}
+                onAiExplain={() => void handleAiExplain()}
+                onExportPdf={handleExportPdf}
+                onCopyLink={onCopyLink}
+              />
+            </div>
 
-            <div className="flex gap-6 mt-6">
+            <div className="print-only-article-title hidden print:block mb-6">
+              <h1 className="text-2xl font-semibold text-slate-900">{title}</h1>
+              <p className="text-sm text-slate-500 mt-1">
+                {article.category} · {article.subCategory || 'General'}
+              </p>
+            </div>
+
+            <div className="flex gap-6 mt-6 min-w-0 overflow-x-hidden print:mt-0 print:block">
               {!isEditing ? (
                 <KBArticleTableOfContents
                   headings={headings}
@@ -194,7 +189,7 @@ export function KBArticleDetailView({
                 />
               ) : null}
               <KBArticleDetailBody
-                htmlContent={enrichedHtml}
+                htmlContent={renderedHtml}
                 isEditing={isEditing}
                 editedContent={editedContent}
                 onContentChange={setEditedContent}
@@ -202,7 +197,7 @@ export function KBArticleDetailView({
               />
             </div>
 
-            <div className="kb-detail-no-print mt-8 rounded-xl border border-slate-200/80 bg-white p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="kb-detail-no-print print:hidden mt-8 rounded-xl border border-slate-200/80 bg-white p-4 flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
                 <h4 className="text-xs font-semibold text-slate-900">Was this documentation helpful?</h4>
                 <p className="text-[11px] text-slate-500 mt-0.5">Feedback updates the enterprise trust score model.</p>
@@ -232,7 +227,7 @@ export function KBArticleDetailView({
         </ScrollArea>
       </div>
 
-      <aside className="kb-detail-no-print flex-[3] min-w-[280px] max-w-[400px] shrink-0 min-h-0 overflow-y-auto bg-white p-4 custom-scrollbar">
+      <aside className="kb-detail-no-print print:hidden flex-[3] min-w-[280px] max-w-[400px] shrink-0 min-h-0 overflow-y-auto bg-white p-4 custom-scrollbar">
         <KBKnowledgeIntelligencePanel
           article={article}
           onTrustScoreUpdated={onTrustScoreUpdated}

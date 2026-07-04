@@ -36,7 +36,7 @@ export function KBArticleTableOfContents({
   return (
     <nav
       className={cn(
-        'hidden xl:block w-[180px] shrink-0 sticky top-24 self-start',
+        'hidden xl:block w-[180px] shrink-0 sticky top-24 self-start print:hidden',
         className,
       )}
       aria-label="On this page"

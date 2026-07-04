@@ -98,8 +98,10 @@ export function deriveArticleBadges(article: {
 }
 
 export const KB_DETAIL_PROSE_CLASS =
-  'kb-article-prose prose prose-slate max-w-none text-[15px] leading-[1.75] tracking-normal ' +
+  'kb-article-prose prose prose-slate max-w-none min-w-0 text-[15px] leading-[1.75] tracking-normal ' +
+  'break-words whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word] ' +
   'prose-headings:font-semibold prose-headings:text-slate-900 prose-headings:tracking-tight ' +
+  'prose-headings:print:break-inside-avoid prose-p:print:break-inside-avoid ' +
   'prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h2:scroll-mt-28 ' +
   'prose-h3:text-base prose-h3:mt-6 prose-h3:mb-2 prose-h3:scroll-mt-28 ' +
   'prose-p:text-slate-600 prose-p:mb-4 prose-li:text-slate-600 ' +
@@ -108,4 +110,9 @@ export const KB_DETAIL_PROSE_CLASS =
   'prose-th:bg-slate-50 prose-th:text-slate-700 prose-th:font-semibold prose-th:px-4 prose-th:py-2 ' +
   'prose-td:px-4 prose-td:py-2 prose-td:border-t prose-td:border-slate-100 ' +
   'prose-pre:rounded-xl prose-pre:border prose-pre:border-slate-200 prose-pre:bg-slate-900 prose-pre:text-slate-100 ' +
-  'prose-code:text-blue-700 prose-code:bg-blue-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded';
+  'prose-pre:whitespace-pre-wrap prose-pre:break-all prose-pre:[overflow-wrap:anywhere] ' +
+  'prose-code:text-blue-700 prose-code:bg-blue-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded ' +
+  'prose-code:break-all prose-code:[overflow-wrap:anywhere]';
+
+export const KB_ARTICLE_CONTENT_WRAP_CLASS =
+  'min-w-0 max-w-full overflow-x-hidden break-words whitespace-pre-wrap [overflow-wrap:anywhere] [word-break:break-word]';
