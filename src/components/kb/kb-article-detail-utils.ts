@@ -1,0 +1,94 @@
+export interface ArticleHeading {
+  id: string;
+  text: string;
+  level: 2 | 3;
+}
+
+export function extractArticleHeadings(html: string): ArticleHeading[] {
+  if (!html) return [];
+  const headings: ArticleHeading[] = [];
+  const regex = /<h([23])[^>]*>(.*?)<\/h\1>/gi;
+  let match: RegExpExecArray | null;
+  let index = 0;
+  while ((match = regex.exec(html)) !== null) {
+    const level = Number(match[1]) as 2 | 3;
+    const text = match[2].replace(/<[^>]+>/g, '').trim();
+    if (!text) continue;
+    const id = `section-${index++}`;
+    headings.push({ id, text, level });
+  }
+  return headings;
+}
+
+export function injectHeadingIds(html: string, headings: ArticleHeading[]): string {
+  if (!headings.length) return html;
+  let index = 0;
+  return html.replace(/<h([23])([^>]*)>(.*?)<\/h\1>/gi, (full, _level, attrs, inner) => {
+    const heading = headings[index];
+    if (!heading) return full;
+    const text = inner.replace(/<[^>]+>/g, '').trim();
+    if (text !== heading.text) return full;
+    index += 1;
+    if (/\bid\s*=/.test(attrs)) return full;
+    return `<h${_level}${attrs} id="${heading.id}">${inner}</h${_level}>`;
+  });
+}
+
+export function formatArticleViews(views?: number): string {
+  return (views ?? 0).toLocaleString('en-US');
+}
+
+export interface ArticleBadge {
+  key: string;
+  label: string;
+  className: string;
+}
+
+export function deriveArticleBadges(article: {
+  status?: string;
+  visibility?: string;
+  category?: string;
+  subCategory?: string;
+  tags?: string[];
+  approvalStatus?: string;
+}): ArticleBadge[] {
+  const badges: ArticleBadge[] = [];
+  const base = 'text-[10px] font-semibold px-2 py-0.5 rounded-md border';
+
+  if (article.status === 'Published') {
+    badges.push({ key: 'published', label: 'Published', className: `${base} bg-emerald-50 text-emerald-700 border-emerald-200` });
+  }
+  if (article.approvalStatus === 'Approved' || article.status === 'Published') {
+    badges.push({ key: 'verified', label: 'Verified', className: `${base} bg-blue-50 text-blue-700 border-blue-200` });
+  }
+  if (article.visibility === 'Private' || article.visibility === 'Internal') {
+    badges.push({ key: 'internal', label: 'Internal', className: `${base} bg-slate-100 text-slate-600 border-slate-200` });
+  }
+  if (
+    article.category?.toLowerCase().includes('security') ||
+    article.tags?.some((t) => t.toLowerCase().includes('security'))
+  ) {
+    badges.push({ key: 'security', label: 'Security', className: `${base} bg-amber-50 text-amber-800 border-amber-200` });
+  }
+  if (
+    article.category?.toLowerCase().includes('sop') ||
+    article.subCategory?.toLowerCase().includes('sop')
+  ) {
+    badges.push({ key: 'sop', label: 'SOP', className: `${base} bg-violet-50 text-violet-700 border-violet-200` });
+  }
+  badges.push({ key: 'ai-reviewed', label: 'AI Reviewed', className: `${base} bg-slate-50 text-slate-600 border-slate-200` });
+
+  return badges;
+}
+
+export const KB_DETAIL_PROSE_CLASS =
+  'kb-article-prose prose prose-slate max-w-none text-[15px] leading-[1.75] tracking-normal ' +
+  'prose-headings:font-semibold prose-headings:text-slate-900 prose-headings:tracking-tight ' +
+  'prose-h2:text-xl prose-h2:mt-8 prose-h2:mb-3 prose-h3:text-base prose-h3:mt-6 prose-h3:mb-2 ' +
+  'prose-p:text-slate-600 prose-p:mb-4 prose-li:text-slate-600 ' +
+  'prose-img:rounded-xl prose-img:border prose-img:border-slate-200 ' +
+  'prose-table:border prose-table:border-slate-200 prose-table:rounded-xl prose-table:overflow-hidden ' +
+  'prose-th:bg-slate-50 prose-th:text-slate-700 prose-th:font-semibold prose-th:px-4 prose-th:py-2 ' +
+  'prose-td:px-4 prose-td:py-2 prose-td:border-t prose-td:border-slate-100 ' +
+  'prose-pre:rounded-xl prose-pre:border prose-pre:border-slate-200 prose-pre:bg-slate-900 prose-pre:text-slate-100 ' +
+  'prose-code:text-blue-700 prose-code:bg-blue-50 prose-code:px-1 prose-code:py-0.5 prose-code:rounded';

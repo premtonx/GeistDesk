@@ -44,6 +44,7 @@ interface KBLeftSidebarProps {
     missing: number;
     outdated: number;
   };
+  healthScore?: number;
   className?: string;
 }
 
@@ -119,7 +120,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
-export function KBLeftSidebar({ active, onNavigate, counts, className }: KBLeftSidebarProps) {
+export function KBLeftSidebar({ active, onNavigate, counts, healthScore, className }: KBLeftSidebarProps) {
   const { t } = useTranslation();
 
   const isActive = (type: KBNavFilter['type'], id: string) =>
@@ -194,6 +195,24 @@ export function KBLeftSidebar({ active, onNavigate, counts, className }: KBLeftS
             />
           ))}
         </nav>
+
+        {typeof healthScore === 'number' ? (
+          <div className="mt-4 mx-1 rounded-xl border border-slate-200/80 bg-slate-50 p-3">
+            <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+              {t('kb.sidebar.healthScore', 'KB Health Score')}
+            </p>
+            <p className="text-xl font-semibold text-slate-900 mt-1">{healthScore}%</p>
+            <div className="mt-2 h-1.5 rounded-full bg-slate-200 overflow-hidden">
+              <div
+                className="h-full rounded-full bg-blue-600 transition-all"
+                style={{ width: `${Math.min(100, Math.max(0, healthScore))}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-slate-500 mt-1.5">
+              {t('kb.sidebar.healthHint', 'Aggregate trust across published articles')}
+            </p>
+          </div>
+        ) : null}
       </div>
 
       <div className="border-t border-slate-200/80 p-2 shrink-0">

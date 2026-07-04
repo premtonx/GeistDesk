@@ -123,7 +123,7 @@ import { useWorkspace } from '../../lib/context/WorkspaceContext';
 import { KBImporter } from '../KBImporter';
 import { KBAutopilotDashboard } from '../KBAutopilotDashboard';
 import { KBArticle } from '../../types';
-import { KBArticleTrustPanel } from '../KBArticleTrustPanel';
+import { KBArticleDetailView } from '../kb/KBArticleDetailView';
 import { trustScoreService, generateDefaultTrustScore } from '../../services/trustScoreService';
 import { AIRelationshipGraph2 } from '../AIRelationshipGraph2';
 
@@ -140,11 +140,11 @@ const ENTERPRISE_USERS = [
 const ENTERPRISE_SEED_ARTICLES: any[] = [
   {
     id: "seed-1",
-    title: "Getting Started with GeistDesk",
-    category: "Getting Started",
-    subCategory: "Workspace Setup",
-    content: "<h2>1. General Interface Overview</h2><p>Welcome to GeistDesk! The enterprise dashboard allows support professionals to leverage automated ticket response loops, live workspace updates, and credential payloads encryption from a single terminal interface.</p><h2>2. Setup Teams & Roles</h2><p>Navigate to Settings > Roles and assign permissions recursively to guarantee proper compartmentalization of ticketing nodes and credential dropzones.</p>",
-    tags: ["onboarding", "setup", "basics"],
+    title: "Getting Started with Azure AD SSO",
+    category: "Security",
+    subCategory: "Identity & SSO SOP",
+    content: "<h2>Overview</h2><p>Configure federated single sign-on between Azure Active Directory and GeistDesk to centralize identity governance, enforce MFA, and map security groups to operational roles.</p><h2>Prerequisites</h2><p>Before enabling the connector, confirm you hold Global Administrator or Identity Administrator privileges in your Azure AD tenant and that conditional access policies are active.</p><h3>Client Secret Rotation</h3><p>Rotate application client secrets every 90 days and document each rotation in the linked compliance ticket.</p><h2>Configuration Steps</h2><p>Register a new enterprise application in Azure AD, configure SAML or OIDC endpoints, and paste the metadata URL into GeistDesk Settings &gt; Identity Providers.</p><pre><code>sso.metadata_url = https://login.microsoftonline.com/{tenant}/federationmetadata/2007-06/federationmetadata.xml</code></pre><h3>Role Mapping</h3><p>Map Azure AD security groups to GeistDesk RBAC roles before enabling automated provisioning for production users.</p>",
+    tags: ["onboarding", "security", "sso", "azure-ad"],
     authorId: "admin",
     owner: "Sarah James",
     reviewer: "Mike Chen",
@@ -152,11 +152,13 @@ const ENTERPRISE_SEED_ARTICLES: any[] = [
     approvalStatus: "Approved",
     reviewDueDate: "2026-09-01",
     status: "Published",
-    visibility: "Public",
-    views: 1420,
+    visibility: "Internal",
+    linkedTicket: "TKT-184",
+    trustScore: 92,
+    views: 14280,
     helpfulCount: 224,
     unhelpfulCount: 4,
-    avgReadTime: "3m 15s",
+    avgReadTime: "6m 40s",
     language: "English",
     createdAt: { toDate: () => new Date("2026-05-15") },
     updatedAt: { toDate: () => new Date("2026-06-01") }
@@ -1777,226 +1779,56 @@ export default function KBPage() {
   const renderArticleDetailView = () => {
     if (!viewingArticle) return null;
 
+    const handleHelpful = async () => {
+      const updatedHelpful = (viewingArticle.helpfulCount || 0) + 1;
+      await kbService.updateArticle(viewingArticle.id, { helpfulCount: updatedHelpful });
+      try {
+        const trust = await trustScoreService.getTrustScore(viewingArticle.id, viewingArticle);
+        const updatedInputs = { ...trust.inputs, helpfulCount: updatedHelpful };
+        await trustScoreService.updateTrustScore(viewingArticle.id, updatedInputs, trust.score, trust.history);
+      } catch (e) {
+        console.warn('Could not save trust score logs:', e);
+      }
+      setArticles((prev) => prev.map((a) => (a.id === viewingArticle.id ? { ...a, helpfulCount: updatedHelpful } : a)));
+      setViewingArticle((prev) => (prev ? { ...prev, helpfulCount: updatedHelpful } : null));
+      toast.success('Thank you! Positive rating logged.');
+    };
+
+    const handleUnhelpful = async () => {
+      const updatedUnhelpful = (viewingArticle.unhelpfulCount || 0) + 1;
+      await kbService.updateArticle(viewingArticle.id, { unhelpfulCount: updatedUnhelpful });
+      try {
+        const trust = await trustScoreService.getTrustScore(viewingArticle.id, viewingArticle);
+        const updatedInputs = { ...trust.inputs, unhelpfulCount: updatedUnhelpful };
+        await trustScoreService.updateTrustScore(viewingArticle.id, updatedInputs, trust.score, trust.history);
+      } catch (e) {
+        console.warn('Could not save trust score logs:', e);
+      }
+      setArticles((prev) => prev.map((a) => (a.id === viewingArticle.id ? { ...a, unhelpfulCount: updatedUnhelpful } : a)));
+      setViewingArticle((prev) => (prev ? { ...prev, unhelpfulCount: updatedUnhelpful } : null));
+      toast.success('Feedback recorded. Trust metrics adjusted.');
+    };
+
     return (
-      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-white overflow-hidden animate-in fade-in duration-250">
-        <ScrollArea className="flex-1 min-h-0 custom-scrollbar">
-          <div className="min-h-full">
-            {/* Header / Breadcrumb navigation */}
-            <div className="px-4 sm:px-6 md:px-8 pt-6 md:pt-8 pb-4 border-b border-slate-100 space-y-4">
-              <div className="flex items-center justify-between">
-                <button 
-                  onClick={() => {
-                    setViewingArticle(null);
-                    setActiveReadingLanguage('English');
-                  }}
-                  className="flex items-center gap-2 text-xs font-bold text-indigo-600 hover:text-indigo-800 transition-all"
-                >
-                  <ArrowLeft className="w-4 h-4" />
-                  <span>Back to Category List</span>
-                </button>
-
-                <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="border-emerald-100 bg-emerald-50 text-emerald-700 font-bold px-2 py-0.5">
-                    {viewingArticle.status}
-                  </Badge>
-                  <Badge className="bg-slate-150 text-slate-600 border-none px-2 py-0.5 font-bold uppercase tracking-widest text-[9px]">
-                    {viewingArticle.visibility}
-                  </Badge>
-                  {viewingArticle.language !== 'English' && (
-                    <Badge variant="outline" className="bg-indigo-50 border-indigo-150 text-indigo-600 px-2 py-0.5 text-[9px]">
-                       {viewingArticle.language}
-                    </Badge>
-                  )}
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                <div>
-                  <span className="text-[10px] uppercase font-extrabold tracking-widest text-slate-400">{viewingArticle.category} &rsaquo; {viewingArticle.subCategory || 'Workspace Setup'}</span>
-                  <h1 className="text-2xl font-black text-slate-800 tracking-tight leading-tight mt-1">
-                    {getLocalizedTitle(viewingArticle, activeReadingLanguage)}
-                  </h1>
-                </div>
-                
-                <div className="flex gap-2">
-                  <Button 
-                    variant="outline" 
-                    className="h-9 px-4 rounded-xl border-slate-200 hover:border-slate-300 font-bold text-xs gap-1.5"
-                    onClick={() => handleEditArticle(viewingArticle)}
-                  >
-                    <PenLine className="w-3.5 h-3.5" />
-                    Edit Draft
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    className="h-9 px-3 rounded-xl border-slate-200"
-                    onClick={() => handleCopyUrl(viewingArticle.title)}
-                  >
-                    <Copy className="w-4 h-4 text-slate-400" />
-                  </Button>
-                  <Button 
-                    variant="outline"
-                    className="h-9 px-3 rounded-xl border-slate-200 text-red-500 hover:bg-red-50 hover:border-red-100"
-                    onClick={() => {
-                      handleDeleteArticle(viewingArticle.id);
-                      setViewingArticle(null);
-                    }}
-                  >
-                     <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-
-              {/* Ownership system metadata info */}
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 py-2 text-xs font-semibold text-slate-600 border-t border-slate-100/60 mt-4 pt-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center font-bold text-[10px] text-indigo-600 shadow-xs">
-                     {viewingArticle.owner ? viewingArticle.owner.charAt(0) : 'O'}
-                  </div>
-                  <div className="flex flex-col">
-                     <span className="text-[9px] uppercase tracking-wider text-slate-400">Owner</span>
-                     <span className="text-slate-700">{viewingArticle.owner || 'Unassigned'}</span>
-                  </div>
-                </div>
-                
-                <div className="flex items-center gap-2">
-                  <User className="w-4.5 h-4.5 text-slate-300" />
-                  <div className="flex flex-col">
-                     <span className="text-[9px] uppercase tracking-wider text-slate-400">Reviewer Assign</span>
-                     <span className="text-slate-700">{viewingArticle.reviewer || 'Mike Chen'}</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col">
-                   <span className="text-[9px] uppercase tracking-wider text-slate-400">Last Revised</span>
-                   <span className="text-slate-700 flex items-center gap-1.5 mt-0.5 font-bold">
-                     <History className="w-3 h-3 text-slate-400" /> {viewingArticle.updatedAt?.toDate ? viewingArticle.updatedAt.toDate().toLocaleDateString() : 'Yesterday'}
-                   </span>
-                </div>
-
-                <div className="flex flex-col">
-                   <span className="text-[9px] uppercase tracking-wider text-slate-400">Review Due</span>
-                   <span className="text-amber-600 flex items-center gap-1.5 mt-0.5 font-bold">
-                     <ClockIcon className="w-3 h-3 text-amber-500" /> {viewingArticle.reviewDueDate || '2026-11-01'}
-                   </span>
-                </div>
-              </div>
-
-               {/* Multi-lingual localization selections */}
-               <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3 mt-1.5">
-                  <span className="text-[10px] uppercase font-black text-slate-400 mr-2 flex items-center gap-1">
-                     <Languages className="w-3 h-3 text-indigo-500" /> Translate Article:
-                  </span>
-                  {['English', 'German', 'French', 'Spanish', 'Japanese'].map((lang, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => handleTranslateArticle(lang)}
-                      className={cn(
-                        "px-2.5 py-1 text-[11px] font-bold rounded-lg border transition-all",
-                        activeReadingLanguage === lang
-                          ? "bg-indigo-600 text-white border-indigo-650"
-                          : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                      )}
-                    >
-                      {lang}
-                    </button>
-                  ))}
-                  {isTranslating && (
-                    <span className="text-[10px] text-slate-400 animate-pulse ml-2 font-semibold">Regen translation...</span>
-                  )}
-               </div>
-
-            </div>
-
-            {/* Dual-column article body + trust sidebar (fluid flex, not height-clamped grid) */}
-            <div className="px-4 sm:px-6 md:px-8 py-6 w-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-6 pb-10">
-              
-              {/* Left Column: Read Canvas & Helpful Feed */}
-              <div className="flex-1 min-w-0 space-y-8">
-                <div className="prose prose-indigo max-w-none prose-h2:text-lg prose-h2:font-black prose-p:text-slate-600 prose-p:leading-relaxed text-sm bg-white p-6 rounded-2xl border border-slate-100">
-                  <div dangerouslySetInnerHTML={{ __html: getLocalizedContent(viewingArticle, activeReadingLanguage) }} />
-                </div>
-
-                {/* Was This Helpful Interactive Feed */}
-                <div className="p-6 bg-slate-50 border border-slate-200 rounded-2xl flex flex-col sm:flex-row items-center justify-between gap-4">
-                   <div>
-                     <h4 className="text-xs font-black text-slate-800 uppercase">Was this technical documentation helpful?</h4>
-                     <p className="text-[11px] text-slate-400 font-semibold mt-0.5">Your responses directly compute real-time confidence scores and update models.</p>
-                   </div>
-                   <div className="flex gap-2 shrink-0">
-                      <Button 
-                        variant="outline" 
-                        className="bg-white hover:bg-emerald-50 hover:text-emerald-700 h-9 rounded-xl font-bold text-xs gap-1.5 border-slate-200"
-                        onClick={async () => {
-                          const updatedHelpful = (viewingArticle.helpfulCount || 0) + 1;
-                          await kbService.updateArticle(viewingArticle.id, {
-                            helpfulCount: updatedHelpful
-                          });
-                          
-                          try {
-                            const trust = await trustScoreService.getTrustScore(viewingArticle.id, viewingArticle);
-                            const updatedInputs = {
-                              ...trust.inputs,
-                              helpfulCount: updatedHelpful
-                            };
-                            await trustScoreService.updateTrustScore(viewingArticle.id, updatedInputs, trust.score, trust.history);
-                          } catch (e) {
-                            console.warn("Could not save trust score logs:", e);
-                          }
-
-                          setArticles(prev => prev.map(a => a.id === viewingArticle.id ? { ...a, helpfulCount: updatedHelpful } : a));
-                          toast.success("Thank you! Positive rating logged. Article Freshness metric computed.");
-                        }}
-                      >
-                         <ThumbsUp className="w-3.5 h-3.5 text-emerald-500" />
-                         <span>Yes ({viewingArticle.helpfulCount || 0})</span>
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        className="bg-white hover:bg-rose-50 hover:text-rose-700 h-9 rounded-xl font-bold text-xs gap-1.5 border-slate-200"
-                        onClick={async () => {
-                          const updatedUnhelpful = (viewingArticle.unhelpfulCount || 0) + 1;
-                          await kbService.updateArticle(viewingArticle.id, {
-                            unhelpfulCount: updatedUnhelpful
-                          });
-
-                          try {
-                            const trust = await trustScoreService.getTrustScore(viewingArticle.id, viewingArticle);
-                            const updatedInputs = {
-                              ...trust.inputs,
-                              unhelpfulCount: updatedUnhelpful
-                            };
-                            await trustScoreService.updateTrustScore(viewingArticle.id, updatedInputs, trust.score, trust.history);
-                          } catch (e) {
-                            console.warn("Could not save trust score logs:", e);
-                          }
-
-                          setArticles(prev => prev.map(a => a.id === viewingArticle.id ? { ...a, unhelpfulCount: updatedUnhelpful } : a));
-                          toast.success("Negative feedback annotated. Confidence metrics adjusted.");
-                        }}
-                      >
-                         <ThumbsDown className="w-3.5 h-3.5 text-rose-500 rotate-180" />
-                         <span>No ({viewingArticle.unhelpfulCount || 0})</span>
-                      </Button>
-                   </div>
-                </div>
-              </div>
-
-              {/* Right Column: Real-time Trust Score Dashboard panel */}
-              <aside className="w-full lg:w-[380px] lg:shrink-0 space-y-6">
-                <KBArticleTrustPanel 
-                  article={viewingArticle} 
-                  onScoreUpdated={(newScore) => {
-                    setArticles(prev => prev.map(a => a.id === viewingArticle.id ? { ...a, trustScore: newScore } : a));
-                    setViewingArticle(prev => prev ? { ...prev, trustScore: newScore } : null);
-                  }}
-                />
-              </aside>
-
-            </div>
-          </div>
-        </ScrollArea>
-      </div>
+      <KBArticleDetailView
+        article={viewingArticle}
+        title={getLocalizedTitle(viewingArticle, activeReadingLanguage)}
+        htmlContent={getLocalizedContent(viewingArticle, activeReadingLanguage)}
+        activeReadingLanguage={activeReadingLanguage}
+        onBack={() => {
+          setViewingArticle(null);
+          setActiveReadingLanguage('English');
+        }}
+        onEdit={() => handleEditArticle(viewingArticle)}
+        onCopyLink={() => handleCopyUrl(viewingArticle.title)}
+        onTranslate={() => handleTranslateArticle(activeReadingLanguage)}
+        onHelpful={handleHelpful}
+        onUnhelpful={handleUnhelpful}
+        onTrustScoreUpdated={(newScore) => {
+          setArticles((prev) => prev.map((a) => (a.id === viewingArticle.id ? { ...a, trustScore: newScore } : a)));
+          setViewingArticle((prev) => (prev ? { ...prev, trustScore: newScore } : null));
+        }}
+      />
     );
   };
 
@@ -2012,6 +1844,7 @@ export default function KBPage() {
               active={kbNav}
               onNavigate={handleKbNavigate}
               counts={sidebarCounts}
+              healthScore={healthScore}
             />
             {isAddingArticle ? (
               <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#F8F9FB] overflow-hidden">
