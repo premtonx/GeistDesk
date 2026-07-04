@@ -605,6 +605,11 @@ export default function KBPage() {
       document.body.style.width = '';
     };
   }, []);
+
+  const closeArticleDraft = useCallback(() => {
+    setIsAddingArticle(false);
+    setEditingArticleId(null);
+  }, []);
   
   const handleSelectArticleByTitle = (title: string) => {
     const matched = articles.find(a => a.title.toLowerCase() === title.toLowerCase());
@@ -631,10 +636,11 @@ export default function KBPage() {
   const [tagInput, setTagInput] = useState('');
 
   useEffect(() => {
+    closeArticleDraft();
     setSelectedCategory('All');
     setActiveSubTab('All');
     setKbNav({ type: 'workspace', id: 'overview' });
-  }, [workspace]);
+  }, [workspace, closeArticleDraft]);
 
   // Default internal structures
   const [categories, setCategories] = useState<KBCategoryRecord[]>([
@@ -938,11 +944,6 @@ export default function KBPage() {
     }
   };
 
-  const closeArticleDraft = useCallback(() => {
-    setIsAddingArticle(false);
-    setEditingArticleId(null);
-  }, []);
-
   const handleEditArticle = (article: any) => {
     setEditingArticleId(article.id);
     setNewArticle({
@@ -1186,6 +1187,7 @@ export default function KBPage() {
   }, [workspaceArticles, draftCount, needsReviewCount, missingTagsCount, outdatedCount]);
 
   const handleKbNavigate = (filter: KBNavFilter) => {
+    closeArticleDraft();
     setKbNav(filter);
     if (filter.type === 'category') {
       setSelectedCategory(filter.id);
@@ -1199,6 +1201,7 @@ export default function KBPage() {
   };
 
   const resetFilters = () => {
+    closeArticleDraft();
     setFilterOwner('All');
     setFilterVisibility('All');
     setFilterTag('All');
@@ -1771,16 +1774,15 @@ export default function KBPage() {
      return art.content;
   };
 
-  return (
-    <div className="flex flex-col flex-1 min-h-0 w-full bg-[#FAFBFC] overflow-hidden text-slate-800 font-sans">
+  const renderArticleDetailView = () => {
+    if (!viewingArticle) return null;
 
-
-        {viewMode === 'coverage' ? (
-          renderCoverageDashboard()
-        ) : viewingArticle ? (
-          <div className="flex-1 min-h-0 overflow-y-auto bg-white animate-in fade-in duration-250 custom-scrollbar">
+    return (
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-white overflow-hidden animate-in fade-in duration-250">
+        <ScrollArea className="flex-1 min-h-0 custom-scrollbar">
+          <div className="min-h-full">
             {/* Header / Breadcrumb navigation */}
-            <div className="px-8 pt-8 pb-4 border-b border-slate-100 space-y-4">
+            <div className="px-4 sm:px-6 md:px-8 pt-6 md:pt-8 pb-4 border-b border-slate-100 space-y-4">
               <div className="flex items-center justify-between">
                 <button 
                   onClick={() => {
@@ -1907,7 +1909,7 @@ export default function KBPage() {
             </div>
 
             {/* Dual-column article body + trust sidebar (fluid flex, not height-clamped grid) */}
-            <div className="px-8 py-6 w-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-6 pb-10">
+            <div className="px-4 sm:px-6 md:px-8 py-6 w-full max-w-7xl mx-auto flex flex-col lg:flex-row gap-6 pb-10">
               
               {/* Left Column: Read Canvas & Helpful Feed */}
               <div className="flex-1 min-w-0 space-y-8">
@@ -1942,7 +1944,6 @@ export default function KBPage() {
                             console.warn("Could not save trust score logs:", e);
                           }
 
-                          // Trigger local state updates
                           setArticles(prev => prev.map(a => a.id === viewingArticle.id ? { ...a, helpfulCount: updatedHelpful } : a));
                           toast.success("Thank you! Positive rating logged. Article Freshness metric computed.");
                         }}
@@ -1970,7 +1971,6 @@ export default function KBPage() {
                             console.warn("Could not save trust score logs:", e);
                           }
 
-                          // Trigger local state updates
                           setArticles(prev => prev.map(a => a.id === viewingArticle.id ? { ...a, unhelpfulCount: updatedUnhelpful } : a));
                           toast.success("Negative feedback annotated. Confidence metrics adjusted.");
                         }}
@@ -1987,7 +1987,6 @@ export default function KBPage() {
                 <KBArticleTrustPanel 
                   article={viewingArticle} 
                   onScoreUpdated={(newScore) => {
-                    // Update trust score in local state arrays
                     setArticles(prev => prev.map(a => a.id === viewingArticle.id ? { ...a, trustScore: newScore } : a));
                     setViewingArticle(prev => prev ? { ...prev, trustScore: newScore } : null);
                   }}
@@ -1996,6 +1995,17 @@ export default function KBPage() {
 
             </div>
           </div>
+        </ScrollArea>
+      </div>
+    );
+  };
+
+  return (
+    <div className="flex flex-col flex-1 min-h-0 w-full bg-[#FAFBFC] overflow-hidden text-slate-800 font-sans">
+
+
+        {viewMode === 'coverage' ? (
+          renderCoverageDashboard()
         ) : (
           <div className="flex-1 flex min-h-0 overflow-hidden bg-[#F8F9FA]">
             <KBLeftSidebar
@@ -2029,13 +2039,15 @@ export default function KBPage() {
                   className="flex-1 min-h-0"
                 />
               </div>
+            ) : viewingArticle ? (
+              renderArticleDetailView()
             ) : (
             <ScrollArea className="flex-1 min-w-0">
               <div className="flex flex-col xl:flex-row gap-0 min-h-full">
                 <main className="flex-1 min-w-0 px-4 sm:px-6 py-6 space-y-6 pb-10">
                   <KBPageHeader
                     onImportDocs={() => setIsImportOpen(true)}
-                    onAiGenerate={() => setKbNav({ type: 'workspace', id: 'ai' })}
+                    onAiGenerate={() => handleKbNavigate({ type: 'workspace', id: 'ai' })}
                     onNewArticle={() => openCreateArticle()}
                     onNewCategory={() => setIsAddingCategory(true)}
                   />
@@ -2043,8 +2055,8 @@ export default function KBPage() {
                   {isAiAssistantMode ? (
                     <KBAutopilotDashboard
                       embedded
-                      onBackToKB={() => setKbNav({ type: 'workspace', id: 'overview' })}
-                      onArticlePublished={() => setKbNav({ type: 'workspace', id: 'overview' })}
+                      onBackToKB={() => handleKbNavigate({ type: 'workspace', id: 'overview' })}
+                      onArticlePublished={() => handleKbNavigate({ type: 'workspace', id: 'overview' })}
                     />
                   ) : (
                     <>
@@ -2178,10 +2190,7 @@ export default function KBPage() {
                       categoryRecords={categories}
                       articles={workspaceArticles}
                       selectedCategory={selectedCategory}
-                      onSelect={(name) => {
-                        setSelectedCategory(name);
-                        setKbNav({ type: 'category', id: name });
-                      }}
+                      onSelect={(name) => handleKbNavigate({ type: 'category', id: name })}
                       onRename={openRenameCategory}
                       onDelete={openDeleteCategory}
                     />
