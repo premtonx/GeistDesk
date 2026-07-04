@@ -214,6 +214,7 @@ Translate the following text to ${targetLanguage}:\n\n${text}`;
   async answerKnowledgeQuery(
     query: string,
     ragSnippets: { sourceTitle: string; source: string; text: string }[],
+    options?: { forceRefresh?: boolean; entityId?: string },
   ): Promise<string> {
     const contextBlock =
       ragSnippets.length > 0
@@ -233,8 +234,15 @@ ${contextBlock}
 
 Provide a concise, helpful answer in 2-4 short paragraphs or bullet points.`;
 
+    const cacheEntityId =
+      options?.entityId ??
+      `kb-search-${query.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 96)}`;
+
     try {
-      return await this.runLifecycleFeature("ticket_summarization", prompt);
+      return await this.runLifecycleFeature("ticket_summarization", prompt, {
+        metadata: { entityId: cacheEntityId, kbArticleId: cacheEntityId },
+        forceRefresh: options?.forceRefresh,
+      });
     } catch (error) {
       console.error("KB semantic search AI error:", error);
       throw error;

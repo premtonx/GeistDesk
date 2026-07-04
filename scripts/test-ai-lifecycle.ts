@@ -18,6 +18,10 @@ import {
   resetEphemeralTokenStores,
   scrubSensitiveData,
 } from '../src/lib/ai-data-anonymization.js';
+import {
+  persistAiResponseCache,
+  resetInMemoryAiCache,
+} from '../src/lib/ai-response-cache.js';
 
 let passed = 0;
 let failed = 0;
@@ -242,6 +246,96 @@ async function testLocalRouteSkipsReversibleScrub(): Promise<void> {
   );
 }
 
+async function testEntityCacheHitBypassesExecutor(): Promise<void> {
+  console.log('\n[13] Entity cache — CACHE_HIT bypasses LLM executor');
+  resetInMemoryAiCache();
+
+  let execCalls = 0;
+  const countingExecutor = async () => {
+    execCalls += 1;
+    return { output: 'should-not-run', confidence: 0.99, costUsd: 0.01 };
+  };
+
+  const ctx = {
+    feature: 'smart_reply' as const,
+    prompt: 'Draft a reply for ticket cache validation',
+    ticketId: 'ticket-cache-hit-1',
+  };
+
+  await persistAiResponseCache(
+    ctx,
+    {
+      output: '[cached] Prior smart reply payload for reload',
+      confidence: 0.93,
+      assignedModel: 'cached-model',
+      promptFingerprint: '',
+    },
+    { skipPersistence: true },
+  );
+
+  const result = await runAiRequestLifecycle(ctx, {
+    config: DEFAULT_ORCHESTRATOR_CONFIG,
+    skipPersistence: true,
+    skipApprovalGate: true,
+    executor: countingExecutor,
+  });
+
+  assert(result.status === 'completed', 'cache hit completes');
+  assert(result.fromCache === true, 'result flagged fromCache');
+  assert(execCalls === 0, 'executor not invoked on CACHE_HIT');
+  assert(
+    result.steps.some((s) => s.step === 'cache_lookup' && s.detail?.includes('CACHE_HIT')),
+    'cache_lookup records CACHE_HIT',
+  );
+  assert(result.explainability?.policiesChecked.includes('cache_hit'), 'explainability logs cache_hit');
+}
+
+async function testForceRefreshBypassesCache(): Promise<void> {
+  console.log('\n[14] Entity cache — forceRefresh bypasses CACHE_HIT');
+  resetInMemoryAiCache();
+
+  let execCalls = 0;
+  const countingExecutor = async ({ prompt }: { prompt: string }) => {
+    execCalls += 1;
+    return { output: `[fresh] ${prompt.slice(0, 40)}`, confidence: 0.95, costUsd: 0.002 };
+  };
+
+  const ctx = {
+    feature: 'smart_reply' as const,
+    prompt: 'Regenerate smart reply after ticket update',
+    ticketId: 'ticket-force-refresh-1',
+  };
+
+  await persistAiResponseCache(
+    ctx,
+    {
+      output: '[cached] stale payload',
+      confidence: 0.9,
+      assignedModel: 'cached-model',
+      promptFingerprint: '',
+    },
+    { skipPersistence: true },
+  );
+
+  const result = await runAiRequestLifecycle(
+    { ...ctx, forceRefresh: true },
+    {
+      config: DEFAULT_ORCHESTRATOR_CONFIG,
+      skipPersistence: true,
+      skipApprovalGate: true,
+      executor: countingExecutor,
+    },
+  );
+
+  assert(result.status === 'completed', 'fresh execution completes');
+  assert(result.fromCache !== true, 'forceRefresh does not serve cache');
+  assert(execCalls === 1, 'executor invoked when forceRefresh=true');
+  assert(
+    result.steps.some((s) => s.step === 'cache_lookup' && s.detail?.includes('forceRefresh')),
+    'cache_lookup skipped due to forceRefresh',
+  );
+}
+
 async function main(): Promise<void> {
   console.log('AI Request Lifecycle — dry-run test suite');
   console.log('='.repeat(50));
@@ -258,6 +352,8 @@ async function main(): Promise<void> {
   await testScrubRehydrateUtilities();
   await testCloudLifecycleScrubAndRehydrate();
   await testLocalRouteSkipsReversibleScrub();
+  await testEntityCacheHitBypassesExecutor();
+  await testForceRefreshBypassesCache();
 
   console.log('\n' + '='.repeat(50));
   console.log(`Results: ${passed} passed, ${failed} failed`);

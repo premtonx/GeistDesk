@@ -104,7 +104,9 @@ export type AiDecisionEngineStep =
   | 'evaluate_budget_capacity'
   | 'assign_compliant_model'
   | 'approval_gate'
+  | 'cache_lookup'
   | 'execute'
+  | 'cache_persist'
   | 'confidence_threshold_check'
   | 'memory_policy'
   | 'file_audit_log';
@@ -134,6 +136,10 @@ export interface AiExecutionContext {
   /** Active UI locale of the operator initiating the request (de/en). */
   operatorLanguage?: AiOperatorLanguage;
   metadata?: Record<string, unknown>;
+  /** When true, bypass entity JSONB cache and force a fresh LLM execution. */
+  forceRefresh?: boolean;
+  /** Alias for forceRefresh — skips cache read before model execution. */
+  skipCache?: boolean;
 }
 
 export interface AiDecisionStepRecord {
@@ -168,6 +174,8 @@ export interface AiExecutionResult {
   explainability?: AiExplainabilityEntry;
   error?: string;
   redactedPrompt?: string;
+  /** True when output was served from entity JSONB cache (no LLM call). */
+  fromCache?: boolean;
 }
 
 export interface AiApprovalQueueEntry {
@@ -596,7 +604,9 @@ export const AI_DECISION_ENGINE_FLOW: Array<{ step: AiDecisionEngineStep; label:
   { step: 'evaluate_budget_capacity', label: 'Evaluate Budget Capacity' },
   { step: 'assign_compliant_model', label: 'Assign Compliant Model' },
   { step: 'approval_gate', label: 'Approval Workflow Gate' },
+  { step: 'cache_lookup', label: 'Entity JSONB Cache Lookup' },
   { step: 'execute', label: 'Execute' },
+  { step: 'cache_persist', label: 'Persist Cache Payload' },
   { step: 'confidence_threshold_check', label: 'Confidence Threshold Check' },
   { step: 'memory_policy', label: 'Memory & Explainability Policies' },
   { step: 'file_audit_log', label: 'File Audit Log' },

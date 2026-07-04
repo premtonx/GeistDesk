@@ -38,6 +38,12 @@ import {
   logAiUsage,
   saveExplainabilityLog,
 } from './ai-orchestrator-store.js';
+import {
+  fingerprintPrompt,
+  lookupAiResponseCache,
+  persistAiResponseCache,
+  shouldBypassAiCache,
+} from './ai-response-cache.js';
 
 export type AiModelExecutor = (input: {
   model: string;
@@ -383,7 +389,135 @@ export async function runAiRequestLifecycle(
 
     recordStep(steps, 'approval_gate', 'passed', gate === 'automatic' ? 'Automatic — no hold' : 'Pre-approved', t);
 
-    // 8. Execute — merge persona skills + operator locale into systemInstruction
+    // 8. Entity JSONB cache lookup — before LLM execution
+    t = Date.now();
+    const promptFingerprint = fingerprintPrompt(redactedPrompt);
+    const bypassCache = shouldBypassAiCache(ctx);
+
+    if (!bypassCache) {
+      const cached = await lookupAiResponseCache(ctx, promptFingerprint, options.skipPersistence);
+      if (cached?.output?.trim()) {
+        assignedModel = cached.assignedModel;
+        modelChoiceReason = 'CACHE_HIT — entity JSONB payload reused; LLM execution bypassed';
+        policiesChecked.push('cache_hit');
+        recordStep(steps, 'cache_lookup', 'passed', 'CACHE_HIT — served from entity JSONB cache', t);
+
+        const output = cached.output;
+        const confidence = cached.confidence;
+        const threshold = resolveConfidenceThreshold(config, ctx.feature);
+
+        if (confidence < threshold) {
+          let reviewPoolId: string | undefined;
+          if (!options.skipPersistence) {
+            reviewPoolId = await enqueueHumanReview({
+              workspaceId,
+              requestId,
+              feature: ctx.feature,
+              confidence,
+              threshold,
+              outputText: output,
+            });
+          }
+          recordStep(
+            steps,
+            'confidence_threshold_check',
+            'pending',
+            `Cached confidence ${(confidence * 100).toFixed(1)}% < threshold ${(threshold * 100).toFixed(1)}%`,
+            Date.now(),
+          );
+
+          const latencyMs = Date.now() - executionStarted;
+          const explainability = buildExplainabilityLog({
+            requestId,
+            feature: ctx.feature,
+            modelChosen: assignedModel,
+            modelChoiceReason,
+            policiesChecked,
+            costUsd: 0,
+            latencyMs,
+          });
+          if (!options.skipPersistence) {
+            await saveExplainabilityLog({ workspaceId, ...explainability });
+          }
+
+          return {
+            requestId,
+            status: 'pending_review',
+            feature: ctx.feature,
+            module,
+            output,
+            confidence,
+            assignedModel,
+            reviewPoolId,
+            steps,
+            explainability,
+            redactedPrompt,
+            fromCache: true,
+          };
+        }
+
+        recordStep(
+          steps,
+          'confidence_threshold_check',
+          'passed',
+          `Cached confidence ${(confidence * 100).toFixed(1)}% >= threshold ${(threshold * 100).toFixed(1)}%`,
+          Date.now(),
+        );
+
+        const memoryResult = applyMemoryPolicyBindings(config, ctx);
+        policiesChecked.push('memory_policy');
+        recordStep(
+          steps,
+          'memory_policy',
+          memoryResult.storeContext ? 'passed' : 'skipped',
+          memoryResult.detail,
+          Date.now(),
+        );
+
+        const latencyMs = Date.now() - executionStarted;
+        const explainability = buildExplainabilityLog({
+          requestId,
+          feature: ctx.feature,
+          modelChosen: assignedModel,
+          modelChoiceReason,
+          policiesChecked,
+          costUsd: 0,
+          latencyMs,
+        });
+
+        if (!options.skipPersistence) {
+          await saveExplainabilityLog({ workspaceId, ...explainability });
+        }
+
+        recordStep(steps, 'file_audit_log', 'passed', `${explainability.logLine} CACHE_HIT`, Date.now());
+
+        return {
+          requestId,
+          status: 'completed',
+          feature: ctx.feature,
+          module,
+          output,
+          confidence,
+          assignedModel,
+          steps,
+          explainability,
+          redactedPrompt,
+          fromCache: true,
+        };
+      }
+
+      recordStep(steps, 'cache_lookup', 'skipped', 'No cached payload for entity/feature', t);
+    } else {
+      recordStep(
+        steps,
+        'cache_lookup',
+        'skipped',
+        bypassCache ? 'forceRefresh/skipCache — cache bypassed' : 'cache bypassed',
+        t,
+      );
+    }
+
+    // 9. Execute — merge persona skills + operator locale into systemInstruction
     t = Date.now();
     const personaId = resolvePersonaForFeature(config, ctx.feature);
     const systemInstruction = buildLifecycleSystemInstruction(config, ctx.feature, ctx.operatorLanguage);
@@ -435,6 +569,31 @@ export async function runAiRequestLifecycle(
           success: true,
         });
       }
+
+      const vipNoPersist =
+        ctx.customerScope === 'vip' && (config.memoryPolicy?.doNotRememberVipData ?? false);
+      await persistAiResponseCache(
+        ctx,
+        {
+          output,
+          confidence,
+          assignedModel,
+          promptFingerprint,
+        },
+        {
+          skipPersistence: options.skipPersistence,
+          skipWriteForVip: vipNoPersist,
+        },
+      );
+      recordStep(
+        steps,
+        'cache_persist',
+        vipNoPersist ? 'skipped' : 'passed',
+        vipNoPersist
+          ? 'VIP memory policy — cache write skipped'
+          : 'Entity JSONB aiPayloadCache updated',
+        Date.now(),
+      );
     } catch (execErr: unknown) {
       const msg = execErr instanceof Error ? execErr.message : String(execErr);
       recordStep(steps, 'execute', 'blocked', msg, t);

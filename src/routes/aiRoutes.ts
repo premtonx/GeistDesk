@@ -61,6 +61,8 @@ router.post('/execute', authenticate, async (req: Request, res: Response) => {
       ticketClosed: req.body.ticketClosed === true,
       operatorLanguage: resolveOperatorLanguage(req),
       metadata: req.body.metadata,
+      forceRefresh: req.body.forceRefresh === true || req.body.skipCache === true,
+      skipCache: req.body.skipCache === true,
     };
 
     const result = await executeAiFeatureRequest(ctx);
@@ -97,6 +99,8 @@ router.post('/execute/resume', authenticate, async (req: Request, res: Response)
       ticketId: req.body.ticketId ? String(req.body.ticketId) : undefined,
       operatorLanguage: resolveOperatorLanguage(req),
       metadata: req.body.metadata,
+      forceRefresh: req.body.forceRefresh === true || req.body.skipCache === true,
+      skipCache: req.body.skipCache === true,
     };
 
     const result = await executeAiFeatureRequest(ctx, { approvalAlreadyGranted: true });
