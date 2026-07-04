@@ -78,6 +78,7 @@ import {
   parseRecipientEmails,
   type ExchangeCreateSecretFormState,
 } from '../exchange/exchange-create-secret-utils';
+import { buildDropzoneMetadata } from '../../lib/vault-dropzone-utils';
 import { copyExchangeLinkToClipboard } from '../exchange/exchange-actions';
 import { isExchangeExpiringSoon, matchesExchangeSearch } from '../exchange/exchange-filter-utils';
 import { resolveExchangeStatus } from '../exchange/exchange-status-utils';
@@ -122,6 +123,7 @@ export default function VaultPage() {
   const [dropzoneAssetId, setDropzoneAssetId] = useState('Firewall Gate-99');
   const [acceptedTypes, setAcceptedTypes] = useState<string[]>(['ZIP', 'LOG']);
   const [uploadLimit, setUploadLimit] = useState('2GB');
+  const [customUploadLimitMb, setCustomUploadLimitMb] = useState('');
   const [virusScan, setVirusScan] = useState(true);
   const [malwareScan, setMalwareScan] = useState(true);
   const [retentionPolicy, setRetentionPolicy] = useState('Auto destruct 48h');
@@ -174,6 +176,7 @@ export default function VaultPage() {
     setDropzoneAssetId('Firewall Gate-99');
     setAcceptedTypes(['ZIP', 'LOG']);
     setUploadLimit('2GB');
+    setCustomUploadLimitMb('');
     setVirusScan(true);
     setMalwareScan(true);
     setRetentionPolicy('Auto destruct 48h');
@@ -436,6 +439,10 @@ export default function VaultPage() {
       toast.error("Please enter a Request Name.");
       return;
     }
+    if (uploadLimit === 'Custom' && !customUploadLimitMb.trim()) {
+      toast.error(t('vault.customUploadLimitRequired', 'Enter a custom upload capacity in megabytes.'));
+      return;
+    }
 
     setIsGenerating(true);
     setGeneratedLink('');
@@ -443,25 +450,26 @@ export default function VaultPage() {
     try {
       const expiresAt = new Date();
       expiresAt.setHours(expiresAt.getHours() + 48); // default dropzone 48h duration
+      const dropzoneMetadata = buildDropzoneMetadata({
+        requestName,
+        requestDescription,
+        dropzoneTicketId,
+        dropzoneCompanyId,
+        dropzoneAssetId,
+        acceptedTypes,
+        uploadLimit,
+        customUploadLimitMb,
+        virusScan,
+        malwareScan,
+        retentionPolicy,
+      });
 
       const requestId = await vaultService.createItem({
         type: 'request',
         expirationType: 'time',
         expiresAt: expiresAt,
-        metadata: {
-          isQuantumSafe: true,
-          pqcLevel: 3,
-          requestName,
-          description: requestDescription,
-          relatedTicketId: dropzoneTicketId,
-          relatedCompanyId: dropzoneCompanyId,
-          relatedAssetId: dropzoneAssetId,
-          acceptedTypes,
-          uploadLimit,
-          virusScan,
-          malwareScan,
-          retentionPolicy
-        }
+        maxViews: 1000,
+        metadata: dropzoneMetadata,
       });
 
       const optimisticItem: VaultItem = {
@@ -469,24 +477,12 @@ export default function VaultPage() {
         type: 'request',
         expirationType: 'time',
         expiresAt: expiresAt.toISOString(),
+        maxViews: 1000,
         isBurned: false,
         createdBy: auth.currentUser?.uid ?? '',
         createdAt: new Date().toISOString(),
         viewCount: 0,
-        metadata: {
-          isQuantumSafe: true,
-          pqcLevel: 3,
-          requestName,
-          description: requestDescription,
-          relatedTicketId: dropzoneTicketId || undefined,
-          relatedCompanyId: dropzoneCompanyId || undefined,
-          relatedAssetId: dropzoneAssetId,
-          acceptedTypes,
-          uploadLimit,
-          virusScan,
-          malwareScan,
-          retentionPolicy,
-        },
+        metadata: dropzoneMetadata,
       };
       prependExchangeHistoryItem(optimisticItem);
       void refreshExchangeHistory();
@@ -1041,6 +1037,19 @@ export default function VaultPage() {
                             </button>
                           ))}
                         </div>
+                        {uploadLimit === 'Custom' ? (
+                          <div className="mt-3 flex items-center gap-2">
+                            <Input
+                              type="number"
+                              min={1}
+                              placeholder={t('vault.customUploadLimitPlaceholder', 'e.g. 750')}
+                              value={customUploadLimitMb}
+                              onChange={(e) => setCustomUploadLimitMb(e.target.value)}
+                              className="h-10 w-32 text-xs bg-white rounded-xl border-slate-200"
+                            />
+                            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">MB</span>
+                          </div>
+                        ) : null}
                       </div>
 
                       <div className="space-y-3">

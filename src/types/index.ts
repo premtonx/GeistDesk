@@ -326,6 +326,13 @@ export interface VaultItem {
     domainWhitelistEnabled?: boolean;
     allowedEmailDomains?: string[];
     mfaRequired?: boolean;
+    vaultKind?: 'dropzone_upload_bucket' | string;
+    allowedTypes?: string[];
+    maxSizeMb?: number;
+    antivirusScan?: boolean;
+    blockMaliciousHashes?: boolean;
+    lastUploadAt?: string;
+    uploadCount?: number;
   };
 }
 

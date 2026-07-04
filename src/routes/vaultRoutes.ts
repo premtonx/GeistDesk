@@ -22,6 +22,12 @@ import {
   isVaultReadCommit,
 } from "../lib/vaultRequestUtils.js";
 
+const DROPZONE_VAULT_KIND = "dropzone_upload_bucket";
+
+function isDropzoneItem(item: any): boolean {
+  return item?.type === "request" || item?.metadata?.vaultKind === DROPZONE_VAULT_KIND;
+}
+
 const router = Router();
 
 // Item metadata lives here (NEVER any secret material).
@@ -70,6 +76,7 @@ function isTimeExpired(item: any): boolean {
 }
 
 function isViewQuotaExhausted(item: any): boolean {
+  if (isDropzoneItem(item)) return false;
   const maxViews = getMaxViews(item);
   if (!Number.isFinite(maxViews)) return false;
   return getViewCount(item) >= maxViews;
@@ -277,9 +284,16 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
       createdAt: new Date().toISOString()
     });
     const secretRef = secretRecord.id;
-    const resolvedMaxViews =
-      expirationType === "read" ? 1 : Math.max(1, maxViews ?? metadata?.maxViews ?? 1);
+    const resolvedMaxViews = isDropzoneItem({ type, metadata })
+      ? 1000
+      : expirationType === "read"
+        ? 1
+        : Math.max(1, maxViews ?? metadata?.maxViews ?? 1);
     const resolvedExpiresAt = expiresAt || null;
+    const resolvedMetadata = {
+      ...(metadata || {}),
+      ...(type === "request" ? { vaultKind: metadata?.vaultKind || DROPZONE_VAULT_KIND } : {}),
+    };
 
     const itemRecord = await addDocDirect(VAULT_ITEMS, {
       type,
@@ -294,7 +308,7 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
       isBurned: false,
       createdBy: req.user.id,
       createdAt: new Date().toISOString(),
-      metadata: metadata || {}
+      metadata: resolvedMetadata
     });
 
     return res.status(201).json({ id: itemRecord.id });
@@ -350,7 +364,10 @@ async function handleSecretMetadata(req: Request, res: Response): Promise<any> {
       });
     }
 
-    return res.json(payload);
+    return res.json({
+      ...payload,
+      dropzone: isDropzoneItem(item),
+    });
   } catch (e: any) {
     return res.status(500).json({ error: "Failed to load vault item." });
   }
@@ -389,6 +406,14 @@ router.post("/secrets/:id/reveal", async (req: Request, res: Response): Promise<
         shares: [],
         content: null,
         metadata: item.metadata || {},
+        dropzone: isDropzoneItem(item),
+      });
+    }
+
+    if (isDropzoneItem(item)) {
+      return res.status(400).json({
+        error: "Dropzone links do not use the secret reveal endpoint. Upload files via the dropzone interface.",
+        dropzone: true,
       });
     }
 
@@ -426,6 +451,67 @@ router.post("/secrets/:id/reveal", async (req: Request, res: Response): Promise<
   } catch (e: any) {
     console.error("[Vault] Reveal failed:", e?.message || e);
     return res.status(500).json({ error: "Failed to reveal secret." });
+  }
+});
+
+/**
+ * POST /api/vault/secrets/:id/upload — public dropzone file intake.
+ * Encrypts uploaded content with AES-256-GCM into the separate secret store.
+ */
+router.post("/secrets/:id/upload", async (req: Request, res: Response): Promise<any> => {
+  const content = typeof req.body?.content === "string" ? req.body.content : null;
+  const fileName = typeof req.body?.fileName === "string" ? req.body.fileName.trim() : "";
+  const fileSizeBytes = typeof req.body?.fileSizeBytes === "number" ? req.body.fileSizeBytes : 0;
+
+  if (!content) return res.status(400).json({ error: "content is required" });
+  if (!fileName) return res.status(400).json({ error: "fileName is required" });
+
+  try {
+    const item = await getDocDirect(VAULT_ITEMS, req.params.id);
+    if (!item || !isDropzoneItem(item)) return res.status(404).json({ error: "Dropzone not found" });
+    if (resolveVaultBurned(item)) {
+      return res.status(410).json({ error: "This dropzone has expired or is no longer accepting uploads." });
+    }
+
+    const metadata = item.metadata || {};
+    const allowedTypes: string[] = metadata.allowedTypes || metadata.acceptedTypes || [];
+    const ext = fileName.split(".").pop()?.toUpperCase() ?? "";
+    if (allowedTypes.length > 0 && !allowedTypes.some((type: string) => type.toUpperCase() === ext)) {
+      return res.status(400).json({ error: `File type .${ext} is not allowed for this dropzone.` });
+    }
+
+    const maxSizeMb = Number(metadata.maxSizeMb) || 2048;
+    const maxBytes = maxSizeMb * 1024 * 1024;
+    if (fileSizeBytes > 0 && fileSizeBytes > maxBytes) {
+      return res.status(400).json({ error: `File exceeds the ${maxSizeMb} MB upload limit.` });
+    }
+    if (content.length > maxBytes * 1.4) {
+      return res.status(400).json({ error: `Payload exceeds the ${maxSizeMb} MB upload limit.` });
+    }
+
+    let secretRef = item.secretRef;
+    if (!secretRef) {
+      const rec = await addDocDirect(VAULT_SECRETS, { createdBy: item.createdBy, createdAt: new Date().toISOString() });
+      secretRef = rec.id;
+      await updateDocDirect(VAULT_ITEMS, item.id, { secretRef });
+    }
+
+    await updateDocDirect(VAULT_SECRETS, secretRef, { encryptedContent: encryptString(content) });
+    await updateDocDirect(VAULT_ITEMS, item.id, {
+      metadata: {
+        ...metadata,
+        filename: fileName,
+        size: fileSizeBytes || content.length,
+        lastUploadAt: new Date().toISOString(),
+        uploadCount: (metadata.uploadCount ?? 0) + 1,
+      },
+      viewCount: getViewCount(item) + 1,
+    });
+
+    return res.json({ success: true, fileName });
+  } catch (e: any) {
+    console.error("[Vault] Dropzone upload failed:", e?.message || e);
+    return res.status(500).json({ error: "Failed to store encrypted dropzone payload." });
   }
 });
 

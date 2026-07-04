@@ -13,6 +13,7 @@ import {
   Zap,
   ArrowRight,
   Upload,
+  FileUp,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -21,6 +22,12 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { combine } from 'shamir-secret-sharing';
 import { useTranslation } from '../../lib/context/I18nContext';
+import {
+  fileMatchesAllowedTypes,
+  formatUploadLimitLabel,
+  getAllowedFileExtensions,
+  isDropzoneVaultItem,
+} from '../../lib/vault-dropzone-utils';
 
 type ViewerLoadState = 'loading' | 'ready' | 'unavailable';
 
@@ -35,12 +42,17 @@ export default function SecretViewerPage() {
   const [passphrase, setPassphrase] = useState('');
   const [viewerEmail, setViewerEmail] = useState('');
   const [isRevealing, setIsRevealing] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadComplete, setUploadComplete] = useState(false);
   const hasRevealedRef = useRef(false);
   const revealInFlightRef = useRef(false);
+
+  const isDropzone = useMemo(() => isDropzoneVaultItem(item), [item]);
 
   const loadItem = useCallback(async (vaultId: string) => {
     setLoadState('loading');
     setViewed(false);
+    setUploadComplete(false);
     setReconstructedContent(null);
     hasRevealedRef.current = false;
 
@@ -53,6 +65,9 @@ export default function SecretViewerPage() {
 
     setItem(data);
     setLoadState('ready');
+    if (isDropzoneVaultItem(data)) {
+      setViewed(true);
+    }
   }, []);
 
   useEffect(() => {
@@ -67,8 +82,64 @@ export default function SecretViewerPage() {
     return Math.max(0, item.maxViews - used);
   }, [item]);
 
+  const allowedTypes = useMemo(() => getAllowedFileExtensions(item?.metadata), [item?.metadata]);
+
+  const uploadLimitLabel = useMemo(() => {
+    const limit = item?.metadata?.uploadLimit ?? '2GB';
+    const maxSizeMb = item?.metadata?.maxSizeMb;
+    if (maxSizeMb) return `${maxSizeMb >= 1024 ? `${maxSizeMb / 1024} GB` : `${maxSizeMb} MB`} Limit`;
+    return formatUploadLimitLabel(limit);
+  }, [item?.metadata]);
+
+  const handleDropzoneUpload = async (file: File) => {
+    if (!item || !isDropzone) return;
+
+    if (!fileMatchesAllowedTypes(file.name, allowedTypes)) {
+      toast.error(
+        t(
+          'exchange.createSecret.viewer.invalidFileType',
+          'This file type is not accepted by the dropzone policy.',
+        ),
+      );
+      return;
+    }
+
+    const maxSizeMb = item.metadata?.maxSizeMb ?? 2048;
+    if (file.size > maxSizeMb * 1024 * 1024) {
+      toast.error(
+        t('exchange.createSecret.viewer.fileTooLarge', 'File exceeds the dropzone upload capacity limit.'),
+      );
+      return;
+    }
+
+    setIsUploading(true);
+    try {
+      const content = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result ?? ''));
+        reader.onerror = () => reject(reader.error);
+        reader.readAsDataURL(file);
+      });
+
+      await vaultService.uploadDropzoneFile(item.id, {
+        content,
+        fileName: file.name,
+        fileSizeBytes: file.size,
+      });
+
+      setUploadComplete(true);
+      toast.success(t('exchange.createSecret.viewer.uploadSuccess', 'Payload delivered successfully.'));
+      void loadItem(item.id);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Upload failed.';
+      toast.error(message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   const handleReveal = async () => {
-    if (!item || item.isBurned || isRevealing || loadState !== 'ready') return;
+    if (!item || item.isBurned || isRevealing || loadState !== 'ready' || isDropzone) return;
     if (hasRevealedRef.current || revealInFlightRef.current) return;
 
     if (item.passphraseRequired && !passphrase.trim()) {
@@ -183,7 +254,9 @@ export default function SecretViewerPage() {
           <ShieldAlert className="w-10 h-10 text-slate-500" />
         </div>
         <h1 className="text-2xl font-bold text-slate-900 mb-2">
-          {t('exchange.createSecret.viewer.unavailable', 'Secret Expired or Not Found')}
+          {isDropzone
+            ? t('exchange.createSecret.viewer.dropzoneUnavailable', 'Dropzone Expired or Not Found')
+            : t('exchange.createSecret.viewer.unavailable', 'Secret Expired or Not Found')}
         </h1>
         <p className="text-slate-500 max-w-md mb-8">
           {t(
@@ -194,6 +267,94 @@ export default function SecretViewerPage() {
         <Badge variant="outline" className="bg-white border-slate-200 text-slate-600 px-4 py-1">
           {t('exchange.createSecret.viewer.unavailableCode', 'Code 404: Not Found')}
         </Badge>
+      </div>
+    );
+  }
+
+  if (isDropzone && item) {
+    return (
+      <div className="min-h-screen bg-[#F8F9FA] flex flex-col items-center justify-center p-4">
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="max-w-lg w-full bg-white rounded-[2.5rem] shadow-2xl border border-slate-100 p-8 text-center space-y-6"
+        >
+          <div className="flex justify-center">
+            <div className="w-16 h-16 bg-violet-50 rounded-3xl flex items-center justify-center text-violet-600">
+              <Upload className="w-8 h-8" />
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <h1 className="text-2xl font-bold text-slate-900">
+              {item.metadata?.requestName || t('exchange.createSecret.viewer.dropzoneActive', 'Secure Dropzone Active')}
+            </h1>
+            <p className="text-sm text-slate-500">
+              {item.metadata?.description ||
+                t(
+                  'exchange.createSecret.viewer.dropzoneActiveDesc',
+                  'Files uploaded here are encrypted with PQC-ECC before storage.',
+                )}
+            </p>
+          </div>
+
+          <div className="flex flex-wrap justify-center gap-2">
+            <Badge className="bg-violet-50 text-violet-700 border-violet-100">{uploadLimitLabel}</Badge>
+            {allowedTypes.length > 0 ? (
+              <Badge variant="outline" className="text-[10px]">
+                {allowedTypes.join(', ')}
+              </Badge>
+            ) : null}
+            {item.metadata?.antivirusScan ? (
+              <Badge variant="outline" className="text-[10px] text-emerald-700 border-emerald-100 bg-emerald-50">
+                {t('exchange.createSecret.viewer.antivirusEnabled', 'Antivirus scan')}
+              </Badge>
+            ) : null}
+          </div>
+
+          <div className="p-10 rounded-3xl bg-[#F3E8FF]/40 border-2 border-dashed border-violet-200 flex flex-col items-center justify-center gap-4">
+            <FileUp className="w-10 h-10 text-violet-600" />
+            <p className="text-sm font-bold text-slate-800">
+              {uploadComplete
+                ? t('exchange.createSecret.viewer.uploadDelivered', 'Secure payload delivered')
+                : t('exchange.createSecret.viewer.selectPayload', 'SELECT PAYLOAD')}
+            </p>
+            <Input
+              type="file"
+              className="max-w-xs text-xs"
+              disabled={isUploading}
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) void handleDropzoneUpload(file);
+                e.target.value = '';
+              }}
+            />
+            {isUploading ? (
+              <p className="text-xs text-violet-600 font-semibold animate-pulse">
+                {t('exchange.createSecret.viewer.uploading', 'Encrypting and transmitting payload...')}
+              </p>
+            ) : null}
+          </div>
+
+          <div className="pt-4 border-t border-slate-50 flex items-center justify-center gap-6">
+            <div className="flex items-center gap-1.5 grayscale opacity-50">
+              <ShieldCheck className="w-3 h-3 text-violet-600" />
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
+                {t('exchange.createSecret.viewer.pqcShield', 'PQC-ECC Shield')}
+              </span>
+            </div>
+            <div className="flex items-center gap-1.5 grayscale opacity-50">
+              <Clock className="w-3 h-3 text-violet-600" />
+              <span className="text-[9px] font-bold text-slate-500 uppercase tracking-tighter">
+                {t('exchange.createSecret.viewer.selfDestruct', 'Self Destruct')}
+              </span>
+            </div>
+          </div>
+        </motion.div>
+
+        <p className="mt-8 text-[10px] font-bold text-slate-400 uppercase tracking-[.2em]">
+          {t('exchange.createSecret.viewer.poweredBy', 'Powered by GeistDesk Phantom Vault')}
+        </p>
       </div>
     );
   }
@@ -255,9 +416,7 @@ export default function SecretViewerPage() {
               <div className="p-12 rounded-3xl bg-slate-50 border-2 border-dashed border-slate-200 flex flex-col items-center justify-center gap-4">
                 <Zap className="w-8 h-8 text-[#1A73E8] fill-current animate-pulse" />
                 <span className="text-sm font-bold text-[#1A73E8] uppercase tracking-widest">
-                  {item?.type === 'request'
-                    ? t('exchange.createSecret.viewer.openDropzone', 'Open Secure Dropzone')
-                    : t('exchange.createSecret.viewer.clickReveal', 'Click to Reveal')}
+                  {t('exchange.createSecret.viewer.clickReveal', 'Click to Reveal')}
                 </span>
               </div>
 
@@ -269,9 +428,7 @@ export default function SecretViewerPage() {
               >
                 {isRevealing
                   ? t('exchange.createSecret.viewer.decrypting', 'Decrypting Payload...')
-                  : item?.type === 'request'
-                    ? t('exchange.createSecret.viewer.enterDropzone', 'Enter Dropzone')
-                    : t('exchange.createSecret.viewer.revealSecret', 'Reveal Secret')}{' '}
+                  : t('exchange.createSecret.viewer.revealSecret', 'Reveal Secret')}{' '}
                 {!isRevealing ? <ArrowRight className="w-4 h-4 ml-2" /> : null}
               </Button>
             </motion.div>
@@ -282,96 +439,44 @@ export default function SecretViewerPage() {
               animate={{ opacity: 1, y: 0 }}
               className="space-y-6"
             >
-              {item?.type === 'request' && !reconstructedContent ? (
-                <div className="space-y-6">
-                  <div className="p-12 rounded-3xl bg-[#E8F0FE]/30 border-2 border-dashed border-[#1A73E8]/30 flex flex-col items-center justify-center gap-4 group hover:border-[#1A73E8] transition-colors">
-                    <div className="w-16 h-16 bg-white rounded-full shadow-sm flex items-center justify-center text-[#1A73E8]">
-                      <Upload className="w-8 h-8" />
-                    </div>
-                    <div className="text-center">
-                      <p className="text-sm font-bold text-slate-900">
-                        {t('exchange.createSecret.viewer.dropzoneActive', 'Secure Dropzone Active')}
-                      </p>
-                      <p className="text-xs text-slate-500 mt-1">
-                        {t(
-                          'exchange.createSecret.viewer.dropzoneActiveDesc',
-                          'Files uploaded here are encrypted with PQC-ECC before storage.',
-                        )}
-                      </p>
-                    </div>
-                    <Input
-                      type="file"
-                      className="hidden"
-                      id="dropzone-file"
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file && item) {
-                          const reader = new FileReader();
-                          reader.onload = async (event) => {
-                            const text = event.target?.result as string;
-                            await vaultService.updateItem(item.id, {
-                              content: `FILE: ${file.name}\nCONTENT: ${text.slice(0, 500)}...`,
-                              metadata: { ...item.metadata, filename: file.name },
-                            });
-                            toast.success(
-                              t('exchange.createSecret.viewer.uploadSuccess', 'Payload delivered successfully.'),
-                            );
-                            void loadItem(item.id);
-                          };
-                          reader.readAsText(file);
-                        }
-                      }}
-                    />
-                    <label
-                      htmlFor="dropzone-file"
-                      className="mt-2 px-6 py-3 bg-[#1A73E8] text-white rounded-xl text-xs font-bold cursor-pointer hover:bg-[#1765cc] transition-colors"
-                    >
-                      {t('exchange.createSecret.viewer.selectPayload', 'SELECT PAYLOAD')}
-                    </label>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  <div className="relative group">
-                    <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-3xl opacity-20 blur group-hover:opacity-40 transition-opacity" />
-                    <div className="relative p-6 bg-slate-50 rounded-3xl border border-slate-100 text-left">
-                      <p className="text-[10px] font-black uppercase tracking-widest text-[#1A73E8] mb-2">
-                        {item?.type === 'request'
-                          ? t('exchange.createSecret.viewer.uploadedPayload', 'Uploaded Payload')
-                          : t('exchange.createSecret.viewer.secretContent', 'Secret Content')}
-                      </p>
-                      <pre className="text-sm font-mono text-slate-900 whitespace-pre-wrap break-all">
-                        {reconstructedContent || t('exchange.createSecret.viewer.payloadBurned', 'Payload burned.')}
-                      </pre>
-                    </div>
-                  </div>
-
-                  <div className="flex gap-3">
-                    <Button
-                      variant="outline"
-                      className="flex-1 h-12 rounded-xl font-bold flex items-center justify-center gap-2"
-                      onClick={copyToClipboard}
-                    >
-                      {copying ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
-                      {copying
-                        ? t('exchange.createSecret.viewer.copiedShort', 'Copied')
-                        : t('exchange.createSecret.viewer.copyText', 'Copy Text')}
-                    </Button>
-                    <div className="h-12 px-4 rounded-xl bg-red-50 flex items-center justify-center text-red-600">
-                      <Trash2 className="w-4 h-4" />
-                    </div>
-                  </div>
-
-                  {item?.isBurned ? (
-                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
-                      {t(
-                        'exchange.createSecret.viewer.linkExpiredAfterView',
-                        'This link has been consumed. Refreshing this page will no longer show the secret.',
-                      )}
+              <div className="space-y-6">
+                <div className="relative group">
+                  <div className="absolute -inset-0.5 bg-gradient-to-r from-blue-500 to-indigo-500 rounded-3xl opacity-20 blur group-hover:opacity-40 transition-opacity" />
+                  <div className="relative p-6 bg-slate-50 rounded-3xl border border-slate-100 text-left">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-[#1A73E8] mb-2">
+                      {t('exchange.createSecret.viewer.secretContent', 'Secret Content')}
                     </p>
-                  ) : null}
+                    <pre className="text-sm font-mono text-slate-900 whitespace-pre-wrap break-all">
+                      {reconstructedContent || t('exchange.createSecret.viewer.payloadBurned', 'Payload burned.')}
+                    </pre>
+                  </div>
                 </div>
-              )}
+
+                <div className="flex gap-3">
+                  <Button
+                    variant="outline"
+                    className="flex-1 h-12 rounded-xl font-bold flex items-center justify-center gap-2"
+                    onClick={copyToClipboard}
+                  >
+                    {copying ? <Check className="w-4 h-4 text-emerald-500" /> : <Copy className="w-4 h-4" />}
+                    {copying
+                      ? t('exchange.createSecret.viewer.copiedShort', 'Copied')
+                      : t('exchange.createSecret.viewer.copyText', 'Copy Text')}
+                  </Button>
+                  <div className="h-12 px-4 rounded-xl bg-red-50 flex items-center justify-center text-red-600">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                </div>
+
+                {item?.isBurned ? (
+                  <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-3 py-2">
+                    {t(
+                      'exchange.createSecret.viewer.linkExpiredAfterView',
+                      'This link has been consumed. Refreshing this page will no longer show the secret.',
+                    )}
+                  </p>
+                ) : null}
+              </div>
             </motion.div>
           )}
         </AnimatePresence>

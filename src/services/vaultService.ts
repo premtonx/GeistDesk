@@ -172,7 +172,7 @@ export const vaultService = {
     }
   },
 
-  /** Upload encrypted content to a dropzone-style request item. */
+  /** Upload encrypted content to a dropzone-style request item (authenticated owner path). */
   updateItem: async (id: string, updates: Partial<VaultItem>) => {
     const res = await fetch(`/api/vault/secrets/${encodeURIComponent(id)}/content`, {
       method: 'POST',
@@ -181,6 +181,19 @@ export const vaultService = {
     });
     await parse(res);
     await logAudit({ module: 'vault', action: 'VAULT_ITEM_MODIFIED', severity: 'medium', details: { itemId: id } });
+  },
+
+  /** Public dropzone upload for inbound file receivers at /v/:id. */
+  uploadDropzoneFile: async (
+    id: string,
+    payload: { content: string; fileName: string; fileSizeBytes: number },
+  ): Promise<void> => {
+    const res = await fetch(`/api/vault/secrets/${encodeURIComponent(id)}/upload`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    await parse(res);
   },
 
   /** Subscribe to vault history via PostgreSQL-backed API polling. */

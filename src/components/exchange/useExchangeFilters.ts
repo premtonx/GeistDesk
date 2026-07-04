@@ -10,6 +10,7 @@ import {
 } from './exchange-filter-utils';
 import { buildExpiringSoonSeedItems, type ExchangeItemRowSeed } from './exchange-template-utils';
 import { normalizeExchangeItemRow } from './exchange-status-utils';
+import { formatUploadLimitLabel } from '../../lib/vault-dropzone-utils';
 
 export interface UseExchangeFiltersParams {
   history: VaultItem[];
@@ -52,6 +53,13 @@ function formatVaultHistoryItem(
     expiresAt: item.isBurned ? null : expiresAt,
     views: item.viewCount ?? (item.isBurned ? 1 : 0),
     type: item.type,
+    size: isReq
+      ? item.metadata?.maxSizeMb
+        ? item.metadata.maxSizeMb >= 1024
+          ? `${item.metadata.maxSizeMb / 1024} GB Limit`
+          : `${item.metadata.maxSizeMb} MB Limit`
+        : formatUploadLimitLabel(item.metadata?.uploadLimit ?? '2GB')
+      : undefined,
     createdAt: item.createdAt?.toDate ? item.createdAt.toDate() : new Date(),
   };
 

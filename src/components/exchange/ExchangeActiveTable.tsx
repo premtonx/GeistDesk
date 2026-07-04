@@ -128,6 +128,9 @@ export function ExchangeActiveTable({
                       <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1 truncate">
                         <Building2 className="w-3 h-3 shrink-0" /> {item.company}
                       </p>
+                      {item.type === 'request' && item.size ? (
+                        <p className="text-[10px] text-violet-600 font-semibold mt-0.5">{item.size}</p>
+                      ) : null}
                     </td>
                     <td className="px-5 py-3 text-slate-600 max-w-[160px] truncate">{item.recipient}</td>
                     <td className="px-5 py-3">
@@ -151,7 +154,7 @@ export function ExchangeActiveTable({
                       <span className="text-[10px] font-medium px-2 py-0.5 rounded-lg bg-slate-100 text-slate-600">
                         {item.type === 'secret'
                           ? t('exchange.policy.burnAfterRead', 'Burn after read')
-                          : t('exchange.policy.malwareScan', 'Malware scan + 48h')}
+                          : item.size || t('exchange.policy.malwareScan', 'Malware scan + 48h')}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right" onClick={(e) => e.stopPropagation()}>
