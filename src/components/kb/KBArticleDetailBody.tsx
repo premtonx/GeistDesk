@@ -1,7 +1,12 @@
-import { AlertTriangle, Info, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { lazy, Suspense } from 'react';
+import { AlertTriangle, Info, CheckCircle2, ShieldAlert, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { Textarea } from '../ui/textarea';
+import { useTranslation } from '../../lib/context/I18nContext';
 import { KB_ARTICLE_CONTENT_WRAP_CLASS, KB_DETAIL_PROSE_CLASS } from './kb-article-detail-utils';
+
+const RichTextEditor = lazy(() =>
+  import('../RichTextEditor').then((module) => ({ default: module.RichTextEditor })),
+);
 
 const CALLOUT_EXAMPLES = [
   {
@@ -72,22 +77,43 @@ export function KBArticleDetailBody({
   editedContent = '',
   onContentChange,
 }: KBArticleDetailBodyProps) {
+  const { t } = useTranslation();
+
   return (
     <div className={cn('flex-1 min-w-0 max-w-full space-y-6 overflow-x-hidden', KB_ARTICLE_CONTENT_WRAP_CLASS)}>
       {isEditing ? (
-        <div className="rounded-xl border-2 border-blue-200 bg-white p-4 shadow-sm min-w-0 max-w-full overflow-hidden">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 mb-2">
-            Editing article content (Markdown)
+        <div
+          className={cn(
+            'rounded-xl border-2 border-blue-200 bg-white p-4 shadow-sm min-w-0 max-w-full overflow-hidden',
+            KB_ARTICLE_CONTENT_WRAP_CLASS,
+          )}
+        >
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 mb-3">
+            {t('kb.editor.bodyLabel', 'Article documentation body')}
           </p>
-          <Textarea
-            value={editedContent}
-            onChange={(event) => onContentChange?.(event.target.value)}
-            className={cn(
-              'min-h-[420px] w-full max-w-full font-mono text-sm leading-relaxed border-slate-200 rounded-xl resize-y focus-visible:ring-blue-500',
-              KB_ARTICLE_CONTENT_WRAP_CLASS,
-            )}
-            placeholder="Enter article markdown content..."
-          />
+          <Suspense
+            fallback={
+              <div className="min-h-[320px] flex items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-sm text-slate-400 gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {t('dialog.loadingEditor', 'Loading editor...')}
+              </div>
+            }
+          >
+            <RichTextEditor
+              value={editedContent}
+              onChange={(content) => onContentChange?.(content)}
+              placeholder={t(
+                'dialog.descriptionPlaceholder',
+                'Add details, context, steps tried, expected outcome, etc.',
+              )}
+              className={cn(
+                'rounded-xl border-slate-200/80 shadow-none min-h-[320px] w-full max-w-full',
+                '[&_.ql-container]:min-h-[280px] [&_.ql-editor]:min-h-[280px]',
+                '[&_.ql-editor]:break-words [&_.ql-editor]:whitespace-pre-wrap',
+                '[&_.ql-editor]:[overflow-wrap:anywhere] [&_.ql-editor]:leading-relaxed',
+              )}
+            />
+          </Suspense>
         </div>
       ) : (
         <article

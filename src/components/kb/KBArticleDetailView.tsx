@@ -10,7 +10,7 @@ import { KBArticleDetailBody } from './KBArticleDetailBody';
 import { KBKnowledgeIntelligencePanel } from './KBKnowledgeIntelligencePanel';
 import { KBArticleToolbarPanels, type KBArticleToolbarPanel } from './KBArticleToolbarPanels';
 import { extractArticleHeadings, injectHeadingIds } from './kb-article-detail-utils';
-import { buildKbArticleDeepLink, toEditableMarkdown, toRenderableHtml } from './kb-content-format';
+import { buildKbArticleDeepLink, toEditableHtml, toRenderableHtml } from './kb-content-format';
 
 export interface KBArticleDetailViewProps {
   article: any;
@@ -74,7 +74,7 @@ export function KBArticleDetailView({
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === 'Escape' && isEditing) {
-        setEditedContent(toEditableMarkdown(viewSourceContent));
+        setEditedContent(toEditableHtml(viewSourceContent));
         setIsEditing(false);
       }
     };
@@ -84,7 +84,7 @@ export function KBArticleDetailView({
 
   const handleToggleEdit = () => {
     if (isEditing) return;
-    setEditedContent(toEditableMarkdown(viewSourceContent));
+    setEditedContent(toEditableHtml(viewSourceContent));
     setIsEditing(true);
   };
 

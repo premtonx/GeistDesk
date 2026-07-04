@@ -129,6 +129,11 @@ export function toRenderableHtml(content: string): string {
   return isHtmlContent(content) ? content : markdownToHtml(content);
 }
 
+/** HTML string loaded into the rich-text editor while editing. */
+export function toEditableHtml(content: string): string {
+  return toRenderableHtml(content);
+}
+
 export function buildKbArticleDeepLink(articleId: string): string {
   if (typeof window === 'undefined') return `/kb?article=${articleId}`;
   return `${window.location.origin}/kb?article=${encodeURIComponent(articleId)}`;
