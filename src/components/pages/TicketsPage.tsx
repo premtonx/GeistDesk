@@ -162,11 +162,6 @@ import { useAuth } from '../../lib/hooks';
 import { useSidebar } from '../../lib/context/SidebarContext';
 import {
   filterTicketsByWorkspace,
-  getLinkedBugTicket,
-  getLinkedSupportTickets,
-  getTicketKind,
-  isBugTicket,
-  devStatusLabelKey,
 } from '../../lib/ticketWorkspace';
 import {
   computeTicketQueueStats,
@@ -197,7 +192,6 @@ import { TimelineTabContent } from '../ticket-details/TimelineTabContent';
 import { AiInsightsTabContent } from '../ticket-details/AiInsightsTabContent';
 import { AssetsTabContent } from '../ticket-details/AssetsTabContent';
 import { RelatedTicketsTabContent } from '../ticket-details/RelatedTicketsTabContent';
-import { RelationalLinksCard } from '../ticket-details/RelationalLinksCard';
 import { TicketKindFieldsCard } from '../ticket-details/TicketKindFieldsCard';
 import { RedesignedSidebar } from '../ticket-details/RedesignedSidebar';
 import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
@@ -1335,30 +1329,6 @@ export default function TicketsPage() {
     }
   };
 
-  const linkToBug = async (bugId: string) => {
-    if (!selectedTicket) return;
-    const bug = allTickets.find((t) => t.id === bugId);
-    if (!bug || !isBugTicket(bug)) {
-      toast.error(t('tickets.relations.invalidBug', 'Select a valid bug ticket.'));
-      return;
-    }
-    try {
-      const supportLinks = selectedTicket.linkedTicketIds ?? [];
-      await ticketService.updateTicket(selectedTicket.id, {
-        linkedBugId: bugId,
-        linkedTicketIds: supportLinks.includes(bugId) ? supportLinks : [...supportLinks, bugId],
-      });
-      const bugLinks = bug.linkedTicketIds ?? [];
-      await ticketService.updateTicket(bugId, {
-        linkedTicketIds: bugLinks.includes(selectedTicket.id) ? bugLinks : [...bugLinks, selectedTicket.id],
-        devStatus: bug.devStatus ?? 'in_dev',
-      });
-      toast.success(t('tickets.relations.linkedSuccess', 'Support case linked to bug.'));
-    } catch {
-      toast.error(t('tickets.relations.linkFailed', 'Failed to link bug.'));
-    }
-  };
-
   const unlinkTicket = async (targetId: string) => {
     if (!selectedTicket) return;
     
@@ -2210,15 +2180,6 @@ export default function TicketsPage() {
                         )}
 
                         {/* 5. Bento Grid horizontal context cards at the end */}
-                        <RelationalLinksCard
-                          ticket={selectedTicket}
-                          allTickets={allTickets}
-                          onLinkToBug={linkToBug}
-                          onCreateBugLink={() => {
-                            openCreateTicket();
-                            toast.info(t('tickets.relations.createBugHint', 'Create a bug ticket, then link it here.'));
-                          }}
-                        />
                         <TicketKindFieldsCard
                           ticket={selectedTicket}
                           onUpdate={(data) => handleInlineUpdate(selectedTicket.id, data)}
@@ -4236,25 +4197,6 @@ export default function TicketsPage() {
                                     SLA
                                   </span>
                                 )}
-                                {(() => {
-                                  const kind = getTicketKind(ticket);
-                                  if (kind === 'support') {
-                                    const bug = getLinkedBugTicket(ticket, allTickets);
-                                    if (!bug) return null;
-                                    return (
-                                      <Badge variant="outline" className="text-[9px] h-4 px-1.5 font-semibold border-violet-200 bg-violet-50 text-violet-700 shrink-0">
-                                        {t(devStatusLabelKey(bug.devStatus), bug.devStatus ?? 'in_dev')}
-                                      </Badge>
-                                    );
-                                  }
-                                  const blocked = getLinkedSupportTickets(ticket, allTickets).length;
-                                  if (blocked === 0) return null;
-                                  return (
-                                    <Badge variant="outline" className="text-[9px] h-4 px-1.5 font-semibold border-amber-200 bg-amber-50 text-amber-800 shrink-0">
-                                      {t('tickets.relations.casesBlocked', '{{count}} cases').replace('{{count}}', String(blocked))}
-                                    </Badge>
-                                  );
-                                })()}
                                 {viewDensity === 'comfortable' && duplicatesCount > 0 && (
                                   <Badge variant="outline" className="text-[8px] font-semibold bg-blue-50/50 border-blue-100 text-blue-700 h-4 flex items-center gap-0.5 shrink-0">
                                     <Link2 className="w-2.5 h-2.5" />
@@ -4586,11 +4528,6 @@ export default function TicketsPage() {
               onOpenFullView={() => {
                 if (!drawerTicketId) return;
                 openFullTicketView(drawerTicketId);
-              }}
-              onLinkToBug={linkToBug}
-              onCreateBugLink={() => {
-                openCreateTicket();
-                toast.info(t('tickets.relations.createBugHint', 'Create a bug ticket, then link it here.'));
               }}
             />
           </div>

@@ -211,7 +211,6 @@ export interface Ticket {
   environment?: string;
   stepsToReproduce?: string;
   devStatus?: 'backlog' | 'in_dev' | 'qa' | 'merged';
-  linkedBugId?: string | null;
   resolvedAt?: any;
   closedAt?: any;
   linkedTicketIds?: string[];

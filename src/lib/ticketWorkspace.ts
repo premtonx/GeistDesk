@@ -44,34 +44,3 @@ function matchStatusNot(status: string | undefined, target: string): boolean {
   if (!status) return true;
   return status.toLowerCase().trim() !== target.toLowerCase().trim();
 }
-
-export function getLinkedBugTicket(ticket: Ticket, allTickets: Ticket[]): Ticket | undefined {
-  const bugId =
-    ticket.linkedBugId ??
-    ticket.linkedTicketIds?.find((id) => {
-      const linked = allTickets.find((t) => t.id === id);
-      return linked && isBugTicket(linked);
-    });
-  return bugId ? allTickets.find((t) => t.id === bugId) : undefined;
-}
-
-export function getLinkedSupportTickets(ticket: Ticket, allTickets: Ticket[]): Ticket[] {
-  const ids = new Set<string>([
-    ...(ticket.linkedTicketIds ?? []),
-    ...allTickets.filter((t) => t.linkedBugId === ticket.id || t.masterTicketId === ticket.id).map((t) => t.id),
-  ]);
-  return allTickets.filter((t) => ids.has(t.id) && isSupportTicket(t) && t.id !== ticket.id);
-}
-
-export function devStatusLabelKey(status?: DevStatus | string): string {
-  switch (status) {
-    case 'in_dev':
-      return 'tickets.devStatus.inDev';
-    case 'qa':
-      return 'tickets.devStatus.qa';
-    case 'merged':
-      return 'tickets.devStatus.merged';
-    default:
-      return 'tickets.devStatus.backlog';
-  }
-}

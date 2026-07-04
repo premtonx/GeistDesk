@@ -1,5 +1,5 @@
 import { Ticket } from '../types';
-import { getLinkedSupportTickets, isBugTicket } from './ticketWorkspace';
+import { isBugTicket } from './ticketWorkspace';
 import {
   type CustomTicketView,
   customViewId,
@@ -312,9 +312,7 @@ export function filterTicketsByView(
           matchStatusNot(t.status, 'spam'),
       );
     case 'linked_bugs':
-      return tickets.filter(
-        (t) => isBugTicket(t) && getLinkedSupportTickets(t, allTickets).length > 0,
-      );
+      return [];
     case 'bug_backlog':
       return tickets.filter((t) => isBugTicket(t) && (!t.devStatus || t.devStatus === 'backlog'));
     case 'incidents':

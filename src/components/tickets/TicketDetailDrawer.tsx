@@ -6,8 +6,6 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Ticket as TicketType, KBArticle } from '../../types';
-import { RelationalLinksCard } from '../ticket-details/RelationalLinksCard';
-import { getTicketKind } from '../../lib/ticketWorkspace';
 
 interface TicketDetailDrawerProps {
   ticket: TicketType | null;
@@ -15,8 +13,6 @@ interface TicketDetailDrawerProps {
   kbArticles: KBArticle[];
   onClose: () => void;
   onOpenFullView: () => void;
-  onLinkToBug: (bugId: string) => void;
-  onCreateBugLink: () => void;
 }
 
 function formatSlaLabel(ticket: TicketType, t: (key: string, fallback: string) => string): string {
@@ -37,8 +33,6 @@ export function TicketDetailDrawer({
   kbArticles,
   onClose,
   onOpenFullView,
-  onLinkToBug,
-  onCreateBugLink,
 }: TicketDetailDrawerProps) {
   const { t } = useTranslation();
 
@@ -59,8 +53,6 @@ export function TicketDetailDrawer({
       .filter((a) => a.title.toLowerCase().split(' ').some((w) => query.includes(w)))
       .slice(0, 3);
   }, [ticket, kbArticles]);
-
-  const kind = ticket ? getTicketKind(ticket) : 'support';
 
   return (
     <AnimatePresence>
@@ -178,15 +170,6 @@ export function TicketDetailDrawer({
                   </div>
                 </div>
               </section>
-
-              {kind === 'support' && (
-                <RelationalLinksCard
-                  ticket={ticket}
-                  allTickets={allTickets}
-                  onLinkToBug={onLinkToBug}
-                  onCreateBugLink={onCreateBugLink}
-                />
-              )}
 
               {ticket.description && (
                 <section className="rounded-xl border border-slate-200/80 p-4">
