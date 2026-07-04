@@ -4,7 +4,7 @@
 > **Repository:** GeistDesk Sovereign AI Orchestrator  
 > **Generated from:** Full codebase audit (routes, components, types, stores, middleware, PostgreSQL schema)  
 > **UI grounding:** Live screenshot text mappings (DE/EN) cross-referenced against implementation  
-> **Last audited:** 2026-06-27  
+> **Last audited:** 2026-07-04  
 
 ---
 
@@ -267,13 +267,22 @@ Rendered inside zone `cockpit` + `AiOperationsCommandCenter sections={['governan
 
 #### Deep AI Incident Workspace (ticket drawer)
 
-| Feature | UI block | Components / services |
-|---------|----------|----------------------|
-| **KEY TAKEAWAYS** | AI summary | `AiInsightsTabContent`, lifecycle `ticket_summarization` |
-| **DIAGNOSTIC ROOT CAUSE** | Root cause block | `root_cause_analysis` feature |
-| **ACTION PLAN CHECKLIST** | Dynamic checkboxes | AI output parsing in ticket detail tabs |
-| **LIVE SENTIMENT & PRIORITY** | ANGRY → P1 SOFORT | `sentiment_analysis`, `escalation_analysis` |
-| **KI-COPILOT SMARTHUB** | Sidebar actions | `SmartContextPanel`, `AIAdapter.generateDraft` |
+**Screenshot grounding:** `image_a00a32.jpg` (conversation tab — AI Orchestrator Deep-Dive Summary card) · `image_a00b22.png` (right dispatch sidebar — KI-Copilot SmartHub)
+
+| UI field (DE / EN) | Visible metric (screenshot) | Technical property | Component / lifecycle | Cache / persistence |
+|--------------------|----------------------------|--------------------|------------------------|---------------------|
+| **AI Orchestrator Deep-Dive Summary** / *Verifizierte Fakten* | Gradient summary card header with verified-facts badge | `ticket.aiSummary` (paragraph); full JSON payload in `ticket.aiPayloadCache.ticket_summarization.output` | `AiSummaryCard.tsx` · lifecycle feature `ticket_summarization` via `executeTicketDeepDiveAnalysis()` → `POST /api/ai/execute` | `geistdesk_documents.aiPayloadCache['ticket_summarization']` + legacy `aiSummary` JSONB field (`ai-response-cache.ts`) |
+| **KEY TAKEAWAYS** / *Wichtigste Erkenntnisse* | Numbered bullet cards (e.g. Entra handshake delay, billing offline, token validation) | `ticket.aiInsights: string[]` — each array element renders as one takeaway row | `AiSummaryCard.tsx` (`findings` list) · parsed by `parseTicketAnalysisOutput()` in `ticket-ai-analysis.ts` | Written by `ticketAnalysisPatch()` on lifecycle success; hydrated on page reload from JSONB |
+| **DIAGNOSTIC ROOT CAUSE** / *Diagnostizierte Fehlerursache* | Italic quoted diagnosis block with indigo left border | `ticket.aiRootCause: string` | `AiSummaryCard.tsx` (root-cause quote panel) · lifecycle `root_cause_analysis` feature (workflow graph) sources the model prompt; persisted field is `aiRootCause` | `geistdesk_documents.aiRootCause` JSONB column |
+| **ACTION PLAN CHECKLIST** / *Aktionsplan-Checkliste* | Up to 3 interactive checkboxes with strikethrough on complete | `ticket.aiChecklist: { task: string; completed: boolean }[]` | `AiSummaryCard.tsx` (`handleToggleChecklist`) · `TicketsPage.tsx` tasks tab · `ticketService.updateTicket({ aiChecklist })` | Per-item `completed` state persisted immediately to ticket JSONB |
+| **LIVE SENTIMENT** / *Live-Stimmung* | Emoji + uppercase label (e.g. **ANGRY** / **VERÄRGERT**) | `ticket.aiSentiment: string` (primary); fallback `ticket.sentiment` | `AiSummaryCard.tsx` live-sentiment card · lifecycle feature `sentiment_analysis` (auto gate in workflow routing) | `geistdesk_documents.aiSentiment` · triage path also sets via `processAiTriage()` |
+| **PRIORITY SUGGESTION** / *Prioritätsvorschlag* | Escalation chip (e.g. **P1 — SOFORT BEHANDELN**, **P2 — HOHE PRIORITÄT**, *Within SLA hours*) | `ticket.priority: 'urgent' \| 'high' \| …` mapped to P1/P2 i18n keys; model recommendation from lifecycle feature `escalation_analysis` | `AiSummaryCard.tsx` (`p1Immediate` / `p2High` locale keys) · `AiWorkflowRoutingTimeline` SLA-risk step · `escalation_analysis` in `AI_DECISION_ENGINE_FLOW` | Priority persisted on `ticket.priority`; escalation output cached under `aiPayloadCache['escalation_analysis']` when invoked |
+| **Full Analysis** / *Vollständige Analyse* · **AI Sync** | Toolbar regenerate controls (sparkle + sync toast) | `forceRefresh: true` / `skipCache: true` on `AiExecutionContext` | `TicketsPage.updateSummary(true)` → `executeTicketDeepDiveAnalysis()` with `ticketId` | Bypasses cache lookup (Step 8), overwrites `aiPayloadCache` on fresh LLM run |
+| **KI-COPILOT SMARTHUB** / *KI-Copilot SmartHub* | Collapsible indigo sidebar hub (dispatch desk properties) | Section id `copilot` in `RedesignedSidebar.tsx` | `RedesignedSidebar.tsx` · locale `tickets.sidebar.aiCopilotHub` | — |
+| **Vorgeschlagene KI-Strategie** / *Suggested AI strategy* | Italic strategy quote (e.g. Entra parity + polite security-review draft) | `ticket.aiReasoningPath: string` (triage reasoning); draft body in `ticket.aiSuggestedDraft: string` | `RedesignedSidebar.tsx` strategy block · `processAiTriage()` / `AIAdapter.generateDraft()` (`smart_reply`) | `aiReasoningPath`, `aiSuggestedDraft` JSONB on ticket; `aiPayloadCache['smart_reply']` |
+| **Antwort entwerfen** / *Draft reply* (one-click) | Primary copilot action button | Invokes `generateAiReply()` → `AIAdapter.generateDraft()` → lifecycle `smart_reply` | `RedesignedSidebar.onDraftWithAI` · `TicketsPage.generateAiReply` · populates composer via `replyText` + `aiSources` | Cached output → `aiSuggestedDraft`; RAG sources → in-memory `aiSources[]` state |
+| **KB-Extraktion** / *KB extraction* (one-click) | Secondary copilot action button | Invokes `handleConvertToKB()` → `AIAdapter.generateKBArticle()` → lifecycle `kb_generation` | `RedesignedSidebar.onConvertToKB` · `TicketsPage.handleConvertToKB` · `kbService.createArticle()` on save | Manager-approval gate on `kb_generation`; cache key via `metadata.entityId` / `metadata.kbArticleId` |
+| **Verifizierte KB-Zitate** / *Verified KB citations* | Citation row + **94 % Konfidenz** badge (and similar % chips) | `ticket.aiCitations: string[]` (triage citations) · runtime `aiSources: { paragraph, articleTitle, articleId? }[]` from RAG · `suggestedNeuralLinks[].confidence` for neural-link % badges | `RedesignedSidebar.tsx` citation row · `AiInsightsTabContent.tsx` verified sources · `ragService.findRelevantContext()` · `TicketsPage` citation drawer (`Math.round(confidence * 100)%`) | Citations persisted on ticket JSONB; sources refreshed per draft generation; lifecycle confidence in `AiCachedResponse.confidence` |
 
 **Global queue summary bar:** `TicketsQueueAiChip` — cross-ticket AI state chips
 
