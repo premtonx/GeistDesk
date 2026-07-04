@@ -55,7 +55,6 @@ import {
   ModuleToolbar,
   ModuleToolbarSelect,
 } from '../ui/module-page';
-import { ScrollArea } from '../../components/ui/scroll-area';
 import {
   ExchangeLeftSidebar,
 } from '../exchange/ExchangeLeftSidebar';
@@ -80,7 +79,7 @@ import {
 } from '../exchange/exchange-create-secret-utils';
 import { copyExchangeLinkToClipboard } from '../exchange/exchange-actions';
 import { isExchangeExpiringSoon, matchesExchangeSearch } from '../exchange/exchange-filter-utils';
-import { resolveExchangeStatus } from '../exchange/exchange-status-utils';
+import { isDemoExchangeId, resolveExchangeStatus } from '../exchange/exchange-status-utils';
 import { buildExpiringSoonSeedItems, type ExchangeItemRowSeed } from '../exchange/exchange-template-utils';
 import type { ExchangeNavId, ExchangeQuickFilter, ExchangeItemRow } from '../exchange/exchange-utils';
 import {
@@ -598,11 +597,58 @@ export default function VaultPage() {
     [allExchangeItems],
   );
 
+  const handleQuickExchangeAction = useCallback(
+    async (item: ExchangeItemRow) => {
+      if (item.id.startsWith('upload-mock')) {
+        setMockUploads((prev) =>
+          prev.map((row) =>
+            row.id === item.id
+              ? {
+                  ...row,
+                  status: 'Active',
+                  expiresAt: new Date(Date.now() + 48 * 60 * 60 * 1000),
+                  expires: 'in 48h',
+                }
+              : row,
+          ),
+        );
+      } else if (item.id.startsWith('seed-expiring-')) {
+        setSeedExpiringItems((prev) =>
+          prev.map((row) =>
+            row.id === item.id
+              ? {
+                  ...row,
+                  expiresAt: new Date(Date.now() + 72 * 60 * 60 * 1000),
+                  expires: 'in 72h',
+                  status: 'Active',
+                }
+              : row,
+          ),
+        );
+      } else if (!isDemoExchangeId(item.id)) {
+        await logAudit({
+          module: 'vault',
+          action: 'EXCHANGE_COMPLIANCE_REFRESH',
+          severity: 'medium',
+          details: { itemId: item.id, itemType: item.type },
+        });
+      }
+
+      toast.success(
+        t(
+          'exchange.actions.complianceRefresh',
+          'Compliance refresh applied — expiration policy re-evaluated.',
+        ),
+      );
+    },
+    [t],
+  );
+
   const exchangeTableProps = {
     selectedItemId: selectedExchangeItem?.id ?? null,
     onRowSelect: setSelectedExchangeItem,
     onCopyLink: handleCopyExchangeLink,
-    onQuickAction: setSelectedExchangeItem,
+    onQuickAction: handleQuickExchangeAction,
     onDeleteRequest: setDeleteTargetItem,
     onChangeSecurityPolicy: handleChangeSecurityPolicy,
     onRotateToken: handleRotateAccessToken,
@@ -694,8 +740,9 @@ export default function VaultPage() {
           onApplyCustomTemplate={handleApplyCustomTemplate}
         />
 
-        <div className="flex flex-1 min-w-0 min-h-0 relative">
-          <ScrollArea className="flex-1 min-w-0">
+        <div className="flex flex-1 min-w-0 min-h-0 overflow-y-auto custom-scrollbar">
+          <div className="flex flex-1 min-w-0 flex-col xl:flex-row xl:items-start">
+            <div className="flex-1 min-w-0 relative">
             <div className="px-4 sm:px-6 py-5 space-y-5 pb-10">
               <ExchangePageHeader quickFilter={isFocusedFilterMode ? quickFilter : null} />
 
@@ -1211,15 +1258,16 @@ export default function VaultPage() {
 
           </AnimatePresence>
             </div>
-          </ScrollArea>
 
           <ExchangeDetailDrawer
             item={selectedExchangeItem}
             onClose={() => setSelectedExchangeItem(null)}
           />
-        </div>
+            </div>
 
-        <ExchangeSecuritySidebar className="hidden xl:flex" expiringItems={expiringSidebarRows} />
+            <ExchangeSecuritySidebar className="hidden xl:flex" expiringItems={expiringSidebarRows} />
+          </div>
+        </div>
       </div>
 
       <ExchangeCreateTemplateModal

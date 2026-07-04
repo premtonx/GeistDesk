@@ -56,7 +56,7 @@ export function ExchangeSecuritySidebar({ expiringItems = [], className }: Excha
   return (
     <aside
       className={cn(
-        'w-[300px] shrink-0 border-l border-slate-200/80 bg-white flex flex-col min-h-0 overflow-y-auto',
+        'w-[300px] shrink-0 border-l border-slate-200/80 bg-white flex flex-col',
         className,
       )}
     >
