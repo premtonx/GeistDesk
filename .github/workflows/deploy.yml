@@ -30,6 +30,9 @@ jobs:
       - name: TypeScript compile gate
         run: npm run lint
 
+      - name: Open-source license compliance gate
+        run: npm run verify:license
+
       - name: Reject unsafe React namespace usage
         run: node scripts/verify-no-react-namespace.mjs
 

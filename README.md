@@ -137,3 +137,11 @@ VITE_FIREBASE_PROJECT_ID=your_firebase_project_id
 ```
 
 Enjoy using **GeistDesk**! Keep your infrastructure sovereign, safe, and powerful! 🚀
+
+---
+
+## License
+
+This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) - see the [LICENSE](LICENSE) file for details.
+
+Copyright (C) 2026 Premton Xhafa. All rights reserved.

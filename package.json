@@ -1,6 +1,7 @@
 {
   "name": "geistdesk-sovereign-ai-orchestrator",
   "version": "1.0.0",
+  "license": "AGPL-3.0",
   "type": "module",
   "description": "Enterprise sovereign AI Orchestrator with detachable AI engines supporting local Ollama models and cloud services.",
   "main": "server.ts",
@@ -77,7 +78,8 @@
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild src/db/seed.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/seed.cjs",
     "build:strict": "npm run lint && node scripts/verify-no-react-namespace.mjs && npm run build && node scripts/verify-production-build.mjs",
-    "verify:release": "node scripts/verify-no-react-namespace.mjs && node scripts/verify-production-build.mjs",
+    "verify:license": "node scripts/verify-license-compliance.mjs",
+    "verify:release": "node scripts/verify-license-compliance.mjs && node scripts/verify-no-react-namespace.mjs && node scripts/verify-production-build.mjs",
     "start": "node dist/server.cjs",
     "seed": "tsx src/db/seed.ts",
     "seed:prod": "node dist/seed.cjs",
