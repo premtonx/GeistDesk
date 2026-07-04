@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
 import { 
   Lock, 
@@ -48,6 +48,7 @@ import {
   DropdownMenuTrigger 
 } from '../../components/ui/dropdown-menu';
 import { vaultService } from '../../services/vaultService';
+import { auth } from '../../lib/firebase';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
 import {
@@ -131,6 +132,8 @@ export default function VaultPage() {
   const [copying, setCopying] = useState(false);
   const [shares, setShares] = useState<string[]>([]);
   const [isQuantumSafe, setIsQuantumSafe] = useState(false);
+  const [secretFormResetKey, setSecretFormResetKey] = useState(0);
+  const previousWorkspaceTabRef = useRef<typeof activeTab>(activeTab);
 
   // Search / Filters
   const [searchTerm, setSearchTerm] = useState('');
@@ -155,6 +158,58 @@ export default function VaultPage() {
     createTemplate,
     getTemplateById,
   } = useExchangeTemplates();
+
+  const resetExchangeCreationOutputs = useCallback(() => {
+    setGeneratedLink('');
+    setShares([]);
+    setIsQuantumSafe(false);
+    setCopying(false);
+  }, []);
+
+  const resetDropzoneForm = useCallback(() => {
+    setRequestName('');
+    setRequestDescription('');
+    setDropzoneTicketId('');
+    setDropzoneCompanyId('');
+    setDropzoneAssetId('Firewall Gate-99');
+    setAcceptedTypes(['ZIP', 'LOG']);
+    setUploadLimit('2GB');
+    setVirusScan(true);
+    setMalwareScan(true);
+    setRetentionPolicy('Auto destruct 48h');
+  }, []);
+
+  const refreshExchangeHistory = useCallback(async () => {
+    const items = await vaultService.fetchHistory();
+    setHistory(items);
+  }, []);
+
+  const prependExchangeHistoryItem = useCallback((item: VaultItem) => {
+    setHistory((prev) => {
+      if (prev.some((row) => row.id === item.id)) return prev;
+      return [item, ...prev];
+    });
+  }, []);
+
+  useEffect(() => {
+    const previousTab = previousWorkspaceTabRef.current;
+    const enteredCreationTab =
+      (activeTab === 'secrets' || activeTab === 'dropzones') && previousTab !== activeTab;
+    const leftCreationTab =
+      (previousTab === 'secrets' || previousTab === 'dropzones') && previousTab !== activeTab;
+
+    if (enteredCreationTab || leftCreationTab) {
+      resetExchangeCreationOutputs();
+    }
+
+    previousWorkspaceTabRef.current = activeTab;
+  }, [activeTab, resetExchangeCreationOutputs]);
+
+  useEffect(() => {
+    return () => {
+      resetExchangeCreationOutputs();
+    };
+  }, [resetExchangeCreationOutputs]);
 
   const { allExchangeItems, filteredExchangeItems, exchangeSidebarCounts } = useExchangeFilters({
     history,
@@ -332,11 +387,27 @@ export default function VaultPage() {
         metadata: payload.metadata,
       });
 
+      const optimisticItem: VaultItem = {
+        id: secretId,
+        type: 'secret',
+        expirationType: payload.expirationType,
+        expiresAt: payload.expiresAt?.toISOString() ?? null,
+        maxViews: payload.maxViews,
+        isBurned: false,
+        createdBy: auth.currentUser?.uid ?? '',
+        createdAt: new Date().toISOString(),
+        viewCount: 0,
+        metadata: payload.metadata,
+      };
+      prependExchangeHistoryItem(optimisticItem);
+      void refreshExchangeHistory();
+
       setShares(splitShares);
       setIsQuantumSafe(true);
       const baseUrl = window.location.origin;
       const finalLink = `${baseUrl}/v/${secretId}`;
       setGeneratedLink(finalLink);
+      setSecretFormResetKey((key) => key + 1);
       toast.success(t('exchange.createSecret.success', 'Quantum-safe link generated with view quota and security policy.'));
 
       if (payload.metadata.shareViaEmail) {
@@ -393,15 +464,39 @@ export default function VaultPage() {
         }
       });
 
+      const optimisticItem: VaultItem = {
+        id: requestId,
+        type: 'request',
+        expirationType: 'time',
+        expiresAt: expiresAt.toISOString(),
+        isBurned: false,
+        createdBy: auth.currentUser?.uid ?? '',
+        createdAt: new Date().toISOString(),
+        viewCount: 0,
+        metadata: {
+          isQuantumSafe: true,
+          pqcLevel: 3,
+          requestName,
+          description: requestDescription,
+          relatedTicketId: dropzoneTicketId || undefined,
+          relatedCompanyId: dropzoneCompanyId || undefined,
+          relatedAssetId: dropzoneAssetId,
+          acceptedTypes,
+          uploadLimit,
+          virusScan,
+          malwareScan,
+          retentionPolicy,
+        },
+      };
+      prependExchangeHistoryItem(optimisticItem);
+      void refreshExchangeHistory();
+
       const baseUrl = window.location.origin;
       const finalLink = `${baseUrl}/v/${requestId}`;
       setGeneratedLink(finalLink);
       setIsGenerating(false);
+      resetDropzoneForm();
       toast.success("Secure Upload Dropzone created successfully!");
-      
-      // Seed an active empty file list for this dropzone in simulation
-      setRequestName('');
-      setRequestDescription('');
     } catch (error: any) {
       console.error("Dropzone Creation Error:", error);
       setIsGenerating(false);
@@ -614,6 +709,9 @@ export default function VaultPage() {
   };
 
   const handleExchangeNavigate = (nav: ExchangeNavId) => {
+    if (nav !== 'secrets' && nav !== 'dropzones') {
+      resetExchangeCreationOutputs();
+    }
     setExchangeNav(nav);
     setQuickFilter(null);
     setSelectedExchangeItem(null);
@@ -628,7 +726,11 @@ export default function VaultPage() {
       activity: 'dashboard',
       security: 'dashboard',
     };
-    setActiveTab(tabMap[nav]);
+    const nextTab = tabMap[nav];
+    if (nextTab === 'secrets' || nextTab === 'dropzones') {
+      resetExchangeCreationOutputs();
+    }
+    setActiveTab(nextTab);
   };
 
   const handleDeleteExchangeItem = async (id: string) => {
@@ -800,6 +902,7 @@ export default function VaultPage() {
                       isGenerating={isGenerating}
                       generatedLink={generatedLink}
                       shares={shares}
+                      formResetKey={secretFormResetKey}
                       onGenerate={handleGenerateSecret}
                       onCopyLink={copyToClipboard}
                     />

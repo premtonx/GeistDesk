@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Zap, Clock, ChevronDown, ChevronUp, Mail, Shield, Lock, Globe } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Button } from '../ui/button';
@@ -28,8 +28,36 @@ interface ExchangeCreateSecretPanelProps {
   isGenerating: boolean;
   generatedLink: string;
   shares: string[];
+  formResetKey?: number;
   onGenerate: (state: ExchangeCreateSecretFormState) => void;
   onCopyLink: (link: string) => void;
+}
+
+function createDefaultFormState() {
+  return {
+    secretContent: '',
+    secretType: 'password',
+    maxViews: 1,
+    customMaxViews: '',
+    expirationPreset: '24h' as ExchangeCreateSecretFormState['expirationPreset'],
+    customExpiresAt: '',
+    shareViaEmailOpen: false,
+    recipientEmails: '',
+    notifyOnView: false,
+    ipRestrictionEnabled: false,
+    ipAllowlist: '',
+    passphraseEnabled: false,
+    passphrase: '',
+    domainWhitelistEnabled: false,
+    allowedEmailDomains: '',
+    deliveryOption: 'copy_link',
+    targetRecipient: '',
+    targetTicketId: '',
+    targetCompanyId: '',
+    targetAssetId: '',
+    mfaRequired: false,
+    securityOpen: true,
+  };
 }
 
 export function ExchangeCreateSecretPanel({
@@ -38,33 +66,62 @@ export function ExchangeCreateSecretPanel({
   isGenerating,
   generatedLink,
   shares,
+  formResetKey = 0,
   onGenerate,
   onCopyLink,
 }: ExchangeCreateSecretPanelProps) {
   const { t } = useTranslation();
+  const defaults = createDefaultFormState();
 
-  const [secretContent, setSecretContent] = useState('');
-  const [secretType, setSecretType] = useState('password');
-  const [maxViews, setMaxViews] = useState<number>(1);
-  const [customMaxViews, setCustomMaxViews] = useState('');
-  const [expirationPreset, setExpirationPreset] = useState<ExchangeCreateSecretFormState['expirationPreset']>('24h');
-  const [customExpiresAt, setCustomExpiresAt] = useState('');
-  const [shareViaEmailOpen, setShareViaEmailOpen] = useState(false);
-  const [recipientEmails, setRecipientEmails] = useState('');
-  const [notifyOnView, setNotifyOnView] = useState(false);
-  const [ipRestrictionEnabled, setIpRestrictionEnabled] = useState(false);
-  const [ipAllowlist, setIpAllowlist] = useState('');
-  const [passphraseEnabled, setPassphraseEnabled] = useState(false);
-  const [passphrase, setPassphrase] = useState('');
-  const [domainWhitelistEnabled, setDomainWhitelistEnabled] = useState(false);
-  const [allowedEmailDomains, setAllowedEmailDomains] = useState('');
-  const [deliveryOption, setDeliveryOption] = useState('copy_link');
-  const [targetRecipient, setTargetRecipient] = useState('');
-  const [targetTicketId, setTargetTicketId] = useState('');
-  const [targetCompanyId, setTargetCompanyId] = useState('');
-  const [targetAssetId, setTargetAssetId] = useState('');
-  const [mfaRequired, setMfaRequired] = useState(false);
-  const [securityOpen, setSecurityOpen] = useState(true);
+  const [secretContent, setSecretContent] = useState(defaults.secretContent);
+  const [secretType, setSecretType] = useState(defaults.secretType);
+  const [maxViews, setMaxViews] = useState<number>(defaults.maxViews);
+  const [customMaxViews, setCustomMaxViews] = useState(defaults.customMaxViews);
+  const [expirationPreset, setExpirationPreset] = useState<ExchangeCreateSecretFormState['expirationPreset']>(defaults.expirationPreset);
+  const [customExpiresAt, setCustomExpiresAt] = useState(defaults.customExpiresAt);
+  const [shareViaEmailOpen, setShareViaEmailOpen] = useState(defaults.shareViaEmailOpen);
+  const [recipientEmails, setRecipientEmails] = useState(defaults.recipientEmails);
+  const [notifyOnView, setNotifyOnView] = useState(defaults.notifyOnView);
+  const [ipRestrictionEnabled, setIpRestrictionEnabled] = useState(defaults.ipRestrictionEnabled);
+  const [ipAllowlist, setIpAllowlist] = useState(defaults.ipAllowlist);
+  const [passphraseEnabled, setPassphraseEnabled] = useState(defaults.passphraseEnabled);
+  const [passphrase, setPassphrase] = useState(defaults.passphrase);
+  const [domainWhitelistEnabled, setDomainWhitelistEnabled] = useState(defaults.domainWhitelistEnabled);
+  const [allowedEmailDomains, setAllowedEmailDomains] = useState(defaults.allowedEmailDomains);
+  const [deliveryOption, setDeliveryOption] = useState(defaults.deliveryOption);
+  const [targetRecipient, setTargetRecipient] = useState(defaults.targetRecipient);
+  const [targetTicketId, setTargetTicketId] = useState(defaults.targetTicketId);
+  const [targetCompanyId, setTargetCompanyId] = useState(defaults.targetCompanyId);
+  const [targetAssetId, setTargetAssetId] = useState(defaults.targetAssetId);
+  const [mfaRequired, setMfaRequired] = useState(defaults.mfaRequired);
+  const [securityOpen, setSecurityOpen] = useState(defaults.securityOpen);
+
+  useEffect(() => {
+    if (formResetKey === 0) return;
+    const next = createDefaultFormState();
+    setSecretContent(next.secretContent);
+    setSecretType(next.secretType);
+    setMaxViews(next.maxViews);
+    setCustomMaxViews(next.customMaxViews);
+    setExpirationPreset(next.expirationPreset);
+    setCustomExpiresAt(next.customExpiresAt);
+    setShareViaEmailOpen(next.shareViaEmailOpen);
+    setRecipientEmails(next.recipientEmails);
+    setNotifyOnView(next.notifyOnView);
+    setIpRestrictionEnabled(next.ipRestrictionEnabled);
+    setIpAllowlist(next.ipAllowlist);
+    setPassphraseEnabled(next.passphraseEnabled);
+    setPassphrase(next.passphrase);
+    setDomainWhitelistEnabled(next.domainWhitelistEnabled);
+    setAllowedEmailDomains(next.allowedEmailDomains);
+    setDeliveryOption(next.deliveryOption);
+    setTargetRecipient(next.targetRecipient);
+    setTargetTicketId(next.targetTicketId);
+    setTargetCompanyId(next.targetCompanyId);
+    setTargetAssetId(next.targetAssetId);
+    setMfaRequired(next.mfaRequired);
+    setSecurityOpen(next.securityOpen);
+  }, [formResetKey]);
 
   const buildState = (): ExchangeCreateSecretFormState => ({
     secretContent,
