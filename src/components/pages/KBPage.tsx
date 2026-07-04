@@ -100,7 +100,8 @@ import { KBPageHeader } from '../kb/KBPageHeader';
 import { KBKpiCards } from '../kb/KBKpiCards';
 import { KBSearchSection } from '../kb/KBSearchSection';
 import { KBSearchAiOverlay } from '../kb/KBSearchAiOverlay';
-import { KBArticleEditorWorkspace } from '../kb/KBArticleEditorWorkspace';
+import { KBArticleEditorWorkspace, type KBArticleDraft } from '../kb/KBArticleEditorWorkspace';
+import { KBBulkActionBar } from '../kb/KBBulkActionBar';
 import { truncateRagSnippet } from '../kb/kbSearchUtils';
 import { ragService, type RAGResult } from '../../services/ragService';
 import { AIAdapter } from '../../lib/ai/provider-adapter';
@@ -596,18 +597,18 @@ export default function KBPage() {
   const [activeReadingLanguage, setActiveReadingLanguage] = useState<string>('English');
   const [isTranslating, setIsTranslating] = useState<boolean>(false);
   
-  const [newArticle, setNewArticle] = useState({
+  const [newArticle, setNewArticle] = useState<KBArticleDraft>({
     title: '',
     content: '',
     category: 'Getting Started',
     subCategory: 'Workspace Setup',
-    visibility: 'Public' as 'Public' | 'Private',
-    tags: [] as string[],
+    visibility: 'Public',
+    tags: [],
     owner: 'Sarah James',
     reviewer: 'Mike Chen',
     lastEditor: 'Sarah James',
-    status: 'Published' as string,
-    avgReadTime: '3m 00s'
+    status: 'Published',
+    avgReadTime: '3m 00s',
   });
   const [tagInput, setTagInput] = useState('');
 

@@ -1,4 +1,5 @@
 import { PenLine, Sparkles, Settings, Check, X } from 'lucide-react';
+import { type Dispatch, type SetStateAction } from 'react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
@@ -14,7 +15,7 @@ export interface KBArticleDraft {
   content: string;
   category: string;
   subCategory: string;
-  visibility: string;
+  visibility: 'Public' | 'Private';
   tags: string[];
   owner: string;
   reviewer: string;
@@ -35,7 +36,7 @@ interface KBArticleEditorWorkspaceProps {
   editingArticleId: string | null;
   selectedCategory: string;
   newArticle: KBArticleDraft;
-  onNewArticleChange: (article: KBArticleDraft) => void;
+  onNewArticleChange: Dispatch<SetStateAction<KBArticleDraft>>;
   tagInput: string;
   onTagInputChange: (value: string) => void;
   categories: KBCategoryRecord[];
@@ -61,7 +62,7 @@ export function KBArticleEditorWorkspace({
   const { t } = useTranslation();
 
   const patchArticle = (patch: Partial<KBArticleDraft>) => {
-    onNewArticleChange({ ...newArticle, ...patch });
+    onNewArticleChange((prev) => ({ ...prev, ...patch }));
   };
 
   return (
