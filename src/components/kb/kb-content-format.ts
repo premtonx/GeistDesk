@@ -12,7 +12,25 @@ function decodeHtmlEntities(value: string): string {
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
-    .replace(/&#39;/g, "'");
+    .replace(/&#39;/g, "'")
+    .replace(/&#x27;/gi, "'");
+}
+
+/** Unwrap double-encoded entity fragments such as &amp;nbsp; before render. */
+function fixDoubleEncodedEntities(value: string): string {
+  let normalized = value;
+  for (let i = 0; i < 3; i += 1) {
+    const next = normalized.replace(/&amp;(nbsp|amp|lt|gt|quot|#39|#x27);/gi, (_, entity: string) => `&${entity};`);
+    if (next === normalized) break;
+    normalized = next;
+  }
+  return normalized;
+}
+
+/** Normalize raw article strings before markdown/HTML conversion. */
+export function sanitizeArticleContent(content: string): string {
+  if (!content.trim()) return '';
+  return decodeHtmlEntities(fixDoubleEncodedEntities(content));
 }
 
 function escapeHtml(value: string): string {
@@ -45,7 +63,6 @@ export function htmlToMarkdown(html: string): string {
 export function markdownToHtml(markdown: string): string {
   const trimmed = markdown.trim();
   if (!trimmed) return '';
-  if (isHtmlContent(trimmed)) return trimmed;
 
   const lines = trimmed.split('\n');
   const blocks: string[] = [];
@@ -117,16 +134,25 @@ export function markdownToHtml(markdown: string): string {
   return blocks.join('\n');
 }
 
-/** Source string shown inside the markdown textarea while editing. */
-export function toEditableMarkdown(content: string): string {
-  if (!content.trim()) return '';
-  return isHtmlContent(content) ? htmlToMarkdown(content) : content;
+/** Final HTML passed into the Quill preview surface. */
+export function sanitizeArticleHtml(html: string): string {
+  if (!html.trim()) return '';
+  return fixDoubleEncodedEntities(html);
 }
 
-/** HTML consumed by the prose renderer and heading/TOC pipeline. */
+/** Source string shown inside the markdown textarea while editing. */
+export function toEditableMarkdown(content: string): string {
+  const normalized = sanitizeArticleContent(content);
+  if (!normalized.trim()) return '';
+  return isHtmlContent(normalized) ? htmlToMarkdown(normalized) : normalized;
+}
+
+/** HTML consumed by the preview renderer and heading/TOC pipeline. */
 export function toRenderableHtml(content: string): string {
-  if (!content.trim()) return '';
-  return isHtmlContent(content) ? content : markdownToHtml(content);
+  const normalized = sanitizeArticleContent(content);
+  if (!normalized.trim()) return '';
+  const html = isHtmlContent(normalized) ? normalized : markdownToHtml(normalized);
+  return sanitizeArticleHtml(html);
 }
 
 /** HTML string loaded into the rich-text editor while editing. */

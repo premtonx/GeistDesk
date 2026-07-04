@@ -2,7 +2,8 @@ import { lazy, Suspense } from 'react';
 import { AlertTriangle, Info, CheckCircle2, ShieldAlert, Loader2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
-import { KB_ARTICLE_CONTENT_WRAP_CLASS, KB_DETAIL_PROSE_CLASS } from './kb-article-detail-utils';
+import { KB_ARTICLE_CONTENT_WRAP_CLASS } from './kb-article-detail-utils';
+import { RichTextPreview } from '../RichTextPreview';
 
 const RichTextEditor = lazy(() =>
   import('../RichTextEditor').then((module) => ({ default: module.RichTextEditor })),
@@ -80,13 +81,11 @@ export function KBArticleDetailBody({
   const { t } = useTranslation();
 
   return (
-    <div className={cn('flex-1 min-w-0 max-w-full space-y-6 overflow-x-hidden', KB_ARTICLE_CONTENT_WRAP_CLASS)}>
+    <div className={cn('flex-1 min-w-0 flex flex-col gap-6', KB_ARTICLE_CONTENT_WRAP_CLASS)}>
       {isEditing ? (
         <div
-          className={cn(
-            'rounded-xl border-2 border-blue-200 bg-white p-4 shadow-sm min-w-0 max-w-full overflow-hidden',
-            KB_ARTICLE_CONTENT_WRAP_CLASS,
-          )}
+          key="kb-article-editor-shell"
+          className="rounded-xl border-2 border-blue-200 bg-white p-4 shadow-sm min-w-0"
         >
           <p className="text-[10px] font-semibold uppercase tracking-wider text-blue-600 mb-3">
             {t('kb.editor.bodyLabel', 'Article documentation body')}
@@ -100,6 +99,7 @@ export function KBArticleDetailBody({
             }
           >
             <RichTextEditor
+              key="kb-article-editor"
               value={editedContent}
               onChange={(content) => onContentChange?.(content)}
               placeholder={t(
@@ -107,28 +107,23 @@ export function KBArticleDetailBody({
                 'Add details, context, steps tried, expected outcome, etc.',
               )}
               className={cn(
-                'rounded-xl border-slate-200/80 shadow-none min-h-[320px] w-full max-w-full',
+                'rounded-xl border-slate-200/80 shadow-none min-h-[320px] w-full',
                 '[&_.ql-container]:min-h-[280px] [&_.ql-editor]:min-h-[280px]',
-                '[&_.ql-editor]:break-words [&_.ql-editor]:whitespace-pre-wrap',
-                '[&_.ql-editor]:[overflow-wrap:anywhere] [&_.ql-editor]:leading-relaxed',
+                '[&_.ql-editor]:break-words [&_.ql-editor]:[overflow-wrap:anywhere] [&_.ql-editor]:leading-relaxed',
               )}
             />
           </Suspense>
         </div>
       ) : (
-        <article
+        <RichTextPreview
+          key="kb-article-preview"
+          html={htmlContent}
           className={cn(
-            KB_DETAIL_PROSE_CLASS,
-            KB_ARTICLE_CONTENT_WRAP_CLASS,
-            'rounded-xl border border-slate-200/80 bg-white p-6',
-            'print:w-full print:max-w-none print:shadow-none print:border-none print:p-0 print:bg-white',
+            'rounded-xl border-slate-200/80 shadow-none min-w-0',
+            'print:shadow-none print:border-none',
+            '[&_.ql-container]:min-h-0 [&_.ql-editor]:min-h-0',
           )}
-        >
-          <div
-            className={cn(KB_ARTICLE_CONTENT_WRAP_CLASS, '[&_pre]:break-all [&_code]:break-all')}
-            dangerouslySetInnerHTML={{ __html: htmlContent }}
-          />
-        </article>
+        />
       )}
 
       {!isEditing && showCalloutSamples ? (

@@ -181,7 +181,7 @@ export function KBArticleDetailView({
               </p>
             </div>
 
-            <div className="flex gap-6 mt-6 min-w-0 overflow-x-hidden print:mt-0 print:block">
+            <div className="flex flex-col xl:flex-row gap-6 mt-6 min-w-0 print:mt-0 print:block">
               {!isEditing ? (
                 <KBArticleTableOfContents
                   headings={headings}
