@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useState, useMemo, useCallback, type FormEvent, type KeyboardEvent } from 'react';
 import { startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
 import { 
   Lock, 
@@ -109,6 +109,7 @@ import { VaultKpiCards } from '../vault/VaultKpiCards';
 import { VaultAiSecurityBanner } from '../vault/VaultAiSecurityBanner';
 import { VaultSearchSection } from '../vault/VaultSearchSection';
 import { VaultLeftSidebar, type VaultSmartFilter } from '../vault/VaultLeftSidebar';
+import { VaultTopTabBar } from '../vault/VaultTopTabBar';
 import { VaultSecuritySidebar } from '../vault/VaultSecuritySidebar';
 import { VaultViewModeSelector, type VaultAssetViewMode } from '../vault/VaultViewModeSelector';
 import { VaultAssetViews } from '../vault/VaultAssetViews';
@@ -268,7 +269,7 @@ export default function CredentialVaultPage() {
   const { isAdmin } = useAdmin();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeVaultId, setActiveVaultId] = useState<string>('local');
-  const [activeVaultScope, setActiveVaultScope] = useState<VaultAuthorityScope | 'all'>('all');
+  const [activeVaultScope, setActiveVaultScope] = useState<VaultAuthorityScope>('personal');
   const [accessCategory, setAccessCategory] = useState<string>('all');
   const [smartFilter, setSmartFilter] = useState<VaultSmartFilter | null>(null);
   const [assetViewMode, setAssetViewMode] = useState<VaultAssetViewMode>('table');
@@ -670,8 +671,7 @@ export default function CredentialVaultPage() {
         scope: newVaultScope,
       });
       await loadAccessiblePortfolios();
-      setActiveVaultId(portfolio.id);
-      setActiveVaultScope(portfolio.scope);
+      handleVaultTabChange(portfolio.id);
       setNewVaultName('');
       setNewVaultDescription('');
       setNewVaultScope('personal');
@@ -942,6 +942,36 @@ export default function CredentialVaultPage() {
   const nonDeletedItems = credentialsQuery.filter(c => !c.deleted);
   const trashItems = credentialsQuery.filter(c => c.deleted);
 
+  const activeVaultDefinition = useMemo(
+    () => allVaultDefinitions.find((v) => v.id === activeVaultId),
+    [allVaultDefinitions, activeVaultId],
+  );
+  const allowedVaultScope = activeVaultDefinition?.scope ?? 'personal';
+
+  const vaultScopedItems = useMemo(
+    () => nonDeletedItems.filter((c) => resolveCredVaultId(c) === activeVaultId),
+    [nonDeletedItems, activeVaultId],
+  );
+
+  const vaultScopedTrash = useMemo(
+    () => trashItems.filter((c) => resolveCredVaultId(c) === activeVaultId),
+    [trashItems, activeVaultId],
+  );
+
+  const handleVaultTabChange = useCallback(
+    (id: string) => {
+      const vault = allVaultDefinitions.find((v) => v.id === id);
+      setActiveVaultId(id);
+      setActiveVaultScope(vault?.scope ?? 'personal');
+      setAccessCategory('all');
+      setSelectedType('all');
+      setSmartFilter(null);
+      setSelectedView('all');
+      setIsCreatingEntry(false);
+    },
+    [allVaultDefinitions],
+  );
+
   // Compute stats for overview cards
   const totalEntries = nonDeletedItems.length;
   const weakCount = nonDeletedItems.filter(c => c.notes?.toLowerCase().includes('weak') || c.label.toLowerCase().includes('database') || c.username === 'db_admin').length;
@@ -953,40 +983,31 @@ export default function CredentialVaultPage() {
   const getFilteredCredentials = () => {
     let list = [...credentialsQuery];
 
-    // Smart filter / view modes
-    const effectiveView = smartFilter === 'archived' ? 'trash' : smartFilter === 'pinned' || smartFilter === 'favorites' ? 'favorites' : smartFilter === 'recently' ? 'recently' : selectedView;
-
-    if (effectiveView === 'trash' || smartFilter === 'archived') {
-      list = list.filter((c) => c.deleted);
+    if (smartFilter === 'archived') {
+      list = vaultScopedTrash;
     } else {
-      list = list.filter((c) => !c.deleted);
+      list = [...vaultScopedItems];
 
-      if (effectiveView === 'favorites' || smartFilter === 'pinned' || smartFilter === 'favorites') {
+      if (smartFilter === 'favorites' || smartFilter === 'pinned') {
         list = list.filter((c) => c.favorite);
-      } else if (effectiveView === 'recently' || smartFilter === 'recently') {
+      } else if (smartFilter === 'recently') {
         list = list.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 12);
-      } else if (selectedView === 'shared') {
-        list = list.filter((c) => c.vaultId === 'shared');
-      }
-
-      if (smartFilter === 'expiring') {
+      } else if (smartFilter === 'expiring') {
         list = list.filter((c) => isExpiringCred(c));
       } else if (smartFilter === 'alerts') {
         list = list.filter((c) => isWeakCred(c));
+      } else if (selectedView === 'favorites') {
+        list = list.filter((c) => c.favorite);
+      } else if (selectedView === 'recently') {
+        list = list.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 12);
+      } else if (selectedView === 'shared') {
+        list = list.filter((c) => c.vaultId === 'shared' || resolveCredVaultId(c) === 'shared-company');
       }
 
-      // Vault scope
-      list = list.filter((c) => resolveCredVaultId(c) === activeVaultId);
+      list = list.filter(
+        (c) => resolveVaultScope(resolveCredVaultId(c), allVaultDefinitions) === activeVaultScope,
+      );
 
-      // Authority clearance tier
-      if (activeVaultScope !== 'all') {
-        list = list.filter((c) => {
-          const vaultId = resolveCredVaultId(c);
-          return resolveVaultScope(vaultId, allVaultDefinitions) === activeVaultScope;
-        });
-      }
-
-      // Access category
       if (accessCategory !== 'all') {
         const cat = ACCESS_CATEGORIES.find((x) => x.id === accessCategory);
         if (cat) {
@@ -997,7 +1018,6 @@ export default function CredentialVaultPage() {
       }
     }
 
-    // Filter by global text search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter(c => 
@@ -1029,26 +1049,43 @@ export default function CredentialVaultPage() {
   const scopeCounts = (['personal', 'department', 'team', 'global'] as VaultAuthorityScope[]).reduce<
     Partial<Record<VaultAuthorityScope, number>>
   >((acc, scope) => {
-    acc[scope] = nonDeletedItems.filter((c) => {
-      const vaultId = resolveCredVaultId(c);
-      return resolveVaultScope(vaultId, allVaultDefinitions) === scope;
-    }).length;
+    acc[scope] = vaultScopedItems.filter(
+      (c) => resolveVaultScope(resolveCredVaultId(c), allVaultDefinitions) === scope,
+    ).length;
     return acc;
   }, {});
 
   const categoryCounts = ACCESS_CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
-    acc[cat.id] = nonDeletedItems.filter((c) => cat.types.includes(c.type)).length;
+    acc[cat.id] = vaultScopedItems.filter((c) => cat.types.includes(c.type)).length;
     return acc;
   }, {});
 
+  const vaultPinnedCount = vaultScopedItems.filter((c) => c.favorite).length;
+  const vaultExpiringCount = vaultScopedItems.filter((c) => isExpiringCred(c)).length;
+  const vaultWeakCount = vaultScopedItems.filter((c) => isWeakCred(c)).length;
+  const vaultRecentCount = Math.min(12, vaultScopedItems.length);
+
   const smartCounts: Partial<Record<VaultSmartFilter, number>> = {
-    favorites: pinnedCount,
-    pinned: pinnedCount,
-    recently: recentCount,
-    expiring: expiringCount,
-    alerts: weakCount,
-    archived: trashItems.length,
+    favorites: vaultPinnedCount,
+    pinned: vaultPinnedCount,
+    recently: vaultRecentCount,
+    expiring: vaultExpiringCount,
+    alerts: vaultWeakCount,
+    archived: vaultScopedTrash.length,
   };
+
+  useEffect(() => {
+    if (accessCategory !== 'all' && (categoryCounts[accessCategory] ?? 0) === 0) {
+      setAccessCategory('all');
+    }
+  }, [accessCategory, categoryCounts]);
+
+  useEffect(() => {
+    if (smartFilter && (smartCounts[smartFilter] ?? 0) === 0) {
+      setSmartFilter(null);
+      setSelectedView('all');
+    }
+  }, [smartFilter, smartCounts]);
 
   const healthScore = Math.max(0, 100 - Math.min(40, weakCount * 12) - Math.min(20, expiringCount * 8));
   const securityScore = Math.min(99, healthScore + 8);
@@ -1152,31 +1189,20 @@ export default function CredentialVaultPage() {
       ) : (
         <div className="flex flex-1 min-h-0 w-full overflow-y-auto">
           <VaultLeftSidebar
-            vaultDefinitions={allVaultDefinitions}
-            activeVaultId={activeVaultId}
-            onVaultChange={(id) => {
-              setActiveVaultId(id);
-              setSmartFilter(null);
-              setIsCreatingEntry(false);
-              const vault = allVaultDefinitions.find((v) => v.id === id);
-              if (vault?.scope) setActiveVaultScope(vault.scope);
-            }}
-            vaultCounts={vaultCounts}
+            activeVaultScope={activeVaultScope}
             selectedCategory={accessCategory}
             onCategoryChange={(id) => {
               setAccessCategory(id);
               setSelectedType('all');
-              setSmartFilter(null);
               setIsCreatingEntry(false);
             }}
             categoryCounts={categoryCounts}
-            activeVaultScope={activeVaultScope}
             onVaultScopeChange={(scope) => {
               setActiveVaultScope(scope);
-              setSmartFilter(null);
               setIsCreatingEntry(false);
             }}
             scopeCounts={scopeCounts}
+            allowedVaultScope={allowedVaultScope}
             smartFilter={smartFilter}
             onSmartFilterChange={(f) => {
               setSmartFilter(f);
@@ -1270,6 +1296,13 @@ export default function CredentialVaultPage() {
                 onChange={setSearchQuery}
                 filtersOpen={isFilterOpen}
                 onToggleFilters={() => setIsFilterOpen((v) => !v)}
+              />
+
+              <VaultTopTabBar
+                vaultDefinitions={allVaultDefinitions}
+                activeVaultId={activeVaultId}
+                onVaultChange={handleVaultTabChange}
+                vaultCounts={vaultCounts}
               />
 
               {isFilterOpen ? (
