@@ -102,7 +102,7 @@ import { GeistVaultEmergency } from './geistvault/GeistVaultEmergency';
 import { GeistVaultAccessRequests } from './geistvault/GeistVaultAccessRequests';
 
 // Redesigned high-fidelity subcomponents
-import { SEEDED_CREDENTIALS, MOCK_CHROME_EXTENSION } from './geistvault/DefaultData';
+import { SEEDED_CREDENTIALS, MOCK_CHROME_EXTENSION, BRANDED_SHOWCASE_CREDENTIALS } from './geistvault/DefaultData';
 import { CredentialDrawer } from './geistvault/CredentialDrawer';
 import { VaultPageHeader } from '../vault/VaultPageHeader';
 import { VaultKpiCards } from '../vault/VaultKpiCards';
@@ -488,10 +488,35 @@ export default function CredentialVaultPage() {
             lastModifiedBy: item.lastModifiedBy,
             favorite: item.favorite,
             deleted: false,
-            vaultId: item.vaultId
+            vaultId: item.vaultId,
+            icon: item.icon,
+            iconType: item.icon ? 'preset' as const : undefined,
+            tags: item.tags,
           });
         }
         logAudit({ module: 'credentials', action: 'vault_seeded', details: { source: 'high_fidelity_screenshot_data' } });
+      } else {
+        for (const item of BRANDED_SHOWCASE_CREDENTIALS) {
+          const existing = await localDB.credentials.filter((c) => c.label === item.label).count();
+          if (existing > 0) continue;
+          const encryptedPassword = await encryptData(item.plainPass, key);
+          await localDB.credentials.add({
+            type: item.type,
+            label: item.label,
+            username: item.username,
+            encryptedPassword,
+            host: item.host,
+            notes: item.notes,
+            updatedAt: Date.now() - (item.offsetHours * 3600 * 1000),
+            lastModifiedBy: item.lastModifiedBy,
+            favorite: item.favorite,
+            deleted: false,
+            vaultId: item.vaultId,
+            icon: item.icon,
+            iconType: item.icon ? 'preset' as const : undefined,
+            tags: item.tags,
+          });
+        }
       }
     } catch (err) {
       console.error("Failed to seed default database items", err);
@@ -1264,6 +1289,13 @@ export default function CredentialVaultPage() {
                 </div>
               </div>
 
+              <VaultTopTabBar
+                vaultDefinitions={allVaultDefinitions}
+                activeVaultId={activeVaultId}
+                onVaultChange={handleVaultTabChange}
+                vaultCounts={vaultCounts}
+              />
+
               <VaultKpiCards
                 totalAssets={totalEntries}
                 healthScore={healthScore}
@@ -1278,13 +1310,6 @@ export default function CredentialVaultPage() {
                 onChange={setSearchQuery}
                 filtersOpen={isFilterOpen}
                 onToggleFilters={() => setIsFilterOpen((v) => !v)}
-              />
-
-              <VaultTopTabBar
-                vaultDefinitions={allVaultDefinitions}
-                activeVaultId={activeVaultId}
-                onVaultChange={handleVaultTabChange}
-                vaultCounts={vaultCounts}
               />
 
               {isFilterOpen ? (

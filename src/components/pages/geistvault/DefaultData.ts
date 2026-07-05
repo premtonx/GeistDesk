@@ -8,11 +8,83 @@ export interface SeedItem {
   lastModifiedBy: string;
   offsetHours: number;
   favorite: boolean;
-  vaultId: 'local' | 'shared';
+  vaultId: string;
   status: 'healthy' | 'weak' | 'expiring' | 'breached';
+  icon?: string;
+  tags?: string[];
+  strengthPercent?: number;
 }
 
+/** Branded enterprise showcase rows — one anchor asset per primary vault tab. */
+export const BRANDED_SHOWCASE_CREDENTIALS: SeedItem[] = [
+  {
+    type: 'cloud',
+    label: 'AWS Production Master Root',
+    host: 'console.aws.amazon.com',
+    username: 'root-admin@company.internal',
+    plainPass: 'AwsPr0d-Mast3r!2026#Secure',
+    notes: 'Corporate AWS Organizations root console. MFA enforced. Password strength audit: 98%.',
+    lastModifiedBy: 'Cloud Ops',
+    offsetHours: 1,
+    favorite: true,
+    vaultId: 'shared-company',
+    status: 'healthy',
+    icon: 'aws',
+    tags: ['AWS', 'Production', 'Strength: 98%'],
+    strengthPercent: 98,
+  },
+  {
+    type: 'ssh',
+    label: 'Docker Swarm Orchestration Hub',
+    host: 'swarm.it-dept.company.internal',
+    username: 'docker-deploy@company.internal',
+    plainPass: 'D0cker-Swarm!Hub89#Deploy',
+    notes: 'IT department container orchestration control plane. Password strength audit: 89%.',
+    lastModifiedBy: 'Platform Team',
+    offsetHours: 3,
+    favorite: false,
+    vaultId: 'it-dept',
+    status: 'healthy',
+    icon: 'docker',
+    tags: ['Docker', 'Server', 'Strength: 89%'],
+    strengthPercent: 89,
+  },
+  {
+    type: 'web',
+    label: 'Personal Amazon Business Portal',
+    host: 'business.amazon.com',
+    username: 'admin-personal@company.com',
+    plainPass: 'Amzn-Biz76!Portal',
+    notes: 'Personal procurement login for business purchases. Password strength audit: 76%.',
+    lastModifiedBy: 'You',
+    offsetHours: 6,
+    favorite: false,
+    vaultId: 'local',
+    status: 'healthy',
+    icon: 'amazon',
+    tags: ['Amazon', 'Web Login', 'Strength: 76%'],
+    strengthPercent: 76,
+  },
+  {
+    type: 'api',
+    label: 'GitHub Registry Production Token',
+    host: 'ghcr.io',
+    username: 'git-automation',
+    plainPass: 'ghp_GitHubPr0d92!RegistryToken',
+    notes: 'DevOps CI/CD registry automation token with package publish scope. Password strength audit: 92%.',
+    lastModifiedBy: 'DevOps',
+    offsetHours: 2,
+    favorite: true,
+    vaultId: 'devops',
+    status: 'healthy',
+    icon: 'github',
+    tags: ['GitHub', 'API Key', 'Strength: 92%'],
+    strengthPercent: 92,
+  },
+];
+
 export const SEEDED_CREDENTIALS: SeedItem[] = [
+  ...BRANDED_SHOWCASE_CREDENTIALS,
   {
     type: 'rdp',
     label: 'Acme Production Server',
@@ -24,99 +96,21 @@ export const SEEDED_CREDENTIALS: SeedItem[] = [
     offsetHours: 2,
     favorite: false,
     vaultId: 'local',
-    status: 'healthy'
-  },
-  {
-    type: 'vpn',
-    label: 'Acme VPN Gateway',
-    host: 'vpn.acme.com',
-    username: 'sarah.james',
-    plainPass: 'VPNSecureGate88',
-    notes: 'Global secure connection client gateway with automated failover tunnels.',
-    lastModifiedBy: 'Mike Chen',
-    offsetHours: 5,
-    favorite: false,
-    vaultId: 'local',
-    status: 'healthy'
-  },
-  {
-    type: 'web',
-    label: 'GitHub - Acme',
-    host: 'github.acme.com',
-    username: 'devops@acme.com',
-    plainPass: 'HubGitDevOpsPass',
-    notes: 'Acme enterprise organization repositories and actions token registries.',
-    lastModifiedBy: 'Sarah James',
-    offsetHours: 24,
-    favorite: false,
-    vaultId: 'shared',
-    status: 'healthy'
+    status: 'healthy',
   },
   {
     type: 'db',
     label: 'PostgreSQL Database',
     host: 'db-prod.acme.com:5432',
     username: 'db_admin',
-    plainPass: '123456', // Weak password trigger!
+    plainPass: '123456',
     notes: 'Primary database instance clustering metadata for ERP workflows.',
     lastModifiedBy: 'Will Coyote',
     offsetHours: 26,
     favorite: false,
-    vaultId: 'shared',
-    status: 'weak'
+    vaultId: 'it-dept',
+    status: 'weak',
   },
-  {
-    type: 'web',
-    label: 'AWS Production',
-    host: 'console.aws.amazon.com',
-    username: 'aws-prod-admin',
-    plainPass: 'AWSAdminKey99',
-    notes: 'Primary root master corporate console cloud computing space.',
-    lastModifiedBy: 'Anna Bell',
-    offsetHours: 48,
-    favorite: false,
-    vaultId: 'shared',
-    status: 'expiring'
-  },
-  {
-    type: 'api',
-    label: 'Stripe API Key',
-    host: 'api.stripe.com',
-    username: 'sk_live_............',
-    plainPass: 'sk_live_51Mxxxxxxxxxxxxxxxxxxxxxxxxxxxx',
-    notes: 'Production payment integration server API token for client billing.',
-    lastModifiedBy: 'John Doe',
-    offsetHours: 72,
-    favorite: false,
-    vaultId: 'local',
-    status: 'healthy'
-  },
-  {
-    type: 'ssh',
-    label: 'SSH - Web Server',
-    host: 'web01.acme.com',
-    username: 'ubuntu',
-    plainPass: 'UbuntuKeyFileB64...',
-    notes: 'Public web cluster entry nodes for CDN origin settings.',
-    lastModifiedBy: 'Mike Chen',
-    offsetHours: 96,
-    favorite: false,
-    vaultId: 'local',
-    status: 'healthy'
-  },
-  {
-    type: 'web',
-    label: 'Microsoft 365 Admin',
-    host: 'admin.microsoft.com',
-    username: 'admin@acme.com',
-    plainPass: 'Office356M365!',
-    notes: 'Global active office cloud subscription workspace for core staff directory.',
-    lastModifiedBy: 'Will Coyote',
-    offsetHours: 120,
-    favorite: false,
-    vaultId: 'shared',
-    status: 'healthy'
-  }
 ];
 
 export const MOCK_CHROME_EXTENSION = {
@@ -124,7 +118,7 @@ export const MOCK_CHROME_EXTENSION = {
   chromeInstalled: true,
   edgeInstalled: true,
   firefoxInstalled: false,
-  lastSync: 'Sync active'
+  lastSync: 'Sync active',
 };
 
 export const MOCK_AUDIT_LOGS = [
@@ -132,5 +126,5 @@ export const MOCK_AUDIT_LOGS = [
   { action: 'Copied', user: 'premtonxh@gmail.com', date: '2026-06-03 08:14:22', ip: '192.168.1.15', loc: 'London, UK' },
   { action: 'Rotated', user: 'sarah.james@acme.com', date: '2026-06-02 11:42:01', ip: '10.0.4.82', loc: 'New York, US' },
   { action: 'Edited', user: 'mike.chen@acme.com', date: '2026-06-01 16:30:15', ip: '10.0.5.11', loc: 'California, US' },
-  { action: 'Created', user: 'will.coyote@acme.com', date: '2026-05-28 09:12:00', ip: '10.0.3.43', loc: 'Texas, US' }
+  { action: 'Created', user: 'will.coyote@acme.com', date: '2026-05-28 09:12:00', ip: '10.0.3.43', loc: 'Texas, US' },
 ];

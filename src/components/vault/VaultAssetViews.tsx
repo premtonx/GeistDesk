@@ -46,6 +46,7 @@ export interface VaultAsset {
   owner?: string;
   tags?: string[];
   lastModifiedBy?: string;
+  icon?: string;
 }
 
 interface VaultAssetViewsProps {
@@ -78,6 +79,40 @@ function typeIcon(type: string) {
     case 'cloud': return <Cloud className={cls} />;
     default: return <KeyIcon className={cls} />;
   }
+}
+
+const BRAND_ICON_STYLES: Record<string, { label: string; className: string }> = {
+  aws: { label: 'AWS', className: 'bg-[#FF9900]/15 text-[#FF9900] border-[#FF9900]/30' },
+  docker: { label: '🐳', className: 'bg-[#2496ED]/10 text-[#2496ED] border-[#2496ED]/25' },
+  amazon: { label: 'a', className: 'bg-[#FF9900]/10 text-slate-900 border-amber-200 font-black italic' },
+  github: { label: 'GH', className: 'bg-slate-900 text-white border-slate-700 font-bold' },
+};
+
+function assetBrandIcon(asset: VaultAsset) {
+  const brand = asset.icon ? BRAND_ICON_STYLES[asset.icon] : undefined;
+  if (!brand) {
+    return (
+      <div className="h-8 w-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">
+        {typeIcon(asset.type)}
+      </div>
+    );
+  }
+  return (
+    <div
+      className={cn(
+        'h-8 w-8 rounded-xl border flex items-center justify-center shrink-0 text-[10px]',
+        brand.className,
+      )}
+      title={asset.icon}
+    >
+      {brand.label}
+    </div>
+  );
+}
+
+function strengthFromTags(tags?: string[]): string | null {
+  const match = tags?.find((tag) => /strength:\s*\d+%/i.test(tag));
+  return match?.match(/(\d+)%/)?.[1] ? `${match.match(/(\d+)%/)![1]}%` : null;
 }
 
 function categoryLabel(type: string, t: (k: string, d?: string) => string): string {
@@ -255,12 +290,13 @@ function AssetTableRow({
   const status = getAssetStatus(asset);
   const vaultId = resolveCredVaultId(asset, index);
   const vault = VAULT_DEFINITIONS.find((v) => v.id === vaultId);
+  const strength = strengthFromTags(asset.tags);
 
   return (
     <tr onClick={() => onSelect(asset)} className="hover:bg-slate-50/60 cursor-pointer group">
       <td className="px-4 py-3">
         <div className="flex items-start gap-2.5 min-w-[200px]">
-          <div className="h-8 w-8 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">{typeIcon(asset.type)}</div>
+          {assetBrandIcon(asset)}
           <div className="min-w-0">
             <div className="flex items-center gap-1.5">
               <p className="font-semibold text-slate-900 truncate">{asset.label}</p>
@@ -289,9 +325,14 @@ function AssetTableRow({
       <td className="px-4 py-3 text-slate-600">{asset.owner ?? asset.lastModifiedBy ?? t('vault.defaultOwner', 'You')}</td>
       <td className="px-4 py-3 text-slate-400 tabular-nums">{formatUpdated(asset.updatedAt)}</td>
       <td className="px-4 py-3">
-        <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border', STATUS_STYLES[status])}>
-          {statusLabel(status, t)}
-        </span>
+        <div className="flex flex-col gap-1">
+          <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border w-fit', STATUS_STYLES[status])}>
+            {statusLabel(status, t)}
+          </span>
+          {strength ? (
+            <span className="text-[9px] font-bold text-violet-600 tabular-nums">{strength} strength</span>
+          ) : null}
+        </div>
       </td>
       <td className="px-4 py-3 text-slate-400">{formatUpdated(asset.updatedAt)}</td>
       <td className="px-4 py-3 text-right">
@@ -334,7 +375,7 @@ function AssetCard({
     >
       <div className="flex items-start justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 min-w-0">
-          <div className="h-9 w-9 rounded-xl bg-slate-100 flex items-center justify-center shrink-0">{typeIcon(asset.type)}</div>
+          {assetBrandIcon(asset)}
           <div className="min-w-0">
             <p className="font-semibold text-slate-900 truncate">{asset.label}</p>
             <p className="text-[10px] text-slate-400 truncate">{asset.username}</p>
