@@ -1,9 +1,9 @@
 /**
  * Server-side Polyglot Bridge translation service.
  *
- * POLYGLOT BRIDGE POLICY: Premium AI / LLM orchestration tokens must NEVER be fired
- * for standard UI conversions or routine support-surface translations. This module
- * uses static phrase dictionaries and optional DeepL HTTP API only.
+ * POLYGLOT BRIDGE POLICY: Premium LLM orchestrator tokens are locked out unless the
+ * workspace admin explicitly enables allowAiFallback. Default path uses static
+ * dictionaries and optional DeepL only.
  */
 
 const PHRASE_DICTIONARY: Record<string, Record<string, string>> = {
@@ -48,6 +48,8 @@ const DEEPL_TARGET_MAP: Record<string, string> = {
 export interface PolyglotTranslateOptions {
   customDictionary?: Record<string, Record<string, string>>;
   translationProviderKey?: string;
+  allowAiFallback?: boolean;
+  mood?: string;
 }
 
 function lookupStaticDictionary(
@@ -104,6 +106,33 @@ async function translateViaDeepL(
   return payload.translations?.[0]?.text?.trim() ?? null;
 }
 
+async function translateViaLlm(
+  text: string,
+  targetLanguage: string,
+  mood?: string,
+): Promise<string | null> {
+  try {
+    const { executeAiFeatureRequest, requireLifecycleOutput } = await import('./ai-orchestrator-service.js');
+    const toneHint = mood?.trim() ? ` Maintain a ${mood.trim()} tone.` : '';
+    const prompt =
+      `Translate the following support content accurately into ${targetLanguage}.` +
+      ` Preserve technical terms and formatting.${toneHint} Output only the translation.\n\n${text}`;
+
+    const result = await executeAiFeatureRequest({
+      workspaceId: 'default',
+      feature: 'translation',
+      prompt,
+      metadata: { targetLanguage, mood, source: 'polyglot-bridge' },
+    });
+
+    const output = requireLifecycleOutput(result);
+    return output.trim() || null;
+  } catch (error) {
+    console.warn('[Polyglot Bridge] LLM translation fallback skipped:', error);
+    return null;
+  }
+}
+
 export async function translatePolyglotContent(
   text: string,
   targetLanguage: string,
@@ -119,6 +148,11 @@ export async function translatePolyglotContent(
     if (deepl) return deepl;
   } catch (error) {
     console.warn('[Polyglot Bridge] DeepL translation skipped:', error);
+  }
+
+  if (options.allowAiFallback) {
+    const llm = await translateViaLlm(text, targetLanguage, options.mood);
+    if (llm) return llm;
   }
 
   return text;

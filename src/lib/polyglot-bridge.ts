@@ -1,4 +1,5 @@
 import type { PolyglotLanguage, PolyglotBridgeSettings } from './module-config';
+import { getModuleConfig } from './module-config';
 
 export { DEFAULT_SUPPORTED_LANGUAGES } from './module-config';
 export type { PolyglotBridgeSettings } from './module-config';
@@ -76,22 +77,25 @@ export function inferLocaleFromFilename(filename: string): string {
 }
 
 /**
- * POLYGLOT BRIDGE POLICY — Standard UI and support-surface translations MUST use static
- * dictionary lookups or low-cost machine translation (e.g. DeepL). Premium LLM /
- * orchestrator tokens must NEVER be consumed for routine UI string conversion.
+ * POLYGLOT BRIDGE POLICY — Standard UI translations use dictionary + low-cost MT first.
+ * LLM orchestrator tokens are only consumed when the admin enables allowAiFallback.
  */
 export async function translateSupportContent(
   text: string,
   targetLanguage: string,
-  _options?: { mood?: string },
+  options?: { mood?: string },
 ): Promise<string> {
   if (!text.trim()) return '';
 
+  const moduleConfig = getModuleConfig();
+
   try {
     const axios = (await import('axios')).default;
-    const res = await axios.post<{ translation: string }>('/api/ai/polyglot/translate', {
+    const res = await axios.post<{ translation: string; engine?: string }>('/api/ai/polyglot/translate', {
       text,
       targetLanguage,
+      mood: options?.mood,
+      allowAiFallback: moduleConfig.polyglot.allowAiFallback,
     });
     return res.data.translation?.trim() || text;
   } catch (error) {

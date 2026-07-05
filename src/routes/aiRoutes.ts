@@ -101,13 +101,13 @@ router.post('/execute/resume', authenticate, async (req: Request, res: Response)
 
 /**
  * POST /api/ai/polyglot/translate
- * Token-efficient Polyglot Bridge translation (dictionary + optional DeepL).
- * Premium LLM orchestrator tokens are never used for this endpoint.
+ * Token-efficient Polyglot Bridge translation (dictionary + optional DeepL + optional LLM when enabled).
  */
 router.post('/polyglot/translate', authenticate, async (req: Request, res: Response) => {
   try {
     const text = String(req.body.text || '');
     const targetLanguage = String(req.body.targetLanguage || '');
+    const mood = req.body.mood ? String(req.body.mood) : undefined;
     if (!text.trim()) {
       return res.status(400).json({ error: 'text is required.' });
     }
@@ -115,13 +115,22 @@ router.post('/polyglot/translate', authenticate, async (req: Request, res: Respo
       return res.status(400).json({ error: 'targetLanguage is required.' });
     }
 
-    let polyglotOptions: { customDictionary?: Record<string, Record<string, string>>; translationProviderKey?: string } = {};
+    let polyglotOptions: {
+      customDictionary?: Record<string, Record<string, string>>;
+      translationProviderKey?: string;
+      allowAiFallback?: boolean;
+      mood?: string;
+    } = { allowAiFallback: false, mood };
+
     try {
       const moduleConfig = await getDocDirect('module_config', 'global');
       if (moduleConfig?.polyglot) {
         polyglotOptions = {
           customDictionary: moduleConfig.polyglot.customDictionary,
           translationProviderKey: moduleConfig.polyglot.translationProviderKey,
+          // Server-side module config is authoritative — never trust client override alone.
+          allowAiFallback: moduleConfig.polyglot.allowAiFallback === true,
+          mood,
         };
       }
     } catch (configError) {
@@ -129,7 +138,8 @@ router.post('/polyglot/translate', authenticate, async (req: Request, res: Respo
     }
 
     const translation = await translatePolyglotContent(text, targetLanguage, polyglotOptions);
-    return res.status(200).json({ translation, engine: 'polyglot-bridge' });
+    const engine = polyglotOptions.allowAiFallback ? 'polyglot-bridge+ai-fallback' : 'polyglot-bridge';
+    return res.status(200).json({ translation, engine });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return res.status(500).json({ error: 'Polyglot translation failed.', details: message });

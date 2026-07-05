@@ -10,11 +10,14 @@ export interface PolyglotBridgeSettings {
   translationProviderKey: string;
   /** Source phrase → target language display name → translated text */
   customDictionary: Record<string, Record<string, string>>;
+  /** When true, unresolved phrases may escalate to the LLM orchestrator (consumes tokens). */
+  allowAiFallback: boolean;
 }
 
 export const DEFAULT_POLYGLOT_BRIDGE_SETTINGS: PolyglotBridgeSettings = {
   translationProviderKey: '',
   customDictionary: {},
+  allowAiFallback: false,
 };
 
 /** Workspace-wide default polyglot languages (US, ES, JP, FR, DE). */
@@ -147,6 +150,7 @@ export const getModuleConfig = (): ModuleConfig => {
       polyglot: {
         translationProviderKey: parsed.polyglot?.translationProviderKey ?? '',
         customDictionary: parsed.polyglot?.customDictionary ?? {},
+        allowAiFallback: parsed.polyglot?.allowAiFallback ?? false,
       },
     };
   } catch {

@@ -2342,7 +2342,9 @@
       "dictionaryDropSubhint": "Drop fr.json or nested phrase maps — parsed client-side and synced to the dictionary store.",
       "dictionaryImported": "Dictionary imported ({{count}} phrase entries).",
       "jsonOnly": "Only .json dictionary files are supported.",
-      "jsonParseError": "Could not parse JSON dictionary file."
+      "jsonParseError": "Could not parse JSON dictionary file.",
+      "aiFallbackTitle": "🤖 Enable AI-Assisted Translation",
+      "aiFallbackDesc": "Allows the system to translate complex ticket contexts via the LLM orchestrator when static dictionaries or machine translators are insufficient. Warning: consumes AI tokens."
     }
   },
   "languages": {

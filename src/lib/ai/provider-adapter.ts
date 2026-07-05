@@ -198,7 +198,7 @@ THREAD HISTORY: ${context.threadHistory?.join("\n") || "No history."}`;
   async translate(text: string, targetLanguage: string, mood: string = "Professional"): Promise<string> {
     if (!text || !text.trim()) return "";
 
-    // POLYGLOT BRIDGE POLICY: Never route routine UI/support translations through LLM orchestrator tokens.
+    // POLYGLOT BRIDGE POLICY: Dictionary + low-cost MT first; LLM only when admin enables allowAiFallback.
     return translateSupportContent(text, targetLanguage, { mood });
   }
 

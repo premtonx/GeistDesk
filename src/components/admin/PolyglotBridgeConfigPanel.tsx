@@ -385,6 +385,31 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
                   </div>
                 </div>
               </div>
+
+              <div className="rounded-xl border border-amber-200/80 bg-amber-50/40 p-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+                <div className="space-y-1 min-w-0">
+                  <Label htmlFor="polyglot-ai-fallback" className="text-sm font-bold text-slate-800">
+                    {t('adminHub.polyglot.aiFallbackTitle', '🤖 KI-gestützte Übersetzung aktivieren')}
+                  </Label>
+                  <p className="text-xs text-muted-foreground leading-relaxed">
+                    {t(
+                      'adminHub.polyglot.aiFallbackDesc',
+                      'Erlaubt dem System, komplexe Ticket-Kontexte mittels LLM-Orchestrator zu übersetzen, falls die statischen Wörterbücher oder maschinellen Übersetzer nicht ausreichen. Achtung: Verbraucht KI-Token.',
+                    )}
+                  </p>
+                </div>
+                <Switch
+                  id="polyglot-ai-fallback"
+                  checked={config.polyglot.allowAiFallback}
+                  onCheckedChange={(allowAiFallback) =>
+                    persist({
+                      ...config,
+                      polyglot: { ...config.polyglot, allowAiFallback },
+                    })
+                  }
+                  className="shrink-0"
+                />
+              </div>
             </div>
 
             <div className="space-y-2">

@@ -2621,7 +2621,9 @@
       "dictionaryDropSubhint": "fr.json oder verschachtelte Phrasen-Maps ablegen — clientseitig geparst und in den Wörterbuch-Speicher synchronisiert.",
       "dictionaryImported": "Wörterbuch importiert ({{count}} Phraseneinträge).",
       "jsonOnly": "Nur .json-Wörterbuchdateien werden unterstützt.",
-      "jsonParseError": "JSON-Wörterbuchdatei konnte nicht geparst werden."
+      "jsonParseError": "JSON-Wörterbuchdatei konnte nicht geparst werden.",
+      "aiFallbackTitle": "🤖 KI-gestützte Übersetzung aktivieren",
+      "aiFallbackDesc": "Erlaubt dem System, komplexe Ticket-Kontexte mittels LLM-Orchestrator zu übersetzen, falls die statischen Wörterbücher oder maschinellen Übersetzer nicht ausreichen. Achtung: Verbraucht KI-Token."
     }
   },
   "languages": {
