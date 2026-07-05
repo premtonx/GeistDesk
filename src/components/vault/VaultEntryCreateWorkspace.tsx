@@ -472,17 +472,19 @@ export function VaultEntryCreateWorkspace({
         {/* -------------------- STEP 2 CONTAINER -------------------- */}
         {wizardStep === 2 && (
           <div className="space-y-6">
+            <p className="text-[11px] text-slate-500 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2">
+              Provide at least one shareable field: username, password, host, notes, or TOTP secret.
+            </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1">
                 <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
-                  Username / System Principal Access Identifier <span className="text-red-500">*</span>
+                  Username / System Principal Access Identifier
                 </label>
                 <Input 
                   placeholder="e.g. root, administrator, ec2-user" 
                   value={newEntry.username || ''}
                   onChange={(e) => setNewEntry({ ...newEntry, username: e.target.value })}
                   className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm"
-                  required
                 />
               </div>
 
@@ -490,7 +492,7 @@ export function VaultEntryCreateWorkspace({
               <div className="space-y-1">
                 <div className="flex justify-between items-center pr-1">
                   <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
-                    Sovereign Secret Password / Key Token <span className="text-red-500">*</span>
+                    Sovereign Secret Password / Key Token
                   </label>
                   {rawPassword && (
                     <div className={cn(
@@ -509,7 +511,6 @@ export function VaultEntryCreateWorkspace({
                     value={rawPassword}
                     onChange={(e) => setRawPassword(e.target.value)}
                     className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm pr-20"
-                    required
                   />
                   <div className="absolute right-1.5 top-1 flex items-center gap-1">
                     <button
@@ -1014,7 +1015,7 @@ export function VaultEntryCreateWorkspace({
                   <div>
                     <span className="text-slate-400 block mb-0.5 font-medium">Username Principal:</span>
                     <span className="font-bold text-slate-800 block truncate" title={newEntry.username}>
-                      {newEntry.username}
+                      {newEntry.username?.trim() || '— (password-only entry)'}
                     </span>
                   </div>
                   <div>
@@ -1179,8 +1180,15 @@ export function VaultEntryCreateWorkspace({
                     return;
                   }
                 } else if (wizardStep === 2) {
-                  if (!newEntry.username || !rawPassword) {
-                    toast.error("Please provide Username ID and raw Password secret before proceeding.");
+                  const hasShareableField = Boolean(
+                    newEntry.username?.trim() ||
+                      rawPassword.trim() ||
+                      newEntry.host?.trim() ||
+                      newEntry.notes?.trim() ||
+                      newEntry.totpSecret?.trim(),
+                  );
+                  if (!hasShareableField) {
+                    toast.error('Provide at least a username, password, host, notes, or TOTP secret.');
                     return;
                   }
                 }

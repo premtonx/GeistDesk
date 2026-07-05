@@ -5,6 +5,24 @@ function encodeAad(provenance?: string): Uint8Array | undefined {
   return new TextEncoder().encode(provenance.trim());
 }
 
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function base64ToBytes(b64: string): Uint8Array {
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes;
+}
+
 /**
  * Browser-native AES-256-GCM with mandatory auth-tag verification.
  * Optional provenance is bound as AAD so tampered server payloads fail closed.
@@ -14,9 +32,10 @@ export async function encryptWithWebCryptoAesGcm(
   key: Uint8Array,
   provenance?: string,
 ): Promise<string> {
+  const normalizedKey = new Uint8Array(key instanceof Uint8Array ? key : key);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encodedData = new TextEncoder().encode(plaintext);
-  const cryptoKey = await crypto.subtle.importKey('raw', key as unknown as BufferSource, { name: 'AES-GCM' }, false, [
+  const cryptoKey = await crypto.subtle.importKey('raw', normalizedKey, { name: 'AES-GCM' }, false, [
     'encrypt',
   ]);
   const aad = encodeAad(provenance);
@@ -29,7 +48,7 @@ export async function encryptWithWebCryptoAesGcm(
   const combined = new Uint8Array(iv.length + encrypted.byteLength);
   combined.set(iv);
   combined.set(new Uint8Array(encrypted), iv.length);
-  return btoa(String.fromCharCode(...combined));
+  return bytesToBase64(combined);
 }
 
 export async function decryptWithWebCryptoAesGcm(
@@ -37,10 +56,11 @@ export async function decryptWithWebCryptoAesGcm(
   key: Uint8Array,
   provenance?: string,
 ): Promise<string> {
-  const combined = Uint8Array.from(atob(encryptedB64), (char) => char.charCodeAt(0));
+  const normalizedKey = new Uint8Array(key instanceof Uint8Array ? key : key);
+  const combined = base64ToBytes(encryptedB64);
   const iv = combined.slice(0, 12);
   const data = combined.slice(12);
-  const cryptoKey = await crypto.subtle.importKey('raw', key as unknown as BufferSource, { name: 'AES-GCM' }, false, [
+  const cryptoKey = await crypto.subtle.importKey('raw', normalizedKey, { name: 'AES-GCM' }, false, [
     'decrypt',
   ]);
   const aad = encodeAad(provenance);

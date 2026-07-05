@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, type FormEvent, type KeyboardEvent } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef, type FormEvent, type KeyboardEvent } from 'react';
 import { startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
 import { 
   Lock, 
@@ -223,7 +223,27 @@ async function deriveMasterKey(password: string, salt: string) {
     hashLength: 32,
     outputType: 'binary',
   });
-  return result;
+  return result instanceof Uint8Array ? result : new Uint8Array(result);
+}
+
+function normalizeDerivedKey(key: Uint8Array | ArrayBuffer | null): Uint8Array | null {
+  if (!key) return null;
+  if (key instanceof Uint8Array) return key;
+  return new Uint8Array(key);
+}
+
+function entryHasShareableSecret(entry: Partial<Credential>, rawPassword: string): boolean {
+  return Boolean(
+    entry.username?.trim() ||
+      rawPassword.trim() ||
+      entry.totpSecret?.trim() ||
+      entry.notes?.trim() ||
+      entry.host?.trim(),
+  );
+}
+
+async function encryptCredentialSecret(rawPassword: string, key: Uint8Array): Promise<string> {
+  return encryptData(rawPassword, key);
 }
 
 async function encryptData(data: string, key: Uint8Array, provenance?: string) {
@@ -455,6 +475,26 @@ export default function CredentialVaultPage() {
   }) || [];
 
   // Seeding default high-fidelity items into Dexie if empty
+  const seedCredentialItem = async (key: Uint8Array, item: (typeof SEEDED_CREDENTIALS)[number]) => {
+    const encryptedPassword = await encryptCredentialSecret(item.plainPass || '', key);
+    await localDB.credentials.add({
+      type: item.type,
+      label: item.label,
+      username: item.username || '',
+      encryptedPassword,
+      host: item.host,
+      notes: item.notes,
+      updatedAt: Date.now() - item.offsetHours * 3600 * 1000,
+      lastModifiedBy: item.lastModifiedBy,
+      favorite: item.favorite,
+      deleted: false,
+      vaultId: item.vaultId,
+      icon: item.icon,
+      iconType: item.icon ? ('preset' as const) : undefined,
+      tags: item.tags,
+    });
+  };
+
   const seedDefaultCredentials = async (key: Uint8Array) => {
     try {
       // Seed default categories
@@ -476,46 +516,14 @@ export default function CredentialVaultPage() {
       const count = await localDB.credentials.count();
       if (count === 0) {
         for (const item of SEEDED_CREDENTIALS) {
-          const encryptedPassword = await encryptData(item.plainPass, key);
-          await localDB.credentials.add({
-            type: item.type,
-            label: item.label,
-            username: item.username,
-            encryptedPassword,
-            host: item.host,
-            notes: item.notes,
-            updatedAt: Date.now() - (item.offsetHours * 3600 * 1000),
-            lastModifiedBy: item.lastModifiedBy,
-            favorite: item.favorite,
-            deleted: false,
-            vaultId: item.vaultId,
-            icon: item.icon,
-            iconType: item.icon ? 'preset' as const : undefined,
-            tags: item.tags,
-          });
+          await seedCredentialItem(key, item);
         }
         logAudit({ module: 'credentials', action: 'vault_seeded', details: { source: 'high_fidelity_screenshot_data' } });
       } else {
-        for (const item of BRANDED_SHOWCASE_CREDENTIALS) {
+        for (const item of SEEDED_CREDENTIALS) {
           const existing = await localDB.credentials.filter((c) => c.label === item.label).count();
           if (existing > 0) continue;
-          const encryptedPassword = await encryptData(item.plainPass, key);
-          await localDB.credentials.add({
-            type: item.type,
-            label: item.label,
-            username: item.username,
-            encryptedPassword,
-            host: item.host,
-            notes: item.notes,
-            updatedAt: Date.now() - (item.offsetHours * 3600 * 1000),
-            lastModifiedBy: item.lastModifiedBy,
-            favorite: item.favorite,
-            deleted: false,
-            vaultId: item.vaultId,
-            icon: item.icon,
-            iconType: item.icon ? 'preset' as const : undefined,
-            tags: item.tags,
-          });
+          await seedCredentialItem(key, item);
         }
       }
     } catch (err) {
@@ -530,7 +538,7 @@ export default function CredentialVaultPage() {
     try {
       // Argon2 key derivation bound to user specific salt string
       const key = await deriveMasterKey(masterPassword, `user-salt-${user.uid}`);
-      setDerivedKey(key);
+      setDerivedKey(normalizeDerivedKey(key));
       await seedDefaultCredentials(key);
       setIsLocked(false);
       logAudit({ module: 'credentials', action: 'vault_unlocked', details: { vaultType: 'personal_local' } });
@@ -788,21 +796,49 @@ export default function CredentialVaultPage() {
     }
   };
 
+  const autoUnlockAttemptedRef = useRef(false);
+
+  useEffect(() => {
+    if (!user || !isLocked || isUnlocking || autoUnlockAttemptedRef.current) return;
+    autoUnlockAttemptedRef.current = true;
+    void handleUnlock();
+  }, [user, isLocked, isUnlocking]);
+
+  const resolveActiveKey = async (): Promise<Uint8Array | null> => {
+    const cached = normalizeDerivedKey(derivedKey);
+    if (cached) return cached;
+    if (!user || !masterPassword) return null;
+    const key = await deriveMasterKey(masterPassword, `user-salt-${user.uid}`);
+    const normalized = normalizeDerivedKey(key);
+    setDerivedKey(normalized);
+    return normalized;
+  };
+
   // Create new credentials
   const handleCreateEntry = async (e: FormEvent) => {
     e.preventDefault();
-    if (!newEntry.label || !newEntry.username || !rawPassword || !derivedKey) {
-      toast.error("Required fields missing. Ensure label, username and password are provided.");
+    if (!newEntry.label?.trim()) {
+      toast.error('Asset name is required.');
+      return;
+    }
+    if (!entryHasShareableSecret(newEntry, rawPassword)) {
+      toast.error('Provide at least a username, password, host, notes, or TOTP secret.');
       return;
     }
 
     setIsSaving(true);
     try {
-      const encryptedPassword = await encryptData(rawPassword, derivedKey);
+      const activeKey = await resolveActiveKey();
+      if (!activeKey) {
+        toast.error('Unlock the vault before saving entries.');
+        return;
+      }
+
+      const encryptedPassword = await encryptCredentialSecret(rawPassword, activeKey);
       const toAdd: Credential = {
-        type: newEntry.type as any,
-        label: newEntry.label || '',
-        username: newEntry.username || '',
+        type: newEntry.type as Credential['type'],
+        label: newEntry.label.trim(),
+        username: newEntry.username?.trim() || '',
         encryptedPassword,
         host: newEntry.host || '',
         notes: newEntry.notes || '',
@@ -811,15 +847,13 @@ export default function CredentialVaultPage() {
         favorite: false,
         deleted: false,
         vaultId: activeVaultId === 'local' ? (newEntry.vaultId || 'local') : activeVaultId,
-
-        // Enterprise metadata
         owner: newEntry.owner || 'You',
         team: newEntry.team || 'Platform Ops',
         department: newEntry.department || 'Infrastructure',
-        linkedCompany: newEntry.linkedCompany || 'Acme Global',
-        linkedAsset: newEntry.linkedAsset || 'Server Cluster',
-        linkedTicket: newEntry.linkedTicket || 'Ticket #442',
-        tags: newEntry.tags || ['Production'],
+        linkedCompany: newEntry.linkedCompany || '',
+        linkedAsset: newEntry.linkedAsset || '',
+        linkedTicket: newEntry.linkedTicket || '',
+        tags: newEntry.tags || [],
         expirationPolicy: newEntry.expirationPolicy || 'Never',
         rotationPolicy: newEntry.rotationPolicy || 'Manual',
         totpSecret: newEntry.totpSecret || '',
@@ -833,8 +867,8 @@ export default function CredentialVaultPage() {
           jitAccess: false,
           requireMfa: false,
           disableExport: false,
-          disableCopy: false
-        }
+          disableCopy: false,
+        },
       };
 
       await localDB.credentials.add(toAdd);
@@ -879,7 +913,8 @@ export default function CredentialVaultPage() {
       setWizardStep(1);
       setIsCreatingEntry(false);
     } catch (err) {
-      toast.error("Failed to commit cryptography record");
+      console.error('[GeistVault] Failed to create credential entry:', err);
+      toast.error(err instanceof Error ? err.message : 'Failed to commit cryptography record');
     } finally {
       setIsSaving(false);
     }
