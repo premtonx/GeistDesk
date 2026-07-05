@@ -31,7 +31,6 @@ import { cn } from '../../lib/utils';
 import { usePermissions } from '../../hooks/usePermissions';
 import { ShieldCheck, Lock } from 'lucide-react';
 import { useTranslation } from '../../lib/context/I18nContext';
-import { PolyglotBridgeConfigPanel } from '../admin/PolyglotBridgeConfigPanel';
 
 const categories = [
   {
@@ -241,6 +240,17 @@ const categories = [
         bgColor: 'bg-indigo-50',
         borderColor: 'border-indigo-105',
         badge: 'Connectivity',
+        module: 'rbac'
+      },
+      {
+        title: 'Polyglot Bridge',
+        description: 'Provision header flags, translation API keys, and custom phrase dictionaries.',
+        icon: Globe,
+        path: '/admin/polyglot',
+        color: 'text-teal-600',
+        bgColor: 'bg-teal-50',
+        borderColor: 'border-teal-105',
+        badge: 'Global',
         module: 'rbac'
       },
       {
@@ -470,8 +480,6 @@ export default function AdminHubPage() {
           </div>
 
         </div>
-
-        <PolyglotBridgeConfigPanel />
 
         {/* 2. CATEGORIZED INFRASTRUCTURE CONFIGURATION BLOCKS */}
         <div className="space-y-12">

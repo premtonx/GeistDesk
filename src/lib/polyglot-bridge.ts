@@ -1,6 +1,7 @@
-import type { PolyglotLanguage } from './module-config';
+import type { PolyglotLanguage, PolyglotBridgeSettings } from './module-config';
 
 export { DEFAULT_SUPPORTED_LANGUAGES } from './module-config';
+export type { PolyglotBridgeSettings } from './module-config';
 
 /** ISO 639-1 presets for admin provisioning dropdowns. */
 export const ISO_LANGUAGE_PRESETS: Record<string, { lang: string; flagCode: string }> = {
@@ -31,6 +32,47 @@ export function resolveLanguagePreset(isoCode: string): { lang: string; flagCode
 
 export function getActiveSupportedLanguages(languages: PolyglotLanguage[]): PolyglotLanguage[] {
   return languages.filter((entry) => entry.enabled);
+}
+
+function isNestedPhraseDictionary(value: unknown): value is Record<string, Record<string, string>> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  return Object.values(value).some((entry) => entry && typeof entry === 'object' && !Array.isArray(entry));
+}
+
+/** Merge imported JSON (flat locale file or nested phrase map) into the custom dictionary store. */
+export function mergeImportedDictionaryJson(
+  existing: PolyglotBridgeSettings['customDictionary'],
+  parsed: unknown,
+  localeHint?: string,
+): PolyglotBridgeSettings['customDictionary'] {
+  const merged: PolyglotBridgeSettings['customDictionary'] = { ...existing };
+
+  if (isNestedPhraseDictionary(parsed)) {
+    for (const [phrase, targets] of Object.entries(parsed)) {
+      merged[phrase] = { ...(merged[phrase] ?? {}), ...targets };
+    }
+    return merged;
+  }
+
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return merged;
+  }
+
+  const iso = normalizeIsoCode(localeHint || 'en');
+  const preset = resolveLanguagePreset(iso);
+  const targetLabel = preset.lang;
+
+  for (const [sourceKey, rawValue] of Object.entries(parsed as Record<string, unknown>)) {
+    if (typeof rawValue !== 'string' || !rawValue.trim()) continue;
+    merged[sourceKey] = { ...(merged[sourceKey] ?? {}), [targetLabel]: rawValue.trim() };
+  }
+
+  return merged;
+}
+
+export function inferLocaleFromFilename(filename: string): string {
+  const base = filename.replace(/\.json$/i, '').split(/[/\\]/).pop() || '';
+  return normalizeIsoCode(base);
 }
 
 /**

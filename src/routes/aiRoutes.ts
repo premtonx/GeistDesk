@@ -3,6 +3,7 @@ import { authenticate } from '../middleware/authMiddleware.js';
 import { AI_DECISION_ENGINE_FLOW, type AiExecutionContext, type AiFeatureId } from '../types/aiOrchestrator.js';
 import { executeAiFeatureRequest } from '../lib/ai-orchestrator-service.js';
 import { translatePolyglotContent } from '../lib/polyglot-translate-service.js';
+import { getDocDirect } from '../lib/postgres-backend.js';
 
 const router = Router();
 
@@ -113,7 +114,21 @@ router.post('/polyglot/translate', authenticate, async (req: Request, res: Respo
     if (!targetLanguage.trim()) {
       return res.status(400).json({ error: 'targetLanguage is required.' });
     }
-    const translation = await translatePolyglotContent(text, targetLanguage);
+
+    let polyglotOptions: { customDictionary?: Record<string, Record<string, string>>; translationProviderKey?: string } = {};
+    try {
+      const moduleConfig = await getDocDirect('module_config', 'global');
+      if (moduleConfig?.polyglot) {
+        polyglotOptions = {
+          customDictionary: moduleConfig.polyglot.customDictionary,
+          translationProviderKey: moduleConfig.polyglot.translationProviderKey,
+        };
+      }
+    } catch (configError) {
+      console.warn('[Polyglot Bridge] Module config lookup skipped:', configError);
+    }
+
+    const translation = await translatePolyglotContent(text, targetLanguage, polyglotOptions);
     return res.status(200).json({ translation, engine: 'polyglot-bridge' });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

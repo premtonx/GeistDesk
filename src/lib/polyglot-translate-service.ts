@@ -45,11 +45,24 @@ const DEEPL_TARGET_MAP: Record<string, string> = {
   nl: 'NL',
 };
 
-function lookupStaticDictionary(text: string, targetLanguage: string): string | null {
+export interface PolyglotTranslateOptions {
+  customDictionary?: Record<string, Record<string, string>>;
+  translationProviderKey?: string;
+}
+
+function lookupStaticDictionary(
+  text: string,
+  targetLanguage: string,
+  customDictionary?: Record<string, Record<string, string>>,
+): string | null {
   const trimmed = text.trim();
-  const bucket = PHRASE_DICTIONARY[trimmed];
-  if (!bucket) return null;
-  return bucket[targetLanguage] ?? null;
+  const buckets = [customDictionary, PHRASE_DICTIONARY];
+  for (const bucket of buckets) {
+    if (!bucket) continue;
+    const entry = bucket[trimmed];
+    if (entry?.[targetLanguage]) return entry[targetLanguage];
+  }
+  return null;
 }
 
 function toDeepLTargetLang(targetLanguage: string): string | null {
@@ -57,8 +70,12 @@ function toDeepLTargetLang(targetLanguage: string): string | null {
   return DEEPL_TARGET_MAP[key] ?? null;
 }
 
-async function translateViaDeepL(text: string, targetLanguage: string): Promise<string | null> {
-  const authKey = process.env.DEEPL_AUTH_KEY || process.env.DEEPL_API_KEY;
+async function translateViaDeepL(
+  text: string,
+  targetLanguage: string,
+  authKeyOverride?: string,
+): Promise<string | null> {
+  const authKey = authKeyOverride || process.env.DEEPL_AUTH_KEY || process.env.DEEPL_API_KEY;
   if (!authKey) return null;
 
   const targetLang = toDeepLTargetLang(targetLanguage);
@@ -87,14 +104,18 @@ async function translateViaDeepL(text: string, targetLanguage: string): Promise<
   return payload.translations?.[0]?.text?.trim() ?? null;
 }
 
-export async function translatePolyglotContent(text: string, targetLanguage: string): Promise<string> {
+export async function translatePolyglotContent(
+  text: string,
+  targetLanguage: string,
+  options: PolyglotTranslateOptions = {},
+): Promise<string> {
   if (!text.trim()) return '';
 
-  const dictionaryHit = lookupStaticDictionary(text, targetLanguage);
+  const dictionaryHit = lookupStaticDictionary(text, targetLanguage, options.customDictionary);
   if (dictionaryHit) return dictionaryHit;
 
   try {
-    const deepl = await translateViaDeepL(text, targetLanguage);
+    const deepl = await translateViaDeepL(text, targetLanguage, options.translationProviderKey);
     if (deepl) return deepl;
   } catch (error) {
     console.warn('[Polyglot Bridge] DeepL translation skipped:', error);

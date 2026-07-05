@@ -5,6 +5,18 @@ export interface PolyglotLanguage {
   enabled: boolean;
 }
 
+/** Admin-provisioned translation credentials and custom phrase dictionaries. */
+export interface PolyglotBridgeSettings {
+  translationProviderKey: string;
+  /** Source phrase → target language display name → translated text */
+  customDictionary: Record<string, Record<string, string>>;
+}
+
+export const DEFAULT_POLYGLOT_BRIDGE_SETTINGS: PolyglotBridgeSettings = {
+  translationProviderKey: '',
+  customDictionary: {},
+};
+
 /** Workspace-wide default polyglot languages (US, ES, JP, FR, DE). */
 export const DEFAULT_SUPPORTED_LANGUAGES: PolyglotLanguage[] = [
   { lang: 'English', isoCode: 'en', flagCode: 'en', enabled: true },
@@ -42,6 +54,7 @@ export interface EmailChannelConfig {
 export interface ModuleConfig {
   polyglotEnabled: boolean;
   languages: PolyglotLanguage[];
+  polyglot: PolyglotBridgeSettings;
   debugAdminMode: boolean;
   personioEnabled: boolean;
   personioClientId: string;
@@ -59,6 +72,7 @@ export interface ModuleConfig {
 const DEFAULT_CONFIG: ModuleConfig = {
   polyglotEnabled: true,
   languages: DEFAULT_SUPPORTED_LANGUAGES.map((entry) => ({ ...entry })),
+  polyglot: { ...DEFAULT_POLYGLOT_BRIDGE_SETTINGS, customDictionary: {} },
   debugAdminMode: false,
   personioEnabled: true,
   personioClientId: '',
@@ -130,6 +144,10 @@ export const getModuleConfig = (): ModuleConfig => {
         enabled: lang.enabled ?? true,
         flagCode: lang.flagCode || inferIsoCodeFromLanguage(lang.lang),
       })),
+      polyglot: {
+        translationProviderKey: parsed.polyglot?.translationProviderKey ?? '',
+        customDictionary: parsed.polyglot?.customDictionary ?? {},
+      },
     };
   } catch {
     return DEFAULT_CONFIG;

@@ -1988,6 +1988,10 @@
       "system_settings": {
         "title": "Systemeinstellungen",
         "description": "Identitätsverwaltung, globale Feature-Flags und Debug-Tools."
+      },
+      "polyglot_bridge": {
+        "title": "Polyglot Bridge",
+        "description": "Header-Flags, Übersetzungs-API-Schlüssel und benutzerdefinierte Phrasenwörterbücher bereitstellen."
       }
     },
     "badges": {
@@ -2601,7 +2605,23 @@
       "minOne": "Mindestens eine Sprache muss aktiv bleiben.",
       "removed": "Sprache entfernt.",
       "minOneActive": "Mindestens eine Sprache muss aktiv bleiben.",
-      "reset": "Standard-Sprachliste wiederhergestellt."
+      "reset": "Standard-Sprachliste wiederhergestellt.",
+      "tabLanguages": "Sprachen",
+      "tabCredentials": "🔑 API-Schlüssel & Dateiverwaltung",
+      "credentialsTitle": "🔑 API-Schlüssel & Dateiverwaltung",
+      "credentialsDesc": "Konfigurieren Sie kostengünstige maschinelle Übersetzungs-APIs und importieren Sie benutzerdefinierte Phrasenwörterbücher. Premium-LLM-Tokens werden nie für UI-Übersetzungen verwendet.",
+      "apiKeyLabel": "DeepL API-Schlüssel / Translation Provider Key",
+      "saveApiKey": "Schlüssel speichern",
+      "showKey": "Anzeigen",
+      "hideKey": "Verbergen",
+      "apiKeySaved": "Übersetzungsanbieter-Zugangsdaten gespeichert.",
+      "dictionaryUpload": "JSON-Sprachdatei importieren",
+      "dictionaryEntries": "Einträge",
+      "dictionaryDropHint": "JSON-Sprachdatei importieren",
+      "dictionaryDropSubhint": "fr.json oder verschachtelte Phrasen-Maps ablegen — clientseitig geparst und in den Wörterbuch-Speicher synchronisiert.",
+      "dictionaryImported": "Wörterbuch importiert ({{count}} Phraseneinträge).",
+      "jsonOnly": "Nur .json-Wörterbuchdateien werden unterstützt.",
+      "jsonParseError": "JSON-Wörterbuchdatei konnte nicht geparst werden."
     }
   },
   "languages": {

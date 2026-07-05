@@ -17,6 +17,7 @@ import EmailChannelsPage from './components/pages/EmailChannelsPage';
 import AiOrchestratorPage from './pages/AiOrchestrator';
 import LegalSettingsPage from './components/pages/LegalSettingsPage';
 import AdminHubPage from './components/pages/AdminHubPage';
+import PolyglotBridgeAdminPage from './components/pages/PolyglotBridgeAdminPage';
 import NotificationEnginePage from './components/pages/NotificationEnginePage';
 import CompanySchemaPage from './components/pages/CompanySchemaPage';
 import ContactSchemaPage from './components/pages/ContactSchemaPage';
@@ -123,6 +124,7 @@ function AppRoutes() {
                     <Route path="admin/pii" element={<AdminRoute><PIIShieldPage /></AdminRoute>} />
                     <Route path="admin/sovereignty" element={<AdminRoute><SovereigntyCenterPage /></AdminRoute>} />
                     <Route path="admin/integrations" element={<AdminRoute><IntegrationsPage /></AdminRoute>} />
+                    <Route path="admin/polyglot" element={<AdminRoute><PolyglotBridgeAdminPage /></AdminRoute>} />
                     <Route path="admin/groups" element={<AdminRoute><GroupsPage /></AdminRoute>} />
                     <Route path="admin/workforce" element={<AdminRoute><WorkforcePage /></AdminRoute>} />
                     <Route path="admin/roles" element={<AdminRoute><RolesPage /></AdminRoute>} />

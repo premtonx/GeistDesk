@@ -1766,6 +1766,12 @@
       "identity_access": "Identity & Access",
       "governance": "Governance",
       "platform": "Platform"
+    },
+    "sections": {
+      "polyglot_bridge": {
+        "title": "Polyglot Bridge",
+        "description": "Provision header flags, translation API keys, and custom phrase dictionaries."
+      }
     }
   },
   "protocols": {
@@ -2320,7 +2326,23 @@
       "minOne": "At least one language must remain active.",
       "removed": "Language removed.",
       "minOneActive": "At least one language must stay active.",
-      "reset": "Restored default language roster."
+      "reset": "Restored default language roster.",
+      "tabLanguages": "Languages",
+      "tabCredentials": "🔑 API Keys & File Management",
+      "credentialsTitle": "🔑 API Keys & File Management",
+      "credentialsDesc": "Configure low-cost machine translation credentials and import custom phrase dictionaries. Premium LLM tokens are never used for UI translation.",
+      "apiKeyLabel": "DeepL API Key / Translation Provider Key",
+      "saveApiKey": "Save Key",
+      "showKey": "Show",
+      "hideKey": "Hide",
+      "apiKeySaved": "Translation provider credentials saved.",
+      "dictionaryUpload": "Import JSON Language File",
+      "dictionaryEntries": "entries",
+      "dictionaryDropHint": "Import JSON Language File",
+      "dictionaryDropSubhint": "Drop fr.json or nested phrase maps — parsed client-side and synced to the dictionary store.",
+      "dictionaryImported": "Dictionary imported ({{count}} phrase entries).",
+      "jsonOnly": "Only .json dictionary files are supported.",
+      "jsonParseError": "Could not parse JSON dictionary file."
     }
   },
   "languages": {
