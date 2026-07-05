@@ -16,6 +16,10 @@ import { Badge } from '../ui/badge';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { updateAgentSkills } from '../../lib/orchestratorService';
 import {
+  AGENT_SKILL_BLUEPRINTS,
+  getBlueprintManifest,
+} from './agentSkillBlueprints';
+import {
   AI_PERSONA_DEFINITIONS,
   type AiPersonaId,
   type AiPersonaSkillProfile,
@@ -70,6 +74,8 @@ export function AiAgentSkillsDrawer({
   const [fileName, setFileName] = useState<string | undefined>();
   const [isSaving, setIsSaving] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
+  const [blueprintHighlight, setBlueprintHighlight] = useState(false);
+  const [activeBlueprintId, setActiveBlueprintId] = useState<string | null>(null);
 
   const persona = agentId ? AI_PERSONA_DEFINITIONS[agentId] : null;
   const format = detectFormat(draftContent, fileName);
@@ -79,8 +85,27 @@ export function AiAgentSkillsDrawer({
     if (open && agentId) {
       setDraftContent(initialSkill?.skillsContent ?? '');
       setFileName(initialSkill?.skillsFileName);
+      setActiveBlueprintId(null);
+      setBlueprintHighlight(false);
     }
   }, [open, agentId, initialSkill?.skillsContent, initialSkill?.skillsFileName]);
+
+  const applyBlueprint = useCallback(
+    (blueprintId: string) => {
+      if (readOnly) return;
+      const manifest = getBlueprintManifest(blueprintId);
+      if (!manifest) return;
+      setDraftContent(manifest);
+      setFileName(`${blueprintId}.sample.json`);
+      setActiveBlueprintId(blueprintId);
+      setBlueprintHighlight(true);
+      window.setTimeout(() => setBlueprintHighlight(false), 1200);
+      toast.success(
+        t('aiOrchestrator.personas.blueprintLoaded', 'Sample blueprint loaded into editor.'),
+      );
+    },
+    [readOnly, t],
+  );
 
   const applyFile = useCallback(
     (file: File) => {
@@ -116,6 +141,8 @@ export function AiAgentSkillsDrawer({
         }
         setDraftContent(normalized);
         setFileName(file.name);
+        setActiveBlueprintId(null);
+        setBlueprintHighlight(false);
         toast.success(t('aiOrchestrator.personas.skillsLoaded', 'Skill manifest loaded into editor.'));
       };
       reader.onerror = () => {
@@ -172,6 +199,38 @@ export function AiAgentSkillsDrawer({
         </SheetHeader>
 
         <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5 min-h-0">
+          <div className="space-y-2.5">
+            <Label className="text-xs font-semibold tracking-wide">
+              {t('aiOrchestrator.personas.blueprintsTitle', '💡 Vorlagen / Sample Blueprints')}
+            </Label>
+            <div className="flex flex-wrap gap-2">
+              {AGENT_SKILL_BLUEPRINTS.map((blueprint) => {
+                const isActive = activeBlueprintId === blueprint.id;
+                const isRecommended = blueprint.personaId === agentId;
+                return (
+                  <button
+                    key={blueprint.id}
+                    type="button"
+                    disabled={readOnly}
+                    title={t(blueprint.descriptionKey, blueprint.defaultDescription)}
+                    onClick={() => applyBlueprint(blueprint.id)}
+                    className={cn(
+                      'inline-flex items-center rounded-full border px-3 py-1.5 text-[11px] font-semibold transition-all duration-200',
+                      'bg-slate-100/90 text-slate-600 border-slate-200',
+                      'hover:bg-violet-50 hover:text-violet-700 hover:border-violet-300',
+                      'hover:shadow-[0_0_0_3px_rgba(139,92,246,0.1)]',
+                      'disabled:opacity-50 disabled:pointer-events-none',
+                      isActive && 'bg-violet-100 text-violet-800 border-violet-400 ring-1 ring-violet-200',
+                      isRecommended && !isActive && 'border-violet-200/70',
+                    )}
+                  >
+                    {t(blueprint.labelKey, blueprint.defaultLabel)}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="space-y-2">
             <div className="flex items-center justify-between gap-2 min-w-0">
               <Label htmlFor="agent-skill-script" className="text-xs font-semibold uppercase tracking-wider">
@@ -185,16 +244,20 @@ export function AiAgentSkillsDrawer({
               id="agent-skill-script"
               disabled={readOnly}
               value={draftContent}
-              onChange={(e) => setDraftContent(e.target.value)}
+              onChange={(e) => {
+                setDraftContent(e.target.value);
+                setActiveBlueprintId(null);
+              }}
               placeholder={t(
                 'aiOrchestrator.personas.skillsEditorPlaceholder',
                 'Enter JSON or YAML skill manifest — system instructions, runtime boundaries, tool definitions…',
               )}
               spellCheck={false}
               className={cn(
-                'min-h-[280px] font-mono text-xs leading-relaxed resize-y',
+                'min-h-[280px] font-mono text-xs leading-relaxed resize-y transition-all duration-300',
                 'bg-slate-950 text-emerald-100 border-slate-700 placeholder:text-slate-500',
                 'focus-visible:ring-indigo-500/40',
+                blueprintHighlight && 'ring-2 ring-violet-400/70 border-violet-500/60 shadow-[0_0_12px_rgba(139,92,246,0.25)]',
               )}
             />
             {validationError && (

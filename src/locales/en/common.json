@@ -2159,6 +2159,22 @@
       "skillsDropzoneHint": "Drop .json or .yaml skill manifest here",
       "skillsDropzoneSubhint": "Or click to browse — parsed instantly via FileReader",
       "manageSkillsButton": "🛠️ Agent Skills",
+      "blueprintsTitle": "💡 Sample Blueprints",
+      "blueprintLoaded": "Sample blueprint loaded into editor.",
+      "blueprints": {
+        "support": {
+          "label": "Support · Empathy & Translation",
+          "description": "Multi-language empathy, summarization guardrails, secure translation hooks."
+        },
+        "security": {
+          "label": "Security · Audit & PII",
+          "description": "Zero-trust boundaries, PII scanning, token provenance, escalation flags."
+        },
+        "knowledge": {
+          "label": "Knowledge · Formal Docs",
+          "description": "RCA ingestion, structured Markdown articles, terminology enforcement."
+        }
+      },
       "supportAgent": {
         "label": "Support Agent",
         "tone": "Friendly",

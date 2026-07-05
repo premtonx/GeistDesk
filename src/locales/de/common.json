@@ -2440,6 +2440,22 @@
       "skillsDropzoneHint": ".json- oder .yaml-Skill-Manifest hier ablegen",
       "skillsDropzoneSubhint": "Oder klicken zum Durchsuchen — sofort via FileReader geladen",
       "manageSkillsButton": "🛠️ Skills verwalten",
+      "blueprintsTitle": "💡 Vorlagen / Sample Blueprints",
+      "blueprintLoaded": "Beispiel-Vorlage in den Editor geladen.",
+      "blueprints": {
+        "support": {
+          "label": "Support · Empathie & Übersetzung",
+          "description": "Empathische Mehrsprachigkeit, Zusammenfassungs-Leitplanken, sichere Übersetzungs-Hooks."
+        },
+        "security": {
+          "label": "Sicherheit · Audit & PII",
+          "description": "Zero-Trust-Grenzen, PII-Scanning, Token-Herkunft, Eskalations-Flags."
+        },
+        "knowledge": {
+          "label": "Wissen · Formale Docs",
+          "description": "RCA-Ingestion, strukturierte Markdown-Artikel, Terminologie-Filter."
+        }
+      },
       "supportAgent": {
         "label": "Support-Agent",
         "tone": "Freundlich",
