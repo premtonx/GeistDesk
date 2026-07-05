@@ -67,6 +67,7 @@ import { Ticket as TicketType, Customer } from '../../types';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { GeistDeskLogo } from '../ui/GeistDeskLogo';
 import { FlagIcon } from '../ui/FlagIcon';
+import { syncModuleConfigFromServer } from '../../lib/module-config';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', key: 'dashboard' },
@@ -154,6 +155,12 @@ export default function MainLayout() {
     void fetchAiStatus().then((h) => h && applyHealth(h));
     return subscribeAiHealth((h) => applyHealth(h));
   }, [user]);
+
+  // Hydrate workspace module config from PostgreSQL so admin changes persist across sessions.
+  useEffect(() => {
+    if (!user) return;
+    void syncModuleConfigFromServer(isSystemAdmin);
+  }, [user, isSystemAdmin]);
 
   useEffect(() => {
     if (!user) return;

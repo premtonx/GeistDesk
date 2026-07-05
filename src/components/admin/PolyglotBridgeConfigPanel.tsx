@@ -20,6 +20,7 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import {
   getModuleConfig,
   saveModuleConfig,
+  syncModuleConfigFromServer,
   type ModuleConfig,
   type PolyglotLanguage,
 } from '../../lib/module-config';
@@ -52,12 +53,23 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    let active = true;
+    void syncModuleConfigFromServer(true).then((next) => {
+      if (!active) return;
+      setConfig(next);
+      setApiKeyInput(next.polyglot.translationProviderKey);
+    });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  useEffect(() => {
     const sync = () => {
       const next = getModuleConfig();
       setConfig(next);
       setApiKeyInput(next.polyglot.translationProviderKey);
     };
-    sync();
     window.addEventListener('module-config-changed', sync);
     return () => window.removeEventListener('module-config-changed', sync);
   }, []);
@@ -68,10 +80,22 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
     setFlagCode(preset.flagCode);
   }, [isoInput]);
 
-  const persist = useCallback((next: ModuleConfig) => {
+  const persist = useCallback(async (next: ModuleConfig): Promise<boolean> => {
     setConfig(next);
-    saveModuleConfig(next);
-  }, []);
+    try {
+      await saveModuleConfig(next);
+      return true;
+    } catch (error) {
+      console.error('[Polyglot Bridge] Failed to persist module config:', error);
+      toast.error(
+        t(
+          'adminHub.polyglot.saveFailed',
+          'Could not save workspace settings to the database. Please try again.',
+        ),
+      );
+      return false;
+    }
+  }, [t]);
 
   const handleIsoChange = (iso: string) => {
     const normalized = normalizeIsoCode(iso);
@@ -81,7 +105,7 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
     setFlagCode(preset.flagCode);
   };
 
-  const handleAddLanguage = () => {
+  const handleAddLanguage = async () => {
     const isoCode = normalizeIsoCode(isoInput);
     if (!isoCode) {
       toast.error(t('adminHub.polyglot.invalidIso', 'Enter a valid ISO language code.'));
@@ -101,16 +125,18 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
       enabled: true,
     };
 
-    persist({
+    const saved = await persist({
       ...config,
       polyglotEnabled: true,
       languages: [...config.languages, entry],
     });
 
-    toast.success(t('adminHub.polyglot.added', 'Language added to Polyglot Bridge.'));
+    if (saved) {
+      toast.success(t('adminHub.polyglot.added', 'Language added to Polyglot Bridge.'));
+    }
   };
 
-  const handleRemoveLanguage = (isoCode: string) => {
+  const handleRemoveLanguage = async (isoCode: string) => {
     const remaining = config.languages.filter((l) => l.isoCode !== isoCode);
     if (remaining.length === 0) {
       toast.error(t('adminHub.polyglot.minOne', 'At least one language must remain active.'));
@@ -119,8 +145,10 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
     if (!remaining.some((l) => l.enabled)) {
       remaining[0] = { ...remaining[0], enabled: true };
     }
-    persist({ ...config, languages: remaining });
-    toast.success(t('adminHub.polyglot.removed', 'Language removed.'));
+    const saved = await persist({ ...config, languages: remaining });
+    if (saved) {
+      toast.success(t('adminHub.polyglot.removed', 'Language removed.'));
+    }
   };
 
   const toggleLanguageEnabled = (isoCode: string) => {
@@ -134,20 +162,24 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
     persist({ ...config, languages: nextLanguages });
   };
 
-  const resetToDefaults = () => {
-    persist({ ...config, languages: DEFAULT_SUPPORTED_LANGUAGES.map((l) => ({ ...l })) });
-    toast.success(t('adminHub.polyglot.reset', 'Restored default language roster.'));
+  const resetToDefaults = async () => {
+    const saved = await persist({ ...config, languages: DEFAULT_SUPPORTED_LANGUAGES.map((l) => ({ ...l })) });
+    if (saved) {
+      toast.success(t('adminHub.polyglot.reset', 'Restored default language roster.'));
+    }
   };
 
-  const handleSaveApiKey = () => {
-    persist({
+  const handleSaveApiKey = async () => {
+    const saved = await persist({
       ...config,
       polyglot: {
         ...config.polyglot,
         translationProviderKey: apiKeyInput.trim(),
       },
     });
-    toast.success(t('adminHub.polyglot.apiKeySaved', 'Translation provider credentials saved.'));
+    if (saved) {
+      toast.success(t('adminHub.polyglot.apiKeySaved', 'Translation provider credentials saved.'));
+    }
   };
 
   const applyDictionaryFile = (file: File) => {
@@ -157,25 +189,27 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
     }
 
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       try {
         const parsed = JSON.parse(String(reader.result || '{}'));
         const localeHint = inferLocaleFromFilename(file.name);
         const merged = mergeImportedDictionaryJson(config.polyglot.customDictionary, parsed, localeHint);
         const entryCount = Object.keys(merged).length;
-        persist({
+        const saved = await persist({
           ...config,
           polyglot: {
             ...config.polyglot,
             customDictionary: merged,
           },
         });
-        toast.success(
-          t('adminHub.polyglot.dictionaryImported', 'Dictionary imported ({{count}} phrase entries).').replace(
-            '{{count}}',
-            String(entryCount),
-          ),
-        );
+        if (saved) {
+          toast.success(
+            t('adminHub.polyglot.dictionaryImported', 'Dictionary imported ({{count}} phrase entries).').replace(
+              '{{count}}',
+              String(entryCount),
+            ),
+          );
+        }
       } catch {
         toast.error(t('adminHub.polyglot.jsonParseError', 'Could not parse JSON dictionary file.'));
       }

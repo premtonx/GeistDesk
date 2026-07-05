@@ -99,7 +99,7 @@ const DEFAULT_CONFIG: ModuleConfig = {
     useOAuth: true,
     imapHost: 'imap.gmail.com',
     imapPort: '993',
-    forwardAddress: '', // This will be calculated or set
+    forwardAddress: '',
     threadingEnabled: true,
     autoTriageEnabled: true,
     signature: '<p>Best regards,<br><strong>GeistDesk Support Team</strong></p>'
@@ -123,6 +123,49 @@ function inferIsoCodeFromLanguage(lang: string): string {
   return 'en';
 }
 
+export function normalizeModuleConfig(parsed: Partial<ModuleConfig> | Record<string, unknown>): ModuleConfig {
+  const source = parsed as Partial<ModuleConfig>;
+  const polyglotRaw = (source.polyglot ?? {}) as Partial<PolyglotBridgeSettings>;
+
+  return {
+    ...DEFAULT_CONFIG,
+    ...source,
+    ai: DEFAULT_CONFIG.ai,
+    email: {
+      ...DEFAULT_CONFIG.email,
+      ...(source.email || {})
+    },
+    languages: (source.languages || DEFAULT_CONFIG.languages).map((lang: PolyglotLanguage & { isoCode?: string }) => ({
+      lang: lang.lang,
+      isoCode: lang.isoCode || inferIsoCodeFromLanguage(lang.lang),
+      enabled: lang.enabled ?? true,
+      flagCode: lang.flagCode || inferIsoCodeFromLanguage(lang.lang),
+    })),
+    polyglot: {
+      translationProviderKey: polyglotRaw.translationProviderKey ?? '',
+      customDictionary: polyglotRaw.customDictionary ?? {},
+      allowAiFallback: polyglotRaw.allowAiFallback ?? false,
+    },
+  };
+}
+
+function readAuthToken(): string | null {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return null;
+  try {
+    return localStorage.getItem('geistdesk_token');
+  } catch {
+    return null;
+  }
+}
+
+/** Writes module config to browser storage and notifies listeners. */
+export function applyModuleConfigToStorage(config: ModuleConfig): void {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return;
+  const { ai: _stripAi, ...persistable } = config;
+  localStorage.setItem('geistdesk_module_config', JSON.stringify({ ...persistable, ai: undefined }));
+  window.dispatchEvent(new Event('module-config-changed'));
+}
+
 export const getModuleConfig = (): ModuleConfig => {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
     return DEFAULT_CONFIG;
@@ -131,57 +174,76 @@ export const getModuleConfig = (): ModuleConfig => {
   if (!saved) return DEFAULT_CONFIG;
   try {
     const parsed = JSON.parse(saved);
-    // AI config is workspace-scoped in PostgreSQL — never hydrate from browser storage.
-    const { ai: _stripAi, ...rest } = parsed;
-    return {
-      ...DEFAULT_CONFIG,
-      ...rest,
-      ai: DEFAULT_CONFIG.ai,
-      email: {
-        ...DEFAULT_CONFIG.email,
-        ...(parsed.email || {})
-      },
-      languages: (parsed.languages || DEFAULT_CONFIG.languages).map((lang: PolyglotLanguage & { isoCode?: string }) => ({
-        lang: lang.lang,
-        isoCode: lang.isoCode || inferIsoCodeFromLanguage(lang.lang),
-        enabled: lang.enabled ?? true,
-        flagCode: lang.flagCode || inferIsoCodeFromLanguage(lang.lang),
-      })),
-      polyglot: {
-        translationProviderKey: parsed.polyglot?.translationProviderKey ?? '',
-        customDictionary: parsed.polyglot?.customDictionary ?? {},
-        allowAiFallback: parsed.polyglot?.allowAiFallback ?? false,
-      },
-    };
+    return normalizeModuleConfig(parsed);
   } catch {
     return DEFAULT_CONFIG;
   }
 };
 
-export const saveModuleConfig = (config: ModuleConfig) => {
-  if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
-    const { ai: _stripAi, ...persistable } = config;
-    localStorage.setItem('geistdesk_module_config', JSON.stringify({ ...persistable, ai: undefined }));
-    window.dispatchEvent(new Event('module-config-changed'));
+/**
+ * Hydrates workspace module config from PostgreSQL (source of truth) into local storage.
+ * Called on login so every admin/operator session receives the latest workspace settings.
+ */
+export async function syncModuleConfigFromServer(isAdmin = false): Promise<ModuleConfig> {
+  if (typeof window === 'undefined') return DEFAULT_CONFIG;
 
-    let token: string | null = null;
-    try {
-      token = localStorage.getItem('geistdesk_token');
-    } catch {}
+  try {
+    const token = readAuthToken();
+    const res = await fetch('/api/module-config', {
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+    });
 
-    // background persist to pg database for server alignment
-    fetch('/api/db', {
-      method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {})
-      },
-      body: JSON.stringify({
-        action: 'set_doc',
-        collection: 'module_config',
-        id: 'global',
-        data: config
-      })
-    }).catch(err => console.error("Database alignment failed", err));
+    if (!res.ok) {
+      return getModuleConfig();
+    }
+
+    const remote = await res.json();
+    if (!remote) {
+      return getModuleConfig();
+    }
+
+    const local = getModuleConfig();
+    const merged = normalizeModuleConfig(
+      isAdmin
+        ? { ...DEFAULT_CONFIG, ...remote }
+        : {
+            ...local,
+            ...remote,
+            polyglot: {
+              ...local.polyglot,
+              ...(remote.polyglot || {}),
+            },
+          },
+    );
+
+    applyModuleConfigToStorage(merged);
+    return merged;
+  } catch (error) {
+    console.warn('[ModuleConfig] Server sync failed:', error);
+    return getModuleConfig();
   }
-};
+}
+
+/** Persists workspace module config to PostgreSQL and local storage. */
+export async function saveModuleConfig(config: ModuleConfig): Promise<void> {
+  const normalized = normalizeModuleConfig(config);
+  applyModuleConfigToStorage(normalized);
+
+  if (typeof window === 'undefined') return;
+
+  const token = readAuthToken();
+  const res = await fetch('/api/module-config', {
+    method: 'PUT',
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(normalized),
+  });
+
+  if (!res.ok) {
+    const payload = await res.json().catch(() => ({}));
+    const message = payload?.error || `HTTP ${res.status}`;
+    throw new Error(message);
+  }
+}

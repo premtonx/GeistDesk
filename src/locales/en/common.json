@@ -2344,7 +2344,8 @@
       "jsonOnly": "Only .json dictionary files are supported.",
       "jsonParseError": "Could not parse JSON dictionary file.",
       "aiFallbackTitle": "🤖 Enable AI-Assisted Translation",
-      "aiFallbackDesc": "Allows the system to translate complex ticket contexts via the LLM orchestrator when static dictionaries or machine translators are insufficient. Warning: consumes AI tokens."
+      "aiFallbackDesc": "Allows the system to translate complex ticket contexts via the LLM orchestrator when static dictionaries or machine translators are insufficient. Warning: consumes AI tokens.",
+      "saveFailed": "Could not save workspace settings to the database. Please try again."
     }
   },
   "languages": {

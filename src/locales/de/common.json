@@ -2623,7 +2623,8 @@
       "jsonOnly": "Nur .json-Wörterbuchdateien werden unterstützt.",
       "jsonParseError": "JSON-Wörterbuchdatei konnte nicht geparst werden.",
       "aiFallbackTitle": "🤖 KI-gestützte Übersetzung aktivieren",
-      "aiFallbackDesc": "Erlaubt dem System, komplexe Ticket-Kontexte mittels LLM-Orchestrator zu übersetzen, falls die statischen Wörterbücher oder maschinellen Übersetzer nicht ausreichen. Achtung: Verbraucht KI-Token."
+      "aiFallbackDesc": "Erlaubt dem System, komplexe Ticket-Kontexte mittels LLM-Orchestrator zu übersetzen, falls die statischen Wörterbücher oder maschinellen Übersetzer nicht ausreichen. Achtung: Verbraucht KI-Token.",
+      "saveFailed": "Workspace-Einstellungen konnten nicht in der Datenbank gespeichert werden. Bitte erneut versuchen."
     }
   },
   "languages": {
