@@ -118,6 +118,7 @@ import { VaultEntryCreateWorkspace } from '../vault/VaultEntryCreateWorkspace';
 import { VaultImportDialog } from '../vault/VaultImportDialog';
 import { VaultFolderCreateModal } from '../vault/VaultFolderCreateModal';
 import { VaultFolderBreadcrumbStrip } from '../vault/VaultFolderBreadcrumbStrip';
+import { VaultCredentialEditSidebar } from '../vault/VaultCredentialEditSidebar';
 import {
   createVaultFolderId,
   resolveCredFolderId,
@@ -979,12 +980,18 @@ export default function CredentialVaultPage() {
   // Modify / Save edited credentials
   const handleSaveEdit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!editingCred || !editingCred.id || !derivedKey) return;
+    if (!editingCred || !editingCred.id) return;
     setIsSaving(true);
     try {
+      const activeKey = await resolveActiveKey();
+      if (!activeKey) {
+        toast.error('Unlock the vault before saving changes.');
+        return;
+      }
+
       let encryptedPassword = editingCred.encryptedPassword;
       if (rawPassword) {
-        encryptedPassword = await encryptData(rawPassword, derivedKey);
+        encryptedPassword = await encryptData(rawPassword, activeKey);
       }
 
       await localDB.credentials.update(Number(editingCred.id), {
@@ -1081,6 +1088,13 @@ export default function CredentialVaultPage() {
     },
     [allVaultDefinitions],
   );
+
+  const openEditEntry = useCallback((cred: Credential) => {
+    setEditingCred({ ...cred });
+    setRawPassword('');
+    setSelectedCredential(null);
+    setIsCreatingEntry(false);
+  }, []);
 
   const handleCreateFolder = async (payload: {
     name: string;
@@ -1497,7 +1511,7 @@ export default function CredentialVaultPage() {
                 viewMode={assetViewMode}
                 activeVaultId={activeVaultId}
                 onSelect={(cred) => setSelectedCredential(cred as Credential)}
-                onEdit={(cred) => setEditingCred(cred as Credential)}
+                onEdit={(cred) => openEditEntry(cred as Credential)}
                 onToggleFavorite={handleToggleFavorite}
                 onDecryptPassword={handleDecryptPassword}
                 onShare={() => toast.success(t('vault.shareAuthorized', 'Secure sharing protocols authorized.'))}
@@ -1507,14 +1521,30 @@ export default function CredentialVaultPage() {
           </main>
 
           {!isCreatingEntry ? (
-          <VaultSecuritySidebar
-            strengthPercent={strengthPercent}
-            mfaCoverage={98}
-            rotationDue={weakCount + expiringCount}
-            recentViewed={nonDeletedItems.slice(0, 4)}
-            recentModified={[...nonDeletedItems].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4)}
-            sharedItems={nonDeletedItems.filter((c) => c.vaultId === 'shared').slice(0, 4)}
-          />
+            editingCred ? (
+              <VaultCredentialEditSidebar
+                credential={editingCred}
+                onChange={(next) => setEditingCred((prev) => (prev ? { ...prev, ...next } : prev))}
+                rawPassword={rawPassword}
+                onRawPasswordChange={setRawPassword}
+                customCategories={customCategories}
+                isSaving={isSaving}
+                onSubmit={handleSaveEdit}
+                onCancel={() => {
+                  setEditingCred(null);
+                  setRawPassword('');
+                }}
+              />
+            ) : (
+              <VaultSecuritySidebar
+                strengthPercent={strengthPercent}
+                mfaCoverage={98}
+                rotationDue={weakCount + expiringCount}
+                recentViewed={nonDeletedItems.slice(0, 4)}
+                recentModified={[...nonDeletedItems].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4)}
+                sharedItems={nonDeletedItems.filter((c) => c.vaultId === 'shared').slice(0, 4)}
+              />
+            )
           ) : null}
         </div>
       )}
@@ -1527,120 +1557,13 @@ export default function CredentialVaultPage() {
             onClose={() => setSelectedCredential(null)}
             onDecryptPassword={handleDecryptPassword}
             onToggleFavorite={handleToggleFavorite}
-            onEdit={(cred) => { setEditingCred(cred); setSelectedCredential(null); }}
+            onEdit={(cred) => openEditEntry(cred)}
             onDelete={(id) => { handleDeleteEntry(id); setSelectedCredential(null); }}
           />
         )}
       </AnimatePresence>
 
-      {/* Edit Credential Entry dialog Modal form */}
-      <Dialog open={!!editingCred} onOpenChange={() => setEditingCred(null)}>
-        {editingCred && (
-          <DialogContent className="sm:max-w-[500px] rounded-[32px] border-[#DADCE0] p-0 overflow-hidden bg-[#F8F9FA]">
-            <form onSubmit={handleSaveEdit}>
-              <DialogHeader className="bg-white border-b border-[#F1F3F4] px-8 py-6">
-                <DialogTitle className="text-xl font-medium">Edit Sovereign Asset</DialogTitle>
-                <DialogDescription className="text-xs">
-                  All updates encrypted locally in client node before writing to disc.
-                </DialogDescription>
-              </DialogHeader>
-
-              <div className="p-8 space-y-4 max-h-[60vh] overflow-y-auto">
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Name Label</label>
-                  <Input 
-                    value={editingCred.label}
-                    onChange={(e) => setEditingCred({ ...editingCred, label: e.target.value })}
-                    className="bg-white border-[#DADCE0] rounded-xl text-sm"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Category Type</label>
-                    <Select 
-                      value={editingCred.type}
-                      onValueChange={(val: any) => setEditingCred({ ...editingCred, type: val })}
-                    >
-                      <SelectTrigger className="bg-white border-[#DADCE0] rounded-xl text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="web">Standard Web Login</SelectItem>
-                        <SelectItem value="rdp">Remote Desktop (RDP)</SelectItem>
-                        <SelectItem value="vpn">VPN Tunnel</SelectItem>
-                        <SelectItem value="ssh">Secure Shell (SSH)</SelectItem>
-                        <SelectItem value="db">Database Account</SelectItem>
-                        <SelectItem value="api">API Token & Key</SelectItem>
-                        <SelectItem value="cloud">Cloud Account</SelectItem>
-                        {customCategories.map((c) => (
-                          <SelectItem key={c.slug} value={c.slug}>{c.name}</SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Host Endpoint Address</label>
-                    <Input 
-                      value={editingCred.host || ''}
-                      onChange={(e) => setEditingCred({ ...editingCred, host: e.target.value })}
-                      className="bg-white border-[#DADCE0] rounded-xl text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Username / ID</label>
-                    <Input 
-                      value={editingCred.username}
-                      onChange={(e) => setEditingCred({ ...editingCred, username: e.target.value })}
-                      className="bg-white border-[#DADCE0] rounded-xl text-sm"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">New Password (leave empty)</label>
-                    <Input 
-                      type="password"
-                      placeholder="••••••••"
-                      value={rawPassword}
-                      onChange={(e) => setRawPassword(e.target.value)}
-                      className="bg-white border-[#DADCE0] rounded-xl text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Operational Internal Notes</label>
-                  <Textarea 
-                    value={editingCred.notes || ''}
-                    onChange={(e) => setEditingCred({ ...editingCred, notes: e.target.value })}
-                    className="bg-white border-[#DADCE0] rounded-xl text-sm resize-none h-20"
-                  />
-                </div>
-              </div>
-
-              <DialogFooter className="bg-white border-t border-[#F1F3F4] px-8 py-5">
-                <Button 
-                  type="button" 
-                  variant="ghost" 
-                  onClick={() => setEditingCred(null)}
-                  className="rounded-full text-xs font-bold text-[#5F6368]"
-                >
-                  Cancel
-                </Button>
-                <Button 
-                  type="submit" 
-                  disabled={isSaving}
-                  className="bg-[#1A73E8] hover:bg-[#155fc0] text-white rounded-full font-bold text-xs h-10 px-8"
-                >
-                  {isSaving ? "Re-Encrypting..." : "Update Secrets Record"}
-                </Button>
-              </DialogFooter>
-            </form>
-          </DialogContent>
-        )}
-      </Dialog>
+      {/* Edit Credential Entry — right sidebar panel (see VaultCredentialEditSidebar) */}
 
       {/* Create Dynamic Category Dialog */}
       <Dialog open={showAddCategoryModal} onOpenChange={setShowAddCategoryModal}>
