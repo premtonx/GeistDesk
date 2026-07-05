@@ -11,12 +11,10 @@ import {
   withPgTransaction,
 } from "../lib/postgres-backend.js";
 import {
-  encryptString,
-  decryptString,
-  encryptStringArray,
-  decryptStringArray,
-  EncryptedPayload
+  decryptPayloadAuto,
+  encryptPayloadPreferred,
 } from "../lib/crypto.js";
+import type { AnyEncryptedPayload } from "../lib/crypto-payload.js";
 import {
   isPreviewOrPrefetchRequest,
   isVaultReadCommit,
@@ -203,8 +201,8 @@ type VaultRevealClaimResult =
       item: any;
       nextViewCount: number;
       shouldBurnMaterial: boolean;
-      encryptedShares: EncryptedPayload[] | null;
-      encryptedContent: EncryptedPayload | null;
+      encryptedShares: AnyEncryptedPayload[] | null;
+      encryptedContent: AnyEncryptedPayload | null;
     }
   | { ok: false; status: 404 | 410 };
 
@@ -231,8 +229,8 @@ async function claimVaultRevealSlot(itemId: string): Promise<VaultRevealClaimRes
       return { ok: false, status: 410 };
     }
 
-    let encryptedShares: EncryptedPayload[] | null = null;
-    let encryptedContent: EncryptedPayload | null = null;
+    let encryptedShares: AnyEncryptedPayload[] | null = null;
+    let encryptedContent: AnyEncryptedPayload | null = null;
 
     if (item.secretRef) {
       const secretRes = await client.query(
@@ -297,9 +295,8 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
   const { type, shares, threshold, expirationType, expiresAt, maxViews, passphrase, metadata } = parsed.data;
 
   try {
-    const encryptedShares = shares && shares.length > 0 ? encryptStringArray(shares) : undefined;
     const secretRecord = await addDocDirect(VAULT_SECRETS, {
-      encryptedShares: encryptedShares || null,
+      encryptedShares: null,
       encryptedContent: null,
       createdBy: req.user.id,
       createdAt: new Date().toISOString()
@@ -331,6 +328,15 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
       createdAt: new Date().toISOString(),
       metadata: resolvedMetadata
     });
+
+    const provenance = `exchange:${req.user.id}:${itemRecord.id}`;
+    const encryptedShares =
+      shares && shares.length > 0
+        ? shares.map((share) => encryptPayloadPreferred(share, provenance))
+        : null;
+    if (encryptedShares) {
+      await updateDocDirect(VAULT_SECRETS, secretRef, { encryptedShares });
+    }
 
     return res.status(201).json({ id: itemRecord.id });
   } catch (e: any) {
@@ -448,8 +454,10 @@ router.post("/secrets/:id/reveal", async (req: Request, res: Response): Promise<
 
     const { item: claimedItem, nextViewCount, shouldBurnMaterial, encryptedShares, encryptedContent } = claim;
 
-    const shares = encryptedShares ? decryptStringArray(encryptedShares) : [];
-    const content = encryptedContent ? decryptString(encryptedContent) : null;
+    const shares = encryptedShares
+      ? encryptedShares.map((payload) => decryptPayloadAuto(payload))
+      : [];
+    const content = encryptedContent ? decryptPayloadAuto(encryptedContent) : null;
 
     const maxViews = getMaxViews(claimedItem);
 
@@ -525,7 +533,9 @@ router.post("/secrets/:id/upload", async (req: Request, res: Response): Promise<
       await updateDocDirect(VAULT_ITEMS, item.id, { secretRef });
     }
 
-    await updateDocDirect(VAULT_SECRETS, secretRef, { encryptedContent: encryptString(content) });
+    await updateDocDirect(VAULT_SECRETS, secretRef, {
+      encryptedContent: encryptPayloadPreferred(content, `dropzone:${item.createdBy}:${item.id}`),
+    });
     await updateDocDirect(VAULT_ITEMS, item.id, {
       metadata: {
         ...metadata,
@@ -564,7 +574,9 @@ router.post("/secrets/:id/content", authenticate, async (req: any, res: Response
       secretRef = rec.id;
       await updateDocDirect(VAULT_ITEMS, item.id, { secretRef });
     }
-    await updateDocDirect(VAULT_SECRETS, secretRef, { encryptedContent: encryptString(content) });
+    await updateDocDirect(VAULT_SECRETS, secretRef, {
+      encryptedContent: encryptPayloadPreferred(content, `dropzone-owner:${req.user.id}:${req.params.id}`),
+    });
     if (req.body?.metadata) {
       await updateDocDirect(VAULT_ITEMS, item.id, { metadata: { ...(item.metadata || {}), ...req.body.metadata } });
     }
@@ -604,7 +616,7 @@ router.get("/dropzones/download", authenticate, async (req: any, res: Response):
       });
     }
 
-    const decrypted = decryptString(secretRecord.encryptedContent);
+    const decrypted = decryptPayloadAuto(secretRecord.encryptedContent);
     const { buffer, mimeType } = decodeStoredDropzonePayload(decrypted);
     const metadata = item.metadata || {};
     const filename = sanitizeDownloadFilename(
