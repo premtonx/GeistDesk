@@ -36,6 +36,7 @@ export interface VaultFolderCreateModalProps {
     icon: VaultFolderIconId;
     parentId: string | null;
   }) => Promise<void> | void;
+  initialParentId?: string | null;
 }
 
 export function VaultFolderCreateModal({
@@ -45,6 +46,7 @@ export function VaultFolderCreateModal({
   vaultLabel,
   folders,
   onCreate,
+  initialParentId = null,
 }: VaultFolderCreateModalProps) {
   const [name, setName] = useState('');
   const [parentId, setParentId] = useState<string>('__root__');
@@ -54,10 +56,10 @@ export function VaultFolderCreateModal({
   useEffect(() => {
     if (!open) return;
     setName('');
-    setParentId('__root__');
+    setParentId(initialParentId ?? '__root__');
     setIcon('folder');
     setIsSaving(false);
-  }, [open]);
+  }, [open, initialParentId]);
 
   const parentOptions = flattenFolderOptions(folders, vaultId);
 

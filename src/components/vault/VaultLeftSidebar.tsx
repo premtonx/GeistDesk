@@ -6,6 +6,8 @@ import {
   VAULT_AUTHORITY_SCOPES,
   type VaultAuthorityScope,
 } from './vault-utils';
+import { VaultFolderSidebarTree } from './VaultFolderSidebarTree';
+import type { VaultFolderNode } from './vaultFolderTypes';
 
 export type VaultSmartFilter = 'favorites' | 'recently' | 'pinned' | 'expiring' | 'alerts' | 'archived';
 
@@ -20,6 +22,12 @@ interface VaultLeftSidebarProps {
   smartFilter: VaultSmartFilter | null;
   onSmartFilterChange: (filter: VaultSmartFilter | null) => void;
   smartCounts: Partial<Record<VaultSmartFilter, number>>;
+  folders?: VaultFolderNode[];
+  vaultId?: string;
+  activeFolderId?: string | null;
+  onFolderSelect?: (folderId: string | null) => void;
+  onCreateFolderIn?: (parentId: string | null) => void;
+  folderCounts?: Record<string, number>;
   collapsed?: boolean;
 }
 
@@ -73,6 +81,12 @@ export function VaultLeftSidebar({
   smartFilter,
   onSmartFilterChange,
   smartCounts,
+  folders = [],
+  vaultId = 'local',
+  activeFolderId = null,
+  onFolderSelect,
+  onCreateFolderIn,
+  folderCounts,
 }: VaultLeftSidebarProps) {
   const { t } = useTranslation();
 
@@ -186,6 +200,18 @@ export function VaultLeftSidebar({
             );
           })}
         </div>
+
+        <SectionTitle>📁 DATENSTRUKTUR / FOLDERS</SectionTitle>
+        {onFolderSelect && onCreateFolderIn ? (
+          <VaultFolderSidebarTree
+            folders={folders}
+            vaultId={vaultId}
+            activeFolderId={activeFolderId}
+            onFolderSelect={onFolderSelect}
+            onCreateFolderIn={onCreateFolderIn}
+            folderCounts={folderCounts}
+          />
+        ) : null}
       </div>
     </aside>
   );

@@ -299,6 +299,7 @@ export default function CredentialVaultPage() {
   const [isCreatingVault, setIsCreatingVault] = useState(false);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
+  const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null);
 
   useEffect(() => {
     startOrchestratorConfigSync();
@@ -505,6 +506,11 @@ export default function CredentialVaultPage() {
     () => (vaultFolders ?? []).filter((folder) => folder.vaultId === activeVaultId),
     [vaultFolders, activeVaultId],
   );
+
+  const openCreateFolderModal = useCallback((parentId: string | null = null) => {
+    setCreateFolderParentId(parentId);
+    setIsCreateFolderOpen(true);
+  }, []);
 
   // Seeding default high-fidelity items into Dexie if empty
   const seedCredentialItem = async (key: Uint8Array, item: (typeof SEEDED_CREDENTIALS)[number]) => {
@@ -1050,6 +1056,17 @@ export default function CredentialVaultPage() {
     [trashItems, activeVaultId],
   );
 
+  const folderCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const cred of vaultScopedItems) {
+      const folderId = resolveCredFolderId(cred);
+      if (folderId) {
+        counts[folderId] = (counts[folderId] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [vaultScopedItems]);
+
   const handleVaultTabChange = useCallback(
     (id: string) => {
       const vault = allVaultDefinitions.find((v) => v.id === id);
@@ -1337,6 +1354,12 @@ export default function CredentialVaultPage() {
               setIsCreatingEntry(false);
             }}
             smartCounts={smartCounts}
+            folders={foldersForActiveVault}
+            vaultId={activeVaultId}
+            activeFolderId={activeFolderId}
+            onFolderSelect={setActiveFolderId}
+            onCreateFolderIn={openCreateFolderModal}
+            folderCounts={folderCounts}
           />
 
           <main className="flex-1 min-w-0 w-full flex flex-col min-h-0">
@@ -1453,7 +1476,7 @@ export default function CredentialVaultPage() {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => setIsCreateFolderOpen(true)}
+                    onClick={() => openCreateFolderModal(activeFolderId)}
                     className="h-8 rounded-xl text-[11px] font-semibold border-slate-200"
                   >
                     📁 Ordner erstellen
@@ -1735,11 +1758,15 @@ export default function CredentialVaultPage() {
 
       <VaultFolderCreateModal
         open={isCreateFolderOpen}
-        onOpenChange={setIsCreateFolderOpen}
+        onOpenChange={(open) => {
+          setIsCreateFolderOpen(open);
+          if (!open) setCreateFolderParentId(null);
+        }}
         vaultId={activeVaultId}
         vaultLabel={activeVaultDefinition?.defaultName ?? activeVaultId}
         folders={foldersForActiveVault}
         onCreate={handleCreateFolder}
+        initialParentId={createFolderParentId}
       />
     </div>
   );
