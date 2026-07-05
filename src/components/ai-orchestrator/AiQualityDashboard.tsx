@@ -37,13 +37,13 @@ export function AiQualityDashboard({ quality }: AiQualityDashboardProps) {
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+    <div className="space-y-4 min-w-0 w-full">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 min-w-0 w-full">
         {cards.map((card) => (
-          <div key={card.id} className={`rounded-2xl border p-4 ${card.accent}`}>
-            <div className="flex items-center gap-2 mb-2">
-              <card.icon className={`w-4 h-4 ${card.iconColor}`} />
-              <p className="text-[10px] font-black uppercase tracking-widest opacity-80">{card.label}</p>
+          <div key={card.id} className={`rounded-2xl border p-4 min-w-0 ${card.accent}`}>
+            <div className="flex items-start gap-2 mb-2 min-w-0">
+              <card.icon className={`w-4 h-4 shrink-0 ${card.iconColor}`} />
+              <p className="text-[10px] font-black uppercase tracking-widest opacity-80 break-words min-w-0">{card.label}</p>
             </div>
             <p className="text-2xl font-black font-mono">{card.value}</p>
           </div>

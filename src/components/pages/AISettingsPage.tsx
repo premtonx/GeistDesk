@@ -59,6 +59,15 @@ import {
 import { ProviderPriorityList } from '../ai-orchestrator/ProviderPriorityList';
 import { AiOrchestratorWorkbench } from '../ai-orchestrator/AiOrchestratorWorkbench';
 import { AiOperationsCommandCenter } from '../ai-orchestrator/AiOperationsCommandCenter';
+import { cn } from '../../lib/utils';
+
+type OrchestratorSubTab = 'command' | 'agents' | 'quality';
+
+const ORCHESTRATOR_SUB_TABS: Array<{ id: OrchestratorSubTab; label: string }> = [
+  { id: 'command', label: '🚀 Kommandozentrale' },
+  { id: 'agents', label: '🧠 Agenten & Workflows' },
+  { id: 'quality', label: '📊 Qualität & Auditing' },
+];
 
 const MODEL_OPTIONS = [
   { value: 'gemini-flash', label: 'Gemini Flash' },
@@ -155,6 +164,7 @@ export default function AISettingsPage() {
   const [isRestoring, setIsRestoring] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string>('');
   const [bulkRoutingModel, setBulkRoutingModel] = useState(MODEL_OPTIONS[0]?.value ?? 'gemini-flash');
+  const [activeSubTab, setActiveSubTab] = useState<OrchestratorSubTab>('command');
 
   const loadAll = useCallback(async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -329,6 +339,37 @@ export default function AISettingsPage() {
           </div>
         </div>
 
+        <div className="w-full min-w-0">
+          <div
+            role="tablist"
+            aria-label={t('aiOrchestrator.commandCenter.subTabs', 'Orchestrator sections')}
+            className="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar scroll-smooth"
+          >
+            {ORCHESTRATOR_SUB_TABS.map((tab) => {
+              const active = activeSubTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setActiveSubTab(tab.id)}
+                  className={cn(
+                    'shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all',
+                    active
+                      ? 'bg-white text-indigo-700 border-indigo-200 shadow-sm ring-1 ring-indigo-100'
+                      : 'bg-slate-50/80 text-slate-600 border-transparent hover:bg-white hover:border-slate-200 hover:text-slate-800',
+                  )}
+                >
+                  <span className="whitespace-nowrap">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {activeSubTab === 'command' && (
+        <>
         {/* AI Overview */}
         <Card className="border-slate-200/80 shadow-sm rounded-2xl overflow-hidden">
           <CardContent className="p-6">
@@ -355,12 +396,7 @@ export default function AISettingsPage() {
           config={config}
           readOnly={readOnly}
           onBudgetEurChange={(dailyBudgetEur) => patchConfig({ dailyBudgetEur })}
-        />
-
-        <AiOrchestratorWorkbench
-          config={config}
-          readOnly={readOnly}
-          onPersonasChange={(featurePersonas) => patchConfig({ featurePersonas })}
+          sections={['header', 'governance', 'workflow', 'budget']}
         />
 
         {/* Provider Health */}
@@ -570,6 +606,16 @@ export default function AISettingsPage() {
             </div>
           </CardContent>
         </Card>
+        </>
+        )}
+
+        {activeSubTab === 'agents' && (
+        <>
+        <AiOrchestratorWorkbench
+          config={config}
+          readOnly={readOnly}
+          onPersonasChange={(featurePersonas) => patchConfig({ featurePersonas })}
+        />
 
         {/* Governance & Policies */}
         <Card className="rounded-2xl shadow-sm">
@@ -610,6 +656,83 @@ export default function AISettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Infrastructure */}
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Cpu className="w-4 h-4" /> Infrastructure
+            </CardTitle>
+            <CardDescription>Ollama, LM Studio, vLLM, Azure OpenAI, and custom gateways</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-6">
+            <div className="space-y-2">
+              <Label>Local / OpenAI-Compatible Endpoint</Label>
+              <Input
+                disabled={readOnly}
+                value={config.endpointUrl}
+                onChange={(e) => patchConfig({ endpointUrl: e.target.value })}
+                placeholder="http://localhost:11434/v1"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isDetectingModels}
+                onClick={handleDetectModels}
+                className="mt-2"
+              >
+                {isDetectingModels ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                Detect Local Models
+              </Button>
+              {detectedModels.length > 0 && (
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {detectedModels.map((m) => (
+                    <Badge key={m.id} variant="outline" className="text-xs">
+                      {m.name} ({m.provider})
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
+            <Separator />
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Provider API Keys</p>
+            <p className="text-[10px] text-muted-foreground -mt-4">
+              Stored encrypted server-side. Keys are never persisted in the browser.
+            </p>
+            {PROVIDER_SECRET_FIELDS.map(({ id, label }) => (
+              <div key={id} className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <Cloud className="w-3.5 h-3.5 text-slate-400" />
+                  <Label className="text-xs">{label}</Label>
+                  {secretStatus[id] && (
+                    <Badge variant="outline" className="text-[9px] h-5 border-emerald-200 text-emerald-700">
+                      Configured
+                    </Badge>
+                  )}
+                </div>
+                <Input
+                  type="password"
+                  disabled={readOnly}
+                  value={secrets[id] || ''}
+                  onChange={(e) => setSecrets((s) => ({ ...s, [id]: e.target.value }))}
+                  placeholder={secretStatus[id] ? '••••••••  (leave blank to keep)' : 'Enter API key'}
+                />
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+        </>
+        )}
+
+        {activeSubTab === 'quality' && (
+        <>
+        <AiOperationsCommandCenter
+          config={config}
+          readOnly={readOnly}
+          onBudgetEurChange={(dailyBudgetEur) => patchConfig({ dailyBudgetEur })}
+          sections={['quality']}
+        />
 
         {/* Emergency Kill Switch */}
         <Card className="rounded-2xl shadow-sm border-red-100 bg-red-50/20">
@@ -689,72 +812,6 @@ export default function AISettingsPage() {
                 Budget threshold exceeded — {config.budgetExceededAction === 'local_fallback' ? 'routing to local fallback' : 'non-critical features disabled'}.
               </div>
             )}
-          </CardContent>
-        </Card>
-
-        {/* Infrastructure */}
-        <Card className="rounded-2xl shadow-sm">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Cpu className="w-4 h-4" /> Infrastructure
-            </CardTitle>
-            <CardDescription>Ollama, LM Studio, vLLM, Azure OpenAI, and custom gateways</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="space-y-2">
-              <Label>Local / OpenAI-Compatible Endpoint</Label>
-              <Input
-                disabled={readOnly}
-                value={config.endpointUrl}
-                onChange={(e) => patchConfig({ endpointUrl: e.target.value })}
-                placeholder="http://localhost:11434/v1"
-              />
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isDetectingModels}
-                onClick={handleDetectModels}
-                className="mt-2"
-              >
-                {isDetectingModels ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-                Detect Local Models
-              </Button>
-              {detectedModels.length > 0 && (
-                <div className="flex flex-wrap gap-2 mt-2">
-                  {detectedModels.map((m) => (
-                    <Badge key={m.id} variant="outline" className="text-xs">
-                      {m.name} ({m.provider})
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
-            <Separator />
-            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Provider API Keys</p>
-            <p className="text-[10px] text-muted-foreground -mt-4">
-              Stored encrypted server-side. Keys are never persisted in the browser.
-            </p>
-            {PROVIDER_SECRET_FIELDS.map(({ id, label }) => (
-              <div key={id} className="space-y-1">
-                <div className="flex items-center gap-2">
-                  <Cloud className="w-3.5 h-3.5 text-slate-400" />
-                  <Label className="text-xs">{label}</Label>
-                  {secretStatus[id] && (
-                    <Badge variant="outline" className="text-[9px] h-5 border-emerald-200 text-emerald-700">
-                      Configured
-                    </Badge>
-                  )}
-                </div>
-                <Input
-                  type="password"
-                  disabled={readOnly}
-                  value={secrets[id] || ''}
-                  onChange={(e) => setSecrets((s) => ({ ...s, [id]: e.target.value }))}
-                  placeholder={secretStatus[id] ? '••••••••  (leave blank to keep)' : 'Enter API key'}
-                />
-              </div>
-            ))}
           </CardContent>
         </Card>
 
@@ -959,6 +1016,8 @@ export default function AISettingsPage() {
             ))}
           </CardContent>
         </Card>
+        </>
+        )}
 
         {/* Test + Save */}
         <div className="flex flex-col sm:flex-row gap-3 sticky bottom-4 bg-[#f4f6f9]/95 backdrop-blur p-4 rounded-2xl border border-slate-200 shadow-lg">
