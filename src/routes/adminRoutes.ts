@@ -53,6 +53,8 @@ import type {
   AiKillSwitch,
   AiMemoryPolicy,
   AiOrchestratorConfig,
+  AiPersonaId,
+  AiPersonaSkillProfile,
   AiPromptLibraryFeature,
   AiTrustLevel,
 } from "../types/aiOrchestrator.js";
@@ -528,6 +530,7 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
         confidenceThresholds: payload.confidenceThresholds as AiConfidenceThresholds | undefined,
         memoryPolicy: payload.memoryPolicy as AiMemoryPolicy | undefined,
         featurePersonas: payload.featurePersonas as AiFeaturePersonaMap | undefined,
+        personaSkills: payload.personaSkills,
         killSwitch: payload.killSwitch as AiKillSwitch | undefined,
         dailyBudgetUsd: payload.dailyBudgetUsd,
         monthlyBudgetUsd: payload.monthlyBudgetUsd,
@@ -560,6 +563,72 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
     return res.status(200).json({ success: true, config: saved, secretStatus, versions });
   } catch (error: any) {
     console.error("[Admin Orchestrator POST] Error updating config:", error);
+    return res.status(500).json({
+      error: "Internal Server Error",
+      details: error.message || String(error),
+    });
+  }
+});
+
+const AGENT_SKILL_IDS: AiPersonaId[] = ['support_agent', 'security_analyst', 'knowledge_writer'];
+
+/**
+ * 5a. PUT /api/admin/orchestrator/agent-skills/:agentId
+ * Persists workspace-wide persona skill scripts (JSON/YAML/Markdown manifests).
+ */
+router.put("/orchestrator/agent-skills/:agentId", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const agentId = String(req.params.agentId) as AiPersonaId;
+    if (!AGENT_SKILL_IDS.includes(agentId)) {
+      return res.status(400).json({ error: "Invalid agent persona id." });
+    }
+
+    const workspaceId = String(req.body.workspaceId || "default");
+    const existing = await getOrchestratorConfig(workspaceId);
+
+    if (existing.configLocked) {
+      return res.status(403).json({
+        error: "Configuration is locked. Super Admin unlock required.",
+        configLocked: true,
+      });
+    }
+
+    const skillsContent = typeof req.body.skillsContent === "string" ? req.body.skillsContent : undefined;
+    const skillsFileName = typeof req.body.skillsFileName === "string" ? req.body.skillsFileName : undefined;
+    const skillData: AiPersonaSkillProfile = {
+      skillsContent: skillsContent?.trim() || undefined,
+      skillsFileName,
+    };
+
+    const updatedBy = req.user?.email || req.user?.id || "SYSTEM_ADMIN";
+
+    await appendOrchestratorAudit({
+      workspaceId,
+      userId: req.user?.id,
+      userEmail: req.user?.email,
+      action: `Updated persona skills (${agentId})`,
+      fieldName: `personaSkills.${agentId}`,
+      oldValue: JSON.stringify(existing.personaSkills?.[agentId] ?? {}),
+      newValue: JSON.stringify(skillData),
+    });
+
+    const saved = await upsertOrchestratorConfig(
+      {
+        workspaceId,
+        personaSkills: { [agentId]: skillData },
+      },
+      updatedBy,
+    );
+
+    orchestratorEventBus.emitConfigUpdated(workspaceId, saved, saved.configVersion);
+
+    return res.status(200).json({
+      success: true,
+      skill: saved.personaSkills?.[agentId] ?? skillData,
+      config: saved,
+    });
+  } catch (error: any) {
+    console.error("[Admin Orchestrator Agent Skills PUT] Error:", error);
     return res.status(500).json({
       error: "Internal Server Error",
       details: error.message || String(error),

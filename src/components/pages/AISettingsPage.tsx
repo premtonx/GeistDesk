@@ -50,6 +50,8 @@ import {
   type AiOrchestratorVersion,
   type AiProviderHealth,
   type DetectedLocalModel,
+  type AiPersonaId,
+  type AiPersonaSkillProfile,
 } from '../../types/aiOrchestrator';
 import {
   fetchOrchestratorConfig,
@@ -65,7 +67,7 @@ type OrchestratorSubTab = 'command' | 'agents' | 'quality';
 
 const ORCHESTRATOR_SUB_TABS: Array<{ id: OrchestratorSubTab; label: string }> = [
   { id: 'command', label: '🚀 Kommandozentrale' },
-  { id: 'agents', label: '🧠 Agenten & Workflows' },
+  { id: 'agents', label: '🧠 Agenten & Personas' },
   { id: 'quality', label: '📊 Qualität & Auditing' },
 ];
 
@@ -220,6 +222,14 @@ export default function AISettingsPage() {
       ),
     }));
     toast.success(t('aiOrchestrator.featureRouting.bulkApplied', 'Routed model applied to all features.'));
+  };
+
+  const handleSkillsSaved = (agentId: AiPersonaId, skill: AiPersonaSkillProfile) => {
+    setConfig((prev) => ({
+      ...prev,
+      personaSkills: { ...prev.personaSkills, [agentId]: skill },
+    }));
+    setLastSyncAt(new Date().toISOString());
   };
 
   const handleSave = async () => {
@@ -606,56 +616,6 @@ export default function AISettingsPage() {
             </div>
           </CardContent>
         </Card>
-        </>
-        )}
-
-        {activeSubTab === 'agents' && (
-        <>
-        <AiOrchestratorWorkbench
-          config={config}
-          readOnly={readOnly}
-          onPersonasChange={(featurePersonas) => patchConfig({ featurePersonas })}
-        />
-
-        {/* Governance & Policies */}
-        <Card className="rounded-2xl shadow-sm">
-          <CardHeader>
-            <SectionHeader icon={ShieldCheck} title="Governance & Policies" />
-          </CardHeader>
-          <CardContent className="grid sm:grid-cols-2 gap-4">
-            {[
-              { key: 'piiEnabled' as const, label: 'PII Protection' },
-              { key: 'autoEscalationEnabled' as const, label: 'Auto Escalation' },
-              { key: 'auditEnabled' as const, label: 'Audit Logging' },
-              { key: 'contentFilteringEnabled' as const, label: 'Content Filtering' },
-              { key: 'promptLoggingEnabled' as const, label: 'Prompt Logging' },
-            ].map(({ key, label }) => (
-              <div key={key} className="flex items-center justify-between p-3 rounded-xl border border-slate-100">
-                <span className="text-sm font-medium">{label}</span>
-                <Switch
-                  checked={config[key]}
-                  disabled={readOnly}
-                  onCheckedChange={(v) => patchConfig({ [key]: v })}
-                />
-              </div>
-            ))}
-            <div className="space-y-2">
-              <Label>Reasoning Level</Label>
-              <Select
-                value={config.reasoningLevel}
-                disabled={readOnly}
-                onValueChange={(v: AiOrchestratorConfig['reasoningLevel']) => patchConfig({ reasoningLevel: v })}
-              >
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="fast">Fast</SelectItem>
-                  <SelectItem value="balanced">Balanced</SelectItem>
-                  <SelectItem value="deep">Deep</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-          </CardContent>
-        </Card>
 
         {/* Infrastructure */}
         <Card className="rounded-2xl shadow-sm">
@@ -725,6 +685,17 @@ export default function AISettingsPage() {
         </>
         )}
 
+        {activeSubTab === 'agents' && (
+        <>
+        <AiOrchestratorWorkbench
+          config={config}
+          readOnly={readOnly}
+          onPersonasChange={(featurePersonas) => patchConfig({ featurePersonas })}
+          onSkillsSaved={handleSkillsSaved}
+        />
+        </>
+        )}
+
         {activeSubTab === 'quality' && (
         <>
         <AiOperationsCommandCenter
@@ -733,6 +704,46 @@ export default function AISettingsPage() {
           onBudgetEurChange={(dailyBudgetEur) => patchConfig({ dailyBudgetEur })}
           sections={['quality']}
         />
+
+        {/* Governance & Policies */}
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <SectionHeader icon={ShieldCheck} title="Governance & Policies" />
+          </CardHeader>
+          <CardContent className="grid sm:grid-cols-2 gap-4">
+            {[
+              { key: 'piiEnabled' as const, label: 'PII Protection' },
+              { key: 'autoEscalationEnabled' as const, label: 'Auto Escalation' },
+              { key: 'auditEnabled' as const, label: 'Audit Logging' },
+              { key: 'contentFilteringEnabled' as const, label: 'Content Filtering' },
+              { key: 'promptLoggingEnabled' as const, label: 'Prompt Logging' },
+            ].map(({ key, label }) => (
+              <div key={key} className="flex items-center justify-between p-3 rounded-xl border border-slate-100">
+                <span className="text-sm font-medium">{label}</span>
+                <Switch
+                  checked={config[key]}
+                  disabled={readOnly}
+                  onCheckedChange={(v) => patchConfig({ [key]: v })}
+                />
+              </div>
+            ))}
+            <div className="space-y-2">
+              <Label>Reasoning Level</Label>
+              <Select
+                value={config.reasoningLevel}
+                disabled={readOnly}
+                onValueChange={(v: AiOrchestratorConfig['reasoningLevel']) => patchConfig({ reasoningLevel: v })}
+              >
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="fast">Fast</SelectItem>
+                  <SelectItem value="balanced">Balanced</SelectItem>
+                  <SelectItem value="deep">Deep</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Emergency Kill Switch */}
         <Card className="rounded-2xl shadow-sm border-red-100 bg-red-50/20">
