@@ -7,6 +7,10 @@ import {
   getVaultFolderIcon,
   type VaultFolderNode,
 } from './vaultFolderTypes';
+import {
+  VAULT_FOLDER_ACTIVE_CLASS,
+  VAULT_FOLDER_ROOT_ACTIVE_CLASS,
+} from './vaultFolderStyles';
 
 export interface VaultFolderSidebarTreeProps {
   folders: VaultFolderNode[];
@@ -66,7 +70,7 @@ function FolderTreeNode({
         className={cn(
           'group flex items-center gap-0.5 rounded-lg pr-1 transition-colors',
           isActive
-            ? 'bg-emerald-50 text-emerald-900 ring-1 ring-emerald-200/80'
+            ? cn(VAULT_FOLDER_ACTIVE_CLASS, 'border')
             : 'text-slate-700 hover:bg-slate-50',
         )}
         style={{ paddingLeft: `${8 + depth * 14}px` }}
@@ -192,8 +196,8 @@ export function VaultFolderSidebarTree({
         className={cn(
           'group flex items-center gap-1 rounded-lg px-2 py-1.5 transition-colors',
           isRootActive
-            ? 'bg-slate-100 text-slate-900 ring-1 ring-slate-200'
-            : 'text-slate-700 hover:bg-slate-50',
+            ? cn(VAULT_FOLDER_ROOT_ACTIVE_CLASS, 'border')
+            : 'text-slate-700 hover:bg-slate-50 border border-transparent',
         )}
       >
         <button
