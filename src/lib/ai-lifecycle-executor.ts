@@ -32,20 +32,12 @@ function estimateCost(promptTokens: number, completionTokens: number, model: str
   return promptTokens * 0.0000015 + completionTokens * 0.000006;
 }
 
-async function callGoogle(
-  apiKey: string,
-  model: string,
-  prompt: string,
-  systemInstruction?: string,
-): Promise<{ output: string; promptTokens: number; completionTokens: number }> {
+async function callGoogle(apiKey: string, model: string, prompt: string): Promise<{ output: string; promptTokens: number; completionTokens: number }> {
   const ai = new GoogleGenAI({ apiKey });
   const result = await ai.models.generateContent({
     model,
     contents: prompt,
-    config: {
-      ...(systemInstruction ? { systemInstruction } : {}),
-      responseMimeType: prompt.includes('JSON') || prompt.includes('json') ? 'application/json' : undefined,
-    },
+    config: { responseMimeType: prompt.includes('JSON') || prompt.includes('json') ? 'application/json' : undefined },
   });
   const output = result.text ?? '';
   const promptTokens = Math.ceil(prompt.length / 4);
@@ -53,16 +45,7 @@ async function callGoogle(
   return { output, promptTokens, completionTokens };
 }
 
-async function callOpenAI(
-  apiKey: string,
-  model: string,
-  prompt: string,
-  systemInstruction?: string,
-): Promise<{ output: string; promptTokens: number; completionTokens: number }> {
-  const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
-  if (systemInstruction?.trim()) messages.push({ role: 'system', content: systemInstruction });
-  messages.push({ role: 'user', content: prompt });
-
+async function callOpenAI(apiKey: string, model: string, prompt: string): Promise<{ output: string; promptTokens: number; completionTokens: number }> {
   const res = await fetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -71,7 +54,7 @@ async function callOpenAI(
     },
     body: JSON.stringify({
       model,
-      messages,
+      messages: [{ role: 'user', content: prompt }],
       response_format: prompt.toLowerCase().includes('json') ? { type: 'json_object' } : undefined,
     }),
   });
@@ -85,12 +68,7 @@ async function callOpenAI(
   };
 }
 
-async function callAnthropic(
-  apiKey: string,
-  model: string,
-  prompt: string,
-  systemInstruction?: string,
-): Promise<{ output: string; promptTokens: number; completionTokens: number }> {
+async function callAnthropic(apiKey: string, model: string, prompt: string): Promise<{ output: string; promptTokens: number; completionTokens: number }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -101,7 +79,6 @@ async function callAnthropic(
     body: JSON.stringify({
       model,
       max_tokens: 4096,
-      ...(systemInstruction?.trim() ? { system: systemInstruction } : {}),
       messages: [{ role: 'user', content: prompt }],
     }),
   });
@@ -115,18 +92,8 @@ async function callAnthropic(
   };
 }
 
-async function callLocal(
-  endpointUrl: string,
-  apiKey: string | null,
-  model: string,
-  prompt: string,
-  systemInstruction?: string,
-): Promise<{ output: string; promptTokens: number; completionTokens: number }> {
+async function callLocal(endpointUrl: string, apiKey: string | null, model: string, prompt: string): Promise<{ output: string; promptTokens: number; completionTokens: number }> {
   const base = endpointUrl.endsWith('/v1') ? endpointUrl : `${endpointUrl.replace(/\/$/, '')}/v1`;
-  const messages: Array<{ role: 'system' | 'user'; content: string }> = [];
-  if (systemInstruction?.trim()) messages.push({ role: 'system', content: systemInstruction });
-  messages.push({ role: 'user', content: prompt });
-
   const res = await fetch(`${base}/chat/completions`, {
     method: 'POST',
     headers: {
@@ -135,7 +102,7 @@ async function callLocal(
     },
     body: JSON.stringify({
       model,
-      messages,
+      messages: [{ role: 'user', content: prompt }],
       response_format: prompt.toLowerCase().includes('json') ? { type: 'json_object' } : undefined,
     }),
   });
@@ -151,7 +118,7 @@ async function callLocal(
 
 /** Production model executor — routes to live Google/OpenAI/Anthropic/local endpoints. */
 export function createProductionModelExecutor(workspaceId = 'default'): AiModelExecutor {
-  return async ({ model, prompt, feature, systemInstruction }) => {
+  return async ({ model, prompt, feature }) => {
     const config = await getOrchestratorConfig(workspaceId);
     const resolved = RUNTIME_MODELS[model] ?? (LOCAL_PROVIDER_IDS.has(model)
       ? { kind: 'local' as const, model: 'llama3' }
@@ -162,18 +129,18 @@ export function createProductionModelExecutor(workspaceId = 'default'): AiModelE
     if (resolved.kind === 'google') {
       const apiKey = (await getProviderSecret('google', workspaceId)) || process.env.GEMINI_API_KEY || '';
       if (!apiKey) throw new Error('Google Gemini API key not configured');
-      result = await callGoogle(apiKey, resolved.model, prompt, systemInstruction);
+      result = await callGoogle(apiKey, resolved.model, prompt);
     } else if (resolved.kind === 'openai') {
       const apiKey = await getProviderSecret('openai', workspaceId);
       if (!apiKey) throw new Error('OpenAI API key not configured');
-      result = await callOpenAI(apiKey, resolved.model, prompt, systemInstruction);
+      result = await callOpenAI(apiKey, resolved.model, prompt);
     } else if (resolved.kind === 'anthropic') {
       const apiKey = await getProviderSecret('anthropic', workspaceId);
       if (!apiKey) throw new Error('Anthropic API key not configured');
-      result = await callAnthropic(apiKey, resolved.model, prompt, systemInstruction);
+      result = await callAnthropic(apiKey, resolved.model, prompt);
     } else {
       const localKey = await getProviderSecret('local', workspaceId);
-      result = await callLocal(config.endpointUrl, localKey, resolved.model, prompt, systemInstruction);
+      result = await callLocal(config.endpointUrl, localKey, resolved.model, prompt);
     }
 
     return {

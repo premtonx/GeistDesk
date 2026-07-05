@@ -34,7 +34,6 @@ import {
   Ban,
   Loader2,
   Info,
-  Gauge,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
@@ -60,38 +59,6 @@ import {
 import { ProviderPriorityList } from '../ai-orchestrator/ProviderPriorityList';
 import { AiOrchestratorWorkbench } from '../ai-orchestrator/AiOrchestratorWorkbench';
 import { AiOperationsCommandCenter } from '../ai-orchestrator/AiOperationsCommandCenter';
-import { cn } from '../../lib/utils';
-
-type OrchestratorZone = 'cockpit' | 'routing' | 'guardrails' | 'providers';
-
-const ORCHESTRATOR_ZONES: Array<{
-  id: OrchestratorZone;
-  emoji: string;
-  labelKey: string;
-  fallback: string;
-}> = [
-  { id: 'cockpit', emoji: '📊', labelKey: 'aiOrchestrator.zones.cockpit', fallback: 'Cockpit & Overview' },
-  { id: 'routing', emoji: '🚦', labelKey: 'aiOrchestrator.zones.routing', fallback: 'Traffic Routing' },
-  { id: 'guardrails', emoji: '🛡️', labelKey: 'aiOrchestrator.zones.guardrails', fallback: 'Guardrails & Policies' },
-  { id: 'providers', emoji: '🔌', labelKey: 'aiOrchestrator.zones.providers', fallback: 'Providers & Auditing' },
-];
-
-function computeConfigurationScore(
-  health: AiOrchestratorHealth | null,
-  config: AiOrchestratorConfig,
-): number {
-  if (!health) return 0;
-  let score = 68;
-  const online = health.providers.filter((p) => p.status === 'online').length;
-  const total = Math.max(health.providers.length, 1);
-  score += Math.round((online / total) * 22);
-  if (config.piiEnabled && config.auditEnabled) score += 4;
-  if (config.contentFilteringEnabled) score += 3;
-  if (!health.killSwitchActive) score += 3;
-  if (health.budgetExceeded) score -= 8;
-  if (health.status === 'degraded') score -= 6;
-  return Math.min(100, Math.max(0, score));
-}
 
 const MODEL_OPTIONS = [
   { value: 'gemini-flash', label: 'Gemini Flash' },
@@ -188,7 +155,6 @@ export default function AISettingsPage() {
   const [isRestoring, setIsRestoring] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string>('');
   const [bulkRoutingModel, setBulkRoutingModel] = useState(MODEL_OPTIONS[0]?.value ?? 'gemini-flash');
-  const [activeZone, setActiveZone] = useState<OrchestratorZone>('cockpit');
 
   const loadAll = useCallback(async (silent = false) => {
     if (!silent) setIsLoading(true);
@@ -315,7 +281,6 @@ export default function AISettingsPage() {
   const metrics = health?.metrics;
   const usage = health?.usage;
   const systemStatus = health?.status ?? 'offline';
-  const configurationScore = computeConfigurationScore(health, config);
 
   if (isLoading) {
     return (
@@ -326,9 +291,8 @@ export default function AISettingsPage() {
   }
 
   return (
-    <div className="flex-1 flex flex-col min-h-0 bg-[#f4f6f9]">
-      <div className="flex-1 overflow-y-auto min-h-0 custom-scrollbar">
-        <div className="p-8 max-w-6xl mx-auto space-y-6 pb-8">
+    <div className="flex-1 overflow-y-auto min-h-0 bg-[#f4f6f9] custom-scrollbar">
+      <div className="p-8 max-w-6xl mx-auto space-y-8 pb-24">
         <AdminBreadcrumbs />
 
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -365,33 +329,10 @@ export default function AISettingsPage() {
           </div>
         </div>
 
-        <nav
-          className="flex flex-wrap gap-2 p-2 bg-white rounded-2xl border border-slate-200/80 shadow-sm"
-          aria-label={t('aiOrchestrator.zones.navLabel', 'Command center sections')}
-        >
-          {ORCHESTRATOR_ZONES.map((zone) => (
-            <button
-              key={zone.id}
-              type="button"
-              onClick={() => setActiveZone(zone.id)}
-              className={cn(
-                'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all min-w-0',
-                activeZone === zone.id
-                  ? 'bg-slate-900 text-white shadow-md'
-                  : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900',
-              )}
-            >
-              <span className="text-base leading-none" aria-hidden>{zone.emoji}</span>
-              <span className="truncate">{t(zone.labelKey, zone.fallback)}</span>
-            </button>
-          ))}
-        </nav>
-
-        {activeZone === 'cockpit' && (
-          <div className="space-y-6 animate-in fade-in duration-200">
+        {/* AI Overview */}
         <Card className="border-slate-200/80 shadow-sm rounded-2xl overflow-hidden">
           <CardContent className="p-6">
-            <SectionHeader icon={Sparkles} title={t('aiOrchestrator.sections.aiOverview', 'AI Overview')} description={t('aiOrchestrator.sections.aiOverviewDesc', 'Workspace command summary')} />
+            <SectionHeader icon={Sparkles} title="AI Overview" description="Workspace command summary" />
             <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
               {[
                 { label: 'Primary Model', value: config.primaryModel },
@@ -410,155 +351,88 @@ export default function AISettingsPage() {
           </CardContent>
         </Card>
 
-        <Card className="border-slate-200/80 shadow-sm rounded-2xl overflow-hidden">
-          <CardContent className="p-6">
-            <SectionHeader
-              icon={Gauge}
-              title={t('aiOrchestrator.sections.configScore', 'Configuration Score')}
-              description={t('aiOrchestrator.sections.configScoreDesc', 'Composite health of providers, policies, and budget posture')}
-            />
-            <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-              <div className="flex items-baseline gap-2">
-                <span className="text-4xl font-black font-mono text-slate-900">{configurationScore}</span>
-                <span className="text-sm font-semibold text-slate-400">/ 100</span>
-              </div>
-              <div className="flex-1 h-3 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className={cn(
-                    'h-full rounded-full transition-all',
-                    configurationScore >= 80 ? 'bg-emerald-500' : configurationScore >= 60 ? 'bg-amber-500' : 'bg-red-500',
-                  )}
-                  style={{ width: `${configurationScore}%` }}
-                />
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         <AiOperationsCommandCenter
           config={config}
           readOnly={readOnly}
           onBudgetEurChange={(dailyBudgetEur) => patchConfig({ dailyBudgetEur })}
-          sections={['governance', 'quality']}
         />
 
-        {/* Cost Analytics */}
-        <Card className="rounded-2xl shadow-sm">
-          <CardHeader>
-            <SectionHeader icon={DollarSign} title={t('aiOrchestrator.sections.costAnalytics', 'Cost Analytics')} />
-          </CardHeader>
-          <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[
-              { label: "Today's Cost", value: `$${metrics?.costTodayUsd?.toFixed(2) ?? '0.00'}` },
-              { label: 'Monthly Cost', value: `$${metrics?.costMonthUsd?.toFixed(2) ?? '0.00'}` },
-              { label: 'Requests Today', value: metrics?.totalRequests ?? 0 },
-              { label: 'Avg Cost / Ticket', value: `$${metrics?.avgCostPerTicketUsd?.toFixed(4) ?? '0.0000'}` },
-            ].map((item) => (
-              <div key={item.label} className="p-4 bg-slate-50 rounded-xl border border-slate-100">
-                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{item.label}</p>
-                <p className="text-xl font-black text-slate-900 mt-1 font-mono">{item.value}</p>
-              </div>
-            ))}
-            <div className="col-span-2 md:col-span-4 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
-              <p className="text-xs text-indigo-700">
-                Top Consumer: <strong className="capitalize">{metrics?.topConsumerFeature?.replace(/_/g, ' ') ?? '—'}</strong>
-              </p>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Module Usage Analytics */}
-        <Card className="rounded-2xl shadow-sm">
-          <CardHeader>
-            <SectionHeader icon={Activity} title={t('aiOrchestrator.sections.usageAnalytics', 'AI Usage Analytics')} description="Consumption by GeistDesk module" />
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              {[
-                { label: 'Requests Today', value: usage?.requestsToday ?? 0 },
-                { label: 'Requests Month', value: usage?.requestsMonth ?? 0 },
-                { label: 'Success Rate', value: `${usage?.successRate ?? 100}%` },
-                { label: 'Failure Rate', value: `${usage?.failureRate ?? 0}%` },
-                { label: 'Avg Latency', value: `${usage?.averageLatency ?? 0}ms` },
-                { label: 'Avg Cost', value: `$${usage?.averageCost?.toFixed(4) ?? '0.0000'}` },
-              ].map((item) => (
-                <div key={item.label} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                  <p className="text-[9px] font-black uppercase text-slate-400">{item.label}</p>
-                  <p className="text-lg font-black font-mono mt-1">{item.value}</p>
-                </div>
-              ))}
-            </div>
-            <div className="rounded-xl border overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="text-left p-3">Module</th>
-                    <th className="text-right p-3">Today</th>
-                    <th className="text-right p-3">Month</th>
-                    <th className="text-right p-3">Success</th>
-                    <th className="text-right p-3">Avg Latency</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(usage?.byModule ?? []).map((m) => (
-                    <tr key={m.module} className="border-t border-slate-100">
-                      <td className="p-3 font-semibold capitalize">{m.module}</td>
-                      <td className="p-3 text-right font-mono">{m.requestsToday}</td>
-                      <td className="p-3 text-right font-mono">{m.requestsMonth}</td>
-                      <td className="p-3 text-right">{m.successRate}%</td>
-                      <td className="p-3 text-right font-mono">{m.averageLatency}ms</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Audit Trail */}
-        <Card className="rounded-2xl shadow-sm">
-          <CardHeader>
-            <SectionHeader icon={History} title={t('aiOrchestrator.sections.auditTrail', 'Audit Trail')} />
-          </CardHeader>
-          <CardContent className="space-y-2 max-h-64 overflow-y-auto">
-            {audit.length === 0 && (
-              <p className="text-sm text-muted-foreground">{t('aiOrchestrator.sections.auditEmpty', 'No configuration changes recorded yet.')}</p>
-            )}
-            {audit.map((entry) => (
-              <div key={entry.id} className="flex items-start justify-between p-3 rounded-xl border border-slate-100 text-sm">
-                <div>
-                  <p className="font-medium">{entry.userEmail || 'System'} — {entry.action}</p>
-                  {entry.fieldName && entry.oldValue && entry.newValue && (
-                    <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">
-                      {entry.fieldName}: {entry.oldValue} → {entry.newValue}
-                    </p>
-                  )}
-                </div>
-                <span className="text-[10px] text-slate-400 shrink-0 ml-2">
-                  {formatRelativeTime(entry.createdAt)}
-                </span>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-          </div>
-        )}
-
-        {activeZone === 'routing' && (
-          <div className="space-y-6 animate-in fade-in duration-200">
         <AiOrchestratorWorkbench
           config={config}
           readOnly={readOnly}
           onPersonasChange={(featurePersonas) => patchConfig({ featurePersonas })}
-          onPersonaSkillsChange={(personaSkills) => patchConfig({ personaSkills })}
         />
 
-        <AiOperationsCommandCenter
-          config={config}
-          readOnly={readOnly}
-          onBudgetEurChange={(dailyBudgetEur) => patchConfig({ dailyBudgetEur })}
-          sections={['workflow']}
-        />
+        {/* Provider Health */}
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <SectionHeader icon={Activity} title="Provider Health" description="Connection state per AI provider" />
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {(health?.providers ?? []).map((p) => (
+              <div
+                key={p.provider}
+                className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-white"
+              >
+                <div className="flex items-center gap-3">
+                  {statusIcon(p.status)}
+                  <div>
+                    <p className="text-sm font-semibold">{p.label}</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {p.status === 'online' && p.latencyMs != null && `${p.latencyMs}ms`}
+                      {p.status === 'missing_key' && 'API Key Missing'}
+                      {p.message && p.status !== 'online' && ` — ${p.message}`}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right text-[10px] text-slate-400 font-mono">
+                  {p.requestsToday != null && <div>{p.requestsToday} req today</div>}
+                  {p.lastSuccessAt && <div>Last OK {formatRelativeTime(p.lastSuccessAt)}</div>}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Configuration Scope + Lock */}
+        <Card className="rounded-2xl shadow-sm">
+          <CardContent className="p-6 space-y-4">
+            <SectionHeader icon={Globe} title="Configuration Scope" />
+            <div className="flex flex-wrap gap-4">
+              {(['workspace', 'global'] as const).map((scope) => (
+                <label key={scope} className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="scope"
+                    checked={config.scope === scope}
+                    disabled={readOnly}
+                    onChange={() => patchConfig({ scope })}
+                    className="accent-slate-900"
+                  />
+                  <span className="text-sm capitalize">{scope}</span>
+                  {scope === 'global' && (
+                    <span className="text-[10px] text-muted-foreground">(Super Admin only)</span>
+                  )}
+                </label>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground">Default: Workspace — all admins share identical AI behavior.</p>
+            <Separator />
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-slate-500" />
+                <div>
+                  <p className="text-sm font-semibold">Lock AI Configuration</p>
+                  <p className="text-xs text-muted-foreground">Only Super Admins can modify when locked</p>
+                </div>
+              </div>
+              <Switch
+                checked={config.configLocked}
+                onCheckedChange={(v) => patchConfig({ configLocked: v })}
+              />
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Provider Priority (Failover Order) */}
         <Card className="rounded-2xl shadow-sm border-indigo-100">
@@ -696,11 +570,7 @@ export default function AISettingsPage() {
             </div>
           </CardContent>
         </Card>
-          </div>
-        )}
 
-        {activeZone === 'guardrails' && (
-          <div className="space-y-6 animate-in fade-in duration-200">
         {/* Governance & Policies */}
         <Card className="rounded-2xl shadow-sm">
           <CardHeader>
@@ -779,11 +649,11 @@ export default function AISettingsPage() {
         {/* Cost Protection */}
         <Card className="rounded-2xl shadow-sm">
           <CardHeader>
-            <SectionHeader icon={Power} title={t('aiOrchestrator.sections.tokenProtection', 'AI Token Protection')} description="Automatic fallback when budgets are exceeded" />
+            <SectionHeader icon={Power} title="AI Cost Protection" description="Automatic fallback when budgets are exceeded" />
           </CardHeader>
           <CardContent className="grid sm:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>{t('aiOrchestrator.sections.dailyBudgetUsd', 'Daily Budget (USD)')}</Label>
+              <Label>Daily Budget (USD)</Label>
               <Input
                 type="number"
                 disabled={readOnly}
@@ -792,7 +662,7 @@ export default function AISettingsPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label>{t('aiOrchestrator.sections.monthlyBudgetUsd', 'Monthly Budget (USD)')}</Label>
+              <Label>Monthly Budget (USD)</Label>
               <Input
                 type="number"
                 disabled={readOnly}
@@ -801,7 +671,7 @@ export default function AISettingsPage() {
               />
             </div>
             <div className="sm:col-span-2 space-y-2">
-              <Label>{t('aiOrchestrator.sections.budgetExceeded', 'When Budget Exceeded')}</Label>
+              <Label>When Budget Exceeded</Label>
               <Select
                 value={config.budgetExceededAction}
                 disabled={readOnly}
@@ -809,8 +679,8 @@ export default function AISettingsPage() {
               >
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="local_fallback">{t('aiOrchestrator.sections.localFallback', 'Fallback to Local Llama')}</SelectItem>
-                  <SelectItem value="disable_non_critical">{t('aiOrchestrator.sections.disableNonCritical', 'Disable Non-Critical Features')}</SelectItem>
+                  <SelectItem value="local_fallback">Fallback to Local Llama</SelectItem>
+                  <SelectItem value="disable_non_critical">Disable Non-Critical Features</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -822,17 +692,6 @@ export default function AISettingsPage() {
           </CardContent>
         </Card>
 
-        <AiOperationsCommandCenter
-          config={config}
-          readOnly={readOnly}
-          onBudgetEurChange={(dailyBudgetEur) => patchConfig({ dailyBudgetEur })}
-          sections={['budget']}
-        />
-          </div>
-        )}
-
-        {activeZone === 'providers' && (
-          <div className="space-y-6 animate-in fade-in duration-200">
         {/* Infrastructure */}
         <Card className="rounded-2xl shadow-sm">
           <CardHeader>
@@ -935,73 +794,75 @@ export default function AISettingsPage() {
           </CardContent>
         </Card>
 
-        {/* Provider Health */}
+        {/* Cost Analytics */}
         <Card className="rounded-2xl shadow-sm">
           <CardHeader>
-            <SectionHeader icon={Activity} title={t('aiOrchestrator.sections.providerHealth', 'Provider Health')} description="Connection state per AI provider" />
+            <SectionHeader icon={DollarSign} title="Cost Analytics" />
           </CardHeader>
-          <CardContent className="space-y-2">
-            {(health?.providers ?? []).map((p) => (
-              <div
-                key={p.provider}
-                className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-white"
-              >
-                <div className="flex items-center gap-3">
-                  {statusIcon(p.status)}
-                  <div>
-                    <p className="text-sm font-semibold">{p.label}</p>
-                    <p className="text-[10px] text-muted-foreground">
-                      {p.status === 'online' && p.latencyMs != null && `${p.latencyMs}ms`}
-                      {p.status === 'missing_key' && 'API Key Missing'}
-                      {p.message && p.status !== 'online' && ` — ${p.message}`}
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right text-[10px] text-slate-400 font-mono">
-                  {p.requestsToday != null && <div>{p.requestsToday} req today</div>}
-                  {p.lastSuccessAt && <div>Last OK {formatRelativeTime(p.lastSuccessAt)}</div>}
-                </div>
+          <CardContent className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[
+              { label: "Today's Cost", value: `$${metrics?.costTodayUsd?.toFixed(2) ?? '0.00'}` },
+              { label: 'Monthly Cost', value: `$${metrics?.costMonthUsd?.toFixed(2) ?? '0.00'}` },
+              { label: 'Requests Today', value: metrics?.totalRequests ?? 0 },
+              { label: 'Avg Cost / Ticket', value: `$${metrics?.avgCostPerTicketUsd?.toFixed(4) ?? '0.0000'}` },
+            ].map((item) => (
+              <div key={item.label} className="p-4 bg-slate-50 rounded-xl border border-slate-100">
+                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400">{item.label}</p>
+                <p className="text-xl font-black text-slate-900 mt-1 font-mono">{item.value}</p>
               </div>
             ))}
+            <div className="col-span-2 md:col-span-4 p-3 bg-indigo-50 rounded-xl border border-indigo-100">
+              <p className="text-xs text-indigo-700">
+                Top Consumer: <strong className="capitalize">{metrics?.topConsumerFeature?.replace(/_/g, ' ') ?? '—'}</strong>
+              </p>
+            </div>
           </CardContent>
         </Card>
 
-        {/* Configuration Scope + Lock */}
+        {/* Module Usage Analytics */}
         <Card className="rounded-2xl shadow-sm">
-          <CardContent className="p-6 space-y-4">
-            <SectionHeader icon={Globe} title={t('aiOrchestrator.sections.configScope', 'Configuration Scope')} />
-            <div className="flex flex-wrap gap-4">
-              {(['workspace', 'global'] as const).map((scope) => (
-                <label key={scope} className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="radio"
-                    name="scope"
-                    checked={config.scope === scope}
-                    disabled={readOnly}
-                    onChange={() => patchConfig({ scope })}
-                    className="accent-slate-900"
-                  />
-                  <span className="text-sm capitalize">{scope}</span>
-                  {scope === 'global' && (
-                    <span className="text-[10px] text-muted-foreground">(Super Admin only)</span>
-                  )}
-                </label>
+          <CardHeader>
+            <SectionHeader icon={Activity} title="AI Usage Analytics" description="Consumption by GeistDesk module" />
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              {[
+                { label: 'Requests Today', value: usage?.requestsToday ?? 0 },
+                { label: 'Requests Month', value: usage?.requestsMonth ?? 0 },
+                { label: 'Success Rate', value: `${usage?.successRate ?? 100}%` },
+                { label: 'Failure Rate', value: `${usage?.failureRate ?? 0}%` },
+                { label: 'Avg Latency', value: `${usage?.averageLatency ?? 0}ms` },
+                { label: 'Avg Cost', value: `$${usage?.averageCost?.toFixed(4) ?? '0.0000'}` },
+              ].map((item) => (
+                <div key={item.label} className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+                  <p className="text-[9px] font-black uppercase text-slate-400">{item.label}</p>
+                  <p className="text-lg font-black font-mono mt-1">{item.value}</p>
+                </div>
               ))}
             </div>
-            <p className="text-[10px] text-muted-foreground">Default: Workspace — all admins share identical AI behavior.</p>
-            <Separator />
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Lock className="w-4 h-4 text-slate-500" />
-                <div>
-                  <p className="text-sm font-semibold">{t('aiOrchestrator.sections.lockConfig', 'Lock AI Configuration')}</p>
-                  <p className="text-xs text-muted-foreground">Only Super Admins can modify when locked</p>
-                </div>
-              </div>
-              <Switch
-                checked={config.configLocked}
-                onCheckedChange={(v) => patchConfig({ configLocked: v })}
-              />
+            <div className="rounded-xl border overflow-hidden">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50">
+                  <tr>
+                    <th className="text-left p-3">Module</th>
+                    <th className="text-right p-3">Today</th>
+                    <th className="text-right p-3">Month</th>
+                    <th className="text-right p-3">Success</th>
+                    <th className="text-right p-3">Avg Latency</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(usage?.byModule ?? []).map((m) => (
+                    <tr key={m.module} className="border-t border-slate-100">
+                      <td className="p-3 font-semibold capitalize">{m.module}</td>
+                      <td className="p-3 text-right font-mono">{m.requestsToday}</td>
+                      <td className="p-3 text-right font-mono">{m.requestsMonth}</td>
+                      <td className="p-3 text-right">{m.successRate}%</td>
+                      <td className="p-3 text-right font-mono">{m.averageLatency}ms</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           </CardContent>
         </Card>
@@ -1071,12 +932,57 @@ export default function AISettingsPage() {
             )}
           </CardContent>
         </Card>
-          </div>
-        )}
+
+        {/* Audit Trail */}
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <SectionHeader icon={History} title="Audit Trail" />
+          </CardHeader>
+          <CardContent className="space-y-2 max-h-64 overflow-y-auto">
+            {audit.length === 0 && (
+              <p className="text-sm text-muted-foreground">No configuration changes recorded yet.</p>
+            )}
+            {audit.map((entry) => (
+              <div key={entry.id} className="flex items-start justify-between p-3 rounded-xl border border-slate-100 text-sm">
+                <div>
+                  <p className="font-medium">{entry.userEmail || 'System'} — {entry.action}</p>
+                  {entry.fieldName && entry.oldValue && entry.newValue && (
+                    <p className="text-[10px] text-muted-foreground mt-0.5 font-mono">
+                      {entry.fieldName}: {entry.oldValue} → {entry.newValue}
+                    </p>
+                  )}
+                </div>
+                <span className="text-[10px] text-slate-400 shrink-0 ml-2">
+                  {formatRelativeTime(entry.createdAt)}
+                </span>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+
+        {/* Test + Save */}
+        <div className="flex flex-col sm:flex-row gap-3 sticky bottom-4 bg-[#f4f6f9]/95 backdrop-blur p-4 rounded-2xl border border-slate-200 shadow-lg">
+          <Button
+            variant="outline"
+            className="flex-1 h-12 rounded-xl"
+            onClick={handleTest}
+            disabled={isTesting}
+          >
+            {isTesting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+            Test AI Configuration
+          </Button>
+          <Button
+            className="flex-1 h-12 rounded-xl bg-slate-900 hover:bg-black"
+            onClick={handleSave}
+            disabled={isSaving || readOnly}
+          >
+            {isSaving ? 'Synchronizing…' : 'Save Workspace Configuration'}
+          </Button>
+        </div>
 
         {testResults && (
           <Card className="rounded-2xl border-blue-100">
-            <CardHeader><CardTitle className="text-sm">{t('aiOrchestrator.sections.testResults', 'Test Results')}</CardTitle></CardHeader>
+            <CardHeader><CardTitle className="text-sm">Test Results</CardTitle></CardHeader>
             <CardContent className="space-y-2">
               {testResults.map((r) => (
                 <div key={r.provider} className="flex items-center gap-2 text-sm">
@@ -1089,28 +995,6 @@ export default function AISettingsPage() {
             </CardContent>
           </Card>
         )}
-        </div>
-      </div>
-
-      <div className="shrink-0 border-t border-slate-200 bg-[#f4f6f9]/95 backdrop-blur-md px-8 py-4">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row gap-3">
-          <Button
-            variant="outline"
-            className="flex-1 h-12 rounded-xl"
-            onClick={handleTest}
-            disabled={isTesting}
-          >
-            {isTesting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            {t('aiOrchestrator.actions.test', 'Test AI Configuration')}
-          </Button>
-          <Button
-            className="flex-1 h-12 rounded-xl bg-slate-900 hover:bg-black"
-            onClick={handleSave}
-            disabled={isSaving || readOnly}
-          >
-            {isSaving ? t('aiOrchestrator.actions.saving', 'Synchronizing…') : t('aiOrchestrator.actions.save', 'Save Workspace Configuration')}
-          </Button>
-        </div>
       </div>
     </div>
   );

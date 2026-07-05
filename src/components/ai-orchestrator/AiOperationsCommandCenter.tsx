@@ -9,29 +9,16 @@ import { AiWorkflowRoutingTimeline } from './AiWorkflowRoutingTimeline';
 import { AiBudgetCompliancePanel } from './AiBudgetCompliancePanel';
 import { AiQualityDashboard } from './AiQualityDashboard';
 
-export type CommandCenterSection = 'hero' | 'governance' | 'quality' | 'workflow' | 'budget';
-
-const ALL_COMMAND_CENTER_SECTIONS: CommandCenterSection[] = [
-  'hero',
-  'governance',
-  'quality',
-  'workflow',
-  'budget',
-];
-
 interface AiOperationsCommandCenterProps {
   config: AiOrchestratorConfig;
   readOnly?: boolean;
   onBudgetEurChange: (eur: number) => void;
-  /** When set, only the listed panels render (layout zone partitioning). */
-  sections?: CommandCenterSection[];
 }
 
 export function AiOperationsCommandCenter({
   config,
   readOnly,
   onBudgetEurChange,
-  sections,
 }: AiOperationsCommandCenterProps) {
   const { t } = useTranslation();
   const [dashboard, setDashboard] = useState<AiOperationsDashboard | null>(null);
@@ -67,104 +54,86 @@ export function AiOperationsCommandCenter({
 
   if (!dashboard) return null;
 
-  const visible = sections ?? ALL_COMMAND_CENTER_SECTIONS;
-  const show = (section: CommandCenterSection) => visible.includes(section);
-  const showGovernanceGrid = show('governance') || show('quality');
-
   return (
     <div className="space-y-6">
-      {show('hero') && (
-        <Card className="rounded-2xl shadow-sm border-slate-900/10 overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-lg text-white">
-              <LayoutDashboard className="w-5 h-5 text-indigo-300" />
-              {t('aiOrchestrator.commandCenter.title', 'AI Operations Command Center')}
-            </CardTitle>
-            <CardDescription className="text-slate-300">
-              {t(
-                'aiOrchestrator.commandCenter.subtitle',
-                'Governance visualization, workflow routing, budget compliance, and quality intelligence.',
-              )}
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      )}
+      <Card className="rounded-2xl shadow-sm border-slate-900/10 overflow-hidden bg-gradient-to-br from-slate-900 via-slate-800 to-indigo-950 text-white">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-lg text-white">
+            <LayoutDashboard className="w-5 h-5 text-indigo-300" />
+            {t('aiOrchestrator.commandCenter.title', 'AI Operations Command Center')}
+          </CardTitle>
+          <CardDescription className="text-slate-300">
+            {t(
+              'aiOrchestrator.commandCenter.subtitle',
+              'Governance visualization, workflow routing, budget compliance, and quality intelligence.',
+            )}
+          </CardDescription>
+        </CardHeader>
+      </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        {showGovernanceGrid && (
-          <>
-            {show('governance') && (
-              <Card className="xl:col-span-8 rounded-2xl shadow-sm border-indigo-100">
-                <CardHeader className="pb-2">
-                  <CardTitle className="text-base flex items-center gap-2">
-                    <Network className="w-4 h-4 text-indigo-600" />
-                    {t('aiOrchestrator.commandCenter.governance.title', 'AI Governance Graph')}
-                  </CardTitle>
-                  <CardDescription>
-                    {t('aiOrchestrator.commandCenter.governance.description', 'Interactive workspace policy tree — click any node for details')}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <AiGovernanceGraph data={dashboard.governance} />
-                </CardContent>
-              </Card>
-            )}
+        <Card className="xl:col-span-8 rounded-2xl shadow-sm border-indigo-100">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Network className="w-4 h-4 text-indigo-600" />
+              {t('aiOrchestrator.commandCenter.governance.title', 'AI Governance Graph')}
+            </CardTitle>
+            <CardDescription>
+              {t('aiOrchestrator.commandCenter.governance.description', 'Interactive workspace policy tree — click any node for details')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AiGovernanceGraph data={dashboard.governance} />
+          </CardContent>
+        </Card>
 
-            {show('quality') && (
-              <div className={`${show('governance') ? 'xl:col-span-4' : 'xl:col-span-12'} flex flex-col gap-6 min-w-0`}>
-                <Card className="rounded-2xl shadow-sm flex-1">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-base flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                      {t('aiOrchestrator.commandCenter.quality.title', 'AI Quality Dashboard')}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    <AiQualityDashboard quality={dashboard.quality} />
-                  </CardContent>
-                </Card>
-              </div>
-            )}
-          </>
-        )}
-
-        {show('workflow') && (
-          <Card className="xl:col-span-12 rounded-2xl shadow-sm border-violet-100">
+        <div className="xl:col-span-4 flex flex-col gap-6 min-w-0">
+          <Card className="rounded-2xl shadow-sm flex-1">
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
-                <Route className="w-4 h-4 text-violet-600" />
-                {t('aiOrchestrator.commandCenter.workflow.title', 'AI Workflow Routing Engine')}
+                <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                {t('aiOrchestrator.commandCenter.quality.title', 'AI Quality Dashboard')}
               </CardTitle>
-              <CardDescription>
-                {t('aiOrchestrator.commandCenter.workflow.description', 'Incident-triggered sequential automation timeline')}
-              </CardDescription>
             </CardHeader>
             <CardContent>
-              <AiWorkflowRoutingTimeline steps={dashboard.workflow} />
+              <AiQualityDashboard quality={dashboard.quality} />
             </CardContent>
           </Card>
-        )}
+        </div>
 
-        {show('budget') && (
-          <Card className="xl:col-span-12 rounded-2xl shadow-sm border-amber-100">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">
-                {t('aiOrchestrator.commandCenter.budget.title', 'Budget Compliance & Fallback Policy')}
-              </CardTitle>
-              <CardDescription>
-                {t('aiOrchestrator.commandCenter.budget.description', 'EUR ceiling with automatic local LLM failover')}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <AiBudgetCompliancePanel
-                budget={dashboard.budget}
-                readOnly={readOnly}
-                dailyBudgetEur={config.dailyBudgetEur}
-                onDailyBudgetEurChange={onBudgetEurChange}
-              />
-            </CardContent>
-          </Card>
-        )}
+        <Card className="xl:col-span-12 rounded-2xl shadow-sm border-violet-100">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Route className="w-4 h-4 text-violet-600" />
+              {t('aiOrchestrator.commandCenter.workflow.title', 'AI Workflow Routing Engine')}
+            </CardTitle>
+            <CardDescription>
+              {t('aiOrchestrator.commandCenter.workflow.description', 'Incident-triggered sequential automation timeline')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AiWorkflowRoutingTimeline steps={dashboard.workflow} />
+          </CardContent>
+        </Card>
+
+        <Card className="xl:col-span-12 rounded-2xl shadow-sm border-amber-100">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base">
+              {t('aiOrchestrator.commandCenter.budget.title', 'Budget Compliance & Fallback Policy')}
+            </CardTitle>
+            <CardDescription>
+              {t('aiOrchestrator.commandCenter.budget.description', 'EUR ceiling with automatic local LLM failover')}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <AiBudgetCompliancePanel
+              budget={dashboard.budget}
+              readOnly={readOnly}
+              dailyBudgetEur={config.dailyBudgetEur}
+              onDailyBudgetEurChange={onBudgetEurChange}
+            />
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

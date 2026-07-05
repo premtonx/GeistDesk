@@ -2,7 +2,7 @@ import { BookOpen, FlaskConical, Gauge, UserCircle2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { useTranslation } from '../../lib/context/I18nContext';
-import type { AiFeaturePersonaMap, AiOrchestratorConfig, AiPersonaSkillsMap } from '../../types/aiOrchestrator';
+import type { AiFeaturePersonaMap, AiOrchestratorConfig } from '../../types/aiOrchestrator';
 import { AiPromptLibraryPanel } from './AiPromptLibraryPanel';
 import { AiProviderBenchmarkGrid } from './AiProviderBenchmarkGrid';
 import { AiPlaygroundPanel } from './AiPlaygroundPanel';
@@ -12,10 +12,9 @@ interface AiOrchestratorWorkbenchProps {
   config: AiOrchestratorConfig;
   readOnly?: boolean;
   onPersonasChange: (personas: AiFeaturePersonaMap) => void;
-  onPersonaSkillsChange: (skills: AiPersonaSkillsMap) => void;
 }
 
-export function AiOrchestratorWorkbench({ config, readOnly, onPersonasChange, onPersonaSkillsChange }: AiOrchestratorWorkbenchProps) {
+export function AiOrchestratorWorkbench({ config, readOnly, onPersonasChange }: AiOrchestratorWorkbenchProps) {
   const { t } = useTranslation();
 
   return (
@@ -65,10 +64,8 @@ export function AiOrchestratorWorkbench({ config, readOnly, onPersonasChange, on
           <TabsContent value="personas" className="mt-5">
             <AiPersonasSelector
               value={config.featurePersonas}
-              skills={config.personaSkills ?? {}}
               readOnly={readOnly}
               onChange={onPersonasChange}
-              onSkillsChange={onPersonaSkillsChange}
             />
           </TabsContent>
         </Tabs>

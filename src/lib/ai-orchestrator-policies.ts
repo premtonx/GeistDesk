@@ -16,23 +16,13 @@ import {
 
 const CLOUD_PROVIDER_IDS = new Set(['gpt-5', 'claude', 'gemini-flash', 'gemini-pro', 'openai', 'anthropic', 'google']);
 
-export function isCloudProvider(providerId: string): boolean {
+function isCloudProvider(providerId: string): boolean {
   if (LOCAL_PROVIDER_IDS.has(providerId)) return false;
   return CLOUD_PROVIDER_IDS.has(providerId) || !LOCAL_PROVIDER_IDS.has(providerId);
 }
 
-export function isLocalProvider(providerId: string): boolean {
+function isLocalProvider(providerId: string): boolean {
   return LOCAL_PROVIDER_IDS.has(providerId);
-}
-
-/** Public cloud egress requires reversible token anonymization before model calls. */
-export function requiresCloudDataAnonymization(
-  config: AiOrchestratorConfig,
-  providerId: string,
-): boolean {
-  if (!config.piiEnabled) return false;
-  if (isLocalProvider(providerId)) return false;
-  return isCloudProvider(providerId);
 }
 
 function vaultUsesCloud(config: AiOrchestratorConfig): boolean {

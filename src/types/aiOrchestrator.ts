@@ -104,9 +104,7 @@ export type AiDecisionEngineStep =
   | 'evaluate_budget_capacity'
   | 'assign_compliant_model'
   | 'approval_gate'
-  | 'cache_lookup'
   | 'execute'
-  | 'cache_persist'
   | 'confidence_threshold_check'
   | 'memory_policy'
   | 'file_audit_log';
@@ -120,8 +118,6 @@ export type AiExecutionStatus =
 
 export type AiCustomerScope = 'standard' | 'vip' | 'enterprise';
 
-export type AiOperatorLanguage = 'de' | 'en';
-
 export interface AiExecutionContext {
   workspaceId?: string;
   feature: AiFeatureId;
@@ -133,13 +129,7 @@ export interface AiExecutionContext {
   customerScope?: AiCustomerScope;
   ticketId?: string;
   ticketClosed?: boolean;
-  /** Active UI locale of the operator initiating the request (de/en). */
-  operatorLanguage?: AiOperatorLanguage;
   metadata?: Record<string, unknown>;
-  /** When true, bypass entity JSONB cache and force a fresh LLM execution. */
-  forceRefresh?: boolean;
-  /** Alias for forceRefresh — skips cache read before model execution. */
-  skipCache?: boolean;
 }
 
 export interface AiDecisionStepRecord {
@@ -174,8 +164,6 @@ export interface AiExecutionResult {
   explainability?: AiExplainabilityEntry;
   error?: string;
   redactedPrompt?: string;
-  /** True when output was served from entity JSONB cache (no LLM call). */
-  fromCache?: boolean;
 }
 
 export interface AiApprovalQueueEntry {
@@ -241,18 +229,7 @@ export interface AiPersonaDefinition {
   languageKey: string;
   formatKey: string;
   systemPromptSuffix: string;
-  /** Optional uploaded Markdown skill instructions (workspace-persisted). */
-  skillsContent?: string;
-  skillsFileName?: string;
 }
-
-/** Workspace-persisted Markdown skill file per persona. */
-export interface AiPersonaSkillProfile {
-  skillsContent?: string;
-  skillsFileName?: string;
-}
-
-export type AiPersonaSkillsMap = Partial<Record<AiPersonaId, AiPersonaSkillProfile>>;
 
 export type AiFeaturePersonaMap = Partial<Record<AiFeatureId, AiPersonaId>>;
 
@@ -388,8 +365,6 @@ export interface AiOrchestratorConfig {
   memoryPolicy: AiMemoryPolicy;
   /** Persona assignments per AI feature row. */
   featurePersonas: AiFeaturePersonaMap;
-  /** Uploaded Markdown skill files keyed by persona id. */
-  personaSkills: AiPersonaSkillsMap;
   killSwitch: AiKillSwitch;
   dailyBudgetUsd: number;
   monthlyBudgetUsd: number;
@@ -498,8 +473,7 @@ export const AI_CORPORATE_POLICY_RULES: Record<
 > = {
   customerPiiNeverLeavesWorkspace: {
     label: 'Customer PII never leaves Workspace',
-    description:
-      'Blocks cloud routing when PII redaction is disabled. When enabled, public cloud egress uses reversible {{GD_TOKEN_*}} anonymization at lifecycle Step 4.',
+    description: 'Blocks cloud routing when PII redaction is disabled or data may egress.',
   },
   vaultAnalysisMustStayLocal: {
     label: 'Vault Analysis must stay 100% Local',
@@ -604,9 +578,7 @@ export const AI_DECISION_ENGINE_FLOW: Array<{ step: AiDecisionEngineStep; label:
   { step: 'evaluate_budget_capacity', label: 'Evaluate Budget Capacity' },
   { step: 'assign_compliant_model', label: 'Assign Compliant Model' },
   { step: 'approval_gate', label: 'Approval Workflow Gate' },
-  { step: 'cache_lookup', label: 'Entity JSONB Cache Lookup' },
   { step: 'execute', label: 'Execute' },
-  { step: 'cache_persist', label: 'Persist Cache Payload' },
   { step: 'confidence_threshold_check', label: 'Confidence Threshold Check' },
   { step: 'memory_policy', label: 'Memory & Explainability Policies' },
   { step: 'file_audit_log', label: 'File Audit Log' },
@@ -779,7 +751,6 @@ export const DEFAULT_ORCHESTRATOR_CONFIG: AiOrchestratorConfig = {
   confidenceThresholds: DEFAULT_CONFIDENCE_THRESHOLDS,
   memoryPolicy: DEFAULT_MEMORY_POLICY,
   featurePersonas: DEFAULT_FEATURE_PERSONAS,
-  personaSkills: {},
   killSwitch: DEFAULT_KILL_SWITCH,
   dailyBudgetUsd: 10,
   monthlyBudgetUsd: 300,
