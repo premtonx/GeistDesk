@@ -493,16 +493,16 @@ export default function CredentialVaultPage() {
     }
   }) || [];
 
-  const vaultFolders = useLiveQuery(async () => {
+  const vaultFolders = (useLiveQuery(async () => {
     try {
       return await localDB.folders.toArray();
     } catch {
       return [];
     }
-  }, []) as VaultFolderNode[];
+  }, []) ?? []) as VaultFolderNode[];
 
   const foldersForActiveVault = useMemo(
-    () => vaultFolders.filter((folder) => folder.vaultId === activeVaultId),
+    () => (vaultFolders ?? []).filter((folder) => folder.vaultId === activeVaultId),
     [vaultFolders, activeVaultId],
   );
 
