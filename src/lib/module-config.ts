@@ -54,6 +54,18 @@ export interface EmailChannelConfig {
   signature: string;
 }
 
+/** GeistExchange custom workflow templates (workspace-wide). */
+export interface ExchangeCustomTemplate {
+  id: string;
+  title: string;
+  tags: string[];
+  description: string;
+  acceptedTypes: string[];
+  uploadLimit: string;
+  variables: string[];
+  createdAt: string;
+}
+
 export interface ModuleConfig {
   polyglotEnabled: boolean;
   languages: PolyglotLanguage[];
@@ -70,6 +82,10 @@ export interface ModuleConfig {
   ssoEnabled: boolean;
   ssoClientId: string;
   ssoTenantId: string;
+  /** Workforce Hub — allowed SSO email domains (workspace-wide). */
+  ssoDomains: string[];
+  /** GeistExchange — admin-defined custom upload templates. */
+  exchangeCustomTemplates: ExchangeCustomTemplate[];
 }
 
 const DEFAULT_CONFIG: ModuleConfig = {
@@ -108,7 +124,9 @@ const DEFAULT_CONFIG: ModuleConfig = {
   forbiddenText: '',
   ssoEnabled: false,
   ssoClientId: '',
-  ssoTenantId: 'common'
+  ssoTenantId: 'common',
+  ssoDomains: ['premtonxh.gmail.com', 'microsoft.onmicrosoft.com', 'entra-sso.com'],
+  exchangeCustomTemplates: [],
 };
 
 function inferIsoCodeFromLanguage(lang: string): string {
@@ -146,6 +164,10 @@ export function normalizeModuleConfig(parsed: Partial<ModuleConfig> | Record<str
       customDictionary: polyglotRaw.customDictionary ?? {},
       allowAiFallback: polyglotRaw.allowAiFallback ?? false,
     },
+    ssoDomains: Array.isArray(source.ssoDomains) ? source.ssoDomains : DEFAULT_CONFIG.ssoDomains,
+    exchangeCustomTemplates: Array.isArray(source.exchangeCustomTemplates)
+      ? source.exchangeCustomTemplates
+      : DEFAULT_CONFIG.exchangeCustomTemplates,
   };
 }
 
@@ -156,6 +178,45 @@ function readAuthToken(): string | null {
   } catch {
     return null;
   }
+}
+
+function migrateLegacyBrowserOnlySettings(config: ModuleConfig): { config: ModuleConfig; migrated: boolean } {
+  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+    return { config, migrated: false };
+  }
+
+  let next = config;
+  let migrated = false;
+
+  try {
+    const legacySso = localStorage.getItem('geistdesk_sso_domains');
+    if (legacySso) {
+      const parsed = JSON.parse(legacySso) as string[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        next = { ...next, ssoDomains: parsed };
+        migrated = true;
+      }
+      localStorage.removeItem('geistdesk_sso_domains');
+    }
+  } catch {
+    /* ignore corrupt legacy payload */
+  }
+
+  try {
+    const legacyTemplates = localStorage.getItem('geistexchange-custom-templates');
+    if (legacyTemplates) {
+      const parsed = JSON.parse(legacyTemplates) as ExchangeCustomTemplate[];
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        next = { ...next, exchangeCustomTemplates: parsed };
+        migrated = true;
+      }
+      localStorage.removeItem('geistexchange-custom-templates');
+    }
+  } catch {
+    /* ignore corrupt legacy payload */
+  }
+
+  return { config: normalizeModuleConfig(next), migrated };
 }
 
 /** Writes module config to browser storage and notifies listeners. */
@@ -203,20 +264,31 @@ export async function syncModuleConfigFromServer(isAdmin = false): Promise<Modul
     }
 
     const local = getModuleConfig();
+    const { config: migratedLocal, migrated } = migrateLegacyBrowserOnlySettings(local);
+
     const merged = normalizeModuleConfig(
       isAdmin
-        ? { ...DEFAULT_CONFIG, ...remote }
+        ? { ...DEFAULT_CONFIG, ...remote, ...migratedLocal }
         : {
-            ...local,
+            ...migratedLocal,
             ...remote,
             polyglot: {
-              ...local.polyglot,
+              ...migratedLocal.polyglot,
               ...(remote.polyglot || {}),
             },
           },
     );
 
     applyModuleConfigToStorage(merged);
+
+    if (migrated && isAdmin) {
+      try {
+        await saveModuleConfig(merged);
+      } catch (error) {
+        console.warn('[ModuleConfig] Legacy migration persist skipped:', error);
+      }
+    }
+
     return merged;
   } catch (error) {
     console.warn('[ModuleConfig] Server sync failed:', error);

@@ -13,12 +13,15 @@ export function useExchangeTemplates() {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
-    setCustomTemplates(loadCustomTemplates());
+    const sync = () => setCustomTemplates(loadCustomTemplates());
+    sync();
+    window.addEventListener('module-config-changed', sync);
+    return () => window.removeEventListener('module-config-changed', sync);
   }, []);
 
-  const persistTemplates = useCallback((templates: ExchangeTemplate[]) => {
+  const persistTemplates = useCallback(async (templates: ExchangeTemplate[]) => {
     setCustomTemplates(templates);
-    saveCustomTemplates(templates);
+    await saveCustomTemplates(templates);
   }, []);
 
   const createTemplate = useCallback(
@@ -29,7 +32,7 @@ export function useExchangeTemplates() {
       }
 
       const template = buildExchangeTemplate(input);
-      persistTemplates([template, ...customTemplates]);
+      void persistTemplates([template, ...customTemplates]);
       return { ok: true, template };
     },
     [customTemplates, persistTemplates],

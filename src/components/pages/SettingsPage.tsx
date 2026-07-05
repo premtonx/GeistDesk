@@ -25,7 +25,7 @@ import {
   LayoutGrid,
   ShieldCheck
 } from 'lucide-react';
-import { getModuleConfig, saveModuleConfig, ModuleConfig } from '../../lib/module-config';
+import { useWorkspaceModuleConfig } from '../../hooks/useWorkspaceModuleConfig';
 import { logout, useAdmin, useAuth } from '../../lib/hooks';
 import { toast } from 'sonner';
 import { LogOut, User as UserIcon, ArrowRight } from 'lucide-react';
@@ -41,7 +41,7 @@ export default function SettingsPage() {
   const { isAdmin } = useAdmin();
   const { user } = useAuth();
   const navigate = useNavigate();
-  const [config, setConfig] = useState<ModuleConfig>(getModuleConfig());
+  const { config, setConfig, persist } = useWorkspaceModuleConfig({ admin: true });
   const { t, i18n, language } = useTranslation();
 
   // Personal Profile state hooks
@@ -100,20 +100,21 @@ export default function SettingsPage() {
     }
   };
 
-  const togglePolyglot = () => {
+  const togglePolyglot = async () => {
     const newConfig = { ...config, polyglotEnabled: !config.polyglotEnabled };
-    setConfig(newConfig);
-    saveModuleConfig(newConfig);
-    toast.success(`Polyglot Bridge ${newConfig.polyglotEnabled ? 'enabled' : 'disabled'}`);
+    const saved = await persist(newConfig);
+    if (saved) {
+      toast.success(`Polyglot Bridge ${newConfig.polyglotEnabled ? 'enabled' : 'disabled'}`);
+    }
   };
 
-  const toggleDebugAdmin = () => {
+  const toggleDebugAdmin = async () => {
     const newConfig = { ...config, debugAdminMode: !config.debugAdminMode };
-    setConfig(newConfig);
-    saveModuleConfig(newConfig);
-    toast.info(`Simulated Admin Mode ${newConfig.debugAdminMode ? 'activated' : 'deactivated'}`);
-    // Force a reload to refresh admin hooks
-    setTimeout(() => window.location.reload(), 1000);
+    const saved = await persist(newConfig);
+    if (saved) {
+      toast.info(`Simulated Admin Mode ${newConfig.debugAdminMode ? 'activated' : 'deactivated'}`);
+      setTimeout(() => window.location.reload(), 1000);
+    }
   };
 
   const handleLogout = async () => {
@@ -125,18 +126,15 @@ export default function SettingsPage() {
     }
   };
 
-  const toggleLanguage = (langName: string) => {
+  const toggleLanguage = async (langName: string) => {
     const newLanguages = config.languages.map(l => 
       l.lang === langName ? { ...l, enabled: !l.enabled } : l
     );
-    // Don't allow disabling all languages if polyglot is on
     if (newLanguages.every(l => !l.enabled) && config.polyglotEnabled) {
       toast.error("At least one language must remain active.");
       return;
     }
-    const newConfig = { ...config, languages: newLanguages };
-    setConfig(newConfig);
-    saveModuleConfig(newConfig);
+    await persist({ ...config, languages: newLanguages });
   };
 
   return (
@@ -262,10 +260,9 @@ export default function SettingsPage() {
                   <Switch 
                     checked={config.personioEnabled}
                     onCheckedChange={(val) => {
-                      const newConfig = { ...config, personioEnabled: val };
-                      setConfig(newConfig);
-                      saveModuleConfig(newConfig);
-                      toast.success(`Personio Sync ${val ? 'enabled' : 'disabled'}`);
+                      void persist({ ...config, personioEnabled: val }).then((saved) => {
+                        if (saved) toast.success(`Personio Sync ${val ? 'enabled' : 'disabled'}`);
+                      });
                     }}
                     className="data-[state=checked]:bg-emerald-600"
                   />
@@ -491,10 +488,9 @@ export default function SettingsPage() {
               <Switch 
                 checked={config.ssoEnabled || false}
                 onCheckedChange={(val) => {
-                  const newConfig = { ...config, ssoEnabled: val };
-                  setConfig(newConfig);
-                  saveModuleConfig(newConfig);
-                  toast.success(`Entra ID SSO ${val ? 'enabled' : 'disabled'}`);
+                  void persist({ ...config, ssoEnabled: val }).then((saved) => {
+                    if (saved) toast.success(`Entra ID SSO ${val ? 'enabled' : 'disabled'}`);
+                  });
                 }}
                 className="data-[state=checked]:bg-indigo-600"
               />

@@ -28,6 +28,8 @@ function sanitizeModuleConfigForOperators(doc: Record<string, unknown> | null) {
     legalPolicy: doc.legalPolicy ?? '',
     forbiddenText: doc.forbiddenText ?? '',
     ssoEnabled: doc.ssoEnabled ?? false,
+    ssoDomains: Array.isArray(doc.ssoDomains) ? doc.ssoDomains : [],
+    exchangeCustomTemplates: Array.isArray(doc.exchangeCustomTemplates) ? doc.exchangeCustomTemplates : [],
   };
 }
 

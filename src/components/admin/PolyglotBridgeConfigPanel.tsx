@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Globe, KeyRound, Plus, Trash2, Upload } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
@@ -18,12 +18,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { FlagIcon } from '../ui/FlagIcon';
 import { useTranslation } from '../../lib/context/I18nContext';
 import {
-  getModuleConfig,
-  saveModuleConfig,
-  syncModuleConfigFromServer,
   type ModuleConfig,
   type PolyglotLanguage,
 } from '../../lib/module-config';
+import { useWorkspaceModuleConfig } from '../../hooks/useWorkspaceModuleConfig';
 import {
   DEFAULT_SUPPORTED_LANGUAGES,
   ISO_LANGUAGE_PRESETS,
@@ -43,7 +41,7 @@ interface PolyglotBridgeConfigPanelProps {
 
 export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPanelProps) {
   const { t } = useTranslation();
-  const [config, setConfig] = useState<ModuleConfig>(() => getModuleConfig());
+  const { config, persist: persistWorkspace } = useWorkspaceModuleConfig({ admin: true });
   const [isoInput, setIsoInput] = useState('it');
   const [displayName, setDisplayName] = useState('');
   const [flagCode, setFlagCode] = useState('it');
@@ -53,26 +51,8 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    let active = true;
-    void syncModuleConfigFromServer(true).then((next) => {
-      if (!active) return;
-      setConfig(next);
-      setApiKeyInput(next.polyglot.translationProviderKey);
-    });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  useEffect(() => {
-    const sync = () => {
-      const next = getModuleConfig();
-      setConfig(next);
-      setApiKeyInput(next.polyglot.translationProviderKey);
-    };
-    window.addEventListener('module-config-changed', sync);
-    return () => window.removeEventListener('module-config-changed', sync);
-  }, []);
+    setApiKeyInput(config.polyglot.translationProviderKey);
+  }, [config.polyglot.translationProviderKey]);
 
   useEffect(() => {
     const preset = resolveLanguagePreset(isoInput);
@@ -80,22 +60,18 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
     setFlagCode(preset.flagCode);
   }, [isoInput]);
 
-  const persist = useCallback(async (next: ModuleConfig): Promise<boolean> => {
-    setConfig(next);
-    try {
-      await saveModuleConfig(next);
-      return true;
-    } catch (error) {
-      console.error('[Polyglot Bridge] Failed to persist module config:', error);
+  const persist = async (next: ModuleConfig): Promise<boolean> => {
+    const saved = await persistWorkspace(next);
+    if (!saved) {
       toast.error(
         t(
           'adminHub.polyglot.saveFailed',
           'Could not save workspace settings to the database. Please try again.',
         ),
       );
-      return false;
     }
-  }, [t]);
+    return saved;
+  };
 
   const handleIsoChange = (iso: string) => {
     const normalized = normalizeIsoCode(iso);

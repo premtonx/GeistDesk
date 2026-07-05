@@ -1,16 +1,14 @@
+import {
+  getModuleConfig,
+  saveModuleConfig,
+  type ExchangeCustomTemplate,
+} from '../../lib/module-config';
+import { isExchangeDevSeedEnabled } from './exchange-dev-seed';
+
 /** Dynamic placeholder tokens e.g. {{customer_name}}, {{ticket_id}} */
 export const EXCHANGE_TEMPLATE_VAR_PATTERN = /\{\{[a-zA-Z_][a-zA-Z0-9_]*\}\}/g;
 
-export interface ExchangeTemplate {
-  id: string;
-  title: string;
-  tags: string[];
-  description: string;
-  acceptedTypes: string[];
-  uploadLimit: string;
-  variables: string[];
-  createdAt: string;
-}
+export type ExchangeTemplate = ExchangeCustomTemplate;
 
 export interface CreateExchangeTemplateInput {
   title: string;
@@ -19,8 +17,6 @@ export interface CreateExchangeTemplateInput {
   acceptedTypes?: string[];
   uploadLimit?: string;
 }
-
-const STORAGE_KEY = 'geistexchange-custom-templates';
 
 export function extractTemplateVariables(...texts: string[]): string[] {
   const found = new Set<string>();
@@ -58,19 +54,15 @@ export function validateCreateTemplateInput(input: CreateExchangeTemplateInput):
   return null;
 }
 
+/** Loads workspace exchange templates from module config (PostgreSQL-backed). */
 export function loadCustomTemplates(): ExchangeTemplate[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as ExchangeTemplate[];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+  return getModuleConfig().exchangeCustomTemplates ?? [];
 }
 
-export function saveCustomTemplates(templates: ExchangeTemplate[]): void {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
+/** Persists workspace exchange templates to module config (PostgreSQL-backed). */
+export async function saveCustomTemplates(templates: ExchangeTemplate[]): Promise<void> {
+  const config = getModuleConfig();
+  await saveModuleConfig({ ...config, exchangeCustomTemplates: templates });
 }
 
 export function buildExchangeTemplate(input: CreateExchangeTemplateInput): ExchangeTemplate {
@@ -89,8 +81,6 @@ export function buildExchangeTemplate(input: CreateExchangeTemplateInput): Excha
     createdAt: new Date().toISOString(),
   };
 }
-
-import { isExchangeDevSeedEnabled } from './exchange-dev-seed';
 
 /** Seed demo rows in development only so Schnellfilter badge counts align with visible table rows. */
 export function buildExpiringSoonSeedItems(): ExchangeItemRowSeed[] {

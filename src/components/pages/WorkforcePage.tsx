@@ -48,8 +48,10 @@ import { agentService } from '../../services/agentService';
 import { User } from '../../types';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
+import { useWorkspaceModuleConfig } from '../../hooks/useWorkspaceModuleConfig';
 
 export default function WorkforcePage() {
+  const { config, persist } = useWorkspaceModuleConfig({ admin: true });
   const [agents, setAgents] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -57,7 +59,7 @@ export default function WorkforcePage() {
   const [authFilter, setAuthFilter] = useState('all');
   
   // SSO Constraints State
-  const [ssoDomains, setSsoDomains] = useState<string[]>([]);
+  const ssoDomains = config.ssoDomains;
   const [newSsoDomain, setNewSsoDomain] = useState('');
 
   // Modal State
@@ -72,33 +74,18 @@ export default function WorkforcePage() {
     password: '',
   });
 
-  // Load SSO domains and agents
+  // Load agents
   useEffect(() => {
-    // 1. Fetch Agents subscription
     const unsubscribe = userService.subscribeToUsers((data) => {
       setAgents(data);
       setLoading(false);
     });
 
-    // 2. Load expected SSO domains list from localStorage
-    try {
-      const stored = localStorage.getItem('geistdesk_sso_domains');
-      if (stored) {
-        setSsoDomains(JSON.parse(stored));
-      } else {
-        const defaultDomains = ['premtonxh.gmail.com', 'microsoft.onmicrosoft.com', 'entra-sso.com'];
-        setSsoDomains(defaultDomains);
-        localStorage.setItem('geistdesk_sso_domains', JSON.stringify(defaultDomains));
-      }
-    } catch (err) {
-      console.error('Failed to parse SSO domains', err);
-    }
-
     return () => unsubscribe();
   }, []);
 
   // Save SSO domain constraint
-  const handleAddSsoDomain = () => {
+  const handleAddSsoDomain = async () => {
     const clean = newSsoDomain.trim().toLowerCase();
     if (!clean) return;
     if (ssoDomains.includes(clean)) {
@@ -106,18 +93,19 @@ export default function WorkforcePage() {
       return;
     }
     const updated = [...ssoDomains, clean];
-    setSsoDomains(updated);
-    localStorage.setItem('geistdesk_sso_domains', JSON.stringify(updated));
-    setNewSsoDomain('');
-    toast.success(`Access constraint added: Expected SSO logins restricted to @${clean}`);
+    const saved = await persist({ ...config, ssoDomains: updated });
+    if (saved) {
+      setNewSsoDomain('');
+      toast.success(`Access constraint added: Expected SSO logins restricted to @${clean}`);
+    }
   };
 
-  // Remove SSO domain constraint
-  const handleRemoveSsoDomain = (index: number) => {
+  const handleRemoveSsoDomain = async (index: number) => {
     const updated = ssoDomains.filter((_, i) => i !== index);
-    setSsoDomains(updated);
-    localStorage.setItem('geistdesk_sso_domains', JSON.stringify(updated));
-    toast.success('SSO domain restriction removed');
+    const saved = await persist({ ...config, ssoDomains: updated });
+    if (saved) {
+      toast.success('SSO domain restriction removed');
+    }
   };
 
   // Switch role dynamically

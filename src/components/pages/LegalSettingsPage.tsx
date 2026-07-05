@@ -4,7 +4,7 @@ import { Label } from '../../components/ui/label';
 import { Textarea } from '../../components/ui/textarea';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
-import { getModuleConfig, saveModuleConfig, ModuleConfig } from '../../lib/module-config';
+import { useWorkspaceModuleConfig } from '../../hooks/useWorkspaceModuleConfig';
 import { toast } from 'sonner';
 import { ShieldAlert, BookOpen, Save, History, Lock, Trash2 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -15,22 +15,22 @@ import { usePermissions } from '../../hooks/usePermissions';
 
 export default function LegalSettingsPage() {
   const { hasSpecialPermission } = usePermissions();
-  const [config, setConfig] = useState<ModuleConfig>(getModuleConfig());
+  const { config, setConfig, persist } = useWorkspaceModuleConfig({ admin: true });
   const [isSaving, setIsSaving] = useState(false);
 
   const canEdit = hasSpecialPermission('aiGovernance');
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!canEdit) {
       toast.error("You lack the AI Governance Grant required to commit these changes.");
       return;
     }
     setIsSaving(true);
-    saveModuleConfig(config);
-    setTimeout(() => {
-      setIsSaving(false);
+    const saved = await persist(config);
+    setIsSaving(false);
+    if (saved) {
       toast.success("Legal Guardrails synchronized across all AI nodes.");
-    }, 800);
+    }
   };
 
   return (

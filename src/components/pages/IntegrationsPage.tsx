@@ -6,7 +6,7 @@ import { Input } from '../../components/ui/input';
 import { Label } from '../../components/ui/label';
 import { Badge } from '../../components/ui/badge';
 import { AdminBreadcrumbs } from '../../components/AdminBreadcrumbs';
-import { getModuleConfig, saveModuleConfig } from '../../lib/module-config';
+import { useWorkspaceModuleConfig } from '../../hooks/useWorkspaceModuleConfig';
 import { toast } from 'sonner';
 import axios from 'axios';
 import { useAuth } from '../../lib/hooks';
@@ -15,12 +15,14 @@ import { useTranslation } from '../../lib/context/I18nContext';
 export default function IntegrationsPage() {
   const { user } = useAuth();
   const { t } = useTranslation();
-  const [config, setConfig] = useState(getModuleConfig());
+  const { config, setConfig, persist } = useWorkspaceModuleConfig({ admin: true });
   const [isTesting, setIsTesting] = useState(false);
 
-  const handleSave = () => {
-    saveModuleConfig(config);
-    toast.success(t('integrations.persisted', 'Integration settings persisted.'));
+  const handleSave = async () => {
+    const saved = await persist(config);
+    if (saved) {
+      toast.success(t('integrations.persisted', 'Integration settings persisted.'));
+    }
   };
 
   const testPersonio = () => {
