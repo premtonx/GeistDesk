@@ -315,6 +315,35 @@ export default function AISettingsPage() {
       <div className="p-8 max-w-6xl mx-auto space-y-8 pb-24">
         <AdminBreadcrumbs />
 
+        <div className="w-full min-w-0 sticky top-0 z-10 -mx-1 px-1 pt-1 pb-2 bg-[#f4f6f9]/95 backdrop-blur-sm">
+          <div
+            role="tablist"
+            aria-label={t('aiOrchestrator.commandCenter.subTabs', 'Orchestrator sections')}
+            className="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar scroll-smooth"
+          >
+            {ORCHESTRATOR_SUB_TABS.map((tab) => {
+              const active = activeSubTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setActiveSubTab(tab.id)}
+                  className={cn(
+                    'shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all',
+                    active
+                      ? 'bg-white text-indigo-700 border-indigo-200 shadow-sm ring-1 ring-indigo-100'
+                      : 'bg-slate-50/80 text-slate-600 border-transparent hover:bg-white hover:border-slate-200 hover:text-slate-800',
+                  )}
+                >
+                  <span className="whitespace-nowrap">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h1 className="text-2xl font-bold tracking-tight">
@@ -346,35 +375,6 @@ export default function AISettingsPage() {
                 <span className="ml-1 opacity-60">v{config.configVersion}</span>
               )}
             </Badge>
-          </div>
-        </div>
-
-        <div className="w-full min-w-0">
-          <div
-            role="tablist"
-            aria-label={t('aiOrchestrator.commandCenter.subTabs', 'Orchestrator sections')}
-            className="flex gap-1.5 overflow-x-auto pb-1 custom-scrollbar scroll-smooth"
-          >
-            {ORCHESTRATOR_SUB_TABS.map((tab) => {
-              const active = activeSubTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={active}
-                  onClick={() => setActiveSubTab(tab.id)}
-                  className={cn(
-                    'shrink-0 inline-flex items-center gap-2 px-3.5 py-2 rounded-xl text-xs font-semibold border transition-all',
-                    active
-                      ? 'bg-white text-indigo-700 border-indigo-200 shadow-sm ring-1 ring-indigo-100'
-                      : 'bg-slate-50/80 text-slate-600 border-transparent hover:bg-white hover:border-slate-200 hover:text-slate-800',
-                  )}
-                >
-                  <span className="whitespace-nowrap">{tab.label}</span>
-                </button>
-              );
-            })}
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Settings2, UserCircle2 } from 'lucide-react';
+import { UserCircle2 } from 'lucide-react';
 import { Label } from '../ui/label';
 import {
   Select,
@@ -9,6 +9,7 @@ import {
   SelectValue,
 } from '../ui/select';
 import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
 import { useTranslation } from '../../lib/context/I18nContext';
 import {
   AI_PERSONA_DEFINITIONS,
@@ -62,41 +63,53 @@ export function AiPersonasSelector({
           const label = t(persona.labelKey, personaId.replace(/_/g, ' '));
 
           return (
-            <button
+            <article
               key={personaId}
-              type="button"
-              onClick={() => openSkillsDrawer(personaId)}
               className={cn(
-                'group relative rounded-xl border border-slate-200 bg-slate-50 p-3 text-left transition-all min-w-0 w-full',
-                'hover:border-indigo-300 hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-400',
+                'flex flex-col rounded-xl border border-slate-200 bg-slate-50 min-w-0 w-full overflow-hidden',
+                'transition-shadow hover:shadow-sm',
               )}
             >
-              <div className="absolute top-2.5 right-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Settings2 className="w-4 h-4 text-indigo-600" aria-hidden />
+              <div className="p-3 flex-1 min-w-0">
+                <div className="flex items-center gap-2 mb-2 min-w-0">
+                  <UserCircle2 className="w-4 h-4 shrink-0 text-indigo-500" />
+                  <p className="text-sm font-bold break-words min-w-0">{label}</p>
+                </div>
+                <p className="text-[11px] text-muted-foreground break-words">
+                  {t(persona.toneKey, 'Tone')}: {t(`aiOrchestrator.personas.tones.${personaId}`, personaId)}
+                </p>
+                <p className="text-[11px] text-muted-foreground break-words">
+                  {t(persona.languageKey, 'Language')}: {t(`aiOrchestrator.personas.languages.${personaId}`, '—')}
+                </p>
+                <p className="text-[11px] text-muted-foreground break-words">
+                  {t(persona.formatKey, 'Format')}: {t(`aiOrchestrator.personas.formats.${personaId}`, '—')}
+                </p>
+                {hasSkill && (
+                  <Badge variant="outline" className="mt-2 text-[9px] border-emerald-200 text-emerald-700">
+                    {t('aiOrchestrator.personas.skillAttached', 'Attached')}
+                    {skill?.skillsFileName ? `: ${skill.skillsFileName}` : ''}
+                  </Badge>
+                )}
               </div>
-              <div className="flex items-center gap-2 mb-2 min-w-0 pr-6">
-                <UserCircle2 className="w-4 h-4 shrink-0 text-indigo-500" />
-                <p className="text-sm font-bold break-words min-w-0">{label}</p>
-              </div>
-              <p className="text-[11px] text-muted-foreground break-words">
-                {t(persona.toneKey, 'Tone')}: {t(`aiOrchestrator.personas.tones.${personaId}`, personaId)}
-              </p>
-              <p className="text-[11px] text-muted-foreground break-words">
-                {t(persona.languageKey, 'Language')}: {t(`aiOrchestrator.personas.languages.${personaId}`, '—')}
-              </p>
-              <p className="text-[11px] text-muted-foreground break-words">
-                {t(persona.formatKey, 'Format')}: {t(`aiOrchestrator.personas.formats.${personaId}`, '—')}
-              </p>
-              {hasSkill && (
-                <Badge variant="outline" className="mt-2 text-[9px] border-emerald-200 text-emerald-700">
-                  {t('aiOrchestrator.personas.skillAttached', 'Attached')}
-                  {skill?.skillsFileName ? `: ${skill.skillsFileName}` : ''}
-                </Badge>
-              )}
-              <p className="mt-2 text-[10px] font-semibold text-indigo-600 opacity-0 group-hover:opacity-100 transition-opacity">
-                {t('aiOrchestrator.personas.manageSkills', 'Skills verwalten →')}
-              </p>
-            </button>
+
+              <footer className="border-t border-slate-200/80 bg-white/70 px-3 py-2.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className={cn(
+                    'w-full h-9 text-xs font-semibold',
+                    'border-violet-200/80 text-violet-700 bg-violet-50/40',
+                    'hover:bg-violet-50 hover:text-violet-800 hover:border-violet-400',
+                    'hover:shadow-[0_0_0_3px_rgba(139,92,246,0.12)]',
+                    'transition-all duration-200',
+                  )}
+                  onClick={() => openSkillsDrawer(personaId)}
+                >
+                  {t('aiOrchestrator.personas.manageSkillsButton', '🛠️ Skills verwalten')}
+                </Button>
+              </footer>
+            </article>
           );
         })}
       </div>

@@ -2439,7 +2439,7 @@
       "skillsDropzoneLabel": "Skill-Datei Dropzone",
       "skillsDropzoneHint": ".json- oder .yaml-Skill-Manifest hier ablegen",
       "skillsDropzoneSubhint": "Oder klicken zum Durchsuchen — sofort via FileReader geladen",
-      "manageSkills": "Skills verwalten →",
+      "manageSkillsButton": "🛠️ Skills verwalten",
       "supportAgent": {
         "label": "Support-Agent",
         "tone": "Freundlich",

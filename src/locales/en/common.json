@@ -2158,7 +2158,7 @@
       "skillsDropzoneLabel": "Skill File Dropzone",
       "skillsDropzoneHint": "Drop .json or .yaml skill manifest here",
       "skillsDropzoneSubhint": "Or click to browse — parsed instantly via FileReader",
-      "manageSkills": "Manage skills →",
+      "manageSkillsButton": "🛠️ Agent Skills",
       "supportAgent": {
         "label": "Support Agent",
         "tone": "Friendly",
