@@ -71,6 +71,15 @@ export function isExchangeActiveStatus(status: string): boolean {
   return status === 'Active' || status === 'Viewed' || status === 'Uploaded' || status === 'Completed';
 }
 
+export function isDropzoneClientUploadClosed(
+  item: Pick<ExchangeItemRow, 'type' | 'status'>,
+  resolvedStatus?: ExchangeLifecycleStatus,
+): boolean {
+  if (item.type !== 'request') return false;
+  const status = resolvedStatus ?? item.status;
+  return status === 'Uploaded' || status === 'Viewed' || status === 'Burned' || status === 'Completed';
+}
+
 export function getExchangeStatusLabelKey(status: string): string {
   switch (status) {
     case 'Active':

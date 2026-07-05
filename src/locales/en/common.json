@@ -1292,6 +1292,12 @@
       "copySuccess": "Link copied successfully.",
       "copyError": "Unable to copy link to clipboard.",
       "copyLink": "Copy link",
+      "copyClientUploadLink": "Copy Client Upload Link",
+      "copyClientAccessLink": "Copy Client Access Link",
+      "uploadSlotClosed": "Upload slot closed — client link is no longer active",
+      "manageDownload": "Manage & Download",
+      "manageDownloadShort": "Manage",
+      "manageDownloadTooltip": "Inspect files, review malware scans, and securely download",
       "viewDetails": "View details",
       "quickAction": "Quick action",
       "delete": "Delete",
@@ -1304,7 +1310,8 @@
       "title": "Active Exchanges",
       "subtitle": "{{count}} records in workspace",
       "live": "Live",
-      "empty": "No active exchanges match your filters."
+      "empty": "No active exchanges match your filters.",
+      "actionHint": "💡 Note: The copy button generates the one-time link for your clients. To inspect and download uploaded files, click “Manage & Download”."
     },
     "table": {
       "type": "Type",

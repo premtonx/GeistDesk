@@ -1293,6 +1293,12 @@
       "copyError": "Link konnte nicht in die Zwischenablage kopiert werden.",
       "complianceRefresh": "Compliance-Aktualisierung angewendet — Ablaufrichtlinie neu bewertet.",
       "copyLink": "Link kopieren",
+      "copyClientUploadLink": "Upload-Link für Client kopieren",
+      "copyClientAccessLink": "Client-Zugriffslink kopieren",
+      "uploadSlotClosed": "Upload-Kontingent verbraucht — Client-Link ist nicht mehr aktiv",
+      "manageDownload": "Verwalten & Herunterladen",
+      "manageDownloadShort": "Verwalten",
+      "manageDownloadTooltip": "Dateien einsehen, Malware-Scans prüfen und sicher herunterladen",
       "viewDetails": "Verwalten",
       "quickAction": "Schnellaktion",
       "delete": "Löschen",
@@ -1305,7 +1311,8 @@
       "title": "Aktive Austausche",
       "subtitle": "{{count}} Datensätze im Arbeitsbereich",
       "live": "Live",
-      "empty": "Keine aktiven Austausche entsprechen Ihren Filtern."
+      "empty": "Keine aktiven Austausche entsprechen Ihren Filtern.",
+      "actionHint": "💡 Hinweis: Der Kopier-Button generiert den Einweg-Link für Ihre Kunden. Um hochgeladene Dateien einzusehen und herunterzuladen, klicken Sie auf „Verwalten & Herunterladen“."
     },
     "table": {
       "type": "Typ",
