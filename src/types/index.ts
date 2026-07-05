@@ -169,6 +169,13 @@ export interface SupportTicket extends Omit<Ticket, 'id'> {
   id: string;
 }
 
+export interface TicketChecklistItem {
+  id?: string;
+  task: string;
+  completed: boolean;
+  source?: 'ai' | 'manual';
+}
+
 export interface Ticket {
   id: string;
   subject: string;
@@ -223,7 +230,7 @@ export interface Ticket {
   aiSummary?: string | null;
   aiInsights?: string[] | null;
   aiRootCause?: string | null;
-  aiChecklist?: { task: string; completed: boolean }[] | null;
+  aiChecklist?: TicketChecklistItem[] | null;
   internalNotes?: string;
   activeAgents?: PresenceAgent[];
   agentComments?: AgentComment[];

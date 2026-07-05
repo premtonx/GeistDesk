@@ -13,7 +13,8 @@ import {
   arrayUnion,
 } from 'firebase/firestore';
 import { db, auth } from '../lib/firebase';
-import { Ticket, Message, OperationType } from '../types';
+import { Ticket, Message, OperationType, TicketChecklistItem } from '../types';
+import { ensureChecklistTaskIds, normalizeChecklistItems, createChecklistTask } from '../lib/ticket-checklist-utils';
 import { handleFirestoreError, logAudit } from './auditService';
 import { groupService } from './groupService';
 import { notificationService } from './notificationService';
@@ -331,5 +332,50 @@ export const ticketService = {
       console.error("Merge failed:", error);
       throw error;
     }
-  }
+  },
+
+  async getTicketChecklist(ticketId: string): Promise<TicketChecklistItem[]> {
+    const ticket = await ticketService.getTicket(ticketId);
+    return ensureChecklistTaskIds(normalizeChecklistItems(ticket?.aiChecklist));
+  },
+
+  async persistTicketChecklist(ticketId: string, checklist: TicketChecklistItem[]): Promise<TicketChecklistItem[]> {
+    const normalized = ensureChecklistTaskIds(checklist);
+    await ticketService.updateTicket(ticketId, { aiChecklist: normalized });
+    return normalized;
+  },
+
+  async toggleTaskCompletion(ticketId: string, taskId: string): Promise<TicketChecklistItem[]> {
+    const checklist = await ticketService.getTicketChecklist(ticketId);
+    const next = checklist.map((item) =>
+      item.id === taskId ? { ...item, completed: !item.completed } : item,
+    );
+    return ticketService.persistTicketChecklist(ticketId, next);
+  },
+
+  async addChecklistTask(ticketId: string, taskText: string): Promise<TicketChecklistItem[]> {
+    const trimmed = taskText.trim();
+    if (!trimmed) return ticketService.getTicketChecklist(ticketId);
+    const checklist = await ticketService.getTicketChecklist(ticketId);
+    const next = [...checklist, createChecklistTask(trimmed, 'manual')];
+    return ticketService.persistTicketChecklist(ticketId, next);
+  },
+
+  async updateChecklistTask(
+    ticketId: string,
+    taskId: string,
+    taskText: string,
+  ): Promise<TicketChecklistItem[]> {
+    const trimmed = taskText.trim();
+    if (!trimmed) return ticketService.getTicketChecklist(ticketId);
+    const checklist = await ticketService.getTicketChecklist(ticketId);
+    const next = checklist.map((item) => (item.id === taskId ? { ...item, task: trimmed } : item));
+    return ticketService.persistTicketChecklist(ticketId, next);
+  },
+
+  async deleteChecklistTask(ticketId: string, taskId: string): Promise<TicketChecklistItem[]> {
+    const checklist = await ticketService.getTicketChecklist(ticketId);
+    const next = checklist.filter((item) => item.id !== taskId);
+    return ticketService.persistTicketChecklist(ticketId, next);
+  },
 };

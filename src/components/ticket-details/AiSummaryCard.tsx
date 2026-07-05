@@ -21,6 +21,7 @@ import { Ticket as TicketType } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { ticketService } from '../../services/ticketService';
+import { normalizeChecklistItems } from '../../lib/ticket-checklist-utils';
 
 interface AiSummaryCardProps {
   ticket: TicketType;
@@ -60,33 +61,16 @@ export function AiSummaryCard({
   }, [ticket.aiSummary, aiSummary]);
 
   // Action Plan checklists maps directly to ticket.aiChecklist
-  const checklist = useMemo(() => {
-    if (ticket.aiChecklist && ticket.aiChecklist.length > 0) {
-      return ticket.aiChecklist;
-    }
-    // Fallback static items matching image if not present in active list
-    return [
-      { task: "Verify OAuth credential mapping configuration", completed: false },
-      { task: "Inspect domain synchronize log errors", completed: false },
-      { task: "Confirm SLA limit constraints remain safe", completed: false }
-    ];
-  }, [ticket.aiChecklist]);
+  const checklist = useMemo(
+    () => normalizeChecklistItems(ticket.aiChecklist).slice(0, 3),
+    [ticket.aiChecklist],
+  );
 
-  // Handle toggling of checklist item check-states asynchronously
-  const handleToggleChecklist = async (idx: number) => {
-    const nextChecklist = checklist.map((item, i) => {
-      if (i === idx) {
-        return { ...item, completed: !item.completed };
-      }
-      return item;
-    });
-
+  const handleToggleChecklist = async (taskId: string) => {
     try {
-      await ticketService.updateTicket(ticket.id, {
-        aiChecklist: nextChecklist
-      });
+      await ticketService.toggleTaskCompletion(ticket.id, taskId);
     } catch (e) {
-      console.error("Failed to commit interactive checklist state to database:", e);
+      console.error('Failed to commit interactive checklist state to database:', e);
     }
   };
 
@@ -209,20 +193,35 @@ export function AiSummaryCard({
                       </h4>
                     </div>
                     <div className="space-y-2 pt-1 font-sans">
-                      {checklist.slice(0, 3).map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-3 p-2 bg-white/40 dark:bg-slate-900/40 rounded-xl border border-indigo-50/5 dark:border-slate-850 hover:bg-white/80 dark:hover:bg-slate-900/80 transition-colors">
-                          <input 
-                            type="checkbox" 
-                            id={`action-plan-${idx}`} 
-                            className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 h-4 w-4 cursor-pointer shrink-0" 
-                            checked={item.completed}
-                            onChange={() => handleToggleChecklist(idx)}
-                          />
-                          <label htmlFor={`action-plan-${idx}`} className={cn("text-[11px] leading-tight cursor-pointer font-semibold text-slate-700 dark:text-slate-300 select-none", item.completed && "line-through text-muted-foreground/60")}>
-                            {item.task}
-                          </label>
-                        </div>
-                      ))}
+                      {checklist.length > 0 ? (
+                        checklist.map((item) => (
+                          <div
+                            key={item.id ?? item.task}
+                            className="flex items-center gap-3 p-2 bg-white/40 dark:bg-slate-900/40 rounded-xl border border-indigo-50/5 dark:border-slate-850 hover:bg-white/80 dark:hover:bg-slate-900/80 transition-colors"
+                          >
+                            <input
+                              type="checkbox"
+                              id={`action-plan-${item.id}`}
+                              className="rounded border-slate-300 text-blue-600 focus:ring-blue-500 focus:ring-offset-0 h-4 w-4 cursor-pointer shrink-0"
+                              checked={item.completed}
+                              onChange={() => item.id && void handleToggleChecklist(item.id)}
+                            />
+                            <label
+                              htmlFor={`action-plan-${item.id}`}
+                              className={cn(
+                                'text-[11px] leading-tight cursor-pointer font-semibold text-slate-700 dark:text-slate-300 select-none',
+                                item.completed && 'line-through text-muted-foreground/60 opacity-70',
+                              )}
+                            >
+                              {item.task}
+                            </label>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-[10px] text-slate-400 italic px-1">
+                          {t('tickets.tasksTab.emptyShort', 'Open the Tasks tab to add or generate action items.')}
+                        </p>
+                      )}
                     </div>
                   </div>
 

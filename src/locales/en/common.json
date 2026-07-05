@@ -613,6 +613,20 @@
       "anonymous": "Anonymous",
       "portal": "portal"
     },
+    "tasksTab": {
+      "title": "Tasks Checklist Action Plan",
+      "progress": "{{completed}} / {{total}} completed",
+      "addTask": "Add Task",
+      "addPlaceholder": "Describe an operational objective…",
+      "empty": "No action items yet. Add a custom task or run AI Full Analysis to generate a plan.",
+      "emptyShort": "Open the Tasks tab to add or generate action items.",
+      "edit": "Edit",
+      "delete": "Delete",
+      "save": "Save",
+      "taskAdded": "Task added to action plan.",
+      "saveFailed": "Could not update task status.",
+      "deleteFailed": "Could not delete task."
+    },
     "sidebar": {
       "title": "Dispatch desk properties",
       "dynamicRag": "Dynamic RAG",

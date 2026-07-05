@@ -192,6 +192,7 @@ import { TimelineTabContent } from '../ticket-details/TimelineTabContent';
 import { AiInsightsTabContent } from '../ticket-details/AiInsightsTabContent';
 import { AssetsTabContent } from '../ticket-details/AssetsTabContent';
 import { RelatedTicketsTabContent } from '../ticket-details/RelatedTicketsTabContent';
+import { TasksTabContent } from '../ticket-details/TasksTabContent';
 import { TicketKindFieldsCard } from '../ticket-details/TicketKindFieldsCard';
 import { RedesignedSidebar } from '../ticket-details/RedesignedSidebar';
 import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
@@ -2238,49 +2239,16 @@ export default function TicketsPage() {
                     )}
 
                     {activeDetailTab === 'tasks' && (
-                      <div className="bg-card border border-border rounded-2xl p-6 space-y-6">
-                        <div className="flex items-center justify-between border-b pb-4">
-                          <div className="flex items-center gap-2">
-                            <Lightbulb className="w-5 h-5 text-amber-500" />
-                            <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">Tasks Checklist Action Plan</h3>
-                          </div>
-                          <span className="text-xs text-muted-foreground font-mono">
-                            {(selectedTicket.aiChecklist?.filter(i => i.completed).length ?? 0)} / {(selectedTicket.aiChecklist?.length ?? 3)} completed
-                          </span>
-                        </div>
-                        <div className="space-y-4">
-                          {(selectedTicket.aiChecklist && selectedTicket.aiChecklist.length > 0 ? selectedTicket.aiChecklist : [
-                            { task: "Verify OAuth credential mapping configuration", completed: false },
-                            { task: "Inspect domain synchronize log errors", completed: false },
-                            { task: "Confirm SLA limit constraints remain safe", completed: false }
-                          ]).map((item, idx) => {
-                            const handleToggle = async () => {
-                              const list = (selectedTicket.aiChecklist && selectedTicket.aiChecklist.length > 0 ? selectedTicket.aiChecklist : [
-                                { task: "Verify OAuth credential mapping configuration", completed: false },
-                                { task: "Inspect domain synchronize log errors", completed: false },
-                                { task: "Confirm SLA limit constraints remain safe", completed: false }
-                              ]);
-                              const newList = list.map((itm, i) => i === idx ? { ...itm, completed: !itm.completed } : itm);
-                              await ticketService.updateTicket(selectedTicket.id, { aiChecklist: newList });
-                              setAllTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, aiChecklist: newList } : t));
-                            };
-                            return (
-                              <div key={idx} className="flex items-start gap-4 p-4 bg-muted/20 hover:bg-muted/40 rounded-xl border border-border/60 transition-colors">
-                                <input 
-                                  type="checkbox" 
-                                  id={`tab-task-${idx}`} 
-                                  className="mt-0.5 rounded border-gray-300 text-[#1A73E8] focus:ring-[#1A73E8] focus:ring-offset-0 h-4 w-4 cursor-pointer shrink-0" 
-                                  checked={item.completed}
-                                  onChange={handleToggle}
-                                />
-                                <label htmlFor={`tab-task-${idx}`} className={cn("text-xs leading-tight cursor-pointer font-semibold", item.completed ? "line-through text-muted-foreground/60" : "text-slate-700 dark:text-slate-300")}>
-                                  {item.task}
-                                </label>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
+                      <TasksTabContent
+                        ticket={selectedTicket}
+                        onChecklistUpdated={(aiChecklist) => {
+                          setAllTickets((prev) =>
+                            prev.map((row) =>
+                              row.id === selectedTicket.id ? { ...row, aiChecklist } : row,
+                            ),
+                          );
+                        }}
+                      />
                     )}
 
                   </div>

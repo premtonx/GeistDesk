@@ -1,3 +1,5 @@
+import { withChecklistTaskIdsFromAi } from './ticket-checklist-utils';
+
 export interface TicketAnalysisPayload {
   aiSummary: string;
   aiInsights: string[];
@@ -120,7 +122,7 @@ export function ticketAnalysisPatch(payload: TicketAnalysisPayload): Record<stri
     aiSummary: payload.aiSummary,
     aiInsights: payload.aiInsights,
     aiRootCause: payload.aiRootCause,
-    aiChecklist: payload.aiChecklist,
+    aiChecklist: withChecklistTaskIdsFromAi(payload.aiChecklist),
     aiSentiment: payload.aiSentiment,
   };
 }

@@ -613,6 +613,20 @@
       "anonymous": "Anonym",
       "portal": "Portal"
     },
+    "tasksTab": {
+      "title": "Aufgaben-Checkliste Aktionsplan",
+      "progress": "{{completed}} / {{total}} erledigt",
+      "addTask": "Aufgabe hinzufügen",
+      "addPlaceholder": "Operatives Ziel beschreiben…",
+      "empty": "Noch keine Aufgaben. Fügen Sie eine manuelle Aufgabe hinzu oder starten Sie die KI-Vollanalyse.",
+      "emptyShort": "Öffnen Sie den Tab Aufgaben, um Einträge hinzuzufügen oder zu generieren.",
+      "edit": "Bearbeiten",
+      "delete": "Löschen",
+      "save": "Speichern",
+      "taskAdded": "Aufgabe zum Aktionsplan hinzugefügt.",
+      "saveFailed": "Aufgabenstatus konnte nicht aktualisiert werden.",
+      "deleteFailed": "Aufgabe konnte nicht gelöscht werden."
+    },
     "sidebar": {
       "title": "Eigenschaften Dispatch-Desk",
       "dynamicRag": "Dynamisches RAG",
