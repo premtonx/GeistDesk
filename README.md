@@ -6,6 +6,25 @@ This repository holds a modern, full-stack application leveraging **React 19 (Vi
 
 ---
 
+### 🚀 Recent Architecture Upgrades
+
+#### 1. 🛡️ Post-Quantum Hybrid Cryptography (GeistExchange & GeistVault)
+- **Hybrid Key Encapsulation (KEM):** Upgraded our secure data envelope system to a dual-layered protection model. We combine classic **X25519 (Elliptic Curve)** with **ML-KEM-1024 (Kyber)** via a **Hybrid Key Derivation Function (HKDF-SHA256)** in compliance with NIST FIPS 203. Ciphertext remains mathematically impenetrable even if one primitive is compromised.
+- **Malicious-Server Tamper Defenses (v2 Payloads):** Hardened all payloads against server-mediated key substitution attacks. Payload blocks utilize **AES-256-GCM** with strict **Authenticated Additional Data (AAD)** binding context (`userId:itemId`). Verification happens entirely client-side via a strict `CryptoIntegrityError` layer before any plaintext exposure.
+- **Backward Compatibility:** Implemented an automated fallback decryption pipeline (`decryptPayloadAuto`) ensuring legacy `v1` data fragments remain operational during migration cycles.
+
+#### 2. 🤖 Interactive & Collaborative AI Checklists (Tickets Module)
+- **Optimistic UI Engine:** The `Aufgaben` (Tasks) tab now features an interactive, real-time checklist synced with the Firestore JSONB layer. User state interactions offer zero-latency optimistic feedback loops with automated transaction rollback protections.
+- **Bilingual Inline Custom Task Injection:** Supports native multi-language task modifications and creations with clean `Enter` and `Escape` keyboard shortcuts.
+- **Visual Milestones:** Features smart responsive badges that shift to high-visibility emerald arrays upon 100% checklist milestone completion.
+
+#### 3. 📦 Secure Dropzone Pipelines & Unified UI Consistency
+- **High-Density Drawer Framework:** Re-engineered the admin file-auditing telemetry layout to use a modern, expanded fixed full-height viewport canvas (`max-w-4xl`), resolving tight structural sidebar container blowouts.
+- **Binary Stream Recovery:** Replaced raw placeholder actions with an authenticated, zero-leak binary blob recovery streaming pipeline (`createObjectURL`), tracking server-side retention timeouts with clean `HTTP 410` error banners.
+- **KB Editor Unification:** Stripped out legacy HTML-leaking textareas within GeistKB and successfully ported over the premium markdown rich-text editing workspace framework from our Tickets canvas.
+
+---
+
 ## 🛠️ Architecture Overview
 
 GeistDesk utilizes a modular, robust, dual-mode full-stack architecture tailored to run either locally, inside lightweight Docker containers, or inside enterprise-grade environments backed by PostgreSQL.
