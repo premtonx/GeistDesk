@@ -43,6 +43,7 @@ export interface VaultAsset {
   updatedAt: number;
   favorite?: boolean;
   vaultId?: string;
+  folderId?: string | null;
   owner?: string;
   tags?: string[];
   lastModifiedBy?: string;

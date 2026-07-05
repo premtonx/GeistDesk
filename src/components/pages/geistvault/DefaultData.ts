@@ -9,6 +9,7 @@ export interface SeedItem {
   offsetHours: number;
   favorite: boolean;
   vaultId: string;
+  folderId?: string | null;
   status: 'healthy' | 'weak' | 'expiring' | 'breached';
   icon?: string;
   tags?: string[];
@@ -109,6 +110,7 @@ export const SEEDED_CREDENTIALS: SeedItem[] = [
     offsetHours: 4,
     favorite: true,
     vaultId: 'local',
+    folderId: 'folder-seed-eu',
     status: 'healthy',
     tags: ['SSH', 'Production'],
   },
@@ -151,6 +153,7 @@ export const SEEDED_CREDENTIALS: SeedItem[] = [
     offsetHours: 18,
     favorite: false,
     vaultId: 'local',
+    folderId: 'folder-seed-vpn',
     status: 'healthy',
     tags: ['VPN', 'Password-only'],
   },
@@ -180,6 +183,30 @@ export const SEEDED_CREDENTIALS: SeedItem[] = [
     vaultId: 'local',
     status: 'healthy',
     tags: ['Email', 'SMTP'],
+  },
+];
+
+export const SEEDED_FOLDERS = [
+  {
+    id: 'folder-seed-prod',
+    name: 'Produktion',
+    icon: 'folder' as const,
+    parentId: null,
+    vaultId: 'local',
+  },
+  {
+    id: 'folder-seed-vpn',
+    name: 'VPN & Netzwerk',
+    icon: 'lock' as const,
+    parentId: null,
+    vaultId: 'local',
+  },
+  {
+    id: 'folder-seed-eu',
+    name: 'EU-West',
+    icon: 'server' as const,
+    parentId: 'folder-seed-prod',
+    vaultId: 'local',
   },
 ];
 

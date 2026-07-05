@@ -17,6 +17,7 @@ export interface VaultEntryDraft {
   favorite?: boolean;
   deleted?: boolean;
   vaultId?: string;
+  folderId?: string | null;
   visibility?: string;
   owner?: string;
   team?: string;

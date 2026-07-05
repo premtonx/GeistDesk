@@ -102,7 +102,7 @@ import { GeistVaultEmergency } from './geistvault/GeistVaultEmergency';
 import { GeistVaultAccessRequests } from './geistvault/GeistVaultAccessRequests';
 
 // Redesigned high-fidelity subcomponents
-import { SEEDED_CREDENTIALS, MOCK_CHROME_EXTENSION, BRANDED_SHOWCASE_CREDENTIALS } from './geistvault/DefaultData';
+import { SEEDED_CREDENTIALS, MOCK_CHROME_EXTENSION, BRANDED_SHOWCASE_CREDENTIALS, SEEDED_FOLDERS } from './geistvault/DefaultData';
 import { CredentialDrawer } from './geistvault/CredentialDrawer';
 import { VaultPageHeader } from '../vault/VaultPageHeader';
 import { VaultKpiCards } from '../vault/VaultKpiCards';
@@ -116,6 +116,14 @@ import { VaultAssetViews } from '../vault/VaultAssetViews';
 import { VaultFabMenu } from '../vault/VaultFabMenu';
 import { VaultEntryCreateWorkspace } from '../vault/VaultEntryCreateWorkspace';
 import { VaultImportDialog } from '../vault/VaultImportDialog';
+import { VaultFolderCreateModal } from '../vault/VaultFolderCreateModal';
+import { VaultFolderBreadcrumbStrip } from '../vault/VaultFolderBreadcrumbStrip';
+import {
+  createVaultFolderId,
+  resolveCredFolderId,
+  type VaultFolderIconId,
+  type VaultFolderNode,
+} from '../vault/vaultFolderTypes';
 import {
   ACCESS_CATEGORIES,
   VAULT_DEFINITIONS,
@@ -160,6 +168,7 @@ interface Credential {
   favorite?: boolean;
   deleted?: boolean;
   vaultId?: string;
+  folderId?: string | null;
 
   // Enterprise Extensions
   visibility?: string;
@@ -194,9 +203,12 @@ interface CustomCategory {
   icon: string;
 }
 
+type StoredVaultFolder = VaultFolderNode;
+
 class SovereignDB extends Dexie {
   credentials!: Table<Credential>;
   categories!: Table<CustomCategory>;
+  folders!: Table<StoredVaultFolder>;
 
   constructor() {
     super('SovereignVault');
@@ -206,6 +218,11 @@ class SovereignDB extends Dexie {
     this.version(2).stores({
       credentials: '++id, type, label, username, updatedAt',
       categories: '++id, name, &slug'
+    });
+    this.version(3).stores({
+      credentials: '++id, type, label, username, updatedAt, folderId, vaultId',
+      categories: '++id, name, &slug',
+      folders: 'id, vaultId, parentId, name',
     });
   }
 }
@@ -280,6 +297,8 @@ export default function CredentialVaultPage() {
   const [newVaultDescription, setNewVaultDescription] = useState('');
   const [newVaultScope, setNewVaultScope] = useState<VaultAuthorityScope>('personal');
   const [isCreatingVault, setIsCreatingVault] = useState(false);
+  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
+  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
 
   useEffect(() => {
     startOrchestratorConfigSync();
@@ -474,6 +493,19 @@ export default function CredentialVaultPage() {
     }
   }) || [];
 
+  const vaultFolders = useLiveQuery(async () => {
+    try {
+      return await localDB.folders.toArray();
+    } catch {
+      return [];
+    }
+  }, []) as VaultFolderNode[];
+
+  const foldersForActiveVault = useMemo(
+    () => vaultFolders.filter((folder) => folder.vaultId === activeVaultId),
+    [vaultFolders, activeVaultId],
+  );
+
   // Seeding default high-fidelity items into Dexie if empty
   const seedCredentialItem = async (key: Uint8Array, item: (typeof SEEDED_CREDENTIALS)[number]) => {
     const encryptedPassword = await encryptCredentialSecret(item.plainPass || '', key);
@@ -489,10 +521,26 @@ export default function CredentialVaultPage() {
       favorite: item.favorite,
       deleted: false,
       vaultId: item.vaultId,
+      folderId: item.folderId ?? null,
       icon: item.icon,
       iconType: item.icon ? ('preset' as const) : undefined,
       tags: item.tags,
     });
+  };
+
+  const seedDefaultFolders = async () => {
+    try {
+      for (const folder of SEEDED_FOLDERS) {
+        const existing = await localDB.folders.get(folder.id);
+        if (existing) continue;
+        await localDB.folders.add({
+          ...folder,
+          createdAt: Date.now(),
+        });
+      }
+    } catch (err) {
+      console.error('Failed to seed default folders', err);
+    }
   };
 
   const seedDefaultCredentials = async (key: Uint8Array) => {
@@ -540,6 +588,7 @@ export default function CredentialVaultPage() {
       const key = await deriveMasterKey(masterPassword, `user-salt-${user.uid}`);
       setDerivedKey(normalizeDerivedKey(key));
       await seedDefaultCredentials(key);
+      await seedDefaultFolders();
       setIsLocked(false);
       logAudit({ module: 'credentials', action: 'vault_unlocked', details: { vaultType: 'personal_local' } });
       toast.success("Sovereign Personal Vault Unlocked Successfully!");
@@ -847,6 +896,7 @@ export default function CredentialVaultPage() {
         favorite: false,
         deleted: false,
         vaultId: activeVaultId === 'local' ? (newEntry.vaultId || 'local') : activeVaultId,
+        folderId: activeFolderId,
         owner: newEntry.owner || 'You',
         team: newEntry.team || 'Platform Ops',
         department: newEntry.department || 'Infrastructure',
@@ -1005,6 +1055,7 @@ export default function CredentialVaultPage() {
       const vault = allVaultDefinitions.find((v) => v.id === id);
       setActiveVaultId(id);
       setActiveVaultScope(vault?.scope ?? 'personal');
+      setActiveFolderId(null);
       setAccessCategory('all');
       setSelectedType('all');
       setSmartFilter(null);
@@ -1013,6 +1064,29 @@ export default function CredentialVaultPage() {
     },
     [allVaultDefinitions],
   );
+
+  const handleCreateFolder = async (payload: {
+    name: string;
+    icon: VaultFolderIconId;
+    parentId: string | null;
+  }) => {
+    const folder: StoredVaultFolder = {
+      id: createVaultFolderId(),
+      name: payload.name,
+      icon: payload.icon,
+      parentId: payload.parentId,
+      vaultId: activeVaultId,
+      createdAt: Date.now(),
+    };
+    await localDB.folders.add(folder);
+    logAudit({
+      module: 'credentials',
+      action: 'folder_created',
+      details: { name: folder.name, vaultId: folder.vaultId, parentId: folder.parentId },
+    });
+    toast.success(`Ordner „${folder.name}“ wurde angelegt.`);
+    setActiveFolderId(folder.id);
+  };
 
   // Compute stats for overview cards
   const totalEntries = nonDeletedItems.length;
@@ -1057,6 +1131,10 @@ export default function CredentialVaultPage() {
         }
       } else if (selectedType !== 'all') {
         list = list.filter((c) => c.type === selectedType);
+      }
+
+      if (activeFolderId) {
+        list = list.filter((c) => resolveCredFolderId(c) === activeFolderId);
       }
     }
 
@@ -1128,6 +1206,12 @@ export default function CredentialVaultPage() {
       setSelectedView('all');
     }
   }, [smartFilter, smartCounts]);
+
+  useEffect(() => {
+    if (activeFolderId && !foldersForActiveVault.some((folder) => folder.id === activeFolderId)) {
+      setActiveFolderId(null);
+    }
+  }, [activeFolderId, foldersForActiveVault]);
 
   const healthScore = Math.max(0, 100 - Math.min(40, weakCount * 12) - Math.min(20, expiringCount * 8));
   const securityScore = Math.min(99, healthScore + 8);
@@ -1360,9 +1444,30 @@ export default function CredentialVaultPage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <p className="text-[11px] text-slate-400 font-medium">
                   {t('vault.showingEntries', 'Showing {{count}} entries').replace('{{count}}', String(currentList.length))}
+                  {activeFolderId
+                    ? ` · ${foldersForActiveVault.find((folder) => folder.id === activeFolderId)?.name ?? 'Ordner'}`
+                    : ''}
                 </p>
-                <VaultViewModeSelector value={assetViewMode} onChange={setAssetViewMode} />
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setIsCreateFolderOpen(true)}
+                    className="h-8 rounded-xl text-[11px] font-semibold border-slate-200"
+                  >
+                    📁 Ordner erstellen
+                  </Button>
+                  <VaultViewModeSelector value={assetViewMode} onChange={setAssetViewMode} />
+                </div>
               </div>
+
+              <VaultFolderBreadcrumbStrip
+                folders={foldersForActiveVault}
+                vaultId={activeVaultId}
+                activeFolderId={activeFolderId}
+                onFolderSelect={setActiveFolderId}
+              />
 
               <VaultAssetViews
                 assets={currentList}
@@ -1627,6 +1732,15 @@ export default function CredentialVaultPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <VaultFolderCreateModal
+        open={isCreateFolderOpen}
+        onOpenChange={setIsCreateFolderOpen}
+        vaultId={activeVaultId}
+        vaultLabel={activeVaultDefinition?.defaultName ?? activeVaultId}
+        folders={foldersForActiveVault}
+        onCreate={handleCreateFolder}
+      />
     </div>
   );
 }
