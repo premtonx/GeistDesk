@@ -36,7 +36,7 @@ export function buildLifecycleSystemInstruction(
   operatorLanguage?: AiOperatorLanguage,
 ): string {
   const parts: string[] = [];
-  const lang = operatorLanguage ?? 'en';
+  const lang = operatorLanguage ?? 'de';
   parts.push(buildOperatorLanguageBlock(lang));
 
   const personaId = resolvePersonaForFeature(config, feature);

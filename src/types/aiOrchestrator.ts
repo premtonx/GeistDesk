@@ -650,13 +650,13 @@ export const PROMPT_LIBRARY_FEATURES: AiPromptLibraryFeature[] = [
 
 export const DEFAULT_PROMPT_BODIES: Record<AiPromptLibraryFeature, string> = {
   ticket_summarization:
-    'You are a support operations assistant. Summarize the ticket thread below into:\n- Current status\n- Key customer concern\n- Actions taken\n- Recommended next step\n\nKeep the summary under 150 words.',
+    'Du bist ein Support-Operations-Assistent. Fasse den Ticket-Thread unten zusammen:\n- Aktueller Status\n- Kernanliegen des Kunden\n- Ergriffene Maßnahmen\n- Empfohlener nächster Schritt\n\nHalte die Zusammenfassung unter 150 Wörtern. Antworte auf Deutsch.',
   kb_generation:
-    'You are a technical writer. Convert the support resolution below into a knowledge base article with:\n- Title\n- Problem description\n- Resolution steps\n- Prevention tips\n\nUse clear Markdown formatting.',
+    'Du bist ein technischer Redakteur. Wandle die Support-Lösung unten in einen Wissensdatenbank-Artikel um mit:\n- Titel\n- Problembeschreibung\n- Lösungsschritte\n- Präventionstipps\n\nVerwende klares Markdown-Format. Antworte auf Deutsch.',
   root_cause_analysis:
-    'You are a senior SRE. Perform root cause analysis on the incident data below:\n- Timeline of events\n- Probable root cause\n- Contributing factors\n- Remediation recommendations',
+    'Du bist ein Senior-SRE. Führe eine Root-Cause-Analyse der Vorfalldaten durch:\n- Zeitachse der Ereignisse\n- Wahrscheinliche Ursache\n- Mitwirkende Faktoren\n- Empfehlungen zur Behebung\n\nAntworte präzise auf Deutsch.',
   translation:
-    'Translate the following support content accurately. Preserve technical terms and tone. Output only the translation.',
+    'Übersetze den folgenden Support-Inhalt präzise. Bewahre Fachbegriffe und Tonalität. Gib ausschließlich die Übersetzung aus.',
 };
 
 export const AI_PERSONA_DEFINITIONS: Record<AiPersonaId, AiPersonaDefinition> = {
@@ -666,7 +666,7 @@ export const AI_PERSONA_DEFINITIONS: Record<AiPersonaId, AiPersonaDefinition> = 
     toneKey: 'aiOrchestrator.personas.supportAgent.tone',
     languageKey: 'aiOrchestrator.personas.supportAgent.language',
     formatKey: 'aiOrchestrator.personas.supportAgent.format',
-    systemPromptSuffix: 'Respond warmly in German as a helpful support agent.',
+    systemPromptSuffix: 'Antworte warmherzig auf Deutsch als hilfreicher Support-Agent.',
   },
   security_analyst: {
     id: 'security_analyst',
@@ -674,7 +674,8 @@ export const AI_PERSONA_DEFINITIONS: Record<AiPersonaId, AiPersonaDefinition> = 
     toneKey: 'aiOrchestrator.personas.securityAnalyst.tone',
     languageKey: 'aiOrchestrator.personas.securityAnalyst.language',
     formatKey: 'aiOrchestrator.personas.securityAnalyst.format',
-    systemPromptSuffix: 'Respond concisely with a security-first mindset. Keep answers short.',
+    systemPromptSuffix:
+      'Du bist ein strikter Sicherheitsanalyst. Analysiere den Text, entferne personenbezogene Daten (PII) nach DSGVO-Richtlinien und antworte kurz und präzise auf Deutsch.',
   },
   knowledge_writer: {
     id: 'knowledge_writer',
@@ -682,7 +683,8 @@ export const AI_PERSONA_DEFINITIONS: Record<AiPersonaId, AiPersonaDefinition> = 
     toneKey: 'aiOrchestrator.personas.knowledgeWriter.tone',
     languageKey: 'aiOrchestrator.personas.knowledgeWriter.language',
     formatKey: 'aiOrchestrator.personas.knowledgeWriter.format',
-    systemPromptSuffix: 'Write formal documentation using structured Markdown headings and lists.',
+    systemPromptSuffix:
+      'Du bist ein Wissensautor. Formuliere technische Inhalte in klar strukturiertes, formelles Deutsch im Markdown-Format.',
   },
 };
 

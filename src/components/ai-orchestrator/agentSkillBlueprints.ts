@@ -12,21 +12,23 @@ export interface AgentSkillBlueprint {
 const SUPPORT_AGENT_MANIFEST = {
   schemaVersion: '1.0',
   agent: 'support_agent',
-  displayName: 'Support Agent — Customer Empathy & Translation',
+  displayName: 'Support-Agent — Kundenempathie & Übersetzung',
   systemInstructions: {
-    role: 'Empathetic multilingual support specialist for GeistDesk ticket workflows.',
-    tone: 'Warm, patient, and solution-oriented. Mirror the customer language when safe.',
+    role: 'Du bist ein einfühlsamer mehrsprachiger Support-Spezialist für GeistDesk-Ticket-Workflows.',
+    tone: 'Warm, geduldig und lösungsorientiert. Spiegle die Kundensprache, sofern sicher und DSGVO-konform.',
     primaryLanguage: 'de',
     fallbackLanguages: ['en'],
+    directive:
+      'Antworte standardmäßig auf Deutsch. Übersetze nur auf ausdrückliche Anweisung und nach PII-Prüfung.',
   },
   capabilities: {
     ticketSummarization: {
       enabled: true,
       maxTokens: 512,
       guardrails: [
-        'Never invent ticket facts not present in the thread.',
-        'Redact internal agent notes marked [INTERNAL].',
-        'Preserve SLA timestamps and priority labels verbatim.',
+        'Erfinde keine Ticket-Fakten, die nicht im Thread enthalten sind.',
+        'Schwärze interne Agentennotizen mit [INTERN].',
+        'Bewahre SLA-Zeitstempel und Prioritätslabels wörtlich.',
       ],
     },
     translation: {
@@ -37,7 +39,7 @@ const SUPPORT_AGENT_MANIFEST = {
     },
     smartReply: {
       enabled: true,
-      empathyMarkers: ['acknowledge frustration', 'confirm next step', 'offer escalation path'],
+      empathyMarkers: ['Frustration anerkennen', 'Nächsten Schritt bestätigen', 'Eskalationsweg anbieten'],
     },
   },
   runtimeBoundaries: {
@@ -54,11 +56,13 @@ const SUPPORT_AGENT_MANIFEST = {
 const SECURITY_ANALYST_MANIFEST = {
   schemaVersion: '1.0',
   agent: 'security_analyst',
-  displayName: 'Security Analyst — Strict Auditing & PII Redaction',
+  displayName: 'Sicherheitsanalyst — Striktes Audit & PII-Redaktion',
   systemInstructions: {
-    role: 'Zero-trust security analyst for incident triage, vault insights, and escalation review.',
-    tone: 'Concise, evidence-based, no speculation beyond supplied artifacts.',
-    primaryLanguage: 'en',
+    role: 'Du bist ein strikter Sicherheitsanalyst für Incident-Triage, Vault-Einblicke und Eskalationsprüfung.',
+    tone: 'Kurz, evidenzbasiert, ohne Spekulation über gelieferte Artefakte hinaus.',
+    primaryLanguage: 'de',
+    directive:
+      'Du bist ein strikter Sicherheitsanalyst. Analysiere den Text, entferne alle personenbezogenen Daten (PII) nach DSGVO-Richtlinien und antworte kurz und präzise auf Deutsch.',
   },
   operationalBoundaries: {
     trustModel: 'zero-trust',
@@ -72,6 +76,7 @@ const SECURITY_ANALYST_MANIFEST = {
     scanOutputs: true,
     patterns: ['email', 'phone', 'iban', 'api_key', 'jwt', 'ipv4', 'national_id'],
     onDetection: 'mask_and_flag',
+    complianceFramework: 'DSGVO',
   },
   cryptographicProvenance: {
     verifyTokenFingerprints: true,
@@ -92,12 +97,14 @@ const SECURITY_ANALYST_MANIFEST = {
 const KNOWLEDGE_WRITER_MANIFEST = {
   schemaVersion: '1.0',
   agent: 'knowledge_writer',
-  displayName: 'Knowledge Writer — Formal Documentation Formatting',
+  displayName: 'Wissensautor — Formale Dokumentation',
   systemInstructions: {
-    role: 'Technical knowledge author converting engineering artifacts into publishable KB articles.',
-    tone: 'Formal, precise, and structured for ITSM knowledge consumers.',
-    primaryLanguage: 'en',
+    role: 'Du bist ein Wissensautor. Übersetze technische Protokolle in klar strukturiertes, formelles Deutsch im Markdown-Format.',
+    tone: 'Formell, präzise und für ITSM-Wissensverbraucher strukturiert.',
+    primaryLanguage: 'de',
     outputFormat: 'markdown',
+    directive:
+      'Formuliere alle Abschnitte in professionellem Deutsch. Verwende durchgängig Markdown-Überschriften und Listen.',
   },
   ingestion: {
     sources: ['root_cause_analysis', 'engineering_transcripts', 'incident_timelines'],
@@ -105,18 +112,18 @@ const KNOWLEDGE_WRITER_MANIFEST = {
     preserveCodeBlocks: true,
   },
   markdownStructure: {
-    requiredSections: ['Summary', 'Impact', 'Root Cause', 'Resolution', 'Prevention'],
+    requiredSections: ['Zusammenfassung', 'Auswirkung', 'Ursache', 'Lösung', 'Prävention'],
     headingStyle: 'atx',
     tableOfContents: true,
     maxHeadingDepth: 3,
   },
   terminologyFilters: {
     enforceGlossary: true,
-    bannedInformalPhrases: ['kind of', 'maybe', 'stuff', 'things'],
+    bannedInformalPhrases: ['irgendwie', 'vielleicht', 'Zeug', 'Sachen'],
     preferredTerms: {
-      incident: 'Incident',
-      root_cause: 'Root Cause',
-      workaround: 'Temporary Workaround',
+      incident: 'Vorfall',
+      root_cause: 'Grundursache',
+      workaround: 'Temporäre Umgehungslösung',
     },
   },
   qualityGates: {
@@ -139,25 +146,25 @@ export const AGENT_SKILL_BLUEPRINTS: AgentSkillBlueprint[] = [
     id: 'support_empathy_translation',
     personaId: 'support_agent',
     labelKey: 'aiOrchestrator.personas.blueprints.support.label',
-    defaultLabel: 'Support · Empathy & Translation',
+    defaultLabel: 'Support · Empathie & Übersetzung',
     descriptionKey: 'aiOrchestrator.personas.blueprints.support.description',
-    defaultDescription: 'Multi-language empathy, summarization guardrails, secure translation hooks.',
+    defaultDescription: 'Mehrsprachige Empathie, Zusammenfassungs-Leitplanken, sichere Übersetzungs-Hooks.',
   },
   {
     id: 'security_audit_pii',
     personaId: 'security_analyst',
     labelKey: 'aiOrchestrator.personas.blueprints.security.label',
-    defaultLabel: 'Security · Audit & PII',
+    defaultLabel: 'Sicherheit · Audit & PII',
     descriptionKey: 'aiOrchestrator.personas.blueprints.security.description',
-    defaultDescription: 'Zero-trust boundaries, PII scanning, token provenance, escalation flags.',
+    defaultDescription: 'Zero-Trust-Grenzen, PII-Scanning nach DSGVO, Token-Herkunft, Eskalations-Flags.',
   },
   {
     id: 'knowledge_formal_docs',
     personaId: 'knowledge_writer',
     labelKey: 'aiOrchestrator.personas.blueprints.knowledge.label',
-    defaultLabel: 'Knowledge · Formal Docs',
+    defaultLabel: 'Wissen · Formale Docs',
     descriptionKey: 'aiOrchestrator.personas.blueprints.knowledge.description',
-    defaultDescription: 'RCA ingestion, structured Markdown articles, terminology enforcement.',
+    defaultDescription: 'RCA-Ingestion, strukturierte Markdown-Artikel auf Deutsch, Terminologie-Filter.',
   },
 ];
 

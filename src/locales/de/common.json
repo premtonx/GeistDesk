@@ -2465,13 +2465,13 @@
       "securityAnalyst": {
         "label": "Sicherheitsanalyst",
         "tone": "Strikt",
-        "language": "Englisch",
+        "language": "Deutsch",
         "format": "Kurz"
       },
       "knowledgeWriter": {
         "label": "Wissensautor",
         "tone": "Formell",
-        "language": "Englisch",
+        "language": "Deutsch",
         "format": "Markdown"
       },
       "tones": {
@@ -2481,8 +2481,8 @@
       },
       "languages": {
         "support_agent": "Deutsch",
-        "security_analyst": "Englisch",
-        "knowledge_writer": "Englisch"
+        "security_analyst": "Deutsch",
+        "knowledge_writer": "Deutsch"
       },
       "formats": {
         "support_agent": "Konversationell",
