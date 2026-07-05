@@ -1,5 +1,6 @@
 import { getDocDirect, getDocsDirect } from './postgres-backend.js';
-import { decryptString, decryptStringArray, type EncryptedPayload } from './crypto.js';
+import { decryptPayloadAuto } from './crypto.js';
+import type { AnyEncryptedPayload } from './crypto-payload.js';
 
 const VAULT_ITEMS = 'vault_items';
 const VAULT_SECRETS = 'vault_item_secrets';
@@ -48,12 +49,12 @@ async function loadExchangeVaultFingerprints(): Promise<string[]> {
         if (!secretDoc) continue;
 
         if (Array.isArray(secretDoc.encryptedShares) && secretDoc.encryptedShares.length > 0) {
-          const shares = decryptStringArray(secretDoc.encryptedShares as EncryptedPayload[]);
+          const shares = (secretDoc.encryptedShares as AnyEncryptedPayload[]).map(decryptPayloadAuto);
           for (const share of shares) collectFingerprint(fingerprints, share);
         }
 
         if (secretDoc.encryptedContent) {
-          const content = decryptString(secretDoc.encryptedContent as EncryptedPayload);
+          const content = decryptPayloadAuto(secretDoc.encryptedContent as AnyEncryptedPayload);
           collectFingerprint(fingerprints, content);
         }
       } catch {

@@ -133,6 +133,12 @@ import {
   type AccessibleVaultPortfolio,
 } from '../../lib/vault-service';
 import { processVaultImport, type VaultImportFormat } from '../../lib/vault-import-processor';
+import {
+  buildVaultProvenance,
+  decryptWithWebCryptoAesGcm,
+  encryptWithWebCryptoAesGcm,
+} from '../../lib/client-aes-gcm';
+import { isCryptoIntegrityError } from '../../lib/crypto-integrity';
 
 // --- Database Schema ---
 interface Credential {
@@ -220,46 +226,19 @@ async function deriveMasterKey(password: string, salt: string) {
   return result;
 }
 
-async function encryptData(data: string, key: Uint8Array) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encodedData = new TextEncoder().encode(data);
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    key as any,
-    { name: 'AES-GCM' },
-    false,
-    ['encrypt']
-  );
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    cryptoKey,
-    encodedData
-  );
-  
-  // Combine IV and Encrypted Data
-  const combined = new Uint8Array(iv.length + encrypted.byteLength);
-  combined.set(iv);
-  combined.set(new Uint8Array(encrypted), iv.length);
-  return btoa(String.fromCharCode(...combined));
+async function encryptData(data: string, key: Uint8Array, provenance?: string) {
+  return encryptWithWebCryptoAesGcm(data, key, provenance);
 }
 
-async function decryptData(encryptedB64: string, key: Uint8Array) {
-  const combined = new Uint8Array(atob(encryptedB64).split('').map(c => c.charCodeAt(0)));
-  const iv = combined.slice(0, 12);
-  const data = combined.slice(12);
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    key as any,
-    { name: 'AES-GCM' },
-    false,
-    ['decrypt']
-  );
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv },
-    cryptoKey,
-    data
-  );
-  return new TextDecoder().decode(decrypted);
+async function decryptData(encryptedB64: string, key: Uint8Array, provenance?: string) {
+  try {
+    return await decryptWithWebCryptoAesGcm(encryptedB64, key, provenance);
+  } catch (error) {
+    if (provenance && isCryptoIntegrityError(error)) {
+      return decryptWithWebCryptoAesGcm(encryptedB64, key);
+    }
+    throw error;
+  }
 }
 
 // --- Main Component ---
@@ -542,7 +521,10 @@ export default function CredentialVaultPage() {
   const handleDecryptPassword = async (cred: Credential): Promise<string | null> => {
     if (!derivedKey) return null;
     try {
-      const plain = await decryptData(cred.encryptedPassword, derivedKey);
+      const provenance = user
+        ? buildVaultProvenance(user.uid, activeVaultId, String(cred.id ?? 'unknown'))
+        : undefined;
+      const plain = await decryptData(cred.encryptedPassword, derivedKey, provenance);
       return plain;
     } catch (err) {
       return null;
