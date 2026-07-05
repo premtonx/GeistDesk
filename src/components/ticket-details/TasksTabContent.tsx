@@ -1,14 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Lightbulb, Pencil, Plus, Trash2 } from 'lucide-react';
+import { CheckCircle2, Lightbulb, Pencil, Plus, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Ticket as TicketType, TicketChecklistItem } from '../../types';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { ticketService } from '../../services/ticketService';
 import {
   countCompletedChecklistItems,
+  createChecklistTask,
   normalizeChecklistItems,
 } from '../../lib/ticket-checklist-utils';
 
@@ -34,6 +36,7 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
 
   const completedCount = useMemo(() => countCompletedChecklistItems(tasks), [tasks]);
   const totalCount = tasks.length;
+  const allComplete = totalCount > 0 && completedCount === totalCount;
 
   const applyChecklist = useCallback(
     (next: TicketChecklistItem[]) => {
@@ -44,12 +47,19 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
   );
 
   const handleToggle = async (taskId: string) => {
+    const previous = tasks;
+    const optimistic = tasks.map((item) =>
+      item.id === taskId ? { ...item, completed: !item.completed } : item,
+    );
+    applyChecklist(optimistic);
     setBusyTaskId(taskId);
+
     try {
       const next = await ticketService.toggleTaskCompletion(ticket.id, taskId);
       applyChecklist(next);
     } catch (error) {
       console.error('[TasksTabContent] toggle failed:', error);
+      applyChecklist(previous);
       toast.error(t('tickets.tasksTab.saveFailed', 'Could not update task status.'));
     } finally {
       setBusyTaskId(null);
@@ -60,14 +70,20 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
     const trimmed = newTaskText.trim();
     if (!trimmed || isAdding) return;
 
+    const optimisticTask = createChecklistTask(trimmed, 'manual');
+    const previous = tasks;
+    applyChecklist([...tasks, optimisticTask]);
+    setNewTaskText('');
     setIsAdding(true);
+
     try {
       const next = await ticketService.addChecklistTask(ticket.id, trimmed);
       applyChecklist(next);
-      setNewTaskText('');
       toast.success(t('tickets.tasksTab.taskAdded', 'Task added to action plan.'));
     } catch (error) {
       console.error('[TasksTabContent] add failed:', error);
+      applyChecklist(previous);
+      setNewTaskText(trimmed);
       toast.error(t('tickets.tasksTab.saveFailed', 'Could not update task status.'));
     } finally {
       setIsAdding(false);
@@ -78,7 +94,11 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
     const trimmed = editingText.trim();
     if (!trimmed) return;
 
+    const previous = tasks;
+    const optimistic = tasks.map((item) => (item.id === taskId ? { ...item, task: trimmed } : item));
+    applyChecklist(optimistic);
     setBusyTaskId(taskId);
+
     try {
       const next = await ticketService.updateChecklistTask(ticket.id, taskId, trimmed);
       applyChecklist(next);
@@ -86,6 +106,7 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
       setEditingText('');
     } catch (error) {
       console.error('[TasksTabContent] edit failed:', error);
+      applyChecklist(previous);
       toast.error(t('tickets.tasksTab.saveFailed', 'Could not update task status.'));
     } finally {
       setBusyTaskId(null);
@@ -93,16 +114,21 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
   };
 
   const handleDelete = async (taskId: string) => {
+    const previous = tasks;
+    const optimistic = tasks.filter((item) => item.id !== taskId);
+    applyChecklist(optimistic);
+    if (editingTaskId === taskId) {
+      setEditingTaskId(null);
+      setEditingText('');
+    }
     setBusyTaskId(taskId);
+
     try {
       const next = await ticketService.deleteChecklistTask(ticket.id, taskId);
       applyChecklist(next);
-      if (editingTaskId === taskId) {
-        setEditingTaskId(null);
-        setEditingText('');
-      }
     } catch (error) {
       console.error('[TasksTabContent] delete failed:', error);
+      applyChecklist(previous);
       toast.error(t('tickets.tasksTab.deleteFailed', 'Could not delete task.'));
     } finally {
       setBusyTaskId(null);
@@ -116,48 +142,31 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
   };
 
   return (
-    <div className="bg-card border border-border rounded-2xl p-6 space-y-6">
-      <div className="flex items-center justify-between border-b pb-4">
-        <div className="flex items-center gap-2">
-          <Lightbulb className="w-5 h-5 text-amber-500" />
-          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100">
+    <div className="bg-card border border-border rounded-2xl p-6 space-y-5">
+      <div className="flex items-center justify-between gap-4 border-b border-border/70 pb-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <Lightbulb className="w-5 h-5 text-amber-500 shrink-0" />
+          <h3 className="text-sm font-bold text-slate-900 dark:text-slate-100 truncate">
             {t('tickets.tasksTab.title', 'Tasks Checklist Action Plan')}
           </h3>
         </div>
-        <span className="text-xs text-muted-foreground font-mono">
+        <Badge
+          variant="outline"
+          className={cn(
+            'shrink-0 font-mono text-[11px] px-2.5 py-1 rounded-full border',
+            allComplete
+              ? 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800'
+              : 'bg-slate-50 text-slate-600 border-slate-200 dark:bg-slate-900 dark:text-slate-300 dark:border-slate-700',
+          )}
+        >
+          <CheckCircle2 className={cn('w-3 h-3 mr-1.5', allComplete && 'text-emerald-600')} />
           {t('tickets.tasksTab.progress', '{{completed}} / {{total}} completed')
             .replace('{{completed}}', String(completedCount))
             .replace('{{total}}', String(totalCount))}
-        </span>
+        </Badge>
       </div>
 
-      <div className="flex items-center gap-2 rounded-xl border border-violet-100 bg-violet-50/40 px-3 py-2.5">
-        <Input
-          value={newTaskText}
-          onChange={(event) => setNewTaskText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              event.preventDefault();
-              void handleAddTask();
-            }
-          }}
-          placeholder={t('tickets.tasksTab.addPlaceholder', 'Describe an operational objective…')}
-          className="h-9 border-0 bg-transparent shadow-none focus-visible:ring-0 text-xs font-medium placeholder:text-slate-400"
-          disabled={isAdding}
-        />
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => void handleAddTask()}
-          disabled={!newTaskText.trim() || isAdding}
-          className="h-9 shrink-0 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold px-3"
-        >
-          <Plus className="w-3.5 h-3.5 mr-1" />
-          {t('tickets.tasksTab.addTask', 'Add Task')}
-        </Button>
-      </div>
-
-      <div className="space-y-3">
+      <div className="space-y-2.5">
         {tasks.length === 0 ? (
           <p className="text-xs text-muted-foreground text-center py-8 border border-dashed border-border rounded-xl">
             {t(
@@ -174,12 +183,12 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
             return (
               <div
                 key={taskId}
-                className="group flex items-start gap-3 p-4 bg-muted/20 hover:bg-muted/40 rounded-xl border border-border/60 transition-colors"
+                className="group relative flex items-start gap-3 p-4 bg-muted/20 hover:bg-muted/40 rounded-xl border border-border/60 transition-colors"
               >
                 <input
                   type="checkbox"
                   id={`tab-task-${taskId}`}
-                  className="mt-0.5 rounded border-gray-300 text-[#1A73E8] focus:ring-[#1A73E8] focus:ring-offset-0 h-4 w-4 cursor-pointer shrink-0 disabled:opacity-50"
+                  className="mt-0.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500 focus:ring-offset-0 h-4 w-4 cursor-pointer shrink-0 disabled:opacity-50"
                   checked={item.completed}
                   disabled={isBusy || isEditing}
                   onChange={() => {
@@ -187,7 +196,7 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
                   }}
                 />
 
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 pr-14">
                   {isEditing ? (
                     <Input
                       autoFocus
@@ -204,14 +213,15 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
                         }
                       }}
                       className="h-8 text-xs font-semibold"
+                      aria-label={t('tickets.tasksTab.edit', 'Edit')}
                     />
                   ) : (
                     <label
                       htmlFor={`tab-task-${taskId}`}
                       className={cn(
-                        'text-xs leading-tight cursor-pointer font-semibold block',
+                        'text-xs leading-relaxed cursor-pointer font-semibold block transition-opacity',
                         item.completed
-                          ? 'line-through text-muted-foreground/60 opacity-70'
+                          ? 'line-through text-muted-foreground/60 opacity-60'
                           : 'text-slate-700 dark:text-slate-300',
                       )}
                     >
@@ -220,14 +230,14 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
                   )}
                 </div>
 
-                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
+                <div className="absolute right-3 top-3 flex items-center gap-0.5 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
                   {isEditing ? (
                     <>
                       <Button
                         type="button"
                         variant="ghost"
                         size="sm"
-                        className="h-7 px-2 text-[10px] font-bold text-[#1A73E8]"
+                        className="h-7 px-2 text-[10px] font-bold text-violet-600 hover:text-violet-700"
                         disabled={isBusy || !editingText.trim()}
                         onClick={() => item.id && void handleSaveEdit(item.id)}
                       >
@@ -252,7 +262,7 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-slate-500 hover:text-[#1A73E8]"
+                        className="h-7 w-7 text-slate-500 hover:text-violet-600 hover:bg-violet-50 dark:hover:bg-violet-950/30"
                         title={t('tickets.tasksTab.edit', 'Edit')}
                         aria-label={t('tickets.tasksTab.edit', 'Edit')}
                         disabled={isBusy}
@@ -264,7 +274,7 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
                         type="button"
                         variant="ghost"
                         size="icon"
-                        className="h-7 w-7 text-rose-500 hover:text-rose-600 hover:bg-rose-50"
+                        className="h-7 w-7 text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30"
                         title={t('tickets.tasksTab.delete', 'Delete')}
                         aria-label={t('tickets.tasksTab.delete', 'Delete')}
                         disabled={isBusy}
@@ -279,6 +289,33 @@ export function TasksTabContent({ ticket, onChecklistUpdated }: TasksTabContentP
             );
           })
         )}
+      </div>
+
+      <div className="flex items-center gap-2 rounded-xl border border-violet-200/80 bg-violet-50/50 dark:bg-violet-950/20 dark:border-violet-900/50 px-3 py-2.5">
+        <Input
+          value={newTaskText}
+          onChange={(event) => setNewTaskText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              void handleAddTask();
+            }
+          }}
+          placeholder={t('tickets.tasksTab.addPlaceholder', 'Describe an operational objective…')}
+          className="h-9 border-0 bg-transparent shadow-none focus-visible:ring-0 text-xs font-medium placeholder:text-slate-400"
+          disabled={isAdding}
+          aria-label={t('tickets.tasksTab.addPlaceholder', 'Describe an operational objective…')}
+        />
+        <Button
+          type="button"
+          size="sm"
+          onClick={() => void handleAddTask()}
+          disabled={!newTaskText.trim() || isAdding}
+          className="h-9 shrink-0 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-[11px] font-bold px-3"
+        >
+          <Plus className="w-3.5 h-3.5 mr-1" />
+          {t('tickets.tasksTab.addTaskBilingual', 'Aufgabe hinzufügen / Add Task')}
+        </Button>
       </div>
     </div>
   );

@@ -145,7 +145,7 @@ import {
   SelectValue,
 } from "../../components/ui/select";
 import { Checkbox } from '../../components/ui/checkbox';
-import { Ticket as TicketType, Message, KBArticle, TicketStatus, TicketPriority, Company, Contact } from '../../types';
+import { Ticket as TicketType, Message, KBArticle, TicketStatus, TicketPriority, Company, Contact, TicketChecklistItem } from '../../types';
 import { redactPII, isTextSensitive } from '../../lib/ai/pii-shield';
 import { AIAdapter } from '../../lib/ai/provider-adapter';
 import { subscribeOrchestratorConfig, startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
@@ -923,6 +923,16 @@ export default function TicketsPage() {
   }, [totalTicketsCount, pageSize]);
 
   const selectedTicket = allTickets.find(t => t.id === selectedTicketId) as any;
+
+  const handleChecklistUpdated = useCallback(
+    (aiChecklist: TicketChecklistItem[]) => {
+      if (!selectedTicketId) return;
+      setAllTickets((prev) =>
+        prev.map((row) => (row.id === selectedTicketId ? { ...row, aiChecklist } : row)),
+      );
+    },
+    [selectedTicketId],
+  );
 
   useEffect(() => {
     if (selectedTicket?.companyId) {
@@ -1936,6 +1946,7 @@ export default function TicketsPage() {
                           isAiReady={isAiReady}
                           onRefreshSummary={() => updateSummary(true)}
                           isAiDrafting={isAiDrafting}
+                          onChecklistUpdated={handleChecklistUpdated}
                         />
 
                         {/* 2. Foldable/Collapsible Agent Notes Section */}
@@ -2241,13 +2252,7 @@ export default function TicketsPage() {
                     {activeDetailTab === 'tasks' && (
                       <TasksTabContent
                         ticket={selectedTicket}
-                        onChecklistUpdated={(aiChecklist) => {
-                          setAllTickets((prev) =>
-                            prev.map((row) =>
-                              row.id === selectedTicket.id ? { ...row, aiChecklist } : row,
-                            ),
-                          );
-                        }}
+                        onChecklistUpdated={handleChecklistUpdated}
                       />
                     )}
 
