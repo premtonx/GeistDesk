@@ -28,6 +28,25 @@ function readCachedAdminSession(): boolean {
   }
 }
 
+function readCachedAdminSession(): boolean {
+  try {
+    const savedProfile = localStorage.getItem('geistdesk_cached_user_profile');
+    const savedRole = localStorage.getItem('geistdesk_cached_user_role');
+    if (!savedProfile) return false;
+    const profile = JSON.parse(savedProfile) as { is_admin?: boolean; role?: string };
+    const role = savedRole ? JSON.parse(savedRole) as { name?: string; id?: string } : null;
+    return (
+      profile.is_admin === true ||
+      profile.role === 'admin' ||
+      role?.name === 'admin' ||
+      role?.id === 'guest-admin' ||
+      role?.id === 'beta-admin'
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function useAuth() {
   return useAuthContext();
 }

@@ -26,7 +26,20 @@ export function usePermissions() {
     } catch {}
     return null;
   });
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => {
+    if (isBetaAutoAdminEnabled()) return true;
+    try {
+      const savedProfile = localStorage.getItem('geistdesk_cached_user_profile');
+      const savedRole = localStorage.getItem('geistdesk_cached_user_role');
+      if (savedProfile && savedRole) {
+        const profile = JSON.parse(savedProfile) as User;
+        const role = JSON.parse(savedRole) as UserRole;
+        if (isStaleGuestAgentCache(profile, role)) return true;
+        return false;
+      }
+    } catch {}
+    return true;
+  });
 
   useEffect(() => {
     if (authLoading) {
