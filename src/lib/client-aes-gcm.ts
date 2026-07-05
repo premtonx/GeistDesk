@@ -2,7 +2,16 @@ import { CryptoIntegrityError } from './crypto-integrity';
 
 function encodeAad(provenance?: string): Uint8Array | undefined {
   if (!provenance?.trim()) return undefined;
-  return new TextEncoder().encode(provenance.trim());
+  return new Uint8Array(new TextEncoder().encode(provenance.trim()));
+}
+
+function buildAesGcmParams(iv: Uint8Array, provenance?: string): AesGcmParams {
+  const normalizedIv = new Uint8Array(iv);
+  const aad = encodeAad(provenance);
+  if (aad) {
+    return { name: 'AES-GCM', iv: normalizedIv, additionalData: new Uint8Array(aad) };
+  }
+  return { name: 'AES-GCM', iv: normalizedIv };
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -38,12 +47,8 @@ export async function encryptWithWebCryptoAesGcm(
   const cryptoKey = await crypto.subtle.importKey('raw', normalizedKey, { name: 'AES-GCM' }, false, [
     'encrypt',
   ]);
-  const aad = encodeAad(provenance);
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv, additionalData: aad as BufferSource | undefined },
-    cryptoKey,
-    encodedData,
-  );
+  const algorithm = buildAesGcmParams(iv, provenance);
+  const encrypted = await crypto.subtle.encrypt(algorithm, cryptoKey, encodedData);
 
   const combined = new Uint8Array(iv.length + encrypted.byteLength);
   combined.set(iv);
@@ -63,14 +68,10 @@ export async function decryptWithWebCryptoAesGcm(
   const cryptoKey = await crypto.subtle.importKey('raw', normalizedKey, { name: 'AES-GCM' }, false, [
     'decrypt',
   ]);
-  const aad = encodeAad(provenance);
+  const algorithm = buildAesGcmParams(iv, provenance);
 
   try {
-    const decrypted = await crypto.subtle.decrypt(
-      { name: 'AES-GCM', iv, additionalData: aad as BufferSource | undefined },
-      cryptoKey,
-      data,
-    );
+    const decrypted = await crypto.subtle.decrypt(algorithm, cryptoKey, data);
     return new TextDecoder().decode(decrypted);
   } catch {
     throw new CryptoIntegrityError(
