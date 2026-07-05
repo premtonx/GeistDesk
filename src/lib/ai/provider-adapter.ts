@@ -6,6 +6,7 @@ import { getCachedLegacyAiConfig, getCachedOrchestratorConfig } from "../aiOrche
 import { executeViaLifecycle, resolveLifecycleOutput, resolveOperatorLanguage } from "../aiLifecycleClient";
 import type { AiExecutionContext, AiFeatureId } from "../../types/aiOrchestrator";
 import type { AIConfig } from "../module-config";
+import { translateSupportContent } from "../polyglot-bridge";
 
 export type AIProvider = "google" | "local-ollama" | "openai-compat";
 
@@ -197,21 +198,8 @@ THREAD HISTORY: ${context.threadHistory?.join("\n") || "No history."}`;
   async translate(text: string, targetLanguage: string, mood: string = "Professional"): Promise<string> {
     if (!text || !text.trim()) return "";
 
-    const prompt = `You are a specialized bidirectional translator for a support platform.
-Rules:
-1. Preserve technical jargon, error codes, and formatting.
-2. Adapt the tone to explicitly match the requested mood: ${mood}.
-3. Return ONLY the translated text, no meta-commentary.
-4. Context is a customer support interaction.
-
-Translate the following text to ${targetLanguage}:\n\n${text}`;
-
-    try {
-      return await this.runLifecycleFeature('translation', prompt);
-    } catch (error) {
-      console.warn("Translation failed, falling back to original text:", error);
-      return text;
-    }
+    // POLYGLOT BRIDGE POLICY: Never route routine UI/support translations through LLM orchestrator tokens.
+    return translateSupportContent(text, targetLanguage, { mood });
   }
 
   /**

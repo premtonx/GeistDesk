@@ -2,6 +2,7 @@ import { Router, type Request, type Response } from 'express';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { AI_DECISION_ENGINE_FLOW, type AiExecutionContext, type AiFeatureId } from '../types/aiOrchestrator.js';
 import { executeAiFeatureRequest } from '../lib/ai-orchestrator-service.js';
+import { translatePolyglotContent } from '../lib/polyglot-translate-service.js';
 
 const router = Router();
 
@@ -94,6 +95,29 @@ router.post('/execute/resume', authenticate, async (req: Request, res: Response)
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return res.status(500).json({ error: 'AI lifecycle resume failed.', details: message });
+  }
+});
+
+/**
+ * POST /api/ai/polyglot/translate
+ * Token-efficient Polyglot Bridge translation (dictionary + optional DeepL).
+ * Premium LLM orchestrator tokens are never used for this endpoint.
+ */
+router.post('/polyglot/translate', authenticate, async (req: Request, res: Response) => {
+  try {
+    const text = String(req.body.text || '');
+    const targetLanguage = String(req.body.targetLanguage || '');
+    if (!text.trim()) {
+      return res.status(400).json({ error: 'text is required.' });
+    }
+    if (!targetLanguage.trim()) {
+      return res.status(400).json({ error: 'targetLanguage is required.' });
+    }
+    const translation = await translatePolyglotContent(text, targetLanguage);
+    return res.status(200).json({ translation, engine: 'polyglot-bridge' });
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    return res.status(500).json({ error: 'Polyglot translation failed.', details: message });
   }
 });
 

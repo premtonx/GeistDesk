@@ -1669,7 +1669,7 @@ export default function TicketsPage() {
                   .filter((l) => l.enabled)
                   .map((f) => (
                     <button
-                      key={f.lang}
+                      key={f.isoCode || f.lang}
                       type="button"
                       onClick={() => setAgentLanguage(f.lang)}
                       className={cn(

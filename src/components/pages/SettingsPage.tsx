@@ -574,7 +574,7 @@ export default function SettingsPage() {
                       )}
                     >
                       <div className="flex items-center gap-2">
-                        <FlagIcon code={languageToFlagCode(lang.lang)} className="w-6 h-4" />
+                        <FlagIcon code={lang.flagCode || languageToFlagCode(lang.lang)} className="w-6 h-4" />
                         <span className="text-xs font-medium">{lang.lang}</span>
                       </div>
                       <Switch 

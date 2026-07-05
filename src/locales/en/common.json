@@ -2297,6 +2297,32 @@
       "saving": "Synchronizing…"
     }
   },
+  "adminHub": {
+    "polyglot": {
+      "title": "🌐 Polyglot Bridge Configuration",
+      "description": "Provision active header flags and agent translation targets workspace-wide. Changes sync instantly to all operator sessions.",
+      "enabled": "Bridge Active",
+      "headerPreview": "Header Flag Preview",
+      "noActive": "No active languages configured.",
+      "isoCode": "ISO Language Code",
+      "displayName": "Display Name",
+      "displayPlaceholder": "Italian",
+      "flagCode": "Flag Icon Code",
+      "addLanguage": "Add Language / Save",
+      "resetDefaults": "Restore Defaults",
+      "tableLanguage": "Language",
+      "tableFlag": "Flag",
+      "tableActive": "Active",
+      "tableActions": "Actions",
+      "invalidIso": "Enter a valid ISO language code.",
+      "duplicate": "This language is already provisioned.",
+      "added": "Language added to Polyglot Bridge.",
+      "minOne": "At least one language must remain active.",
+      "removed": "Language removed.",
+      "minOneActive": "At least one language must stay active.",
+      "reset": "Restored default language roster."
+    }
+  },
   "languages": {
     "de": "Deutsch",
     "en": "English"

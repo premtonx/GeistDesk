@@ -1,10 +1,18 @@
-import { languageToFlagCode, type FlagCode } from '../components/ui/FlagIcon';
-
 export interface PolyglotLanguage {
   lang: string;
-  flagCode: FlagCode;
+  isoCode: string;
+  flagCode: string;
   enabled: boolean;
 }
+
+/** Workspace-wide default polyglot languages (US, ES, JP, FR, DE). */
+export const DEFAULT_SUPPORTED_LANGUAGES: PolyglotLanguage[] = [
+  { lang: 'English', isoCode: 'en', flagCode: 'en', enabled: true },
+  { lang: 'Spanish', isoCode: 'es', flagCode: 'es', enabled: true },
+  { lang: 'Japanese', isoCode: 'ja', flagCode: 'jp', enabled: true },
+  { lang: 'French', isoCode: 'fr', flagCode: 'fr', enabled: true },
+  { lang: 'German', isoCode: 'de', flagCode: 'de', enabled: true },
+];
 
 export interface AIConfig {
   sentimentModel: 'local-gemma' | 'local-llama' | 'gemini-flash' | 'custom-local';
@@ -50,13 +58,7 @@ export interface ModuleConfig {
 
 const DEFAULT_CONFIG: ModuleConfig = {
   polyglotEnabled: true,
-  languages: [
-    { lang: 'English', flagCode: 'en', enabled: true },
-    { lang: 'Spanish', flagCode: 'es', enabled: true },
-    { lang: 'Japanese', flagCode: 'jp', enabled: true },
-    { lang: 'Korean', flagCode: 'kr', enabled: true },
-    { lang: 'German', flagCode: 'de', enabled: true }
-  ],
+  languages: DEFAULT_SUPPORTED_LANGUAGES.map((entry) => ({ ...entry })),
   debugAdminMode: false,
   personioEnabled: true,
   personioClientId: '',
@@ -92,6 +94,18 @@ const DEFAULT_CONFIG: ModuleConfig = {
   ssoTenantId: 'common'
 };
 
+function inferIsoCodeFromLanguage(lang: string): string {
+  const normalized = lang.toLowerCase().trim();
+  if (normalized.includes('german') || normalized === 'deutsch') return 'de';
+  if (normalized.includes('english')) return 'en';
+  if (normalized.includes('spanish')) return 'es';
+  if (normalized.includes('french')) return 'fr';
+  if (normalized.includes('italian')) return 'it';
+  if (normalized.includes('japanese')) return 'ja';
+  if (normalized.includes('korean')) return 'ko';
+  return 'en';
+}
+
 export const getModuleConfig = (): ModuleConfig => {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
     return DEFAULT_CONFIG;
@@ -110,10 +124,11 @@ export const getModuleConfig = (): ModuleConfig => {
         ...DEFAULT_CONFIG.email,
         ...(parsed.email || {})
       },
-      languages: (parsed.languages || DEFAULT_CONFIG.languages).map((lang: any) => ({
+      languages: (parsed.languages || DEFAULT_CONFIG.languages).map((lang: PolyglotLanguage & { isoCode?: string }) => ({
         lang: lang.lang,
+        isoCode: lang.isoCode || inferIsoCodeFromLanguage(lang.lang),
         enabled: lang.enabled ?? true,
-        flagCode: lang.flagCode || languageToFlagCode(lang.lang),
+        flagCode: lang.flagCode || inferIsoCodeFromLanguage(lang.lang),
       })),
     };
   } catch {

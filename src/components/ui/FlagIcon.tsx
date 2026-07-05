@@ -2,7 +2,7 @@ import React from 'react';
 import { cn } from '../../lib/utils';
 
 /** ISO-style flag codes supported by the language switcher. */
-export type FlagCode = 'de' | 'en' | 'es' | 'jp' | 'kr';
+export type FlagCode = 'de' | 'en' | 'es' | 'jp' | 'kr' | 'fr' | 'it' | 'pt' | 'nl' | (string & {});
 
 interface FlagIconProps {
   code: FlagCode;
@@ -51,6 +51,7 @@ export function FlagIcon({ code, className, title }: FlagIconProps) {
         </svg>
       );
     case 'jp':
+    case 'ja':
       return (
         <svg viewBox="0 0 24 16" className={sizeClass} width={24} height={16} aria-hidden={!title}>
           <rect width="24" height="16" fill="#FFF" />
@@ -58,6 +59,7 @@ export function FlagIcon({ code, className, title }: FlagIconProps) {
         </svg>
       );
     case 'kr':
+    case 'ko':
       return (
         <svg viewBox="0 0 24 16" className={sizeClass} width={24} height={16} aria-hidden={!title}>
           <rect width="24" height="16" fill="#FFF" />
@@ -70,8 +72,49 @@ export function FlagIcon({ code, className, title }: FlagIconProps) {
           </defs>
         </svg>
       );
+    case 'fr':
+      return (
+        <svg viewBox="0 0 24 16" className={sizeClass} width={24} height={16} aria-hidden={!title}>
+          <rect width="8" height="16" fill="#0055A4" />
+          <rect width="8" height="16" x="8" fill="#FFF" />
+          <rect width="8" height="16" x="16" fill="#EF4135" />
+        </svg>
+      );
+    case 'it':
+      return (
+        <svg viewBox="0 0 24 16" className={sizeClass} width={24} height={16} aria-hidden={!title}>
+          <rect width="8" height="16" fill="#009246" />
+          <rect width="8" height="16" x="8" fill="#FFF" />
+          <rect width="8" height="16" x="16" fill="#CE2B37" />
+        </svg>
+      );
+    case 'pt':
+      return (
+        <svg viewBox="0 0 24 16" className={sizeClass} width={24} height={16} aria-hidden={!title}>
+          <rect width="24" height="16" fill="#006600" />
+          <rect width="10" height="16" fill="#FF0000" />
+        </svg>
+      );
+    case 'nl':
+      return (
+        <svg viewBox="0 0 24 16" className={sizeClass} width={24} height={16} aria-hidden={!title}>
+          <rect width="24" height="5.33" fill="#AE1C28" />
+          <rect width="24" height="5.33" y="5.33" fill="#FFF" />
+          <rect width="24" height="5.34" y="10.66" fill="#21468B" />
+        </svg>
+      );
     default:
-      return null;
+      return (
+        <span
+          className={cn(
+            'inline-flex items-center justify-center shrink-0 rounded-sm border border-slate-300 bg-slate-100 text-[8px] font-bold uppercase text-slate-600 min-w-[24px] min-h-[16px]',
+            className,
+          )}
+          title={title}
+        >
+          {String(code).slice(0, 2).toUpperCase()}
+        </span>
+      );
   }
 }
 
@@ -81,7 +124,12 @@ export function languageToFlagCode(lang: string): FlagCode {
   if (normalized.includes('german') || normalized === 'deutsch' || normalized === 'de') return 'de';
   if (normalized.includes('english') || normalized === 'en') return 'en';
   if (normalized.includes('spanish') || normalized === 'español' || normalized === 'es') return 'es';
-  if (normalized.includes('japanese') || normalized === 'ja') return 'jp';
-  if (normalized.includes('korean') || normalized === 'ko') return 'kr';
+  if (normalized.includes('french') || normalized === 'français' || normalized === 'fr') return 'fr';
+  if (normalized.includes('italian') || normalized === 'it') return 'it';
+  if (normalized.includes('japanese') || normalized === 'ja' || normalized === 'jp') return 'jp';
+  if (normalized.includes('korean') || normalized === 'ko' || normalized === 'kr') return 'kr';
+  if (normalized.includes('portuguese') || normalized === 'pt') return 'pt';
+  if (normalized.includes('dutch') || normalized === 'nl') return 'nl';
+  if (normalized.length === 2) return normalized;
   return 'en';
 }

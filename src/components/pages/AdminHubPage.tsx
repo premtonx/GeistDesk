@@ -31,6 +31,7 @@ import { cn } from '../../lib/utils';
 import { usePermissions } from '../../hooks/usePermissions';
 import { ShieldCheck, Lock } from 'lucide-react';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { PolyglotBridgeConfigPanel } from '../admin/PolyglotBridgeConfigPanel';
 
 const categories = [
   {
@@ -469,6 +470,8 @@ export default function AdminHubPage() {
           </div>
 
         </div>
+
+        <PolyglotBridgeConfigPanel />
 
         {/* 2. CATEGORIZED INFRASTRUCTURE CONFIGURATION BLOCKS */}
         <div className="space-y-12">
