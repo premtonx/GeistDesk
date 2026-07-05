@@ -3,7 +3,7 @@
  */
 
 import { getCachedLegacyAiConfig, getCachedOrchestratorConfig } from "../aiOrchestratorClient";
-import { executeViaLifecycle, resolveLifecycleOutput } from "../aiLifecycleClient";
+import { executeViaLifecycle, resolveLifecycleOutput, resolveOperatorLanguage } from "../aiLifecycleClient";
 import type { AiExecutionContext, AiFeatureId } from "../../types/aiOrchestrator";
 import type { AIConfig } from "../module-config";
 
@@ -20,6 +20,7 @@ export interface ModelProfile {
 export interface TicketContext {
   subject: string;
   description: string;
+  ticketId?: string;
   kbContent?: string;
   threadHistory?: string[];
   customerMetadata?: Record<string, any>;
@@ -104,7 +105,12 @@ export class AIAdapter {
     prompt: string,
     ctx: Partial<AiExecutionContext> = {},
   ): Promise<string> {
-    const result = await executeViaLifecycle({ feature, prompt, ...ctx });
+    const result = await executeViaLifecycle({
+      feature,
+      prompt,
+      operatorLanguage: resolveOperatorLanguage(),
+      ...ctx,
+    });
     return resolveLifecycleOutput(result);
   }
 
@@ -125,6 +131,7 @@ Return JSON:`;
 
     try {
       const output = await this.runLifecycleFeature('smart_reply', `${systemPrompt}\n\n${userPrompt}`, {
+        ticketId: context.ticketId,
         customerScope: context.customerMetadata?.vip ? 'vip' : undefined,
       });
       const body = JSON.parse(output);
@@ -138,12 +145,17 @@ Return JSON:`;
     }
   }
 
-  async summarizeThread(history: string[], options?: { format?: 'bullets' | 'paragraph'; count?: number }): Promise<string> {
+  async summarizeThread(
+    history: string[],
+    options?: { format?: 'bullets' | 'paragraph'; count?: number; ticketId?: string },
+  ): Promise<string> {
     const format = options?.format === 'bullets' ? `into ${options.count || 3} bullet points` : "into a concise paragraph";
     const prompt = `Summarize the following support thread ${format}:\n\n${history.join("\n")}`;
 
     try {
-      return await this.runLifecycleFeature('ticket_summarization', prompt);
+      return await this.runLifecycleFeature('ticket_summarization', prompt, {
+        ticketId: options?.ticketId,
+      });
     } catch (e) {
       console.error("Lifecycle summarization error:", e);
       return "AI summarization failed.";
@@ -199,6 +211,72 @@ Translate the following text to ${targetLanguage}:\n\n${text}`;
     } catch (error) {
       console.warn("Translation failed, falling back to original text:", error);
       return text;
+    }
+  }
+
+  /**
+   * Simplified layout analysis for KB article detail "AI Explain" toolbar action.
+   */
+  async explainArticleLayout(title: string, content: string, articleId: string): Promise<string> {
+    const plain = content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    const prompt = `You are a documentation analyst. Produce a simplified layout analysis of this knowledge base article for support operators.
+
+Structure your response with these sections:
+1. Document Purpose (1-2 sentences)
+2. Section Overview (bullet list of main topics)
+3. Key Dependencies & Permissions
+4. Recommended Reader Actions
+
+Use clear, accessible language. Do not invent facts not present in the article.
+
+Article Title: ${title}
+Article Content:
+${plain.slice(0, 14000)}`;
+
+    return await this.runLifecycleFeature('ticket_summarization', prompt, {
+      metadata: { entityId: `kb-explain-${articleId}`, kbArticleId: articleId },
+    });
+  }
+
+  /**
+   * Answers a KB search question using workspace-scoped RAG snippets only.
+   * Uses ticket_summarization (automatic) to avoid manager-approval gates on kb_generation.
+   */
+  async answerKnowledgeQuery(
+    query: string,
+    ragSnippets: { sourceTitle: string; source: string; text: string }[],
+    options?: { forceRefresh?: boolean; entityId?: string },
+  ): Promise<string> {
+    const contextBlock =
+      ragSnippets.length > 0
+        ? ragSnippets
+            .map((s) => `[${s.source}: ${s.sourceTitle}]\n${s.text}`)
+            .join("\n\n")
+        : "No matching documentation found in this workspace.";
+
+    const prompt = `You are Geist AI, a knowledge base assistant. Answer the user's question using ONLY the provided workspace documentation excerpts.
+If the excerpts do not contain enough information, say so clearly and suggest what to search for.
+Do not invent facts or reference data outside the provided context.
+
+USER QUESTION: ${query}
+
+WORKSPACE DOCUMENTATION:
+${contextBlock}
+
+Provide a concise, helpful answer in 2-4 short paragraphs or bullet points.`;
+
+    const cacheEntityId =
+      options?.entityId ??
+      `kb-search-${query.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 96)}`;
+
+    try {
+      return await this.runLifecycleFeature("ticket_summarization", prompt, {
+        metadata: { entityId: cacheEntityId, kbArticleId: cacheEntityId },
+        forceRefresh: options?.forceRefresh,
+      });
+    } catch (error) {
+      console.error("KB semantic search AI error:", error);
+      throw error;
     }
   }
 
