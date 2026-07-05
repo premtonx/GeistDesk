@@ -97,6 +97,11 @@ export default function SecretViewerPage() {
     return formatUploadLimitLabel(limit);
   }, [item?.metadata]);
 
+  const uploadedFilename = useMemo(
+    () => getDropzoneUploadedFilename(item?.metadata),
+    [item?.metadata],
+  );
+
   const maxSizeMb = item?.metadata?.maxSizeMb ?? 2048;
 
   const handleDropzoneUpload = async (file: File) => {
@@ -281,11 +286,6 @@ export default function SecretViewerPage() {
       </div>
     );
   }
-
-  const uploadedFilename = useMemo(
-    () => getDropzoneUploadedFilename(item?.metadata),
-    [item?.metadata],
-  );
 
   if (isDropzone && item) {
     return (
