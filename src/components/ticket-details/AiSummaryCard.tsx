@@ -17,7 +17,7 @@ import {
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
-import { Ticket as TicketType } from '../../types';
+import { Ticket as TicketType, TicketChecklistItem } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { ticketService } from '../../services/ticketService';
@@ -29,6 +29,7 @@ interface AiSummaryCardProps {
   isAiReady: boolean;
   onRefreshSummary: () => void;
   isAiDrafting: boolean;
+  onChecklistUpdated?: (checklist: TicketChecklistItem[]) => void;
 }
 
 export function AiSummaryCard({
@@ -36,7 +37,8 @@ export function AiSummaryCard({
   aiSummary,
   isAiReady,
   onRefreshSummary,
-  isAiDrafting
+  isAiDrafting,
+  onChecklistUpdated,
 }: AiSummaryCardProps) {
   const { t } = useTranslation();
   
@@ -67,10 +69,18 @@ export function AiSummaryCard({
   );
 
   const handleToggleChecklist = async (taskId: string) => {
+    const current = normalizeChecklistItems(ticket.aiChecklist);
+    const optimistic = current.map((item) =>
+      item.id === taskId ? { ...item, completed: !item.completed } : item,
+    );
+    onChecklistUpdated?.(optimistic);
+
     try {
-      await ticketService.toggleTaskCompletion(ticket.id, taskId);
+      const next = await ticketService.toggleTaskCompletion(ticket.id, taskId);
+      onChecklistUpdated?.(next);
     } catch (e) {
       console.error('Failed to commit interactive checklist state to database:', e);
+      onChecklistUpdated?.(current);
     }
   };
 

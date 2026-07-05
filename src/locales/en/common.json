@@ -617,6 +617,7 @@
       "title": "Tasks Checklist Action Plan",
       "progress": "{{completed}} / {{total}} completed",
       "addTask": "Add Task",
+      "addTaskBilingual": "Aufgabe hinzufügen / Add Task",
       "addPlaceholder": "Describe an operational objective…",
       "empty": "No action items yet. Add a custom task or run AI Full Analysis to generate a plan.",
       "emptyShort": "Open the Tasks tab to add or generate action items.",
