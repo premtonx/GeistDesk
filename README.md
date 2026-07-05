@@ -18,7 +18,17 @@ This repository holds a modern, full-stack application leveraging **React 19 (Vi
 - **Bilingual Inline Custom Task Injection:** Supports native multi-language task modifications and creations with clean `Enter` and `Escape` keyboard shortcuts.
 - **Visual Milestones:** Features smart responsive badges that shift to high-visibility emerald arrays upon 100% checklist milestone completion.
 
-#### 3. 📦 Secure Dropzone Pipelines & Unified UI Consistency
+#### 3. 🧠 Advanced AI Orchestrator Core & Global Agent Skill Registry
+- **Single-Page Sub-Tab Router Navigation:** Restructured the massive AI Management Console canvas into a high-density horizontal sub-tab framework (`🚀 Kommandozentrale`, `🧠 Agenten & Personas`, `📊 Qualität & Auditing`). This completely flattens vertical page height and eliminates scrolling fatigue while preserving active operational monitoring pipelines.
+- **Permanent "Skills verwalten" Control Anchors:** Standardized a highly visible, uniform interactive card footer button across all Agent Persona profiles (`Support-Agent`, `Sicherheitsanalyst`, `Wissensautor`). Administrative access to agent brain configurations is exposed globally by default, bypassing multi-step selection layers.
+- **Multi-Modal Skill Manifest Drawer:** Built a slide-out administrative editor panel allowing operators to customize an agent's runtime instructions, behavioral guardrails, and tool execution privileges. Supports twin operational pathways:
+  * *Manual Configuration Canvas:* A raw, high-density text interface allowing real-time edits to system instructions or JSON/YAML tool structures.
+  * *Skill File Dropzone:* A client-side `FileReader` parsing slot that allows operators to drag and drop custom `.json` or `.yaml` skill blueprints directly into the validation stream.
+- **Built-In System Blueprints Library:** Embedded a set of quick-load, enterprise-optimized template blueprints (*Customer Empathy & Translation*, *Strict Auditing & Zero-Trust PII Redaction*, *Technical Markdown Documentation*). Admins can instantiate production-ready agent boundaries with a single click.
+- **Global Immutability and Persistence:** Wired all mutations directly to our centralized data layer (`orchestratorService.updateAgentSkills`), ensuring that modified configurations deploy globally across all operator sessions simultaneously instead of caching locally.
+- **Layout Overflows Hardened:** Solved severe compound string clipping bugs by applying fluid responsive width tracking, `min-w-0` grid recalculations, and strict `break-words` text wrapping boundaries to long titles like `KI-Qualitäts-Dashboard`.
+
+#### 4. 📦 Secure Dropzone Pipelines & Unified UI Consistency
 - **High-Density Drawer Framework:** Re-engineered the admin file-auditing telemetry layout to use a modern, expanded fixed full-height viewport canvas (`max-w-4xl`), resolving tight structural sidebar container blowouts.
 - **Binary Stream Recovery:** Replaced raw placeholder actions with an authenticated, zero-leak binary blob recovery streaming pipeline (`createObjectURL`), tracking server-side retention timeouts with clean `HTTP 410` error banners.
 - **KB Editor Unification:** Stripped out legacy HTML-leaking textareas within GeistKB and successfully ported over the premium markdown rich-text editing workspace framework from our Tickets canvas.
