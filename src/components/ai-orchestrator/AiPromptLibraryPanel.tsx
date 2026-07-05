@@ -16,6 +16,7 @@ import {
 import { useTranslation } from '../../lib/context/I18nContext';
 import { diffLines } from '../../lib/text-diff';
 import {
+  DEFAULT_PROMPT_BODIES,
   PROMPT_LIBRARY_FEATURES,
   type AiPromptLibraryFeature,
   type AiPromptTemplate,
@@ -60,7 +61,12 @@ export function AiPromptLibraryPanel({ readOnly }: AiPromptLibraryPanelProps) {
     setTemplates(templatesRes.data.templates || []);
     setVersions(versionsRes.data.versions || []);
     const current = (templatesRes.data.templates || []).find((tpl: AiPromptTemplate) => tpl.feature === feature);
-    setDraftBody(current?.body ?? versionsRes.data.current?.body ?? '');
+    const loadedBody = current?.body ?? versionsRes.data.current?.body ?? '';
+    setDraftBody(
+      loadedBody.trim()
+        ? loadedBody
+        : DEFAULT_PROMPT_BODIES[feature],
+    );
     setCompareVersionId('');
   }, []);
 

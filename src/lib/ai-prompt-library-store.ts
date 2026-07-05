@@ -3,6 +3,7 @@ import { queryDb } from './postgres-backend.js';
 import {
   DEFAULT_PROMPT_BODIES,
   PROMPT_LIBRARY_FEATURES,
+  shouldMigratePromptToGermanBaseline,
   type AiPromptLibraryFeature,
   type AiPromptTemplate,
   type AiPromptVersion,
@@ -27,13 +28,41 @@ async function ensureTemplate(workspaceId: string, feature: AiPromptLibraryFeatu
   );
   if (existing.rows[0]) {
     const row = existing.rows[0];
+    const body = String(row.body);
+    const germanBody = DEFAULT_PROMPT_BODIES[feature];
+
+    if (shouldMigratePromptToGermanBaseline(body, feature) && body.trim() !== germanBody.trim()) {
+      const nextVersion = Number(row.current_version ?? 1) + 1;
+      await queryDb(
+        `UPDATE ai_prompt_templates
+         SET body = $1, current_version = $2, updated_by = 'system', updated_at = NOW()
+         WHERE id = $3`,
+        [germanBody, nextVersion, row.id],
+      );
+      await queryDb(
+        `INSERT INTO ai_prompt_versions (template_id, feature, version_number, body, change_note, created_by)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
+        [row.id, feature, nextVersion, germanBody, 'Deutsche Baseline-Lokalisierung', 'system'],
+      );
+      return {
+        id: String(row.id),
+        workspaceId: String(row.workspace_id),
+        feature: row.feature as AiPromptLibraryFeature,
+        name: String(row.name),
+        currentVersion: nextVersion,
+        body: germanBody,
+        updatedAt: new Date().toISOString(),
+        updatedBy: 'system',
+      };
+    }
+
     return {
       id: String(row.id),
       workspaceId: String(row.workspace_id),
       feature: row.feature as AiPromptLibraryFeature,
       name: String(row.name),
       currentVersion: Number(row.current_version ?? 1),
-      body: String(row.body),
+      body,
       updatedAt: new Date(row.updated_at).toISOString(),
       updatedBy: row.updated_by ? String(row.updated_by) : undefined,
     };

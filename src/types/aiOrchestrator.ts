@@ -650,14 +650,40 @@ export const PROMPT_LIBRARY_FEATURES: AiPromptLibraryFeature[] = [
 
 export const DEFAULT_PROMPT_BODIES: Record<AiPromptLibraryFeature, string> = {
   ticket_summarization:
-    'Du bist ein Support-Operations-Assistent. Fasse den Ticket-Thread unten zusammen:\n- Aktueller Status\n- Kernanliegen des Kunden\n- Ergriffene Maßnahmen\n- Empfohlener nächster Schritt\n\nHalte die Zusammenfassung unter 150 Wörtern. Antworte auf Deutsch.',
+    'Du bist ein Assistent für den Supportbetrieb. Fasse den folgenden Ticket-Verlauf wie folgt zusammen:\n- Aktueller Status\n- Hauptanliegen des Kunden\n- Ergriffene Maßnahmen\n- Empfohlener nächster Schritt\n\nHalte die Zusammenfassung unter 150 Wörtern.',
   kb_generation:
-    'Du bist ein technischer Redakteur. Wandle die Support-Lösung unten in einen Wissensdatenbank-Artikel um mit:\n- Titel\n- Problembeschreibung\n- Lösungsschritte\n- Präventionstipps\n\nVerwende klares Markdown-Format. Antworte auf Deutsch.',
+    'Du bist ein technischer Redakteur. Wandle die Support-Lösung unten in einen Wissensdatenbank-Artikel um mit:\n- Titel\n- Problembeschreibung\n- Lösungsschritte\n- Präventionstipps\n\nVerwende klares Markdown-Format und formuliere auf Deutsch.',
   root_cause_analysis:
-    'Du bist ein Senior-SRE. Führe eine Root-Cause-Analyse der Vorfalldaten durch:\n- Zeitachse der Ereignisse\n- Wahrscheinliche Ursache\n- Mitwirkende Faktoren\n- Empfehlungen zur Behebung\n\nAntworte präzise auf Deutsch.',
+    'Du bist ein Senior-SRE. Führe eine Root-Cause-Analyse der Vorfalldaten durch:\n- Zeitachse der Ereignisse\n- Wahrscheinliche Ursache\n- Mitwirkende Faktoren\n- Empfehlungen zur Behebung\n\nAntworte präzise und strukturiert auf Deutsch.',
   translation:
-    'Übersetze den folgenden Support-Inhalt präzise. Bewahre Fachbegriffe und Tonalität. Gib ausschließlich die Übersetzung aus.',
+    'Übersetze den folgenden Support-Inhalt präzise ins Deutsche. Bewahre Fachbegriffe und Tonalität. Gib ausschließlich die Übersetzung aus.',
 };
+
+/** Legacy English seed bodies — used to auto-migrate untouched default templates to German. */
+export const LEGACY_ENGLISH_PROMPT_BODIES: Record<AiPromptLibraryFeature, string> = {
+  ticket_summarization:
+    'You are a support operations assistant. Summarize the ticket thread below into:\n- Current status\n- Key customer concern\n- Actions taken\n- Recommended next step\n\nKeep the summary under 150 words.',
+  kb_generation:
+    'You are a technical writer. Convert the support resolution below into a knowledge base article with:\n- Title\n- Problem description\n- Resolution steps\n- Prevention tips\n\nUse clear Markdown formatting.',
+  root_cause_analysis:
+    'You are a senior SRE. Perform root cause analysis on the incident data below:\n- Timeline of events\n- Probable root cause\n- Contributing factors\n- Remediation recommendations',
+  translation:
+    'Translate the following support content accurately. Preserve technical terms and tone. Output only the translation.',
+};
+
+export function shouldMigratePromptToGermanBaseline(
+  body: string,
+  feature: AiPromptLibraryFeature,
+): boolean {
+  const trimmed = body.trim();
+  if (!trimmed) return true;
+  if (trimmed === LEGACY_ENGLISH_PROMPT_BODIES[feature].trim()) return true;
+  if (trimmed.startsWith('You are a support operations assistant')) return true;
+  if (trimmed.startsWith('You are a technical writer. Convert the support resolution')) return true;
+  if (trimmed.startsWith('You are a senior SRE')) return true;
+  if (trimmed.startsWith('Translate the following support content accurately')) return true;
+  return false;
+}
 
 export const AI_PERSONA_DEFINITIONS: Record<AiPersonaId, AiPersonaDefinition> = {
   support_agent: {
