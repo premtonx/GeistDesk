@@ -72,12 +72,48 @@ export function computeQuickFilterCounts(items: ExchangeItemRow[]): ExchangeQuic
 
 export function matchesExchangeSearch(item: ExchangeItemRow, searchTerm: string): boolean {
   if (!searchTerm.trim()) return true;
-  const q = searchTerm.toLowerCase();
+  const query = searchTerm.toLowerCase().trim();
+  if (!query) return true;
+
+  const includes = (value: string | undefined | null) =>
+    Boolean(value?.toLowerCase().includes(query));
+
+  const matchTitle = includes(item.name);
+  const matchRecipient = includes(item.recipient);
+  const matchCompany = includes(item.company);
+  const matchTicketLabel = includes(item.ticketId);
+  const matchRelatedTicketId = includes(item.relatedTicketId);
+  const matchRelatedTicketSubject = includes(item.relatedTicketSubject);
+  const matchDescription = includes(item.description);
+  const matchSizeOrFilename = includes(item.size);
+  const matchUploadedFilename = includes(item.uploadedFilename);
+  const matchStatus = includes(item.status);
+  const matchType = includes(item.type);
+
+  const matchFiles =
+    item.uploadedFilenames?.some((fileName) => includes(fileName)) ?? false;
+
+  const matchAllowedTypes =
+    item.allowedTypes?.some((type) => type.toLowerCase().includes(query)) ?? false;
+
+  const matchRecipientEmails =
+    item.recipientEmails?.some((email) => includes(email)) ?? false;
+
   return (
-    item.name.toLowerCase().includes(q) ||
-    item.recipient.toLowerCase().includes(q) ||
-    item.company.toLowerCase().includes(q) ||
-    item.ticketId.toLowerCase().includes(q)
+    matchTitle ||
+    matchRecipient ||
+    matchCompany ||
+    matchTicketLabel ||
+    matchRelatedTicketId ||
+    matchRelatedTicketSubject ||
+    matchDescription ||
+    matchSizeOrFilename ||
+    matchUploadedFilename ||
+    matchStatus ||
+    matchType ||
+    matchFiles ||
+    matchAllowedTypes ||
+    matchRecipientEmails
   );
 }
 
@@ -94,18 +130,35 @@ export function applyLegacyTableFilters(
   tableFilter: ExchangeTableFilter,
   tableTab: ExchangeTableTab,
 ): boolean {
+  const resolvedStatus = resolveExchangeStatus(item);
+
   if (tableFilter === 'secrets' && item.type !== 'secret') return false;
   if (tableFilter === 'uploads' && item.type !== 'request') return false;
-  if (tableFilter === 'active' && !isExchangeActiveStatus(resolveExchangeStatus(item))) return false;
-  if (tableFilter === 'burned' && resolveExchangeStatus(item) !== 'Burned') return false;
-  if (tableFilter === 'expired' && resolveExchangeStatus(item) !== 'Expired') return false;
+  if (tableFilter === 'active' && !isExchangeActiveStatus(resolvedStatus)) return false;
+  if (tableFilter === 'burned' && resolvedStatus !== 'Burned') return false;
+  if (tableFilter === 'expired' && resolvedStatus !== 'Expired') return false;
 
-  const resolvedStatus = resolveExchangeStatus(item);
-  if (tableTab === 'active_links' && (item.type !== 'secret' || !isExchangeActiveStatus(resolvedStatus))) return false;
-  if (tableTab === 'active_dropzones' && (item.type !== 'request' || !isExchangeActiveStatus(resolvedStatus))) return false;
-  if (tableTab === 'recent_uploads' && resolvedStatus !== 'Uploaded' && resolvedStatus !== 'Completed') return false;
-  if (tableTab === 'requests' && item.type !== 'request') return false;
-  if (tableTab === 'expiring_soon' && !isExchangeExpiringSoon(item)) return false;
+  const typeLockedByDropdown = tableFilter === 'secrets' || tableFilter === 'uploads';
+
+  if (tableTab === 'active_links') {
+    if (item.type !== 'secret' || !isExchangeActiveStatus(resolvedStatus)) return false;
+  } else if (tableTab === 'active_dropzones') {
+    if (item.type !== 'request' || !isExchangeActiveStatus(resolvedStatus)) return false;
+  } else if (tableTab === 'recent_uploads') {
+    if (resolvedStatus !== 'Uploaded' && resolvedStatus !== 'Completed') return false;
+  } else if (tableTab === 'requests' && !typeLockedByDropdown && tableFilter !== 'all') {
+    if (item.type !== 'request') return false;
+  } else if (tableTab === 'expiring_soon') {
+    if (!isExchangeExpiringSoon(item)) return false;
+  }
+
+  if (typeLockedByDropdown && tableFilter === 'uploads' && tableTab === 'active_dropzones') {
+    if (!isExchangeActiveStatus(resolvedStatus)) return false;
+  }
+
+  if (typeLockedByDropdown && tableFilter === 'secrets' && tableTab === 'active_links') {
+    if (!isExchangeActiveStatus(resolvedStatus)) return false;
+  }
 
   return true;
 }
@@ -122,12 +175,12 @@ export function filterExchangeItems(
   const { searchTerm, quickFilter, tableFilter, tableTab } = options;
 
   return items.filter((item) => {
-    if (!matchesExchangeSearch(item, searchTerm)) return false;
-
     if (quickFilter) {
-      return matchesQuickFilter(item, quickFilter);
+      if (!matchesQuickFilter(item, quickFilter)) return false;
+    } else if (!applyLegacyTableFilters(item, tableFilter, tableTab)) {
+      return false;
     }
 
-    return applyLegacyTableFilters(item, tableFilter, tableTab);
+    return matchesExchangeSearch(item, searchTerm);
   });
 }

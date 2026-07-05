@@ -848,8 +848,11 @@ export default function VaultPage() {
                     onChange={(v) => {
                       setQuickFilter(null);
                       setSelectedExchangeItem(null);
-                      setTableFilter(v as typeof tableFilter);
-                      setTableTab('requests');
+                      const next = v as typeof tableFilter;
+                      setTableFilter(next);
+                      if (next === 'secrets') setTableTab('active_links');
+                      else if (next === 'uploads') setTableTab('active_dropzones');
+                      else setTableTab('requests');
                     }}
                     aria-label={t('actions.filter', 'Filter')}
                   >

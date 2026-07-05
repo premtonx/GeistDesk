@@ -71,6 +71,15 @@ export interface ExchangeItemRow {
   size?: string;
   createdAt: Date;
   aiStatus?: string;
+  /** Uploaded payload filename (dropzones). */
+  uploadedFilename?: string;
+  /** All known filenames attached to this exchange row. */
+  uploadedFilenames?: string[];
+  relatedTicketId?: string;
+  relatedTicketSubject?: string;
+  description?: string;
+  allowedTypes?: string[];
+  recipientEmails?: string[];
 }
 
 export function exchangeStatusClass(status: string): string {

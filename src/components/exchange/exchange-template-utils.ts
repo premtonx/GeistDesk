@@ -129,4 +129,11 @@ export interface ExchangeItemRowSeed {
   type: string;
   size?: string;
   createdAt: Date;
+  uploadedFilename?: string;
+  uploadedFilenames?: string[];
+  relatedTicketId?: string;
+  relatedTicketSubject?: string;
+  description?: string;
+  allowedTypes?: string[];
+  recipientEmails?: string[];
 }

@@ -39,13 +39,20 @@ function formatVaultHistoryItem(
   const expiresAt = resolveExpiresAt(item.expiresAt);
 
   const hasUpload = hasDropzoneUploadedPayload(item);
+  const uploadedFilename = item.metadata?.filename;
+  const allowedTypes = item.metadata?.allowedTypes ?? item.metadata?.acceptedTypes ?? [];
+  const recipientEmails = item.metadata?.recipientEmails ?? [];
 
   const baseRow: ExchangeItemRow = {
     id: item.id,
     name,
     recipient: item.metadata?.targetRecipient || 'john.doe@client.com',
     company: relatedCompanyObj?.name || 'External Customer',
-    ticketId: relatedTicketObj?.subject ? `TKT-${item.metadata?.relatedTicketId?.substring(0, 4)}` : 'N/A',
+    ticketId: relatedTicketObj?.subject
+      ? `TKT-${item.metadata?.relatedTicketId?.substring(0, 4)}`
+      : item.metadata?.relatedTicketId
+        ? item.metadata.relatedTicketId
+        : 'N/A',
     status: item.isBurned ? 'Burned' : hasUpload ? 'Uploaded' : 'Active',
     expires: item.isBurned
       ? '__expired__'
@@ -56,8 +63,8 @@ function formatVaultHistoryItem(
     views: item.viewCount ?? (item.isBurned ? 1 : 0),
     type: item.type,
     size: isReq
-      ? hasUpload && item.metadata?.filename
-        ? item.metadata.filename
+      ? hasUpload && uploadedFilename
+        ? uploadedFilename
         : item.metadata?.maxSizeMb
           ? item.metadata.maxSizeMb >= 1024
             ? `${item.metadata.maxSizeMb / 1024} GB Limit`
@@ -65,12 +72,24 @@ function formatVaultHistoryItem(
           : formatUploadLimitLabel(item.metadata?.uploadLimit ?? '2GB')
       : undefined,
     createdAt: item.createdAt?.toDate ? item.createdAt.toDate() : new Date(),
+    uploadedFilename: uploadedFilename ?? undefined,
+    uploadedFilenames: uploadedFilename ? [uploadedFilename] : [],
+    relatedTicketId: item.metadata?.relatedTicketId,
+    relatedTicketSubject: relatedTicketObj?.subject,
+    description: item.metadata?.description ?? item.metadata?.requestName,
+    allowedTypes,
+    recipientEmails,
   };
 
   return normalizeExchangeItemRow(baseRow);
 }
 
 function seedToRow(seed: ExchangeItemRowSeed): ExchangeItemRow {
+  const uploadedFilename =
+    seed.uploadedFilename ??
+    (seed.type === 'request' && seed.size && !/\blimit\b/i.test(seed.size) ? seed.size : undefined) ??
+    (seed.type === 'request' && /\.[a-z0-9]{2,5}$/i.test(seed.name) ? seed.name : undefined);
+
   return normalizeExchangeItemRow({
     id: seed.id,
     name: seed.name,
@@ -84,6 +103,13 @@ function seedToRow(seed: ExchangeItemRowSeed): ExchangeItemRow {
     type: seed.type,
     size: seed.size,
     createdAt: seed.createdAt,
+    uploadedFilename,
+    uploadedFilenames: uploadedFilename ? [uploadedFilename] : seed.uploadedFilenames,
+    relatedTicketId: seed.relatedTicketId,
+    relatedTicketSubject: seed.relatedTicketSubject,
+    description: seed.description,
+    allowedTypes: seed.allowedTypes,
+    recipientEmails: seed.recipientEmails,
   });
 }
 
