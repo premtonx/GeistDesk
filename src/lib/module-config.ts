@@ -20,14 +20,12 @@ export const DEFAULT_POLYGLOT_BRIDGE_SETTINGS: PolyglotBridgeSettings = {
   allowAiFallback: false,
 };
 
-/** Workspace-wide default polyglot languages (US, ES, JP, FR, DE). */
-export const DEFAULT_SUPPORTED_LANGUAGES: PolyglotLanguage[] = [
-  { lang: 'English', isoCode: 'en', flagCode: 'en', enabled: true },
-  { lang: 'Spanish', isoCode: 'es', flagCode: 'es', enabled: true },
-  { lang: 'Japanese', isoCode: 'ja', flagCode: 'jp', enabled: true },
-  { lang: 'French', isoCode: 'fr', flagCode: 'fr', enabled: true },
-  { lang: 'German', isoCode: 'de', flagCode: 'de', enabled: true },
-];
+import { PLATFORM_DEFAULT_LANGUAGES } from '../data/platform-defaults';
+
+/** @deprecated Use PLATFORM_DEFAULT_LANGUAGES from src/data/platform-defaults.ts */
+export const DEFAULT_SUPPORTED_LANGUAGES: PolyglotLanguage[] = PLATFORM_DEFAULT_LANGUAGES.map((entry) => ({
+  ...entry,
+}));
 
 export interface AIConfig {
   sentimentModel: 'local-gemma' | 'local-llama' | 'gemini-flash' | 'custom-local';

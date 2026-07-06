@@ -13,9 +13,11 @@
 import "dotenv/config";
 import pg from "pg";
 import { hashPassword } from "../lib/crypto.js";
+import { initDb } from "../lib/postgres-backend.js";
 // Bundled directly into dist/seed.cjs at build time so the production image
 // (which ships no source files) can still run the seeder.
 import seedDatasetJson from "./seed-data.json";
+import { seedAllPlatformDefaults } from "./seed-platform-defaults.js";
 
 const { Pool } = pg;
 
@@ -109,6 +111,7 @@ async function main() {
 
   const client = await pool.connect();
   try {
+    await initDb();
     await client.query(DDL);
 
     // Hash passwords for user rows; never persist plaintext.
@@ -134,12 +137,25 @@ async function main() {
     const purged = await purgeStaleDuplicateUsers(client, users);
     const u = await batchUpsert(client, "users", users);
     const k = await batchUpsert(client, "tickets", tickets);
+    const platform = await seedAllPlatformDefaults(client);
     await client.query("COMMIT");
 
     if (purged > 0) {
       console.log(`[seed] Purged ${purged} stale duplicate user row(s) sharing a seeded email.`);
     }
     console.log(`[seed] Upserted ${u} users and ${k} tickets into geistdesk_documents.`);
+    if (platform.moduleConfig) {
+      console.log("[seed] Seeded module_config/global with German Polyglot Bridge defaults.");
+    }
+    if (platform.vaultFolders > 0) {
+      console.log(`[seed] Upserted ${platform.vaultFolders} default vault_folders.`);
+    }
+    if (platform.promptTemplates > 0) {
+      console.log(`[seed] Inserted ${platform.promptTemplates} German ai_prompt_templates.`);
+    }
+    if (platform.personaSkills) {
+      console.log("[seed] Seeded default German persona_skills_json on orchestrator config.");
+    }
     console.log("[seed] Done. Default seeded credentials are dev-only — rotate them immediately.");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});

@@ -38,6 +38,7 @@ export const DB_AUTHENTICATED_COLLECTIONS = new Set([
   'notification_templates',
   'autopilot_suggestions',
   'vaults',
+  'vault_folders',
   'kb_coverage',
 ]);
 

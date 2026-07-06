@@ -103,7 +103,7 @@ import { GeistVaultEmergency } from './geistvault/GeistVaultEmergency';
 import { GeistVaultAccessRequests } from './geistvault/GeistVaultAccessRequests';
 
 // Redesigned high-fidelity subcomponents
-import { SEEDED_CREDENTIALS, MOCK_CHROME_EXTENSION, BRANDED_SHOWCASE_CREDENTIALS, SEEDED_FOLDERS } from './geistvault/DefaultData';
+import { SEEDED_CREDENTIALS, MOCK_CHROME_EXTENSION, BRANDED_SHOWCASE_CREDENTIALS } from './geistvault/DefaultData';
 import { CredentialDrawer } from './geistvault/CredentialDrawer';
 import { VaultPageHeader } from '../vault/VaultPageHeader';
 import { VaultKpiCards } from '../vault/VaultKpiCards';
@@ -124,8 +124,8 @@ import { VaultCreateInstancePanel } from '../vault/VaultCreateInstancePanel';
 import { VaultShareAccessPanel } from '../vault/VaultShareAccessPanel';
 import { VaultDeleteConfirmBanner } from '../vault/VaultDeleteConfirmBanner';
 import {
-  createVaultFolderId,
   resolveCredFolderId,
+  resolveFolderIconId,
   type VaultFolderIconId,
   type VaultFolderNode,
 } from '../vault/vaultFolderTypes';
@@ -572,22 +572,31 @@ export default function CredentialVaultPage() {
     });
   };
 
-  const seedDefaultFolders = async () => {
+  const syncFoldersFromServer = async (vaultId: string) => {
     try {
-      for (const folder of SEEDED_FOLDERS) {
-        const existing = await localDB.folders.get(folder.id);
-        if (existing) continue;
-        await localDB.folders.add({
-          ...folder,
-          createdAt: Date.now(),
+      const { folders } = await credentialVaultService.listFolders(vaultId);
+      const existing = await localDB.folders.where('vaultId').equals(vaultId).toArray();
+      for (const folder of existing) {
+        await localDB.folders.delete(folder.id);
+      }
+      for (const folder of folders) {
+        await localDB.folders.put({
+          id: folder.id,
+          name: folder.name,
+          icon: resolveFolderIconId(folder.icon),
+          parentId: folder.parentId,
+          vaultId: folder.vaultId,
+          createdAt: new Date(folder.createdAt).getTime() || Date.now(),
+          sortOrder: folder.sortOrder,
         });
       }
     } catch (err) {
-      console.error('Failed to seed default folders', err);
+      console.error('Failed to sync vault folders from database', err);
     }
   };
 
   const seedDefaultCredentials = async (key: Uint8Array) => {
+    if (!isDemoVaultMode) return;
     try {
       // Seed default categories
       try {
@@ -631,8 +640,10 @@ export default function CredentialVaultPage() {
       // Argon2 key derivation bound to user specific salt string
       const key = await deriveMasterKey(masterPassword, `user-salt-${user.uid}`);
       setDerivedKey(normalizeDerivedKey(key));
-      await seedDefaultCredentials(key);
-      await seedDefaultFolders();
+      if (isDemoVaultMode) {
+        await seedDefaultCredentials(key);
+      }
+      await syncFoldersFromServer('local');
       setIsLocked(false);
       logAudit({ module: 'credentials', action: 'vault_unlocked', details: { vaultType: 'personal_local' } });
       toast.success("Sovereign Personal Vault Unlocked Successfully!");
@@ -828,6 +839,14 @@ export default function CredentialVaultPage() {
     const creds = await localDB.credentials.where('vaultId').equals(vaultId).toArray();
     for (const cred of creds) {
       if (cred.id != null) await localDB.credentials.delete(Number(cred.id));
+    }
+    try {
+      const { folders } = await credentialVaultService.listFolders(vaultId);
+      for (const folder of folders) {
+        await credentialVaultService.deleteFolder(folder.id);
+      }
+    } catch (err) {
+      console.warn('Could not purge server vault folders', err);
     }
     const folders = await localDB.folders.where('vaultId').equals(vaultId).toArray();
     for (const folder of folders) {
@@ -1198,27 +1217,43 @@ export default function CredentialVaultPage() {
     setIsCreatingEntry(false);
   }, []);
 
+  useEffect(() => {
+    if (!isLocked && user && activeVaultId) {
+      void syncFoldersFromServer(activeVaultId);
+    }
+  }, [isLocked, user, activeVaultId]);
+
   const handleCreateFolder = async (payload: {
     name: string;
     icon: VaultFolderIconId;
     parentId: string | null;
   }) => {
-    const folder: StoredVaultFolder = {
-      id: createVaultFolderId(),
-      name: payload.name,
-      icon: payload.icon,
-      parentId: payload.parentId,
-      vaultId: activeVaultId,
-      createdAt: Date.now(),
-    };
-    await localDB.folders.add(folder);
-    logAudit({
-      module: 'credentials',
-      action: 'folder_created',
-      details: { name: folder.name, vaultId: folder.vaultId, parentId: folder.parentId },
-    });
-    toast.success(`Ordner „${folder.name}“ wurde angelegt.`);
-    setActiveFolderId(folder.id);
+    try {
+      const { folder } = await credentialVaultService.createFolder({
+        name: payload.name,
+        icon: payload.icon,
+        parentId: payload.parentId,
+        vaultId: activeVaultId,
+      });
+      await localDB.folders.put({
+        id: folder.id,
+        name: folder.name,
+        icon: resolveFolderIconId(folder.icon),
+        parentId: folder.parentId,
+        vaultId: folder.vaultId,
+        createdAt: new Date(folder.createdAt).getTime() || Date.now(),
+        sortOrder: folder.sortOrder,
+      });
+      logAudit({
+        module: 'credentials',
+        action: 'folder_created',
+        details: { name: folder.name, vaultId: folder.vaultId, parentId: folder.parentId },
+      });
+      toast.success(`Ordner „${folder.name}“ wurde angelegt.`);
+      setActiveFolderId(folder.id);
+    } catch (err: any) {
+      toast.error(err?.message || 'Ordner konnte nicht angelegt werden.');
+    }
   };
 
   // Compute stats for overview cards

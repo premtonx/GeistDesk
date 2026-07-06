@@ -13,6 +13,160 @@ import { routeParam } from '../lib/route-params.js';
 
 const router = Router();
 const COLLECTION = 'geist_vault_portfolios';
+const FOLDER_COLLECTION = 'vault_folders';
+
+const folderIconSchema = z.enum(['folder', 'lock', 'server', 'key', 'database', 'cloud']);
+
+const createFolderSchema = z.object({
+  name: z.string().min(1).max(120),
+  icon: folderIconSchema.default('folder'),
+  parentId: z.string().nullable().optional(),
+  vaultId: z.string().min(1).max(128),
+  sortOrder: z.number().int().min(0).optional(),
+});
+
+const updateFolderSchema = createFolderSchema.partial().omit({ vaultId: true });
+
+function folderId(): string {
+  return `folder-${crypto.randomUUID()}`;
+}
+
+async function userCanAccessVaultFolder(vaultId: string, userId: string, isAdmin: boolean): Promise<boolean> {
+  if (isAdmin) return true;
+  if (vaultId === 'local' || vaultId === 'shared' || vaultId === 'shared-company') return true;
+  const portfolio = await getDocDirect(COLLECTION, vaultId);
+  if (!portfolio) return vaultId === 'local';
+  return userCanAccessPortfolio(portfolio, userId, false);
+}
+
+/** GET /api/credential-vault/folders — list folders for a vault partition */
+router.get('/folders', authenticate, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const vaultId = String(req.query.vaultId || 'local');
+    const userId = req.user!.id;
+    const isAdmin = req.user!.role === 'SYSTEM_ADMIN' || (req.user as any).is_admin === true;
+
+    if (!(await userCanAccessVaultFolder(vaultId, userId, isAdmin))) {
+      return res.status(403).json({ error: 'Insufficient permissions for this vault.' });
+    }
+
+    const all = await getDocsDirect(FOLDER_COLLECTION, [{ type: 'where', field: 'vaultId', op: '==', value: vaultId }]);
+    const folders = all.sort(
+      (a: any, b: any) =>
+        (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0) || String(a.name).localeCompare(String(b.name)),
+    );
+    return res.json({ folders });
+  } catch (err: any) {
+    console.error('[credential-vault] list folders', err);
+    return res.status(500).json({ error: 'Failed to list vault folders' });
+  }
+});
+
+/** POST /api/credential-vault/folders — create folder */
+router.post('/folders', authenticate, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const parsed = createFolderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Invalid input' });
+    }
+
+    const userId = req.user!.id;
+    const isAdmin = req.user!.role === 'SYSTEM_ADMIN' || (req.user as any).is_admin === true;
+    const { vaultId, parentId = null, name, icon, sortOrder } = parsed.data;
+
+    if (!(await userCanAccessVaultFolder(vaultId, userId, isAdmin))) {
+      return res.status(403).json({ error: 'Insufficient permissions for this vault.' });
+    }
+
+    if (parentId) {
+      const parent = await getDocDirect(FOLDER_COLLECTION, parentId);
+      if (!parent || parent.vaultId !== vaultId) {
+        return res.status(400).json({ error: 'Parent folder not found in this vault.' });
+      }
+    }
+
+    const id = folderId();
+    const now = new Date().toISOString();
+    const data = {
+      name,
+      icon,
+      parentId,
+      vaultId,
+      sortOrder: sortOrder ?? 0,
+      createdBy: userId,
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    await setDocDirect(FOLDER_COLLECTION, id, data);
+    const folder = await getDocDirect(FOLDER_COLLECTION, id);
+    return res.status(201).json({ folder });
+  } catch (err: any) {
+    console.error('[credential-vault] create folder', err);
+    return res.status(500).json({ error: 'Failed to create vault folder' });
+  }
+});
+
+/** PUT /api/credential-vault/folders/:id */
+router.put('/folders/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const id = routeParam(req.params.id);
+    const parsed = updateFolderSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Invalid input' });
+    }
+
+    const existing = await getDocDirect(FOLDER_COLLECTION, id);
+    if (!existing) return res.status(404).json({ error: 'Folder not found' });
+
+    const userId = req.user!.id;
+    const isAdmin = req.user!.role === 'SYSTEM_ADMIN' || (req.user as any).is_admin === true;
+    if (!(await userCanAccessVaultFolder(String(existing.vaultId), userId, isAdmin))) {
+      return res.status(403).json({ error: 'Insufficient permissions for this vault.' });
+    }
+
+    if (parsed.data.parentId) {
+      const parent = await getDocDirect(FOLDER_COLLECTION, parsed.data.parentId);
+      if (!parent || parent.vaultId !== existing.vaultId) {
+        return res.status(400).json({ error: 'Parent folder not found in this vault.' });
+      }
+      if (parsed.data.parentId === id) {
+        return res.status(400).json({ error: 'A folder cannot be its own parent.' });
+      }
+    }
+
+    await updateDocDirect(FOLDER_COLLECTION, id, {
+      ...parsed.data,
+      updatedAt: new Date().toISOString(),
+    });
+    const folder = await getDocDirect(FOLDER_COLLECTION, id);
+    return res.json({ folder });
+  } catch (err: any) {
+    console.error('[credential-vault] update folder', err);
+    return res.status(500).json({ error: 'Failed to update vault folder' });
+  }
+});
+
+/** DELETE /api/credential-vault/folders/:id */
+router.delete('/folders/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const id = routeParam(req.params.id);
+    const existing = await getDocDirect(FOLDER_COLLECTION, id);
+    if (!existing) return res.status(404).json({ error: 'Folder not found' });
+
+    const userId = req.user!.id;
+    const isAdmin = req.user!.role === 'SYSTEM_ADMIN' || (req.user as any).is_admin === true;
+    if (!(await userCanAccessVaultFolder(String(existing.vaultId), userId, isAdmin))) {
+      return res.status(403).json({ error: 'Insufficient permissions for this vault.' });
+    }
+
+    await deleteDocDirect(FOLDER_COLLECTION, id);
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error('[credential-vault] delete folder', err);
+    return res.status(500).json({ error: 'Failed to delete vault folder' });
+  }
+});
 
 const assignmentSchema = z.object({
   userId: z.string().min(1),

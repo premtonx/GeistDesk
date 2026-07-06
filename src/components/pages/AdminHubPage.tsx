@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
 import { 
   Shield, 
@@ -275,39 +276,36 @@ export default function AdminHubPage() {
 
   // Unified Live Telemetry control state
   const [telemetry, setTelemetry] = useState({
-    activeAgents: 12,
-    ticketsProcessed: 1284,
-    assetsManaged: 4532,
-    vaultSecrets: 932,
-    knowledgeArticles: 1209,
-    aiRequests: 18241,
-    systemHealth: 99.98,
-    latencyMs: 12
+    activeAgents: 0,
+    ticketsProcessed: 0,
+    assetsManaged: 0,
+    vaultSecrets: 0,
+    knowledgeArticles: 0,
+    aiRequests: 0,
+    systemHealth: 100,
+    latencyMs: 0,
   });
+  const [telemetryLoading, setTelemetryLoading] = useState(true);
 
-  // Dynamic simulation to make control plane feel alive and realistic (like Datadog/Cloudflare)
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTelemetry(prev => {
-        // Randomly adjust AI requests (upward trend)
-        const newAiRequests = prev.aiRequests + Math.floor(Math.random() * 3) + 1;
-        // Minor health fluctuation
-        const healthFluc = 99.98 + (Math.random() * 0.01 - 0.005);
-        const parsedHealth = parseFloat(Math.min(100, Math.max(99.90, healthFluc)).toFixed(2));
-        // Random minor latency change
-        const rawLatency = prev.latencyMs + Math.floor(Math.random() * 3) - 1;
-        const validLatency = Math.min(25, Math.max(8, rawLatency));
-
-        return {
-          ...prev,
-          aiRequests: newAiRequests,
-          systemHealth: parsedHealth,
-          latencyMs: validLatency
-        };
-      });
-    }, 4000);
-
-    return () => clearInterval(interval);
+    let active = true;
+    const loadStats = async () => {
+      try {
+        const res = await axios.get('/api/admin/hub-stats');
+        if (!active) return;
+        setTelemetry(res.data);
+      } catch (err) {
+        console.warn('Admin hub stats unavailable', err);
+      } finally {
+        if (active) setTelemetryLoading(false);
+      }
+    };
+    void loadStats();
+    const interval = setInterval(loadStats, 30000);
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, []);
 
   return (

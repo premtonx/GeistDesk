@@ -38,6 +38,26 @@ export interface AccessibleVaultPortfolio extends VaultPortfolio {
   userRole: VaultPortfolioRole;
 }
 
+export interface VaultFolderRecord {
+  id: string;
+  name: string;
+  icon: string;
+  parentId: string | null;
+  vaultId: string;
+  sortOrder?: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string;
+}
+
+export interface VaultFolderInput {
+  name: string;
+  icon?: string;
+  parentId?: string | null;
+  vaultId: string;
+  sortOrder?: number;
+}
+
 const API_BASE = '/api/credential-vault';
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
@@ -80,6 +100,24 @@ export const credentialVaultService = {
       method: 'PUT',
       body: JSON.stringify({ assignments }),
     }),
+
+  listFolders: (vaultId: string) =>
+    apiFetch<{ folders: VaultFolderRecord[] }>(`/folders?vaultId=${encodeURIComponent(vaultId)}`),
+
+  createFolder: (input: VaultFolderInput) =>
+    apiFetch<{ folder: VaultFolderRecord }>('/folders', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+
+  updateFolder: (id: string, input: Partial<Omit<VaultFolderInput, 'vaultId'>>) =>
+    apiFetch<{ folder: VaultFolderRecord }>(`/folders/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+
+  deleteFolder: (id: string) =>
+    apiFetch<{ success: boolean }>(`/folders/${id}`, { method: 'DELETE' }),
 };
 
 export const VAULT_ROLE_LABELS: Record<VaultPortfolioRole, string> = {

@@ -1,0 +1,151 @@
+/**
+ * Idempotent seeding of workspace platform defaults into PostgreSQL.
+ * Invoked from src/db/seed.ts after users/tickets are upserted.
+ */
+
+import type pg from 'pg';
+import {
+  PLATFORM_DEFAULT_VAULT_FOLDERS,
+  buildDefaultModuleConfigSeed,
+  buildDefaultPersonaSkills,
+  buildDefaultPromptTemplates,
+} from '../data/platform-defaults.js';
+
+async function batchUpsert(
+  client: pg.PoolClient,
+  collection: string,
+  rows: Array<{ id: string; [key: string]: unknown }>,
+): Promise<number> {
+  if (rows.length === 0) return 0;
+
+  const valueClauses: string[] = [];
+  const params: unknown[] = [];
+  let p = 1;
+
+  for (const row of rows) {
+    const { id, ...rest } = row;
+    valueClauses.push(`($${p++}, $${p++}, $${p++})`);
+    params.push(collection, id, rest);
+  }
+
+  const sql = `
+    INSERT INTO geistdesk_documents (collection, id, data)
+    VALUES ${valueClauses.join(', ')}
+    ON CONFLICT (collection, id) DO UPDATE
+      SET data = EXCLUDED.data, updated_at = NOW()
+  `;
+  await client.query(sql, params);
+  return rows.length;
+}
+
+export async function seedModuleConfig(client: pg.PoolClient): Promise<boolean> {
+  const existing = await client.query(
+    `SELECT id FROM geistdesk_documents WHERE collection = 'module_config' AND id = 'global' LIMIT 1`,
+  );
+  if (existing.rowCount && existing.rowCount > 0) return false;
+
+  const now = new Date().toISOString();
+  await batchUpsert(client, 'module_config', [
+    {
+      id: 'global',
+      ...buildDefaultModuleConfigSeed(),
+      createdAt: now,
+      updatedAt: now,
+    },
+  ]);
+  return true;
+}
+
+export async function seedVaultFolders(client: pg.PoolClient): Promise<number> {
+  const now = new Date().toISOString();
+  const rows = PLATFORM_DEFAULT_VAULT_FOLDERS.map((folder) => ({
+    id: folder.id,
+    name: folder.name,
+    icon: folder.icon,
+    parentId: folder.parentId,
+    vaultId: folder.vaultId,
+    sortOrder: folder.sortOrder ?? 0,
+    createdAt: now,
+    updatedAt: now,
+  }));
+  return batchUpsert(client, 'vault_folders', rows);
+}
+
+export async function seedPromptTemplates(client: pg.PoolClient): Promise<number> {
+  let inserted = 0;
+  for (const tpl of buildDefaultPromptTemplates()) {
+    const existing = await client.query(
+      `SELECT id FROM ai_prompt_templates WHERE workspace_id = 'default' AND feature = $1 LIMIT 1`,
+      [tpl.feature],
+    );
+    if (existing.rowCount && existing.rowCount > 0) continue;
+
+    const res = await client.query(
+      `INSERT INTO ai_prompt_templates (workspace_id, feature, name, current_version, body, updated_by, updated_at)
+       VALUES ('default', $1, $2, 1, $3, 'system', NOW())
+       RETURNING id`,
+      [tpl.feature, tpl.name, tpl.body],
+    );
+    const templateId = res.rows[0]?.id;
+    if (templateId) {
+      await client.query(
+        `INSERT INTO ai_prompt_versions (template_id, feature, version_number, body, change_note, created_by)
+         VALUES ($1, $2, 1, $3, 'Deutsche Baseline-Lokalisierung', 'system')`,
+        [templateId, tpl.feature, tpl.body],
+      );
+      inserted += 1;
+    }
+  }
+  return inserted;
+}
+
+export async function seedOrchestratorPersonaSkills(client: pg.PoolClient): Promise<boolean> {
+  const personaSkills = buildDefaultPersonaSkills();
+  const existing = await client.query(
+    `SELECT persona_skills_json FROM ai_orchestrator_config WHERE workspace_id = 'default' LIMIT 1`,
+  );
+
+  if (!existing.rowCount || existing.rowCount === 0) {
+    await client.query(
+      `INSERT INTO ai_orchestrator_config (workspace_id, persona_skills_json, created_by, updated_by, updated_at)
+       VALUES ('default', $1::jsonb, 'system', 'system', NOW())
+       ON CONFLICT (workspace_id) DO NOTHING`,
+      [JSON.stringify(personaSkills)],
+    );
+    return true;
+  }
+
+  const current = existing.rows[0]?.persona_skills_json;
+  const parsed =
+    current == null
+      ? {}
+      : typeof current === 'string'
+        ? (JSON.parse(current) as Record<string, unknown>)
+        : (current as Record<string, unknown>);
+
+  const hasAnySkill = Object.values(parsed).some(
+    (skill) => skill && typeof skill === 'object' && String((skill as { skillsContent?: string }).skillsContent || '').trim(),
+  );
+  if (hasAnySkill) return false;
+
+  await client.query(
+    `UPDATE ai_orchestrator_config
+     SET persona_skills_json = $1::jsonb, updated_by = 'system', updated_at = NOW()
+     WHERE workspace_id = 'default'`,
+    [JSON.stringify(personaSkills)],
+  );
+  return true;
+}
+
+export async function seedAllPlatformDefaults(client: pg.PoolClient): Promise<{
+  moduleConfig: boolean;
+  vaultFolders: number;
+  promptTemplates: number;
+  personaSkills: boolean;
+}> {
+  const moduleConfig = await seedModuleConfig(client);
+  const vaultFolders = await seedVaultFolders(client);
+  const promptTemplates = await seedPromptTemplates(client);
+  const personaSkills = await seedOrchestratorPersonaSkills(client);
+  return { moduleConfig, vaultFolders, promptTemplates, personaSkills };
+}

@@ -186,29 +186,8 @@ export const SEEDED_CREDENTIALS: SeedItem[] = [
   },
 ];
 
-export const SEEDED_FOLDERS = [
-  {
-    id: 'folder-seed-prod',
-    name: 'Produktion',
-    icon: 'folder' as const,
-    parentId: null,
-    vaultId: 'local',
-  },
-  {
-    id: 'folder-seed-vpn',
-    name: 'VPN & Netzwerk',
-    icon: 'lock' as const,
-    parentId: null,
-    vaultId: 'local',
-  },
-  {
-    id: 'folder-seed-eu',
-    name: 'EU-West',
-    icon: 'server' as const,
-    parentId: 'folder-seed-prod',
-    vaultId: 'local',
-  },
-];
+/** @deprecated Vault folders are seeded via `npm run seed` into PostgreSQL (`vault_folders`). */
+export const SEEDED_FOLDERS: never[] = [];
 
 export const MOCK_CHROME_EXTENSION = {
   status: 'Installed',

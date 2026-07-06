@@ -23,7 +23,9 @@ import {
 } from '../../lib/module-config';
 import { useWorkspaceModuleConfig } from '../../hooks/useWorkspaceModuleConfig';
 import {
-  DEFAULT_SUPPORTED_LANGUAGES,
+  PLATFORM_DEFAULT_LANGUAGES,
+} from '../../data/platform-defaults';
+import {
   ISO_LANGUAGE_PRESETS,
   getActiveSupportedLanguages,
   inferLocaleFromFilename,
@@ -139,7 +141,7 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
   };
 
   const resetToDefaults = async () => {
-    const saved = await persist({ ...config, languages: DEFAULT_SUPPORTED_LANGUAGES.map((l) => ({ ...l })) });
+    const saved = await persist({ ...config, languages: PLATFORM_DEFAULT_LANGUAGES.map((l) => ({ ...l })) });
     if (saved) {
       toast.success(t('adminHub.polyglot.reset', 'Restored default language roster.'));
     }
