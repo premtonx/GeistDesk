@@ -85,15 +85,21 @@
   },
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild src/db/seed.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/seed.cjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild src/db/migrate.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/migrate.cjs && esbuild src/db/seed.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/seed.cjs",
     "build:strict": "npm run lint && node scripts/verify-no-react-namespace.mjs && npm run build && node scripts/verify-production-build.mjs",
     "verify:license": "node scripts/verify-license-compliance.mjs",
     "verify:hybrid-crypto": "tsx scripts/verify-hybrid-crypto.mjs",
     "verify:release": "node scripts/verify-license-compliance.mjs && node scripts/verify-no-react-namespace.mjs && node scripts/verify-production-build.mjs",
     "start": "node dist/server.cjs",
-    "start:prod": "node dist/seed.cjs && node dist/server.cjs",
+    "db:migrate": "tsx src/db/migrate.ts",
+    "db:migrate:prod": "node dist/migrate.cjs",
+    "db:deploy": "npm run db:migrate",
+    "db:deploy:prod": "npm run db:migrate:prod",
     "seed": "tsx src/db/seed.ts",
     "seed:prod": "node dist/seed.cjs",
+    "prod:bootstrap": "npm run db:deploy:prod && npm run seed:prod",
+    "prod:start": "npm run prod:bootstrap && node dist/server.cjs",
+    "start:prod": "npm run prod:start",
     "lint": "tsc --noEmit",
     "test:lifecycle": "tsx scripts/test-ai-lifecycle.ts"
   }

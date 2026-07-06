@@ -1,8 +1,9 @@
 #!/bin/sh
-# GeistDesk production container entrypoint.
-# 1. Wait for PostgreSQL to accept connections
-# 2. Run idempotent platform seed (users/tickets/defaults)
-# 3. Start the Express gateway
+# GeistDesk production container entrypoint — zero-config one-command bootstrap:
+#   1. Wait for PostgreSQL
+#   2. Deploy schema (idempotent DDL via dist/migrate.cjs)
+#   3. Seed German platform defaults (idempotent via dist/seed.cjs)
+#   4. Start the Express gateway (PID 1 via exec)
 set -eu
 
 echo "[entrypoint] GeistDesk production bootstrap starting..."
@@ -38,8 +39,11 @@ const pool = new Pool({ connectionString });
 })();
 NODE
 
-echo "[entrypoint] Running idempotent database seed (node dist/seed.cjs)..."
-node dist/seed.cjs
+echo "[entrypoint] Step 1/3 — deploying database schema (npm run db:deploy:prod)..."
+npm run db:deploy:prod
 
-echo "[entrypoint] Starting application server (node dist/server.cjs)..."
+echo "[entrypoint] Step 2/3 — running idempotent platform seed (npm run seed:prod)..."
+npm run seed:prod
+
+echo "[entrypoint] Step 3/3 — starting application server (node dist/server.cjs)..."
 exec node dist/server.cjs

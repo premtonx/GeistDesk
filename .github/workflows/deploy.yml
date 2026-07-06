@@ -148,7 +148,8 @@ jobs:
               exit 1
             fi
 
-            # Database seeding runs automatically in scripts/docker-entrypoint.sh on every container start.
+            # Container bootstrap (scripts/docker-entrypoint.sh):
+            #   wait for Postgres → db:deploy:prod → seed:prod → server
 
             echo "Verifying production health endpoint..."
             for i in 1 2 3 4 5 6 7 8 9 10; do
