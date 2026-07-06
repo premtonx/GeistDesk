@@ -20,8 +20,11 @@ RUN npm ci --omit=dev --dangerously-allow-all-scripts --no-audit
 # Copy built artifacts from the build stage
 COPY --from=builder /app/dist ./dist
 
+# Production entrypoint: wait for DB → seed → start server
+COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Standard express server port configuration
 EXPOSE 3000
 
-# Set the start command to launch our bundled high-performance commonJS node server code
-CMD ["node", "dist/server.cjs"]
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

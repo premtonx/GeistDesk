@@ -148,7 +148,21 @@ jobs:
               exit 1
             fi
 
-            docker compose exec -T geistdesk-gateway node dist/seed.cjs
+            # Database seeding runs automatically in scripts/docker-entrypoint.sh on every container start.
+
+            echo "Verifying production health endpoint..."
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -fsS "https://app.premtonx.cloud/api/health" >/dev/null; then
+                echo "Health check OK (https://app.premtonx.cloud/api/health)"
+                break
+              fi
+              if [ "$i" -eq 10 ]; then
+                echo "FATAL: Health check did not return 200 after deploy"
+                exit 1
+              fi
+              echo "Health check attempt ${i}/10 failed — retrying in 5s..."
+              sleep 5
+            done
 
             echo "=== Deploy success: ${BUNDLE} @ ${DEPLOY_COMMIT} ==="
             echo "Cache busting: Docker --no-cache rebuild + hashed assets + Cache-Control: no-store on index.html"

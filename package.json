@@ -91,6 +91,7 @@
     "verify:hybrid-crypto": "tsx scripts/verify-hybrid-crypto.mjs",
     "verify:release": "node scripts/verify-license-compliance.mjs && node scripts/verify-no-react-namespace.mjs && node scripts/verify-production-build.mjs",
     "start": "node dist/server.cjs",
+    "start:prod": "node dist/seed.cjs && node dist/server.cjs",
     "seed": "tsx src/db/seed.ts",
     "seed:prod": "node dist/seed.cjs",
     "lint": "tsc --noEmit",
