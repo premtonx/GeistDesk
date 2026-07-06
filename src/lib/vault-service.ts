@@ -76,6 +76,12 @@ export const credentialVaultService = {
 
   deletePortfolio: (id: string) =>
     apiFetch<{ success: boolean }>(`/portfolios/${id}`, { method: 'DELETE' }),
+
+  shareVault: (id: string, assignments: VaultPortfolioAssignment[]) =>
+    apiFetch<{ portfolio: VaultPortfolio }>(`/portfolios/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({ assignments }),
+    }),
 };
 
 export const VAULT_ROLE_LABELS: Record<VaultPortfolioRole, string> = {

@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import crypto from 'crypto';
-import { authenticate, requireRole } from '../middleware/authMiddleware.js';
+import { authenticate } from '../middleware/authMiddleware.js';
 import {
   getDocDirect,
   getDocsDirect,
@@ -154,23 +154,26 @@ router.put('/portfolios/:id', authenticate, async (req: Request, res: Response):
   }
 });
 
-/** DELETE /api/credential-vault/portfolios/:id */
-router.delete(
-  '/portfolios/:id',
-  authenticate,
-  requireRole(['SYSTEM_ADMIN']),
-  async (req: Request, res: Response): Promise<any> => {
-    try {
-      const { id } = req.params;
-      const existing = await getDocDirect(COLLECTION, id);
-      if (!existing) return res.status(404).json({ error: 'Portfolio not found' });
-      await deleteDocDirect(COLLECTION, id);
-      return res.json({ success: true });
-    } catch (err: any) {
-      console.error('[credential-vault] delete portfolio', err);
-      return res.status(500).json({ error: 'Failed to delete vault portfolio' });
+/** DELETE /api/credential-vault/portfolios/:id — owner or system admin */
+router.delete('/portfolios/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { id } = req.params;
+    const existing = await getDocDirect(COLLECTION, id);
+    if (!existing) return res.status(404).json({ error: 'Portfolio not found' });
+
+    const userId = req.user!.id;
+    const isAdmin = req.user!.role === 'SYSTEM_ADMIN' || (req.user as any).is_admin === true;
+    const userRole = resolveUserRole(existing, userId, isAdmin);
+    if (!isAdmin && userRole !== 'Besitzer') {
+      return res.status(403).json({ error: 'Only the vault owner can delete this portfolio' });
     }
-  },
-);
+
+    await deleteDocDirect(COLLECTION, id);
+    return res.json({ success: true });
+  } catch (err: any) {
+    console.error('[credential-vault] delete portfolio', err);
+    return res.status(500).json({ error: 'Failed to delete vault portfolio' });
+  }
+});
 
 export default router;

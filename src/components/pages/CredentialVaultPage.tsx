@@ -35,7 +35,7 @@ import {
   File,
   Tag,
   ExternalLink,
-  User,
+  User as UserIcon,
   Sliders,
   History,
   CheckSquare,
@@ -83,6 +83,7 @@ import { useAuth, useAdmin } from '../../lib/hooks';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { ModuleToolbarSelect } from '../ui/module-page';
 import { logAudit } from '../../services/auditService';
+import { userService } from '../../services/userService';
 import { 
   collection, 
   query, 
@@ -119,6 +120,9 @@ import { VaultImportDialog } from '../vault/VaultImportDialog';
 import { VaultFolderCreateModal } from '../vault/VaultFolderCreateModal';
 import { VaultFolderBreadcrumbStrip } from '../vault/VaultFolderBreadcrumbStrip';
 import { VaultCredentialEditSidebar } from '../vault/VaultCredentialEditSidebar';
+import { VaultCreateInstancePanel } from '../vault/VaultCreateInstancePanel';
+import { VaultShareAccessPanel } from '../vault/VaultShareAccessPanel';
+import { VaultDeleteConfirmBanner } from '../vault/VaultDeleteConfirmBanner';
 import {
   createVaultFolderId,
   resolveCredFolderId,
@@ -140,7 +144,9 @@ import {
   roleToDefaultPermission,
   roleToPermissionKey,
   type AccessibleVaultPortfolio,
+  type VaultPortfolioAssignment,
 } from '../../lib/vault-service';
+import type { User as WorkspaceUser } from '../../types';
 import { processVaultImport, type VaultImportFormat } from '../../lib/vault-import-processor';
 import {
   buildVaultProvenance,
@@ -293,11 +299,18 @@ export default function CredentialVaultPage() {
   const [dynamicPortfolios, setDynamicPortfolios] = useState<AccessibleVaultPortfolio[]>([]);
   const [isImportOpen, setIsImportOpen] = useState(false);
   const [isImporting, setIsImporting] = useState(false);
-  const [isCreateVaultOpen, setIsCreateVaultOpen] = useState(false);
+  const [isCreatingVaultInstance, setIsCreatingVaultInstance] = useState(false);
   const [newVaultName, setNewVaultName] = useState('');
   const [newVaultDescription, setNewVaultDescription] = useState('');
+  const [newVaultEmoji, setNewVaultEmoji] = useState('🔒');
   const [newVaultScope, setNewVaultScope] = useState<VaultAuthorityScope>('personal');
-  const [isCreatingVault, setIsCreatingVault] = useState(false);
+  const [isSubmittingVaultCreate, setIsSubmittingVaultCreate] = useState(false);
+  const [vaultShareOpen, setVaultShareOpen] = useState(false);
+  const [vaultDeleteOpen, setVaultDeleteOpen] = useState(false);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
+  const [isDeletingVault, setIsDeletingVault] = useState(false);
+  const [isSavingShare, setIsSavingShare] = useState(false);
+  const [workspaceUsers, setWorkspaceUsers] = useState<WorkspaceUser[]>([]);
   const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
   const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
   const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null);
@@ -322,6 +335,29 @@ export default function CredentialVaultPage() {
     ...VAULT_DEFINITIONS,
     ...portfolioVaultDefinitions.filter((v) => !staticVaultIds.has(v.id)),
   ];
+
+  const activePortfolio = useMemo(
+    () => dynamicPortfolios.find((p) => p.id === activeVaultId) ?? null,
+    [dynamicPortfolios, activeVaultId],
+  );
+
+  const isVaultOwner = activePortfolio?.userRole === 'Besitzer';
+
+  const openCreateVaultInstance = useCallback(() => {
+    setIsCreatingVaultInstance(true);
+    setVaultShareOpen(false);
+    setVaultDeleteOpen(false);
+    setIsCreatingEntry(false);
+    setEditingCred(null);
+  }, []);
+
+  const closeCreateVaultInstance = useCallback(() => {
+    setIsCreatingVaultInstance(false);
+    setNewVaultName('');
+    setNewVaultDescription('');
+    setNewVaultEmoji('🔒');
+    setNewVaultScope('personal');
+  }, []);
 
   const loadAccessiblePortfolios = async () => {
     try {
@@ -729,30 +765,92 @@ export default function CredentialVaultPage() {
     }
   };
 
-  const handleCreateVaultInstance = async () => {
+  const handleCreateVaultInstance = async (e?: FormEvent) => {
+    if (e) e.preventDefault();
     if (!newVaultName.trim()) {
       toast.error(t('vault.create.nameRequired', 'Vault name is required'));
       return;
     }
-    setIsCreatingVault(true);
+    setIsSubmittingVaultCreate(true);
     try {
       const { portfolio } = await credentialVaultService.createPortfolio({
         name: newVaultName.trim(),
         description: newVaultDescription.trim(),
+        emoji: newVaultEmoji.trim() || '🔒',
         scope: newVaultScope,
       });
       await loadAccessiblePortfolios();
       handleVaultTabChange(portfolio.id);
-      setNewVaultName('');
-      setNewVaultDescription('');
-      setNewVaultScope('personal');
-      setIsCreateVaultOpen(false);
+      closeCreateVaultInstance();
       toast.success(t('vault.create.success', 'New vault instance created'));
       logAudit({ module: 'credentials', action: 'vault_instance_created', details: { vaultId: portfolio.id } });
     } catch (err: any) {
       toast.error(err.message || t('vault.create.failed', 'Failed to create vault'));
     } finally {
-      setIsCreatingVault(false);
+      setIsSubmittingVaultCreate(false);
+    }
+  };
+
+  const openVaultSharePanel = useCallback(async () => {
+    setVaultShareOpen(true);
+    setVaultDeleteOpen(false);
+    setIsCreatingVaultInstance(false);
+    try {
+      const agents = await userService.getAgents();
+      setWorkspaceUsers(agents);
+    } catch {
+      setWorkspaceUsers([]);
+    }
+  }, []);
+
+  const handleSaveVaultShare = async (assignments: VaultPortfolioAssignment[]) => {
+    if (!activePortfolio) return;
+    setIsSavingShare(true);
+    try {
+      await credentialVaultService.shareVault(activePortfolio.id, assignments);
+      await loadAccessiblePortfolios();
+      toast.success(t('vault.share.saved', 'Tresor-Zugriff gespeichert'));
+      setVaultShareOpen(false);
+      logAudit({
+        module: 'credentials',
+        action: 'vault_shared',
+        details: { vaultId: activePortfolio.id, memberCount: assignments.length },
+      });
+    } catch (err: any) {
+      toast.error(err.message || t('vault.share.failed', 'Freigabe konnte nicht gespeichert werden'));
+    } finally {
+      setIsSavingShare(false);
+    }
+  };
+
+  const purgeLocalVaultData = async (vaultId: string) => {
+    const creds = await localDB.credentials.where('vaultId').equals(vaultId).toArray();
+    for (const cred of creds) {
+      if (cred.id != null) await localDB.credentials.delete(Number(cred.id));
+    }
+    const folders = await localDB.folders.where('vaultId').equals(vaultId).toArray();
+    for (const folder of folders) {
+      await localDB.folders.delete(folder.id);
+    }
+  };
+
+  const handleDeleteVaultInstance = async () => {
+    if (!activePortfolio || deleteConfirmName.trim() !== activePortfolio.name.trim()) return;
+    setIsDeletingVault(true);
+    try {
+      await credentialVaultService.deletePortfolio(activePortfolio.id);
+      await purgeLocalVaultData(activePortfolio.id);
+      await loadAccessiblePortfolios();
+      setVaultDeleteOpen(false);
+      setVaultShareOpen(false);
+      setDeleteConfirmName('');
+      handleVaultTabChange('local');
+      toast.success(t('vault.delete.success', 'Tresor wurde gelöscht'));
+      logAudit({ module: 'credentials', action: 'vault_instance_deleted', details: { vaultId: activePortfolio.id } });
+    } catch (err: any) {
+      toast.error(err.message || t('vault.delete.failed', 'Tresor konnte nicht gelöscht werden'));
+    } finally {
+      setIsDeletingVault(false);
     }
   };
 
@@ -1080,6 +1178,9 @@ export default function CredentialVaultPage() {
       setActiveVaultId(id);
       setActiveVaultScope(vault?.scope ?? 'personal');
       setActiveFolderId(null);
+      setIsCreatingVaultInstance(false);
+      setVaultShareOpen(false);
+      setVaultDeleteOpen(false);
       setAccessCategory('all');
       setSelectedType('all');
       setSmartFilter(null);
@@ -1438,7 +1539,7 @@ export default function CredentialVaultPage() {
                   <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl text-xs" onClick={() => setVaultViewMode('emergency')}>
                     {t('vault.breakGlass', 'Break Glass Emergency')}
                   </Button>
-                  <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl text-xs" onClick={() => setIsCreateVaultOpen(true)}>
+                  <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl text-xs" onClick={openCreateVaultInstance}>
                     {t('vault.createVault', 'New Vault')}
                   </Button>
                   <VaultFabMenu onNewAsset={openNewAsset} onImport={() => setIsImportOpen(true)} />
@@ -1451,6 +1552,62 @@ export default function CredentialVaultPage() {
                 onVaultChange={handleVaultTabChange}
                 vaultCounts={vaultCounts}
               />
+
+              {isVaultOwner && activePortfolio ? (
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-xl text-[11px] font-semibold"
+                    onClick={openVaultSharePanel}
+                  >
+                    👥 {t('vault.share.button', 'Teilen')}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-8 rounded-xl text-[11px] font-semibold border-red-200 text-red-600 hover:bg-red-50"
+                    onClick={() => {
+                      setVaultDeleteOpen(true);
+                      setVaultShareOpen(false);
+                      setDeleteConfirmName('');
+                    }}
+                  >
+                    🗑️ {t('vault.delete.button', 'Tresor löschen')}
+                  </Button>
+                </div>
+              ) : null}
+
+              {vaultDeleteOpen && activePortfolio ? (
+                <VaultDeleteConfirmBanner
+                  vaultName={activePortfolio.name}
+                  confirmText={deleteConfirmName}
+                  onConfirmTextChange={setDeleteConfirmName}
+                  isDeleting={isDeletingVault}
+                  onConfirm={handleDeleteVaultInstance}
+                  onCancel={() => {
+                    setVaultDeleteOpen(false);
+                    setDeleteConfirmName('');
+                  }}
+                />
+              ) : null}
+
+              {vaultShareOpen && activePortfolio ? (
+                <VaultShareAccessPanel
+                  portfolio={activePortfolio}
+                  users={workspaceUsers}
+                  isSaving={isSavingShare}
+                  onSaveAssignments={handleSaveVaultShare}
+                  onClose={() => setVaultShareOpen(false)}
+                  onRequestDelete={() => {
+                    setVaultShareOpen(false);
+                    setVaultDeleteOpen(true);
+                    setDeleteConfirmName('');
+                  }}
+                />
+              ) : null}
 
               <VaultKpiCards
                 totalAssets={totalEntries}
@@ -1506,16 +1663,32 @@ export default function CredentialVaultPage() {
                 onFolderSelect={setActiveFolderId}
               />
 
-              <VaultAssetViews
-                assets={currentList}
-                viewMode={assetViewMode}
-                activeVaultId={activeVaultId}
-                onSelect={(cred) => setSelectedCredential(cred as Credential)}
-                onEdit={(cred) => openEditEntry(cred as Credential)}
-                onToggleFavorite={handleToggleFavorite}
-                onDecryptPassword={handleDecryptPassword}
-                onShare={() => toast.success(t('vault.shareAuthorized', 'Secure sharing protocols authorized.'))}
-              />
+              {isCreatingVaultInstance ? (
+                <VaultCreateInstancePanel
+                  name={newVaultName}
+                  description={newVaultDescription}
+                  scope={newVaultScope}
+                  emoji={newVaultEmoji}
+                  onNameChange={setNewVaultName}
+                  onDescriptionChange={setNewVaultDescription}
+                  onScopeChange={setNewVaultScope}
+                  onEmojiChange={setNewVaultEmoji}
+                  isSubmitting={isSubmittingVaultCreate}
+                  onSubmit={handleCreateVaultInstance}
+                  onCancel={closeCreateVaultInstance}
+                />
+              ) : (
+                <VaultAssetViews
+                  assets={currentList}
+                  viewMode={assetViewMode}
+                  activeVaultId={activeVaultId}
+                  onSelect={(cred) => setSelectedCredential(cred as Credential)}
+                  onEdit={(cred) => openEditEntry(cred as Credential)}
+                  onToggleFavorite={handleToggleFavorite}
+                  onDecryptPassword={handleDecryptPassword}
+                  onShare={() => toast.success(t('vault.shareAuthorized', 'Secure sharing protocols authorized.'))}
+                />
+              )}
             </div>
             )}
           </main>
@@ -1635,49 +1808,6 @@ export default function CredentialVaultPage() {
         onImport={handleImportCredentials}
         isImporting={isImporting}
       />
-
-      <Dialog open={isCreateVaultOpen} onOpenChange={setIsCreateVaultOpen}>
-        <DialogContent className="sm:max-w-md rounded-2xl">
-          <DialogHeader>
-            <DialogTitle>{t('vault.create.title', 'Create New Vault')}</DialogTitle>
-            <DialogDescription>
-              {t('vault.create.description', 'Create an independent KeePass-style vault instance with its own encryption salt.')}
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 py-2">
-            <Input
-              value={newVaultName}
-              onChange={(e) => setNewVaultName(e.target.value)}
-              placeholder={t('vault.create.namePlaceholder', 'Vault name')}
-              className="rounded-xl"
-            />
-            <Textarea
-              value={newVaultDescription}
-              onChange={(e) => setNewVaultDescription(e.target.value)}
-              placeholder={t('vault.create.descPlaceholder', 'Description (optional)')}
-              className="rounded-xl min-h-[64px] text-sm"
-            />
-            <ModuleToolbarSelect
-              value={newVaultScope}
-              onChange={(v) => setNewVaultScope(v as VaultAuthorityScope)}
-              aria-label={t('vault.portfolio.clearanceTier', 'Clearance tier')}
-            >
-              <option value="personal">{t('vault.authorities.personal', 'Personal')}</option>
-              <option value="department">{t('vault.authorities.department', 'Department')}</option>
-              <option value="team">{t('vault.authorities.team', 'Shared Team')}</option>
-              <option value="global">{t('vault.authorities.global', 'Company Global')}</option>
-            </ModuleToolbarSelect>
-          </div>
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsCreateVaultOpen(false)} disabled={isCreatingVault}>
-              {t('actions.cancel', 'Cancel')}
-            </Button>
-            <Button type="button" onClick={handleCreateVaultInstance} disabled={isCreatingVault}>
-              {isCreatingVault ? t('vault.create.creating', 'Creating...') : t('vault.create.button', 'Create Vault')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       <VaultFolderCreateModal
         open={isCreateFolderOpen}
