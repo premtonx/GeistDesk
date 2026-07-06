@@ -1,8 +1,8 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { db } from "../lib/firebase";
-import { collection, query, where, getDocs, limit, orderBy } from "firebase/firestore";
+import { collection, query, getDocs, limit, orderBy } from "firebase/firestore";
 import { Ticket } from "../types";
 import { getCachedLegacyAiConfig } from "../lib/aiOrchestratorClient";
+import { executeClientAiPrompt } from "../lib/client-ai-proxy";
 
 export interface SuggestedLink {
   ticketId: string;
@@ -12,26 +12,23 @@ export interface SuggestedLink {
 }
 
 /**
- * Uses Gemini or Ollama to find semantically related tickets for a given ticket.
+ * Uses the server AI lifecycle to find semantically related tickets for a given ticket.
  */
 export async function suggestNeuralLinks(currentTicket: Ticket): Promise<SuggestedLink[]> {
   const config = { ai: getCachedLegacyAiConfig() };
   const isGoogle = config.ai.sentimentModel === 'gemini-flash';
 
   try {
-    // 1. Fetch potential candidates (e.g., recent tickets in the last 30 days)
-    // For now, let's just get the 20 most recent tickets
     const ticketsRef = collection(db, 'tickets');
     const q = query(ticketsRef, orderBy('createdAt', 'desc'), limit(20));
     const snapshot = await getDocs(q);
-    
+
     const candidates = snapshot.docs
       .map(doc => ({ id: doc.id, ...doc.data() } as Ticket))
       .filter(t => t.id !== currentTicket.id);
 
     if (candidates.length === 0) return [];
 
-    // 2. Perform "Semantic Similarity" comparison
     const candidatesList = candidates.map(t => `- ID: ${t.id}, Subject: ${t.subject}, Content preview: ${t.description.slice(0, 200)}`).join('\n');
 
     const prompt = `System: You are an expert AI Support Auditor. Your task is to identify semantically related support tickets.
@@ -44,7 +41,7 @@ Description: ${currentTicket.description}
 Candidate Tickets:
 ${candidatesList}
 
-Compare the Current Ticket against the Candidate Tickets. 
+Compare the Current Ticket against the Candidate Tickets.
 Identify up to 3 tickets that are highly related.
 Return a JSON array of objects with:
 - ticketId: string
@@ -55,34 +52,12 @@ Return a JSON array of objects with:
     let suggestions: SuggestedLink[] = [];
 
     if (isGoogle) {
-      const apiKey = config.ai.apiKey || process.env.GEMINI_API_KEY || "";
-      if (!apiKey) {
-        console.warn("Neural Link suggestion skipped: Gemini API key not set");
-        return [];
-      }
-      const ai = new GoogleGenAI({ apiKey });
-      const result = await ai.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: [{ role: "user", parts: [{ text: prompt }] }],
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                ticketId: { type: Type.STRING },
-                subject: { type: Type.STRING },
-                confidence: { type: Type.NUMBER },
-                reason: { type: Type.STRING }
-              },
-              required: ["ticketId", "subject", "confidence", "reason"]
-            }
-          }
-        }
+      const result = await executeClientAiPrompt({
+        feature: 'escalation_analysis',
+        prompt: `${prompt}\nRespond with raw JSON array only.`,
+        ticketId: currentTicket.id,
       });
-
-      suggestions = JSON.parse(result.text || '[]') as SuggestedLink[];
+      suggestions = JSON.parse(result.output || '[]') as SuggestedLink[];
     } else {
       const endpoint = config.ai.localEndpoint || "http://localhost:11434/v1";
       const modelName = config.ai.sentimentModel === 'custom-local'

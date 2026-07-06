@@ -1,12 +1,9 @@
 import type { User, UserRole } from '../types';
 
-/** Beta-stage auto-admin: enabled unless explicitly disabled via env. */
+/** Beta-stage auto-admin — disabled by default; set VITE_BETA_AUTO_ADMIN=true to enable. */
 export function isBetaAutoAdminEnabled(): boolean {
   const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
-  if (env?.VITE_BETA_AUTO_ADMIN === 'false') {
-    return false;
-  }
-  return true;
+  return env?.VITE_BETA_AUTO_ADMIN === 'true';
 }
 
 export function buildBetaAdminRole(): UserRole {
@@ -65,7 +62,7 @@ export function applyBetaAdminSession(authUser: {
   return { profile, role };
 }
 
-/** Offline / timeout guest session: full admin so Admin Hub and KI Orchestrator stay reachable. */
+/** Offline / timeout guest session — only when demo mode is explicitly enabled. */
 export function buildGuestAdminProfile(authUser: {
   uid: string;
   email?: string | null;
@@ -107,6 +104,9 @@ export function applyGuestAdminSession(authUser: {
   displayName?: string | null;
   photoURL?: string | null;
 }) {
+  if (!isBetaAutoAdminEnabled()) {
+    return null;
+  }
   const profile = buildGuestAdminProfile(authUser);
   const role = buildGuestAdminRole();
   persistBetaAdminSession(profile, role);

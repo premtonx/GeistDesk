@@ -41,14 +41,12 @@ export interface AccessibleVaultPortfolio extends VaultPortfolio {
 const API_BASE = '/api/credential-vault';
 
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = localStorage.getItem('geistdesk_token') || sessionStorage.getItem('geistdesk_token');
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(init?.headers as Record<string, string> | undefined),
   };
-  if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(`${API_BASE}${path}`, { ...init, headers });
+  const res = await fetch(`${API_BASE}${path}`, { ...init, headers, credentials: 'include' });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     throw new Error(body.error || `Vault API error (${res.status})`);

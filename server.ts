@@ -1,5 +1,7 @@
 import "dotenv/config";
 import express from "express";
+import helmet from "helmet";
+import cookieParser from "cookie-parser";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import axios from "axios";
@@ -33,10 +35,71 @@ import credentialVaultRoutes from "./src/routes/credentialVaultRoutes.js";
 import { orchestratorEventBus } from "./src/lib/ai-orchestrator-events.js";
 import { hashPassword, verifyPassword } from "./src/lib/crypto.js";
 import { calculateCoverage, getDashboardData } from "./src/services/coverageEngine.js";
+import { assertDbCollectionAccess } from "./src/lib/db-access-policy.js";
+import { setSessionCookie, clearSessionCookie } from "./src/lib/session-cookie.js";
+import {
+  authRateLimiter,
+  vaultRevealRateLimiter,
+  webhookRateLimiter,
+  sandboxRateLimiter,
+} from "./src/middleware/rate-limiters.js";
 
 // Local session signing secret (required; authMiddleware enforces presence).
 const JWT_SECRET = process.env.JWT_SECRET as string;
 const SESSION_TTL = "12h";
+const IS_PROD = process.env.NODE_ENV === "production";
+
+function isPublicRegistrationAllowed(): boolean {
+  if (process.env.ALLOW_PUBLIC_REGISTRATION === "true") return true;
+  if (process.env.ALLOW_PUBLIC_REGISTRATION === "false") return false;
+  return !IS_PROD;
+}
+
+function isSandboxEnabled(): boolean {
+  if (process.env.ENABLE_SANDBOX === "true") return true;
+  if (process.env.ENABLE_SANDBOX === "false") return false;
+  return !IS_PROD;
+}
+
+function requireGraphClientStateSecret(): string {
+  const secret = process.env.GRAPH_CLIENT_STATE_SECRET;
+  if (!secret) {
+    if (IS_PROD) {
+      throw new Error("[Security] GRAPH_CLIENT_STATE_SECRET is required in production.");
+    }
+    console.warn("[Security] GRAPH_CLIENT_STATE_SECRET is not set — Graph webhooks are disabled in non-production.");
+    return "";
+  }
+  return secret;
+}
+
+function isPrivateNetworkUrl(urlString: string): boolean {
+  try {
+    const parsed = new URL(urlString);
+    const host = parsed.hostname.toLowerCase();
+    if (host === "localhost" || host === "127.0.0.1" || host === "::1" || host.endsWith(".local")) {
+      return true;
+    }
+    if (/^10\./.test(host) || /^192\.168\./.test(host) || /^172\.(1[6-9]|2\d|3[01])\./.test(host)) {
+      return true;
+    }
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
+      return true;
+    }
+    return false;
+  } catch {
+    return true;
+  }
+}
+
+function verifyInboundMailWebhook(req: any): boolean {
+  const expected = process.env.INBOUND_MAIL_WEBHOOK_SECRET;
+  if (!expected) {
+    return !IS_PROD;
+  }
+  const provided = req.headers["x-geistdesk-webhook-secret"];
+  return typeof provided === "string" && provided === expected;
+}
 
 // Fields that must never be returned to clients for the users collection.
 const USER_SENSITIVE_FIELDS = ["password", "passwordHash", "activationToken"];
@@ -82,6 +145,10 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
+  app.use(helmet({
+    contentSecurityPolicy: IS_PROD ? undefined : false,
+  }));
+  app.use(cookieParser());
   app.use(express.json({ limit: "1mb" }));
 
   // Health check
@@ -95,7 +162,10 @@ async function startServer() {
 
   // Register a new local account. Password is hashed with Argon2id; the
   // plaintext is never persisted and never returned.
-  app.post("/api/auth/register", async (req: any, res) => {
+  app.post("/api/auth/register", authRateLimiter, async (req: any, res) => {
+    if (!isPublicRegistrationAllowed()) {
+      return res.status(403).json({ error: "Public registration is disabled. Contact an administrator." });
+    }
     const { email, password, name } = req.body || {};
     if (!email || !password || typeof email !== "string" || typeof password !== "string") {
       return res.status(400).json({ error: "email and password are required" });
@@ -123,9 +193,9 @@ async function startServer() {
         createdAt: new Date().toISOString()
       });
       const token = issueSessionToken({ id: created.id, email: cleanEmail });
+      setSessionCookie(res, token);
       return res.status(201).json({
-        token,
-        user: sanitizeUserDoc({ id: created.id, ...created.data })
+        user: sanitizeUserDoc({ id: created.id, ...created.data }),
       });
     } catch (e: any) {
       console.error("[Auth/Register] Failed:", e?.message || e);
@@ -134,7 +204,7 @@ async function startServer() {
   });
 
   // Authenticate an existing local account using a constant-time hash compare.
-  app.post("/api/auth/login", async (req: any, res) => {
+  app.post("/api/auth/login", authRateLimiter, async (req: any, res) => {
     const { email, password } = req.body || {};
     if (!email || !password) {
       return res.status(400).json({ error: "email and password are required" });
@@ -164,11 +234,21 @@ async function startServer() {
         return res.status(403).json({ error: "Your account has been deactivated." });
       }
       const token = issueSessionToken({ id: userDoc.id, email: userDoc.email });
-      return res.json({ token, user: sanitizeUserDoc(userDoc) });
+      setSessionCookie(res, token);
+      return res.json({ user: sanitizeUserDoc(userDoc) });
     } catch (e: any) {
       console.error("[Auth/Login] Failed:", e?.message || e);
       return res.status(500).json({ error: "Login failed." });
     }
+  });
+
+  app.post("/api/auth/logout", (_req, res) => {
+    clearSessionCookie(res);
+    return res.json({ success: true });
+  });
+
+  app.get("/api/auth/session", authenticate, async (req: any, res) => {
+    return res.json({ user: sanitizeUserDoc(req.user?.dbRecord || { id: req.user.id, email: req.user.email, name: req.user.name, role: req.user.role }) });
   });
 
   // Generic database API router for standard PostgreSQL / fallback execution
@@ -178,14 +258,25 @@ async function startServer() {
       return res.status(400).json({ error: "Missing action or collection parameter" });
     }
 
+    const access = assertDbCollectionAccess({
+      collection,
+      action,
+      userIsAdmin: req.user?.role === "SYSTEM_ADMIN",
+      userId: req.user?.id,
+      docId: id,
+    });
+    if (access.allowed === false) {
+      return res.status(access.status).json({ error: access.error });
+    }
+
     // Compute authorization directly from the verified database role on every single API request
     const userIsAdmin = req.user?.role === "SYSTEM_ADMIN";
     const userCanCreateTickets = req.user?.dbRecord?.can_create_tickets !== false;
     const userCanViewKnowledgeBase = req.user?.dbRecord?.can_view_knowledgebase !== false;
     const uid = req.user?.id;
 
-    // 2. Enforce Administrative Access Controls
-    const adminCollections = ['roles', 'module_config', 'audits', 'admins', 'groups'];
+    // 2. Enforce Administrative Access Controls (legacy guard; policy module is authoritative)
+    const adminCollections = ['roles', 'module_config', 'audits', 'admins', 'groups', 'audit_logs', 'compliance_logs'];
     if (adminCollections.includes(collection)) {
       if (!userIsAdmin) {
         return res.status(403).json({ error: "Forbidden: Strict Administrative access required for collection " + collection });
@@ -302,13 +393,15 @@ async function startServer() {
   app.use("/api/ai", aiRoutes);
   app.use("/api/module-config", moduleConfigRoutes);
 
-  // Workspace AI orchestrator — read-only config for all authenticated modules
+  // Workspace AI orchestrator — redacted config for agents; full config via /api/admin/orchestrator/config
   app.get("/api/ai/config", authenticate, async (req: any, res) => {
     try {
       const { getOrchestratorConfig } = await import("./src/lib/ai-orchestrator-store.js");
+      const { toPublicOrchestratorConfig } = await import("./src/types/aiOrchestrator.js");
       const workspaceId = String(req.query.workspaceId || "default");
       const config = await getOrchestratorConfig(workspaceId);
-      return res.json(config);
+      const isAdmin = req.user?.role === "SYSTEM_ADMIN";
+      return res.json(isAdmin ? config : toPublicOrchestratorConfig(config));
     } catch (e: any) {
       console.error("[AI Config] Failed:", e?.message || e);
       return res.status(500).json({ error: "Failed to load AI configuration." });
@@ -327,13 +420,8 @@ async function startServer() {
     }
   });
 
-  // Real-time orchestrator sync via Server-Sent Events
-  app.get("/api/ai/events", (req: any, res, next) => {
-    if (req.query.token && !req.headers.authorization) {
-      req.headers.authorization = `Bearer ${req.query.token}`;
-    }
-    next();
-  }, authenticate, (req: any, res) => {
+  // Real-time orchestrator sync via Server-Sent Events (session cookie auth)
+  app.get("/api/ai/events", authenticate, (req: any, res) => {
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -415,7 +503,7 @@ async function startServer() {
   /**
    * Microsoft Graph Teams Live Transcripts Change Notification Webhook Handler
    */
-  app.post("/api/webhooks/teams-transcripts", async (req, res) => {
+  app.post("/api/webhooks/teams-transcripts", webhookRateLimiter, async (req, res) => {
     // 1. Webhook Handshake / Validation Request
     // Microsoft Graph sends a POST with a validationToken query param to verify the endpoint is active.
     const validationToken = req.query.validationToken;
@@ -427,7 +515,10 @@ async function startServer() {
 
     // 2. Process Change Notification
     try {
-      const clientStateSecret = process.env.GRAPH_CLIENT_STATE_SECRET || "GeistDeskSovereignSecretState2026";
+      const clientStateSecret = requireGraphClientStateSecret();
+      if (!clientStateSecret) {
+        return res.status(503).json({ status: "disabled", error: "Graph webhook secret is not configured." });
+      }
       const processed = await graphTranscriptService.handleSubscriptionNotification(req.body, clientStateSecret);
       
       if (processed) {
@@ -450,7 +541,13 @@ async function startServer() {
     // Fallback/Demo settings for local sandbox
     const defaultUrl = `https://${req.get('host')}/api/webhooks/teams-transcripts`;
     const targetUrl = extNotificationUrl || defaultUrl;
-    const clientStateSecret = process.env.GRAPH_CLIENT_STATE_SECRET || "GeistDeskSovereignSecretState2026";
+    const clientStateSecret = requireGraphClientStateSecret();
+    if (!clientStateSecret) {
+      return res.status(503).json({
+        success: false,
+        error: "GRAPH_CLIENT_STATE_SECRET is required to configure Graph subscriptions.",
+      });
+    }
 
     if (!accessToken) {
       // Graceful sovereign preview/simulation mode with detailed setup instructions
@@ -515,7 +612,10 @@ async function startServer() {
   // -----------------------------------------------------------------------------
   // SECURE AD-HOC SIMULATOR & TEST SANDBOX ROUTE
   // -----------------------------------------------------------------------------
-  app.post("/api/test-sandbox", async (req, res) => {
+  app.post("/api/test-sandbox", sandboxRateLimiter, authenticate, requireRole(["SYSTEM_ADMIN"]), async (req, res) => {
+    if (!isSandboxEnabled()) {
+      return res.status(404).json({ error: "Sandbox is disabled." });
+    }
     const { text } = req.body;
     if (!text) {
       return res.status(400).json({ error: "No input text provided" });
@@ -561,7 +661,10 @@ async function startServer() {
   // -----------------------------------------------------------------------------
   // CORE INTERACTIVE CONTROL DASHBOARD PORTAL (SANDBOX MOCK INTERFACE)
   // -----------------------------------------------------------------------------
-  app.get("/sandbox", (req, res) => {
+  app.get("/sandbox", authenticate, requireRole(["SYSTEM_ADMIN"]), (req, res) => {
+    if (!isSandboxEnabled()) {
+      return res.status(404).send("Sandbox is disabled.");
+    }
     res.send(`
     <!DOCTYPE html>
     <html lang="en">
@@ -956,7 +1059,10 @@ async function startServer() {
   });
 
   // Inbound Mail Webhook
-  app.post("/api/webhooks/inbound-mail", async (req, res) => {
+  app.post("/api/webhooks/inbound-mail", webhookRateLimiter, async (req, res) => {
+    if (!verifyInboundMailWebhook(req)) {
+      return res.status(401).json({ error: "Unauthorized webhook." });
+    }
     const { sender, subject, body, attachments } = req.body;
     
     if (!sender || !subject || !body) {
@@ -1129,7 +1235,7 @@ async function startServer() {
     res.json({ success: true, settings });
   });
 
-  app.get("/api/tickets/:id", async (req, res) => {
+  app.get("/api/tickets/:id", authenticate, async (req, res) => {
     const { id } = req.params;
     const forceRefresh = req.query.refresh === 'true';
     const db = getDb();
@@ -1239,7 +1345,7 @@ Respond only with the raw valid JSON payload.`;
     }
   });
 
-  app.get("/api/tickets/:ticketId/export", async (req, res) => {
+  app.get("/api/tickets/:ticketId/export", authenticate, async (req, res) => {
     const { ticketId } = req.params;
     try {
       const db = getDb();
@@ -1327,6 +1433,9 @@ Respond only with the raw valid JSON payload.`;
   app.post("/api/kb/crawl", checkAdmin, async (req, res) => {
     const { url } = req.body;
     if (!url) return res.status(400).json({ error: "URL is required" });
+    if (isPrivateNetworkUrl(String(url))) {
+      return res.status(400).json({ error: "URL targets a private or disallowed network address." });
+    }
 
     try {
       console.log(`Crawling URL: ${url}`);
@@ -1375,6 +1484,9 @@ Respond only with the raw valid JSON payload.`;
 
   // KB Knowledge Coverage Engine Endpoints
   const handleGetCoverage = async (req: any, res: any) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
     try {
       const config = await getServerAiConfig();
       const apiKey = config.apiKey || process.env.GEMINI_API_KEY || "";
@@ -1387,6 +1499,9 @@ Respond only with the raw valid JSON payload.`;
   };
 
   const handleGetCategoryCoverage = async (req: any, res: any) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
     const { id } = req.params;
     try {
       const db = getDb();
@@ -1409,6 +1524,12 @@ Respond only with the raw valid JSON payload.`;
   };
 
   const handleRecalculateCoverage = async (req: any, res: any) => {
+    if (!req.user) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    if (req.user.role !== "SYSTEM_ADMIN") {
+      return res.status(403).json({ error: "Forbidden: Administrative access required." });
+    }
     try {
       const coverages = await calculateCoverage();
       const config = await getServerAiConfig();
@@ -1421,15 +1542,15 @@ Respond only with the raw valid JSON payload.`;
     }
   };
 
-  app.get("/api/coverage", handleGetCoverage);
-  app.get("/coverage", handleGetCoverage);
-  app.get("/api/coverage/category/:id", handleGetCategoryCoverage);
-  app.get("/coverage/category/:id", handleGetCategoryCoverage);
-  app.post("/api/coverage/recalculate", handleRecalculateCoverage);
-  app.post("/coverage/recalculate", handleRecalculateCoverage);
+  app.get("/api/coverage", authenticate, handleGetCoverage);
+  app.get("/coverage", authenticate, handleGetCoverage);
+  app.get("/api/coverage/category/:id", authenticate, handleGetCategoryCoverage);
+  app.get("/coverage/category/:id", authenticate, handleGetCategoryCoverage);
+  app.post("/api/coverage/recalculate", authenticate, handleRecalculateCoverage);
+  app.post("/coverage/recalculate", authenticate, handleRecalculateCoverage);
 
   // Handoff Engine Endpoints
-  app.post("/api/tickets/:ticketId/handoff-summary", async (req, res) => {
+  app.post("/api/tickets/:ticketId/handoff-summary", authenticate, async (req, res) => {
     const { ticketId } = req.params;
     const db = getDb();
 
@@ -1468,18 +1589,22 @@ Respond only with the raw valid JSON payload.`;
     }
   });
 
-  app.post("/api/tickets/:ticketId/golden-note", async (req, res) => {
+  app.post("/api/tickets/:ticketId/golden-note", authenticate, async (req: any, res) => {
     const { ticketId } = req.params;
-    const { content, authorId, authorName } = req.body;
+    const { content } = req.body;
     const db = getDb();
+
+    if (!content || typeof content !== "string") {
+      return res.status(400).json({ error: "content is required." });
+    }
 
     try {
       await db.collection("tickets").doc(ticketId).collection("messages").add({
         ticketId,
-        senderId: authorId,
+        senderId: req.user?.id,
         senderType: "agent",
-        senderName: authorName,
-        content: content,
+        senderName: req.user?.name || req.user?.email || "Agent",
+        content,
         isGoldenNote: true,
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });

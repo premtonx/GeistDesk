@@ -29,7 +29,12 @@ import {
 } from '../types/aiOrchestrator.js';
 import { mergeCorporatePolicies, mergeDataResidencyPolicy } from './ai-orchestrator-policies.js';
 
-const SECRET_KEY = process.env.AI_SECRETS_KEY || process.env.JWT_SECRET || 'geistdesk-dev-secrets-key';
+const SECRET_KEY = process.env.AI_SECRETS_KEY || process.env.JWT_SECRET;
+if (!SECRET_KEY) {
+  throw new Error(
+    '[AI Secrets] AI_SECRETS_KEY or JWT_SECRET is required to encrypt provider credentials at rest.',
+  );
+}
 
 function deriveKey(): Buffer {
   return crypto.scryptSync(SECRET_KEY, 'geistdesk-ai-secrets', 32);

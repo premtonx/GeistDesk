@@ -276,11 +276,12 @@ export default function LoginPage() {
     });
   };
 
-  // One-click public demo access: signs in as the shared read/write demo admin
-  // so visitors can explore GeistDesk with full administrative rights.
+  // One-click demo access — only available in development or when VITE_DEMO_MODE=true.
+  const isDemoMode = import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === 'true';
   const DEMO_EMAIL = 'demo@geistdesk.com';
   const DEMO_PASSWORD = 'GeistDeskDemo2026';
   const handleAutofill = async () => {
+    if (!isDemoMode) return;
     setEmail(DEMO_EMAIL);
     setPassword(DEMO_PASSWORD);
     setLoading(true);
@@ -544,16 +545,20 @@ export default function LoginPage() {
           </div>
 
           <div className="flex gap-2 items-center">
-            <Button 
-              type="button"
-              variant="outline" 
-              size="sm"
-              onClick={handleAutofill}
-              className="text-[9px] uppercase font-black tracking-wider text-rose-600 bg-rose-50/50 hover:bg-rose-50 border-rose-200/60 rounded-full h-7 px-3 cursor-pointer hover:shadow-sm"
-            >
-              {texts.autofillDemo}
-            </Button>
-            <div className="h-4 w-px bg-slate-200" />
+            {isDemoMode ? (
+              <>
+                <Button 
+                  type="button"
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleAutofill}
+                  className="text-[9px] uppercase font-black tracking-wider text-rose-600 bg-rose-50/50 hover:bg-rose-50 border-rose-200/60 rounded-full h-7 px-3 cursor-pointer hover:shadow-sm"
+                >
+                  {texts.autofillDemo}
+                </Button>
+                <div className="h-4 w-px bg-slate-200" />
+              </>
+            ) : null}
             <span className="text-slate-400 font-black uppercase text-[9px] tracking-widest pl-0.5">Console v2.6 Ready</span>
           </div>
         </div>

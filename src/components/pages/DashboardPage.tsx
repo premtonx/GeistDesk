@@ -40,7 +40,6 @@ import { Ticket as TicketType } from '../../types';
 import { CreateTicketDialog } from '../CreateTicketDialog';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useTranslation } from '../../lib/context/I18nContext';
-import { getSessionToken } from 'firebase/auth';
 
 interface TicketStats {
   total: number;
@@ -87,10 +86,7 @@ export default function DashboardPage() {
     let active = true;
     const loadStats = async () => {
       try {
-        const token = getSessionToken();
-        const res = await fetch('/api/stats/tickets', {
-          headers: token ? { Authorization: `Bearer ${token}` } : {}
-        });
+        const res = await fetch('/api/stats/tickets', { credentials: 'include' });
         if (res.ok && active) {
           setServerStats(await res.json());
         }

@@ -17,7 +17,6 @@ export default defineConfig(({mode}) => {
       topLevelAwait()
     ],
     define: {
-      'process.env.GEMINI_API_KEY': JSON.stringify(env.GEMINI_API_KEY),
       'process.env.NODE_ENV': JSON.stringify(mode === 'development' ? 'development' : 'production'),
       __BUILD_ID__: JSON.stringify(buildStamp),
       global: 'globalThis',

@@ -44,7 +44,7 @@ export function getCachedLegacyAiConfig(): AIConfig {
 export async function fetchOrchestratorConfig(force = false): Promise<AiOrchestratorConfig> {
   if (!force && cachedConfig) return cachedConfig;
   try {
-    const res = await axios.get('/api/ai/config');
+    const res = await axios.get('/api/ai/config', { withCredentials: true });
     applyConfig(res.data);
     return cachedConfig!;
   } catch {
@@ -54,7 +54,7 @@ export async function fetchOrchestratorConfig(force = false): Promise<AiOrchestr
 
 export async function fetchAiStatus(): Promise<AiOrchestratorHealth | null> {
   try {
-    const res = await axios.get('/api/ai/status');
+    const res = await axios.get('/api/ai/status', { withCredentials: true });
     cachedHealth = res.data;
     notifyHealth(cachedHealth!);
     return cachedHealth;
@@ -75,27 +75,13 @@ export function subscribeAiHealth(cb: (health: AiOrchestratorHealth) => void): (
   return () => healthListeners.delete(cb);
 }
 
-function getAuthToken(): string | null {
-  try {
-    return localStorage.getItem('geistdesk_token');
-  } catch {
-    return null;
-  }
-}
-
-/** Real-time sync via Server-Sent Events (replaces 30s polling). */
 export function startOrchestratorConfigSync(): void {
   void fetchOrchestratorConfig(true);
   void fetchAiStatus();
 
   if (eventSource) return;
 
-  const token = getAuthToken();
-  const url = token
-    ? `/api/ai/events?token=${encodeURIComponent(token)}`
-    : '/api/ai/events';
-
-  eventSource = new EventSource(url);
+  eventSource = new EventSource('/api/ai/events', { withCredentials: true } as EventSourceInit);
 
   eventSource.onmessage = (event) => {
     try {

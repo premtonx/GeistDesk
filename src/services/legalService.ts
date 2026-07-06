@@ -1,10 +1,9 @@
-import { GoogleGenAI, Type } from "@google/genai";
 import { getModuleConfig } from "../lib/module-config";
 import { getCachedLegacyAiConfig } from "../lib/aiOrchestratorClient";
 import { db, auth } from "../lib/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
+import { executeClientAiPrompt } from "../lib/client-ai-proxy";
 
-// Note: GoogleGenAI is initialized dynamically if needed
 export interface LegalValidationResult {
   isValid: boolean;
   violationDetail?: string;
@@ -12,7 +11,7 @@ export interface LegalValidationResult {
 }
 
 /**
- * Validates a draft content against legal guardrails using a local Gemini or local/Ollama model.
+ * Validates a draft content against legal guardrails using the server AI lifecycle.
  */
 export async function validateDraft(draftContent: string, ticketId?: string): Promise<LegalValidationResult> {
   const moduleConfig = getModuleConfig();
@@ -21,48 +20,25 @@ export async function validateDraft(draftContent: string, ticketId?: string): Pr
 
   if (!policyText) return { isValid: true };
 
-  const systemInstruction = `You are a legal guardrail compliance engine. Your goal is to detect if a support agent's draft message violates company legal policies.
-Identify specific contradictions like unauthorized financial promises or legal advice.
-Return a JSON object with:
-- isValid: boolean
-- violationDetail: string (which rule was violated)
-- forbiddenText: string (the exact problematic text from the draft)`;
-
   const prompt = `Draft Content to Validate:
 "${draftContent}"
 
 Company Policy & Guardrails:
-"${policyText}"`;
+"${policyText}"
+
+Return JSON with keys isValid (boolean), violationDetail (string), forbiddenText (string).`;
 
   try {
     let result: LegalValidationResult = { isValid: true };
     const isGoogle = aiConfig.sentimentModel === 'gemini-flash';
 
     if (isGoogle) {
-      const apiKey = aiConfig.apiKey || process.env.GEMINI_API_KEY || "";
-      if (!apiKey) {
-        console.warn("Legal validation skipped: Gemini API key not set");
-        return { isValid: true };
-      }
-      const genAI = new GoogleGenAI({ apiKey });
-      const response = await genAI.models.generateContent({
-        model: "gemini-3-flash-preview",
-        contents: prompt,
-        config: {
-          systemInstruction,
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              isValid: { type: Type.BOOLEAN },
-              violationDetail: { type: Type.STRING },
-              forbiddenText: { type: Type.STRING },
-            },
-            required: ["isValid"],
-          },
-        },
+      const lifecycle = await executeClientAiPrompt({
+        feature: 'smart_reply',
+        prompt,
+        ticketId,
       });
-      result = JSON.parse(response.text) as LegalValidationResult;
+      result = JSON.parse(lifecycle.output) as LegalValidationResult;
     } else {
       const endpoint = aiConfig.localEndpoint || "http://localhost:11434/v1";
       const modelName = aiConfig.sentimentModel === 'custom-local'
@@ -78,7 +54,7 @@ Company Policy & Guardrails:
         body: JSON.stringify({
           model: modelName,
           messages: [
-            { role: "system", content: systemInstruction },
+            { role: "system", content: "You are a legal guardrail compliance engine. Respond only with JSON." },
             { role: "user", content: prompt }
           ],
           response_format: { type: "json_object" }
@@ -88,7 +64,6 @@ Company Policy & Guardrails:
       result = JSON.parse(rdata.choices[0].message.content) as LegalValidationResult;
     }
 
-    // If violation found, log to compliance_logs
     if (!result.isValid) {
       await logViolation({
         agentId: auth.currentUser?.uid || 'unknown',
@@ -103,7 +78,6 @@ Company Policy & Guardrails:
     return result;
   } catch (error) {
     console.error("Legal validation failed:", error);
-    // Fail safe to let the user review manually if validation fails
     return { isValid: true };
   }
 }

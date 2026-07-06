@@ -25,12 +25,9 @@ if (!LOCAL_JWT_SECRET) {
 // Extend Express Request type locally for safety
 export type AuthenticatedRequest = any;
 
-/** Beta-stage auto-admin on the server: mirrors client VITE_BETA_AUTO_ADMIN (default: enabled). */
+/** Beta-stage auto-admin on the server — disabled by default; set BETA_AUTO_ADMIN=true to enable. */
 function isServerBetaAutoAdminEnabled(): boolean {
-  if (process.env.BETA_AUTO_ADMIN === 'false') {
-    return false;
-  }
-  return true;
+  return process.env.BETA_AUTO_ADMIN === 'true';
 }
 
 /**

@@ -13,7 +13,6 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { GoogleGenAI, Type } from "@google/genai";
 import { cn } from '../lib/utils';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -23,10 +22,8 @@ import { Badge } from './ui/badge';
 import { toast } from 'sonner';
 import { kbService } from '../services/kbService';
 import { useAuth } from '../lib/hooks';
-import { auth } from '../lib/firebase';
-import { getSessionToken } from 'firebase/auth';
-
 import { getCachedLegacyAiConfig } from '../lib/aiOrchestratorClient';
+import { executeClientAiPrompt } from '../lib/client-ai-proxy';
 
 interface ProcessingItem {
   id: string;
@@ -82,29 +79,11 @@ export function KBImporter() {
       let aiData: any = {};
 
       if (isGoogle) {
-        const apiKey = config.ai.apiKey || process.env.GEMINI_API_KEY || "";
-        if (!apiKey) {
-          throw new Error("Gemini API key is not configured for KB Importer");
-        }
-        const ai = new GoogleGenAI({ apiKey });
-        const response = await ai.models.generateContent({
-          model: "gemini-3-flash-preview",
-          contents: prompt,
-          config: {
-            responseMimeType: "application/json",
-            responseSchema: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                markdown: { type: Type.STRING },
-                tags: { type: Type.ARRAY, items: { type: Type.STRING } },
-                category: { type: Type.STRING }
-              },
-              required: ['title', 'markdown', 'tags', 'category']
-            }
-          }
+        const result = await executeClientAiPrompt({
+          feature: 'kb_generation',
+          prompt: `${prompt}\nRespond with raw JSON only: { "title": string, "markdown": string, "tags": string[], "category": string }`,
         });
-        aiData = JSON.parse(response.text || '{}');
+        aiData = JSON.parse(result.output || '{}');
       } else {
         const endpoint = config.ai.localEndpoint || "http://localhost:11434/v1";
         const modelName = config.ai.sentimentModel === 'custom-local'
@@ -184,13 +163,10 @@ export function KBImporter() {
 
     try {
       updateItem(id, { status: 'parsing', progress: 20 });
-      const crawlToken = getSessionToken();
       const response = await fetch('/api/kb/crawl', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(crawlToken ? { Authorization: `Bearer ${crawlToken}` } : {})
-        },
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ url })
       });
       
@@ -216,12 +192,9 @@ export function KBImporter() {
         const formData = new FormData();
         formData.append('file', file);
 
-        const parseToken = getSessionToken();
         const response = await fetch('/api/kb/parse-file', {
           method: 'POST',
-          headers: {
-            ...(parseToken ? { Authorization: `Bearer ${parseToken}` } : {})
-          },
+          credentials: 'include',
           body: formData
         });
 

@@ -1,18 +1,9 @@
 import axios from 'axios';
 
-const TOKEN_KEY = 'geistdesk_token';
-
-/** Apply the persisted GeistDesk session token to axios default headers. */
+/** Configure axios to send httpOnly session cookies on same-origin API calls. */
 export function applySessionAuthHeader() {
-  let token: string | null = null;
-  try {
-    token = localStorage.getItem(TOKEN_KEY);
-  } catch {
-    /* ignore storage errors */
-  }
-  if (token) {
-    axios.defaults.headers.common['Authorization'] = `Bearer ${token}`;
-  } else {
-    delete axios.defaults.headers.common['Authorization'];
-  }
+  axios.defaults.withCredentials = true;
+  delete axios.defaults.headers.common['Authorization'];
 }
+
+applySessionAuthHeader();

@@ -1,14 +1,13 @@
-import { getSessionToken } from 'firebase/auth';
 import { auth } from '../lib/firebase';
 import { VaultItem } from '../types';
 import { logAudit } from './auditService';
 
 function authHeaders(): Record<string, string> {
-  const token = getSessionToken();
-  return {
-    'Content-Type': 'application/json',
-    ...(token ? { Authorization: `Bearer ${token}` } : {})
-  };
+  return { 'Content-Type': 'application/json' };
+}
+
+async function vaultFetch(input: RequestInfo, init?: RequestInit) {
+  return fetch(input, { ...init, credentials: 'include', headers: { ...authHeaders(), ...(init?.headers as Record<string, string> | undefined) } });
 }
 
 async function parse(res: Response) {
@@ -35,9 +34,8 @@ export const vaultService = {
     const user = auth.currentUser;
     if (!user) throw new Error('Not authenticated');
 
-    const res = await fetch('/api/vault/secrets', {
+    const res = await vaultFetch('/api/vault/secrets', {
       method: 'POST',
-      headers: authHeaders(),
       body: JSON.stringify({
         type: item.type,
         shares: item.shares || undefined,
@@ -87,7 +85,7 @@ export const vaultService = {
   /** List vault metadata for the signed-in user (PostgreSQL source of truth). */
   fetchHistory: async (): Promise<VaultItem[]> => {
     try {
-      const res = await fetch('/api/vault/history', { headers: authHeaders() });
+      const res = await vaultFetch('/api/vault/history', {});
       if (!res.ok) return [];
       const data = await parse(res);
       return (data.items ?? []) as VaultItem[];
@@ -145,7 +143,7 @@ export const vaultService = {
 
   burnItem: async (id: string) => {
     try {
-      await fetch(`/api/vault/secrets/${encodeURIComponent(id)}/burn`, {
+      await vaultFetch(`/api/vault/secrets/${encodeURIComponent(id)}/burn`, {
         method: 'POST',
         headers: authHeaders()
       });
@@ -162,7 +160,7 @@ export const vaultService = {
    */
   deleteItem: async (id: string) => {
     try {
-      await fetch(`/api/vault/secrets/${encodeURIComponent(id)}/burn`, {
+      await vaultFetch(`/api/vault/secrets/${encodeURIComponent(id)}/burn`, {
         method: 'POST',
         headers: authHeaders()
       });
@@ -174,7 +172,7 @@ export const vaultService = {
 
   /** Upload encrypted content to a dropzone-style request item (authenticated owner path). */
   updateItem: async (id: string, updates: Partial<VaultItem>) => {
-    const res = await fetch(`/api/vault/secrets/${encodeURIComponent(id)}/content`, {
+    const res = await vaultFetch(`/api/vault/secrets/${encodeURIComponent(id)}/content`, {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({ content: updates.content, metadata: updates.metadata })
@@ -198,7 +196,7 @@ export const vaultService = {
 
   /** Recover and download an uploaded dropzone payload for the authenticated owner. */
   downloadDropzoneFile: async (id: string): Promise<string> => {
-    const res = await fetch(`/api/vault/dropzones/download?id=${encodeURIComponent(id)}`, {
+    const res = await vaultFetch(`/api/vault/dropzones/download?id=${encodeURIComponent(id)}`, {
       method: 'GET',
       headers: authHeaders(),
     });

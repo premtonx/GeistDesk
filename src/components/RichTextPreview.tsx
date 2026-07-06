@@ -1,4 +1,5 @@
 import 'react-quill-new/dist/quill.snow.css';
+import { sanitizeRichHtml } from '../lib/sanitize-html';
 
 const RICH_TEXT_PREVIEW_STYLES = `
   .rich-text-preview-container .ql-container.ql-snow {
@@ -63,7 +64,7 @@ export function RichTextPreview({ html, className }: RichTextPreviewProps) {
     >
       <div className="ql-container ql-snow">
         {html.trim() ? (
-          <div className="ql-editor" dangerouslySetInnerHTML={{ __html: html }} />
+          <div className="ql-editor" dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(html) }} />
         ) : (
           <div className="ql-editor ql-blank" />
         )}

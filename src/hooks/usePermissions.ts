@@ -66,8 +66,10 @@ export function usePermissions() {
 
     if (isStaleGuestAgentCache(userProfile, role)) {
       const guestSession = applyGuestAdminSession(authUser);
-      setUserProfile(guestSession.profile);
-      setRole(guestSession.role);
+      if (guestSession) {
+        setUserProfile(guestSession.profile);
+        setRole(guestSession.role);
+      }
     }
 
     // Privileges are derived strictly from the database role; there is no
@@ -112,9 +114,41 @@ export function usePermissions() {
           setUserProfile(p);
           localStorage.setItem('geistdesk_cached_user_profile', JSON.stringify(p));
         } else {
-          const { profile, role } = applyGuestAdminSession(authUser);
-          setRole(role);
-          setUserProfile(profile);
+          const guestSession = applyGuestAdminSession(authUser);
+          if (guestSession) {
+            setRole(guestSession.role);
+            setUserProfile(guestSession.profile);
+          } else {
+            const agentRole: UserRole = {
+              id: 'legacy',
+              name: 'agent',
+              description: 'Offline agent fallback',
+              permissions: {
+                tickets: { view: true, create: true, edit: true, delete: false, admin: false },
+                customers: { view: true, create: true, edit: true, delete: false, admin: false },
+                vault: { view: true, create: true, edit: true, delete: false, admin: false },
+                insights: { view: false, create: false, edit: false, delete: false, admin: false },
+              },
+              specialPermissions: {
+                overridePIIShield: false,
+                manageModelOrchestrator: false,
+                bypass2FA: false,
+                aiGovernance: false,
+              },
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            };
+            setRole(agentRole);
+            setUserProfile({
+              id: authUser.uid,
+              name: authUser.displayName || authUser.email?.split('@')[0] || 'Agent',
+              email: authUser.email || '',
+              avatar: authUser.photoURL || '',
+              role: 'agent',
+              is_admin: false,
+              createdAt: new Date(),
+            });
+          }
         }
         setLoading(false);
       }
@@ -205,9 +239,11 @@ export function usePermissions() {
         }
       } else {
         if (timeoutFired && !realProfileLoaded) {
-          const { profile, role } = applyGuestAdminSession(authUser);
-          setRole(role);
-          setUserProfile(profile);
+          const guestSession = applyGuestAdminSession(authUser);
+          if (guestSession) {
+            setRole(guestSession.role);
+            setUserProfile(guestSession.profile);
+          }
           setLoading(false);
         }
       }

@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
+import crypto from "crypto";
 import { authenticate, requireRole } from "../middleware/authMiddleware.js";
 import { 
   getDocDirect, 
@@ -176,7 +177,7 @@ router.post("/users/create-local", authenticate, requireRole(["SYSTEM_ADMIN"]), 
     }
 
     // Generate a secure temporary activation token and expired time (e.g. 24 hours)
-    const rawActivationToken = "act-" + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const rawActivationToken = "act-" + crypto.randomBytes(24).toString("hex");
     const activationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 Hours
 
     // Construct profile payload

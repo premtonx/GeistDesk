@@ -2,6 +2,8 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { createHash } from "crypto";
 import { authenticate } from "../middleware/authMiddleware.js";
+import { hashPassword, verifyPassword, isHashedPassword } from "../lib/crypto.js";
+import { vaultRevealRateLimiter } from "../middleware/rate-limiters.js";
 import {
   getDocDirect,
   addDocDirect,
@@ -46,8 +48,20 @@ const createSecretSchema = z.object({
   metadata: z.record(z.string(), z.any()).optional()
 });
 
-function hashPassphrase(value: string): string {
+function legacySha256Passphrase(value: string): string {
   return createHash("sha256").update(value).digest("hex");
+}
+
+async function hashVaultPassphrase(value: string): Promise<string> {
+  return hashPassword(value);
+}
+
+async function verifyVaultPassphrase(value: string, storedHash: string): Promise<boolean> {
+  if (!value || !storedHash) return false;
+  if (isHashedPassword(storedHash)) {
+    return verifyPassword(value, storedHash);
+  }
+  return legacySha256Passphrase(value) === storedHash;
 }
 
 function getMaxViews(item: any): number {
@@ -125,7 +139,7 @@ function sanitizeDownloadFilename(name: string): string {
   return base || "dropzone-payload.bin";
 }
 
-function validateRevealSecurity(item: any, req: Request): { ok: true } | { ok: false; status: number; error: string } {
+async function validateRevealSecurity(item: any, req: Request): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
   const metadata = item.metadata || {};
   if (metadata.ipRestrictionEnabled && metadata.ipAllowlist) {
     const clientIp = getClientIp(req);
@@ -136,7 +150,7 @@ function validateRevealSecurity(item: any, req: Request): { ok: true } | { ok: f
   if (metadata.passphraseEnabled) {
     const provided = typeof req.body?.passphrase === "string" ? req.body.passphrase : "";
     const expectedHash = item.passphraseHash;
-    if (!provided || !expectedHash || hashPassphrase(provided) !== expectedHash) {
+    if (!provided || !expectedHash || !(await verifyVaultPassphrase(provided, expectedHash))) {
       return { ok: false, status: 403, error: "Invalid passphrase." };
     }
   }
@@ -322,7 +336,7 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
       expiresAt: resolvedExpiresAt,
       maxViews: resolvedMaxViews,
       viewCount: 0,
-      passphraseHash: passphrase ? hashPassphrase(passphrase) : null,
+      passphraseHash: passphrase ? await hashVaultPassphrase(passphrase) : null,
       isBurned: false,
       createdBy: req.user.id,
       createdAt: new Date().toISOString(),
@@ -408,7 +422,7 @@ router.head("/secrets/:id", handleSecretMetadata);
  * Returns decrypted shares/content exactly once. For read-once secrets it
  * burns the item and destroys the secret material immediately afterward.
  */
-router.post("/secrets/:id/reveal", async (req: Request, res: Response): Promise<any> => {
+router.post("/secrets/:id/reveal", vaultRevealRateLimiter, async (req: Request, res: Response): Promise<any> => {
   try {
     const prefetchOrPreview = isPreviewOrPrefetchRequest(req);
     const commitRead = isVaultReadCommit(req);
@@ -419,7 +433,7 @@ router.post("/secrets/:id/reveal", async (req: Request, res: Response): Promise<
       return res.status(410).json({ error: "This secret has already been burned or expired.", isBurned: true });
     }
 
-    const security = validateRevealSecurity(item, req);
+    const security = await validateRevealSecurity(item, req);
     if (security.ok === false) {
       return res.status(security.status).json({ error: security.error });
     }
@@ -487,7 +501,7 @@ router.post("/secrets/:id/reveal", async (req: Request, res: Response): Promise<
  * POST /api/vault/secrets/:id/upload — public dropzone file intake.
  * Encrypts uploaded content with AES-256-GCM into the separate secret store.
  */
-router.post("/secrets/:id/upload", async (req: Request, res: Response): Promise<any> => {
+router.post("/secrets/:id/upload", vaultRevealRateLimiter, async (req: Request, res: Response): Promise<any> => {
   const content = typeof req.body?.content === "string" ? req.body.content : null;
   const fileName = typeof req.body?.fileName === "string" ? req.body.fileName.trim() : "";
   const fileSizeBytes = typeof req.body?.fileSizeBytes === "number" ? req.body.fileSizeBytes : 0;

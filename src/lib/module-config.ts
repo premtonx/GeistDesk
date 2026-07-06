@@ -171,14 +171,6 @@ export function normalizeModuleConfig(parsed: Partial<ModuleConfig> | Record<str
   };
 }
 
-function readAuthToken(): string | null {
-  if (typeof window === 'undefined' || typeof localStorage === 'undefined') return null;
-  try {
-    return localStorage.getItem('geistdesk_token');
-  } catch {
-    return null;
-  }
-}
 
 function migrateLegacyBrowserOnlySettings(config: ModuleConfig): { config: ModuleConfig; migrated: boolean } {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
@@ -249,9 +241,8 @@ export async function syncModuleConfigFromServer(isAdmin = false): Promise<Modul
   if (typeof window === 'undefined') return DEFAULT_CONFIG;
 
   try {
-    const token = readAuthToken();
     const res = await fetch('/api/module-config', {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      credentials: 'include',
     });
 
     if (!res.ok) {
@@ -303,12 +294,11 @@ export async function saveModuleConfig(config: ModuleConfig): Promise<void> {
 
   if (typeof window === 'undefined') return;
 
-  const token = readAuthToken();
   const res = await fetch('/api/module-config', {
     method: 'PUT',
+    credentials: 'include',
     headers: {
       'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
     },
     body: JSON.stringify(normalized),
   });

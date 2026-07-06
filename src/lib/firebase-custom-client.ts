@@ -4,27 +4,27 @@
 import platformConfig from '../../geistdesk-platform-config.json';
 import { applySessionAuthHeader } from './session-auth';
 
-// Simple Auth State Store. Credentials are NEVER stored client-side; the only
-// persisted artifact is the server-issued signed session token.
+// Simple Auth State Store. Session JWT is stored in an httpOnly cookie by the server.
 const USER_KEY = 'geistdesk_auth_user';
-const TOKEN_KEY = 'geistdesk_token';
 
+/** Legacy helper — session auth is cookie-based; returns null in hardened builds. */
 export function getSessionToken(): string | null {
-  try {
-    return localStorage.getItem(TOKEN_KEY);
-  } catch {
-    return null;
-  }
+  return null;
 }
 
-function setSessionToken(token: string | null) {
+function clearLegacyTokenStorage() {
   try {
-    if (token) localStorage.setItem(TOKEN_KEY, token);
-    else localStorage.removeItem(TOKEN_KEY);
-    applySessionAuthHeader();
+    localStorage.removeItem('geistdesk_token');
+    sessionStorage.removeItem('geistdesk_token');
   } catch {
-    /* ignore storage errors */
+    /* ignore */
   }
+  applySessionAuthHeader();
+}
+
+function onSessionEstablished() {
+  clearLegacyTokenStorage();
+  applySessionAuthHeader();
 }
 
 export interface User {
@@ -51,8 +51,27 @@ class FirebaseAuth {
         this.currentUser = null;
       }
     } else {
-      // Do not automatically log in - wait for user interaction to preserve Multi-User Privacy Schema
       this.currentUser = null;
+    }
+
+    void this.hydrateSessionFromCookie();
+  }
+
+  private async hydrateSessionFromCookie() {
+    try {
+      const res = await fetch('/api/auth/session', { credentials: 'include' });
+      if (!res.ok) {
+        if (this.currentUser) {
+          this.updateUser(null);
+        }
+        return;
+      }
+      const data = await res.json().catch(() => ({}));
+      if (data?.user) {
+        this.updateUser(userFromServer(data.user));
+      }
+    } catch {
+      /* offline — keep cached profile until next successful sync */
     }
   }
 
@@ -106,13 +125,14 @@ export async function signInWithEmailAndPassword(authObj: FirebaseAuth, email: s
   const res = await fetch('/api/auth/login', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ email, password })
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data?.error || 'Invalid credentials.');
   }
-  setSessionToken(data.token);
+  onSessionEstablished();
   const user = userFromServer(data.user);
   authObj.updateUser(user);
   return { user };
@@ -122,13 +142,14 @@ export async function createUserWithEmailAndPassword(authObj: FirebaseAuth, emai
   const res = await fetch('/api/auth/register', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ email, password })
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(data?.error || 'Registration failed.');
   }
-  setSessionToken(data.token);
+  onSessionEstablished();
   const user = userFromServer(data.user);
   authObj.updateUser(user);
   return { user };
@@ -153,10 +174,8 @@ export async function updatePassword(_user: User, newPassword: string) {
   // Password changes are performed server-side against the Argon2id hash.
   const res = await fetch('/api/auth/change-password', {
     method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      ...(getSessionToken() ? { Authorization: `Bearer ${getSessionToken()}` } : {})
-    },
+    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ newPassword })
   });
   if (!res.ok) {
@@ -174,7 +193,12 @@ export async function signInWithPopup(_authObj: FirebaseAuth, _provider: any) {
 }
 
 export async function signOut(authObj: FirebaseAuth) {
-  setSessionToken(null);
+  try {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+  } catch {
+    /* ignore network errors during logout */
+  }
+  clearLegacyTokenStorage();
   authObj.updateUser(null);
 }
 
@@ -273,13 +297,10 @@ export function getDocFromServer(ref: DocumentReference) {
 async function execDbAction(action: string, payload: any, retries = 5, delayMs = 1500) {
   for (let attempt = 1; attempt <= retries; attempt++) {
     try {
-      const token = getSessionToken();
       const res = await fetch('/api/db', {
         method: 'POST',
-        headers: { 
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {})
-        },
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
         body: JSON.stringify({ action, ...payload })
       });
       

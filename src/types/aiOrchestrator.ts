@@ -852,3 +852,26 @@ export function toLegacyAiConfig(config: AiOrchestratorConfig) {
     killSwitch: config.killSwitch,
   };
 }
+
+/** Redacted orchestrator view for non-admin authenticated clients. */
+export function toPublicOrchestratorConfig(config: AiOrchestratorConfig): Partial<AiOrchestratorConfig> {
+  return {
+    workspaceId: config.workspaceId,
+    scope: config.scope,
+    primaryModel: config.primaryModel,
+    reasoningModel: config.reasoningModel,
+    triageModel: config.triageModel,
+    providerPriority: config.providerPriority,
+    fallbackModels: config.fallbackModels,
+    featureRouting: config.featureRouting,
+    endpointUrl: config.endpointUrl,
+    piiEnabled: config.piiEnabled,
+    autoEscalationEnabled: config.autoEscalationEnabled,
+    reasoningLevel: config.reasoningLevel,
+    contentFilteringEnabled: config.contentFilteringEnabled,
+    featurePersonas: config.featurePersonas,
+    killSwitch: config.killSwitch,
+    configVersion: config.configVersion,
+    updatedAt: config.updatedAt,
+  };
+}

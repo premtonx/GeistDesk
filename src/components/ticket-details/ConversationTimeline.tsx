@@ -36,18 +36,7 @@ interface ConversationTimelineProps {
   translatedTicket: { subject: string; description: string } | null;
 }
 
-function makeLinksClickable(text: string): string {
-  if (!text) return "";
-  // regex for standard http/https links
-  const urlPattern = /(\b(https?):\/\/[-A-Z0-9+&@#\/%?=~_|!:,.;]*[-A-Z0-9+&@#\/%=~_|])/ig;
-  let result = text.replace(urlPattern, '<a href="$1" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline font-semibold">$1</a>');
-
-  // regex to match www. sites (that aren't already prefixed with http/https)
-  const wwwPattern = /(^|[^\/])(www\.[A-Za-z0-9_-]+\.[A-Za-z0-9_.-]+(?:\/[^\s]*)?)/g;
-  result = result.replace(wwwPattern, '$1<a href="https://$2" target="_blank" rel="noopener noreferrer" class="text-blue-600 dark:text-blue-400 hover:underline font-semibold">$2</a>');
-
-  return result;
-}
+import { sanitizeLinkifiedText } from '../../lib/sanitize-html';
 
 export function ConversationTimeline({
   ticket,
@@ -200,7 +189,7 @@ export function ConversationTimeline({
                     {isTranslating && item.id === 'opening-post' ? (
                       <p className="italic text-muted-foreground animate-pulse">Translating message content...</p>
                     ) : (
-                      <div className="select-text cursor-text" dangerouslySetInnerHTML={{ __html: makeLinksClickable(redactPII(item.content)) }} />
+                      <div className="select-text cursor-text" dangerouslySetInnerHTML={{ __html: sanitizeLinkifiedText(redactPII(item.content)) }} />
                     )}
                   </div>
 

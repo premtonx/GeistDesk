@@ -52,15 +52,12 @@ export class AIAdapter {
     const sentimentProfile = this.getProfileForType('sentiment');
     const thinkingProfile = this.getProfileForType('thinking');
 
-    const envKeyAvailable = typeof process !== 'undefined' && process.env?.GEMINI_API_KEY;
-    const hasGoogleKey = !!(this.config.apiKey || envKeyAvailable);
-
     const sentimentOk = sentimentProfile.provider === 'google'
-      ? hasGoogleKey
+      ? true
       : !!(sentimentProfile.endpoint && sentimentProfile.endpoint.trim());
 
     const thinkingOk = thinkingProfile.provider === 'google'
-      ? hasGoogleKey
+      ? true
       : !!(thinkingProfile.endpoint && thinkingProfile.endpoint.trim());
 
     return sentimentOk || thinkingOk;

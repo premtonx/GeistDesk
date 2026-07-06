@@ -2,7 +2,6 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import {
   auth,
   onAuthStateChanged,
-  getSessionToken,
   signOut,
   type User,
 } from '../firebase';
@@ -28,12 +27,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(nextUser);
       setLoading(false);
       if (nextUser) {
-        const token = getSessionToken();
-        if (!token) {
-          console.warn('[AuthProvider] Authenticated user without session token; clearing stale session');
-          signOut(auth);
-          return;
-        }
         applySessionAuthHeader();
         if (isBetaAutoAdminEnabled()) {
           applyBetaAdminSession(nextUser);
