@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import crypto from "crypto";
+import { routeParam } from "../lib/route-params.js";
 import { authenticate, requireRole } from "../middleware/authMiddleware.js";
 import { 
   getDocDirect, 
@@ -237,7 +238,7 @@ router.post("/users/create-local", authenticate, requireRole(["SYSTEM_ADMIN"]), 
  */
 router.patch("/users/:id/role", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     if (!id || id.trim() === "") {
       return res.status(400).json({ error: "Missing required user id parameter." });
     }
@@ -320,7 +321,7 @@ router.patch("/users/:id/role", authenticate, requireRole(["SYSTEM_ADMIN"]), asy
  */
 router.post("/users/:id/set-password", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
   try {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     if (!id || id.trim() === "") {
       return res.status(400).json({ error: "Missing required user id parameter." });
     }

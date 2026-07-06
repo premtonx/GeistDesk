@@ -9,6 +9,7 @@ import {
   updateDocDirect,
   deleteDocDirect,
 } from '../lib/postgres-backend.js';
+import { routeParam } from '../lib/route-params.js';
 
 const router = Router();
 const COLLECTION = 'geist_vault_portfolios';
@@ -126,7 +127,7 @@ router.post('/portfolios', authenticate, async (req: Request, res: Response): Pr
 /** PUT /api/credential-vault/portfolios/:id */
 router.put('/portfolios/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     const parsed = updatePortfolioSchema.safeParse(req.body);
     if (!parsed.success) {
       return res.status(400).json({ error: parsed.error.issues[0]?.message || 'Invalid input' });
@@ -157,7 +158,7 @@ router.put('/portfolios/:id', authenticate, async (req: Request, res: Response):
 /** DELETE /api/credential-vault/portfolios/:id — owner or system admin */
 router.delete('/portfolios/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
-    const { id } = req.params;
+    const id = routeParam(req.params.id);
     const existing = await getDocDirect(COLLECTION, id);
     if (!existing) return res.status(404).json({ error: 'Portfolio not found' });
 

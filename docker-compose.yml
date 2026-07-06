@@ -18,11 +18,18 @@ services:
       - DATABASE_URL=postgresql://geist_user:geist_password@geistdesk-db:5432/geistdesk_prod?sslmode=disable
 
       # Required security secrets (define these in the server's .env file).
-      # The server fails fast without JWT_SECRET; GeistVault requires VAULT_ENCRYPTION_KEY.
       - JWT_SECRET=${JWT_SECRET}
       - VAULT_ENCRYPTION_KEY=${VAULT_ENCRYPTION_KEY}
-      # Only required if using Microsoft Entra ID SSO (token audience validation).
-      - MICROSOFT_PROVIDER_CLIENT_ID=${MICROSOFT_PROVIDER_CLIENT_ID}
+      - AI_SECRETS_KEY=${AI_SECRETS_KEY:-}
+      - MICROSOFT_PROVIDER_CLIENT_ID=${MICROSOFT_PROVIDER_CLIENT_ID:-}
+
+      # Security hardening (production defaults)
+      - BETA_AUTO_ADMIN=${BETA_AUTO_ADMIN:-false}
+      - ALLOW_PUBLIC_REGISTRATION=${ALLOW_PUBLIC_REGISTRATION:-false}
+      - ENABLE_SANDBOX=${ENABLE_SANDBOX:-false}
+      - GRAPH_CLIENT_STATE_SECRET=${GRAPH_CLIENT_STATE_SECRET}
+      - INBOUND_MAIL_WEBHOOK_SECRET=${INBOUND_MAIL_WEBHOOK_SECRET}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
       
       # Base environment configs (SSO)
       - VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY}

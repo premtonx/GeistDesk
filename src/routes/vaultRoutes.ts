@@ -21,6 +21,7 @@ import {
   isPreviewOrPrefetchRequest,
   isVaultReadCommit,
 } from "../lib/vaultRequestUtils.js";
+import { routeParam } from "../lib/route-params.js";
 
 const DROPZONE_VAULT_KIND = "dropzone_upload_bucket";
 
@@ -389,7 +390,8 @@ router.get("/history", authenticate, async (req: any, res: Response): Promise<an
  */
 async function handleSecretMetadata(req: Request, res: Response): Promise<any> {
   try {
-    const item = await getDocDirect(VAULT_ITEMS, req.params.id);
+    const itemId = routeParam(req.params.id);
+    const item = await getDocDirect(VAULT_ITEMS, itemId);
     if (!item) return res.status(404).json({ error: "Not found" });
 
     const payload = formatVaultItemMetadata(item);
@@ -424,10 +426,11 @@ router.head("/secrets/:id", handleSecretMetadata);
  */
 router.post("/secrets/:id/reveal", vaultRevealRateLimiter, async (req: Request, res: Response): Promise<any> => {
   try {
+    const itemId = routeParam(req.params.id);
     const prefetchOrPreview = isPreviewOrPrefetchRequest(req);
     const commitRead = isVaultReadCommit(req);
 
-    const item = await getDocDirect(VAULT_ITEMS, req.params.id);
+    const item = await getDocDirect(VAULT_ITEMS, itemId);
     if (!item) return res.status(404).json({ error: "Not found" });
     if (resolveVaultBurned(item)) {
       return res.status(410).json({ error: "This secret has already been burned or expired.", isBurned: true });
@@ -458,7 +461,7 @@ router.post("/secrets/:id/reveal", vaultRevealRateLimiter, async (req: Request, 
       });
     }
 
-    const claim = await claimVaultRevealSlot(req.params.id);
+    const claim = await claimVaultRevealSlot(itemId);
     if (claim.ok === false) {
       return res.status(claim.status).json({
         error: claim.status === 404 ? 'Not found' : 'This secret has already been burned or expired.',
@@ -510,7 +513,8 @@ router.post("/secrets/:id/upload", vaultRevealRateLimiter, async (req: Request, 
   if (!fileName) return res.status(400).json({ error: "fileName is required" });
 
   try {
-    const item = await getDocDirect(VAULT_ITEMS, req.params.id);
+    const itemId = routeParam(req.params.id);
+    const item = await getDocDirect(VAULT_ITEMS, itemId);
     if (!item || !isDropzoneItem(item)) return res.status(404).json({ error: "Dropzone not found" });
     if (resolveVaultBurned(item)) {
       return res.status(410).json({ error: "This dropzone has expired or is no longer accepting uploads." });
@@ -579,7 +583,8 @@ router.post("/secrets/:id/content", authenticate, async (req: any, res: Response
   if (!content) return res.status(400).json({ error: "content is required" });
 
   try {
-    const item = await getDocDirect(VAULT_ITEMS, req.params.id);
+    const itemId = routeParam(req.params.id);
+    const item = await getDocDirect(VAULT_ITEMS, itemId);
     if (!item) return res.status(404).json({ error: "Not found" });
 
     let secretRef = item.secretRef;
@@ -589,7 +594,7 @@ router.post("/secrets/:id/content", authenticate, async (req: any, res: Response
       await updateDocDirect(VAULT_ITEMS, item.id, { secretRef });
     }
     await updateDocDirect(VAULT_SECRETS, secretRef, {
-      encryptedContent: encryptPayloadPreferred(content, `dropzone-owner:${req.user.id}:${req.params.id}`),
+      encryptedContent: encryptPayloadPreferred(content, `dropzone-owner:${req.user.id}:${itemId}`),
     });
     if (req.body?.metadata) {
       await updateDocDirect(VAULT_ITEMS, item.id, { metadata: { ...(item.metadata || {}), ...req.body.metadata } });
@@ -650,7 +655,8 @@ router.get("/dropzones/download", authenticate, async (req: any, res: Response):
 /** POST /api/vault/secrets/:id/burn — authenticated owner/admin burn. */
 router.post("/secrets/:id/burn", authenticate, async (req: any, res: Response): Promise<any> => {
   try {
-    const item = await getDocDirect(VAULT_ITEMS, req.params.id);
+    const itemId = routeParam(req.params.id);
+    const item = await getDocDirect(VAULT_ITEMS, itemId);
     if (!item) return res.status(404).json({ error: "Not found" });
     if (item.createdBy !== req.user.id && req.user.role !== "SYSTEM_ADMIN") {
       return res.status(403).json({ error: "Forbidden: you cannot burn this secret." });
