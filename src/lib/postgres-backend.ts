@@ -504,6 +504,10 @@ function generateDocId(): string {
   return randomUUID();
 }
 
+function toJsonbParam(value: unknown): string {
+  return JSON.stringify(value ?? {});
+}
+
 export async function addDocDirect(collectionName: string, data: any): Promise<any> {
   const pool = requirePool();
   const generatedId = generateDocId();
@@ -511,9 +515,9 @@ export async function addDocDirect(collectionName: string, data: any): Promise<a
   processed.id = generatedId;
 
   await pool.query(
-    `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, $3)
+    `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, $3::jsonb)
      ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-    [collectionName, generatedId, processed]
+    [collectionName, generatedId, toJsonbParam(processed)]
   );
 
   return { id: generatedId, data: processed };
@@ -526,9 +530,9 @@ export async function updateDocDirect(collectionName: string, id: string, data: 
   delete processed.id; // Primary ID is handled in row columns
 
   await pool.query(
-    `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, $3)
+    `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, $3::jsonb)
      ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-    [collectionName, id, processed]
+    [collectionName, id, toJsonbParam(processed)]
   );
 }
 
@@ -538,9 +542,9 @@ export async function setDocDirect(collectionName: string, id: string, data: any
   delete processed.id;
 
   await pool.query(
-    `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, $3)
+    `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, $3::jsonb)
      ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-    [collectionName, id, processed]
+    [collectionName, id, toJsonbParam(processed)]
   );
 }
 

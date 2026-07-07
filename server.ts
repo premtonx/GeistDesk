@@ -39,7 +39,7 @@ import kbDashboardRoutes from "./src/routes/kbDashboardRoutes.js";
 import kbIngestionRoutes from "./src/routes/kbIngestionRoutes.js";
 import executiveDashboardRoutes from "./src/routes/executiveDashboardRoutes.js";
 import { orchestratorEventBus } from "./src/lib/ai-orchestrator-events.js";
-import { hashPassword, verifyPassword } from "./src/lib/crypto.js";
+import { hashPassword, verifyPassword, assertVaultEncryptionConfigured } from "./src/lib/crypto.js";
 import { calculateCoverage, getDashboardData } from "./src/services/coverageEngine.js";
 import { assertDbCollectionAccess } from "./src/lib/db-access-policy.js";
 import { setSessionCookie, clearSessionCookie } from "./src/lib/session-cookie.js";
@@ -148,6 +148,15 @@ console.log("Server process starting...");
 async function startServer() {
   console.log("Initializing Express app...");
   await initDb();
+  if (IS_PROD) {
+    try {
+      assertVaultEncryptionConfigured();
+      console.log("[Vault] VAULT_ENCRYPTION_KEY validated (256-bit).");
+    } catch (vaultKeyError: any) {
+      console.error("[Vault] FATAL:", vaultKeyError?.message || vaultKeyError);
+      throw vaultKeyError;
+    }
+  }
   const app = express();
   const PORT = 3000;
 
@@ -159,7 +168,7 @@ async function startServer() {
             // External bootstrap only — no unsafe-inline scripts (see public/storage-bootstrap.js).
             // GeistVault derives master keys in-browser via hash-wasm (Argon2id → WebAssembly.compile).
             scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
+            styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
             imgSrc: ["'self'", "data:", "blob:", "https:"],
             connectSrc: ["'self'", "https:", "wss:"],
             fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],

@@ -111,8 +111,13 @@ export function assertVaultEncryptionConfigured(): void {
   getVaultKey();
 }
 
+function normalizeVaultKeyMaterial(raw: string | undefined): string {
+  if (!raw) return "";
+  return raw.trim().replace(/^['"]|['"]$/g, "");
+}
+
 function getVaultKey(): Buffer {
-  const raw = process.env.VAULT_ENCRYPTION_KEY;
+  const raw = normalizeVaultKeyMaterial(process.env.VAULT_ENCRYPTION_KEY);
   if (!raw) {
     throw new Error(
       "VAULT_ENCRYPTION_KEY is not configured. Refusing to process vault secrets without a 256-bit key. " +
@@ -237,6 +242,15 @@ export function decryptPayloadAuto(payload: AnyEncryptedPayload): string {
 /** Prefer hybrid encryption for all newly written vault/exchange secret material. */
 export function encryptPayloadPreferred(plaintext: string, provenance?: string): AnyEncryptedPayload {
   return encryptStringHybrid(plaintext, provenance);
+}
+
+/**
+ * GeistExchange at-rest encryption — AES-256-GCM (v1).
+ * Used for Shamir shares + content blobs: fast, low memory, decrypts via decryptPayloadAuto.
+ * Client-side Shamir splitting still provides split-knowledge before transit.
+ */
+export function encryptExchangeAtRest(plaintext: string): EncryptedPayload {
+  return encryptString(plaintext);
 }
 
 /** Encrypt an array of strings (e.g. Shamir shares) individually. */

@@ -15,7 +15,7 @@ import {
 import {
   assertVaultEncryptionConfigured,
   decryptPayloadAuto,
-  encryptPayloadPreferred,
+  encryptExchangeAtRest,
 } from "../lib/crypto.js";
 import type { AnyEncryptedPayload } from "../lib/crypto-payload.js";
 import {
@@ -360,12 +360,11 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
     });
     itemId = itemRecord.id;
 
-    const provenance = `exchange:${req.user.id}:${itemRecord.id}`;
     const encryptedShares = hasShares
-      ? shares!.map((share) => encryptPayloadPreferred(share, provenance))
+      ? shares!.map((share) => encryptExchangeAtRest(share))
       : null;
     const encryptedContent = hasContent
-      ? encryptPayloadPreferred(content!.trim(), provenance)
+      ? encryptExchangeAtRest(content!.trim())
       : null;
 
     if (encryptedShares || encryptedContent) {
@@ -402,7 +401,7 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
 
     return res.status(201).json({ id: itemRecord.id });
   } catch (e: any) {
-    console.error("[Vault] Failed to create secret:", e?.message || e);
+    console.error("[Vault] Failed to create secret:", e?.message || e, e?.stack);
     if (secretRef) {
       await deleteDocDirect(VAULT_SECRETS, secretRef).catch(() => undefined);
     }
@@ -624,7 +623,7 @@ router.post("/secrets/:id/upload", vaultRevealRateLimiter, async (req: Request, 
     }
 
     await updateDocDirect(VAULT_SECRETS, secretRef, {
-      encryptedContent: encryptPayloadPreferred(content, `dropzone:${item.createdBy}:${item.id}`),
+      encryptedContent: encryptExchangeAtRest(content),
     });
     await updateDocDirect(VAULT_ITEMS, item.id, {
       metadata: {
@@ -675,7 +674,7 @@ router.post("/secrets/:id/content", authenticate, async (req: any, res: Response
       await updateDocDirect(VAULT_ITEMS, item.id, { secretRef });
     }
     await updateDocDirect(VAULT_SECRETS, secretRef, {
-      encryptedContent: encryptPayloadPreferred(content, `dropzone-owner:${req.user.id}:${itemId}`),
+      encryptedContent: encryptExchangeAtRest(content),
     });
     if (req.body?.metadata) {
       await updateDocDirect(VAULT_ITEMS, item.id, { metadata: { ...(item.metadata || {}), ...req.body.metadata } });
