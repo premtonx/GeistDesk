@@ -1,4 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
+import { resolveCategoryIcon } from '../../lib/kb-category-icons';
+import type { KBCategoryDto } from '../../services/kbDashboardApi';
 
 export const UNCATEGORIZED_CATEGORY_ID = 'uncategorized';
 
@@ -61,6 +63,21 @@ export function getCategoryDisplayName(
     return t('kb.categories.uncategorized.name', 'Uncategorized');
   }
   return t(categoryI18nKey(id), id);
+}
+
+export function mapDbCategoryToRecord(dto: KBCategoryDto, fallbackOrder = 0): KBCategoryRecord {
+  return {
+    id: dto.id,
+    name: dto.name,
+    subCategory: dto.subCategory,
+    desc: dto.desc,
+    owner: dto.owner,
+    updated: dto.updatedAt
+      ? new Date(dto.updatedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      : undefined,
+    icon: resolveCategoryIcon(dto.iconName),
+    order: dto.order ?? fallbackOrder,
+  };
 }
 
 export function articleMatchesCategoryId(
