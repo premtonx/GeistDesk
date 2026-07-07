@@ -157,7 +157,8 @@ async function startServer() {
           useDefaults: true,
           directives: {
             // External bootstrap only — no unsafe-inline scripts (see public/storage-bootstrap.js).
-            scriptSrc: ["'self'"],
+            // GeistVault derives master keys in-browser via hash-wasm (Argon2id → WebAssembly.compile).
+            scriptSrc: ["'self'", "'wasm-unsafe-eval'"],
             styleSrc: ["'self'", "'unsafe-inline'"],
             imgSrc: ["'self'", "data:", "blob:", "https:"],
             connectSrc: ["'self'", "https:", "wss:"],

@@ -237,17 +237,37 @@ class SovereignDB extends Dexie {
 const localDB = new SovereignDB();
 
 // --- Crypto Helpers ---
+function isVaultWasmBlockedError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err);
+  return /WebAssembly|wasm-unsafe-eval|Wasm code generation disallowed|WebAssembly is not supported/i.test(msg);
+}
+
+function vaultCryptoErrorMessage(err: unknown, fallback: string): string {
+  if (isVaultWasmBlockedError(err)) {
+    return 'Vault cryptography was blocked by browser security policy (WebAssembly). Reload after deploy, or contact your administrator.';
+  }
+  if (err instanceof Error && err.message.trim()) {
+    return err.message;
+  }
+  return fallback;
+}
+
 async function deriveMasterKey(password: string, salt: string) {
-  const result = await argon2id({
-    password: password,
-    salt: salt,
-    parallelism: 1,
-    iterations: 10,
-    memorySize: 65536, // 64MB
-    hashLength: 32,
-    outputType: 'binary',
-  });
-  return result instanceof Uint8Array ? result : new Uint8Array(result);
+  try {
+    const result = await argon2id({
+      password: password,
+      salt: salt,
+      parallelism: 1,
+      iterations: 10,
+      memorySize: 65536, // 64MB
+      hashLength: 32,
+      outputType: 'binary',
+    });
+    return result instanceof Uint8Array ? result : new Uint8Array(result);
+  } catch (err) {
+    console.error('[GeistVault] Argon2id key derivation failed:', err);
+    throw err;
+  }
 }
 
 function normalizeDerivedKey(key: Uint8Array | ArrayBuffer | null): Uint8Array | null {
@@ -633,7 +653,7 @@ export default function CredentialVaultPage() {
     }
   };
 
-  const wipeLocalPersonalVaultCache = async () => {
+  const wipeLocalPersonalVaultCache = async (options?: { preserveMasterPassword?: boolean }) => {
     const creds = await localDB.credentials.where('vaultId').equals('local').toArray();
     for (const cred of creds) {
       if (cred.id != null) await localDB.credentials.delete(Number(cred.id));
@@ -643,8 +663,10 @@ export default function CredentialVaultPage() {
       await localDB.folders.delete(folder.id);
     }
     setDerivedKey(null);
-    setMasterPassword(isDemoVaultMode ? 'password123' : '');
-    setConfirmPassword('');
+    if (!options?.preserveMasterPassword) {
+      setMasterPassword(isDemoVaultMode ? 'password123' : '');
+      setConfirmPassword('');
+    }
   };
 
   const discoverVaultGateMode = useCallback(async () => {
@@ -710,11 +732,13 @@ export default function CredentialVaultPage() {
     if (e) e.preventDefault();
     if (!masterPassword || !user) return;
     setIsUnlocking(true);
+    const passwordForDerivation = masterPassword;
     try {
-      const key = await deriveMasterKey(masterPassword, `user-salt-${user.uid}`);
+      const key = await deriveMasterKey(passwordForDerivation, `user-salt-${user.uid}`);
       await completeVaultUnlock(key);
     } catch (err) {
-      toast.error('Failed to unlock. Ensure Master Password conforms.');
+      console.error('[GeistVault] Vault unlock failed:', err);
+      toast.error(vaultCryptoErrorMessage(err, 'Failed to unlock. Check your master password and try again.'));
     } finally {
       setIsUnlocking(false);
     }
@@ -733,16 +757,18 @@ export default function CredentialVaultPage() {
     }
 
     setIsUnlocking(true);
+    const passwordForDerivation = masterPassword;
     try {
-      await wipeLocalPersonalVaultCache();
-      const key = await deriveMasterKey(masterPassword, `user-salt-${user.uid}`);
+      await wipeLocalPersonalVaultCache({ preserveMasterPassword: true });
+      const key = await deriveMasterKey(passwordForDerivation, `user-salt-${user.uid}`);
       await credentialVaultService.initializePersonalVault();
       await completeVaultUnlock(key);
       setVaultGateMode('unlock');
       logAudit({ module: 'credentials', action: 'vault_initialized', details: { vaultType: 'personal_local' } });
       toast.success('Persönlicher Tresor initialisiert. Ihr Master-Passwort verlässt niemals diesen Browser.');
     } catch (err) {
-      toast.error('Initialisierung fehlgeschlagen. Bitte erneut versuchen.');
+      console.error('[GeistVault] Vault initialization failed:', err);
+      toast.error(vaultCryptoErrorMessage(err, 'Initialisierung fehlgeschlagen. Bitte erneut versuchen.'));
     } finally {
       setIsUnlocking(false);
     }
