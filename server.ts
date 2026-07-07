@@ -35,6 +35,7 @@ import credentialVaultRoutes from "./src/routes/credentialVaultRoutes.js";
 import kbArticleRoutes from "./src/routes/kbArticleRoutes.js";
 import kbCategoryRoutes from "./src/routes/kbCategoryRoutes.js";
 import kbDashboardRoutes from "./src/routes/kbDashboardRoutes.js";
+import kbIngestionRoutes from "./src/routes/kbIngestionRoutes.js";
 import executiveDashboardRoutes from "./src/routes/executiveDashboardRoutes.js";
 import { orchestratorEventBus } from "./src/lib/ai-orchestrator-events.js";
 import { hashPassword, verifyPassword } from "./src/lib/crypto.js";
@@ -411,6 +412,7 @@ async function startServer() {
   app.use("/api/kb/articles", kbArticleRoutes);
   app.use("/api/kb/categories", kbCategoryRoutes);
   app.use("/api/kb/dashboard", kbDashboardRoutes);
+  app.use("/api/kb", kbIngestionRoutes);
   app.use("/api/dashboard", executiveDashboardRoutes);
   app.use("/api/module-config", moduleConfigRoutes);
 
@@ -1448,58 +1450,6 @@ Respond only with the raw valid JSON payload.`;
     } catch (error) {
       console.error("Export Error:", error);
       res.status(500).json({ error: "Export failed" });
-    }
-  });
-
-  app.post("/api/kb/crawl", checkAdmin, async (req, res) => {
-    const { url } = req.body;
-    if (!url) return res.status(400).json({ error: "URL is required" });
-    if (isPrivateNetworkUrl(String(url))) {
-      return res.status(400).json({ error: "URL targets a private or disallowed network address." });
-    }
-
-    try {
-      console.log(`Crawling URL: ${url}`);
-      const response = await axios.get(url, {
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-      });
-      const $ = cheerio.load(response.data);
-      
-      const title = $("h1").first().text().trim() || $("title").text().trim() || url;
-      // Try common content containers
-      const content = $("article, main, .content, #content, .post").first().text().trim() || $("body").text().trim();
-
-      res.json({ title, content });
-    } catch (error) {
-      console.error("Crawl error:", error);
-      res.status(500).json({ error: "Failed to crawl site" });
-    }
-  });
-
-  app.post("/api/kb/parse-file", checkAdmin, upload.single("file"), async (req: any, res) => {
-    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
-
-    try {
-      const { originalname, buffer, mimetype } = req.file;
-      console.log(`Parsing file: ${originalname} (${mimetype})`);
-      let text = "";
-
-      if (mimetype === "application/pdf") {
-        const data = await pdf(buffer);
-        text = data.text;
-      } else if (mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
-        const data = await mammoth.extractRawText({ buffer });
-        text = data.value;
-      } else {
-        text = buffer.toString("utf-8");
-      }
-
-      res.json({ title: originalname, content: text });
-    } catch (error) {
-      console.error("Parse error:", error);
-      res.status(500).json({ error: "Failed to parse file" });
     }
   });
 

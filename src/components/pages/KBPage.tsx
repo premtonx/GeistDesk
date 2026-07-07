@@ -119,6 +119,7 @@ import {
   mapDbCategoryToRecord,
 } from '../kb/kbCategoryUtils';
 import { KBCategoryAdminPanel } from '../kb/KBCategoryAdminPanel';
+import { KBCategoryCreateDialog } from '../kb/KBCategoryCreateDialog';
 import {
   computeDashboardMetrics,
   isDraftStatus,
@@ -607,6 +608,7 @@ export default function KBPage() {
   
   // Advanced side panels & creation states
   const [isCategoryAdminOpen, setIsCategoryAdminOpen] = useState(false);
+  const [isCategoryCreateOpen, setIsCategoryCreateOpen] = useState(false);
   const [kbGlobalSettings, setKbGlobalSettings] = useState<KBGlobalSettings | null>(null);
   const [isRenamingCategory, setIsRenamingCategory] = useState(false);
   const [renameCategoryId, setRenameCategoryId] = useState<string | null>(null);
@@ -1878,7 +1880,7 @@ export default function KBPage() {
                     onImportDocs={() => setIsImportOpen(true)}
                     onAiGenerate={() => handleKbNavigate({ type: 'workspace', id: 'ai' })}
                     onNewArticle={() => openCreateArticle()}
-                    onNewCategory={() => setIsCategoryAdminOpen(true)}
+                    onNewCategory={() => setIsCategoryCreateOpen(true)}
                   />
 
                   {isAiAssistantMode ? (
@@ -2101,10 +2103,17 @@ export default function KBPage() {
             <DialogTitle>{t('kb.actions.importDocs', 'Import Docs')}</DialogTitle>
             <DialogDescription>{t('kb.importDesc', 'Import documentation from URLs or files with AI-assisted parsing.')}</DialogDescription>
           </DialogHeader>
-          <KBImporter />
+          <KBImporter categories={categories} />
         </DialogContent>
       </Dialog>
 
+
+      <KBCategoryCreateDialog
+        open={isCategoryCreateOpen}
+        onOpenChange={setIsCategoryCreateOpen}
+        categories={categories}
+        onCategoriesChange={setCategories}
+      />
 
       <KBCategoryAdminPanel
         open={isCategoryAdminOpen}
@@ -2114,7 +2123,6 @@ export default function KBPage() {
           articles.filter((a) => resolveArticleCategoryId(a, categories) === categoryId).length
         }
         onCategoriesChange={setCategories}
-        enterpriseUsers={ENTERPRISE_USERS}
       />
 
       <KBCategoryDeleteModal

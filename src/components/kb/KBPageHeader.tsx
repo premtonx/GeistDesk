@@ -70,17 +70,17 @@ export function KBPageHeader({
                 className="h-9 rounded-xl text-xs font-semibold bg-blue-600 hover:bg-blue-700 text-white gap-1"
               >
                 <Plus className="w-3.5 h-3.5" />
-                {t('kb.actions.newArticle', 'New Article')}
+                {t('kb.actions.newShort', '+ Neu')}
                 <ChevronDown className="w-3.5 h-3.5 opacity-80" />
               </Button>
             }
           />
-          <DropdownMenuContent align="end" className="w-48 rounded-xl">
+          <DropdownMenuContent align="end" className="w-56 rounded-xl">
             <DropdownMenuItem onClick={onNewArticle} className="text-xs font-medium">
-              {t('kb.actions.newDocument', 'New Document')}
+              {t('kb.actions.createArticle', '📄 Artikel erstellen')}
             </DropdownMenuItem>
             <DropdownMenuItem onClick={onNewCategory ?? onNewArticle} className="text-xs font-medium">
-              {t('kb.actions.newFolder', 'New Folder / Category')}
+              {t('kb.actions.createCategory', '📁 Kategorie erstellen')}
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

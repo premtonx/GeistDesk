@@ -31,7 +31,6 @@ interface KBCategoryAdminPanelProps {
   categories: KBCategoryRecord[];
   articleCountByCategory: (categoryId: string) => number;
   onCategoriesChange: (categories: KBCategoryRecord[]) => void;
-  enterpriseUsers: { name: string }[];
 }
 
 export function KBCategoryAdminPanel({
@@ -40,12 +39,10 @@ export function KBCategoryAdminPanel({
   categories,
   articleCountByCategory,
   onCategoriesChange,
-  enterpriseUsers,
 }: KBCategoryAdminPanelProps) {
   const { t } = useTranslation();
   const [newName, setNewName] = useState('');
   const [newDesc, setNewDesc] = useState('');
-  const [newOwner, setNewOwner] = useState(enterpriseUsers[0]?.name ?? 'Sarah James');
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setEditingName] = useState('');
   const [deleteTarget, setDeleteTarget] = useState<KBCategoryRecord | null>(null);
@@ -67,7 +64,6 @@ export function KBCategoryAdminPanel({
       const { category } = await kbCategoryApi.create({
         name: newName.trim(),
         desc: newDesc.trim(),
-        owner: newOwner,
         order: categories.length + 1,
       });
       onCategoriesChange([
@@ -82,7 +78,7 @@ export function KBCategoryAdminPanel({
     } finally {
       setBusy(false);
     }
-  }, [categories, newDesc, newName, newOwner, onCategoriesChange, t]);
+  }, [categories, newDesc, newName, onCategoriesChange, t]);
 
   const handleRename = useCallback(
     async (categoryId: string) => {
@@ -170,24 +166,13 @@ export function KBCategoryAdminPanel({
                   placeholder={t('kb.categoryAdd.descPlaceholder', 'Short description (optional)')}
                   className="h-9 rounded-lg text-sm"
                 />
-                <select
-                  value={newOwner}
-                  onChange={(e) => setNewOwner(e.target.value)}
-                  className="w-full h-9 border rounded-lg bg-white px-2 text-sm"
-                >
-                  {enterpriseUsers.map((u) => (
-                    <option key={u.name} value={u.name}>
-                      {u.name}
-                    </option>
-                  ))}
-                </select>
                 <Button
                   size="sm"
-                  className="w-full rounded-lg"
+                  className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white font-semibold shadow-sm"
                   disabled={busy || !newName.trim()}
                   onClick={() => void handleCreate()}
                 >
-                  {t('kb.categoryAdd.submit', 'Add category')}
+                  {t('kb.categoryAdd.confirm', 'Create category')}
                 </Button>
               </div>
             </div>
