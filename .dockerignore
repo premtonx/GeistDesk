@@ -1,0 +1,12 @@
+node_modules
+.git
+.github
+src
+public
+*.md
+.env
+.env.*
+dist/.vite
+.vite
+coverage
+terminals

@@ -69,6 +69,26 @@ jobs:
     permissions:
       contents: read
     steps:
+      - name: Checkout compose and Dockerfile
+        uses: actions/checkout@v4
+
+      - name: Download CI build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: production-dist-${{ github.sha }}
+          path: dist
+
+      - name: Upload prebuilt dist to production host
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: sovereign
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: dist
+          target: /home/sovereign/GeistDesk
+          overwrite: true
+
       - name: Execute Remote SSH Deployment Loop
         uses: appleboy/ssh-action@v1.0.3
         env:
@@ -79,6 +99,7 @@ jobs:
           username: sovereign
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
+          command_timeout: 30m
           envs: BUILD_ID,GITHUB_TOKEN
           script: |
             set -euo pipefail
@@ -91,6 +112,11 @@ jobs:
             export BUILD_ID="${BUILD_ID:-$DEPLOY_COMMIT}"
 
             echo "=== GeistDesk deploy @ ${DEPLOY_COMMIT} (BUILD_ID=${BUILD_ID}) ==="
+
+            if [ ! -f dist/index.html ] || [ ! -f dist/server.cjs ]; then
+              echo "FATAL: Prebuilt dist/ artifact missing on host (index.html or server.cjs)"
+              exit 1
+            fi
 
             # Ensure production security env vars exist in host .env (never overwrite existing secrets).
             touch .env
@@ -123,10 +149,10 @@ jobs:
               exit 1
             fi
 
-            # Prevent stale host-side artifacts from being copied into Docker layers.
-            rm -rf dist .vite node_modules/.vite || true
+            # Runtime-only Docker image — dist/ is supplied by CI artifact (no on-host Vite build).
+            rm -rf .vite node_modules/.vite || true
 
-            docker compose build --no-cache --pull \
+            docker compose build --pull \
               --build-arg BUILD_ID="${BUILD_ID}" \
               geistdesk-gateway
 
@@ -166,4 +192,4 @@ jobs:
             done
 
             echo "=== Deploy success: ${BUNDLE} @ ${DEPLOY_COMMIT} ==="
-            echo "Cache busting: Docker --no-cache rebuild + hashed assets + Cache-Control: no-store on index.html"
+            echo "Deploy model: CI prebuilt dist + runtime Docker image (no on-host Vite build)"

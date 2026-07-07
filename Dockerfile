@@ -1,30 +1,22 @@
-# Build Stage
-FROM node:24-alpine AS builder
-WORKDIR /app
-ARG BUILD_ID=local
-ENV BUILD_ID=$BUILD_ID
-COPY package*.json .npmrc ./
-RUN npm ci --dangerously-allow-all-scripts --no-audit
-COPY . .
-RUN npm run lint && node scripts/verify-no-react-namespace.mjs && npm run build && node scripts/verify-production-build.mjs
+# Production runtime image.
+# Expects a pre-built dist/ directory in the build context (produced by CI via
+# `npm run build` and uploaded as a deploy artifact). This avoids rebuilding
+# Vite + TypeScript on the production host, which previously exceeded SSH timeouts.
 
-# Production Stage
 FROM node:24-alpine AS runner
 WORKDIR /app
+
+ARG BUILD_ID=local
+ENV BUILD_ID=$BUILD_ID
 ENV NODE_ENV=production
 
-# Install only production dependencies
 COPY package*.json .npmrc ./
 RUN npm ci --omit=dev --dangerously-allow-all-scripts --no-audit
 
-# Copy built artifacts from the build stage
-COPY --from=builder /app/dist ./dist
-
-# Production entrypoint: wait for DB → schema deploy → seed → start server
+COPY dist ./dist
 COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-# Standard express server port configuration
 EXPOSE 3000
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
