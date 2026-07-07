@@ -54,6 +54,7 @@ jobs:
           fi
 
           node scripts/verify-production-build.mjs
+          node scripts/verify-server-bundle.mjs
 
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
@@ -159,7 +160,7 @@ jobs:
             docker compose up -d geistdesk-gateway
 
             echo "Waiting for gateway health..."
-            sleep 15
+            sleep 30
 
             BUNDLE="$(docker compose exec -T geistdesk-gateway sh -c "grep -oE 'index-[^\"]+\.js' dist/index.html | head -1")"
             echo "Active bundle inside container: ${BUNDLE}"
@@ -185,6 +186,7 @@ jobs:
               fi
               if [ "$i" -eq 10 ]; then
                 echo "FATAL: Health check did not return 200 after deploy"
+                docker compose logs --tail=120 geistdesk-gateway || true
                 exit 1
               fi
               echo "Health check attempt ${i}/10 failed — retrying in 5s..."

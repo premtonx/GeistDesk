@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
 import axios from 'axios';
+import mammoth from 'mammoth';
 import { createRequire } from 'module';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { addDocDirect } from '../lib/postgres-backend.js';
@@ -11,11 +12,12 @@ import {
   parseKbIngestBuffer,
 } from '../lib/kb-ingestion.js';
 
-const require = createRequire(import.meta.url);
+const require = createRequire(
+  typeof import.meta !== 'undefined' && import.meta.url
+    ? import.meta.url
+    : (typeof __filename !== 'undefined' ? __filename : ''),
+);
 const pdfParse = require('pdf-parse') as (data: Buffer) => Promise<{ text: string }>;
-const mammoth = require('mammoth') as {
-  extractRawText: (options: { buffer: Buffer }) => Promise<{ value: string }>;
-};
 
 const upload = multer({
   storage: multer.memoryStorage(),
