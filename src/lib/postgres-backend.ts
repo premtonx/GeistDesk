@@ -347,25 +347,36 @@ function processValueMutations(obj: any, existingDocData: any = {}): any {
     return obj;
   }
 
+  const existing =
+    existingDocData != null && typeof existingDocData === 'object' ? existingDocData : {};
+
   const result: any = Array.isArray(obj) ? [] : {};
 
   for (const key of Object.keys(obj)) {
     const val = obj[key];
 
-    if (val && typeof val === 'object') {
+    if (Array.isArray(val)) {
+      // Arrays are replaced wholesale (e.g. encryptedShares). Do not recurse into
+      // elements — null parents like encryptedShares: null would crash otherwise.
+      result[key] = val;
+    } else if (val && typeof val === 'object') {
       if (val._type === 'serverTimestamp') {
         result[key] = new Date().toISOString();
       } else if (val._type === 'arrayUnion') {
-        const existingArray = Array.isArray(existingDocData[key]) ? existingDocData[key] : [];
+        const existingArray = Array.isArray(existing[key]) ? existing[key] : [];
         result[key] = Array.from(new Set([...existingArray, ...val.values]));
       } else if (val._type === 'increment') {
-        const existingNum = typeof existingDocData[key] === 'number' ? existingDocData[key] : 0;
+        const existingNum = typeof existing[key] === 'number' ? existing[key] : 0;
         result[key] = existingNum + (val.value || 0);
       } else if (val._type === 'deleteField') {
         // Handled by skipping writing this property in result
         continue;
       } else {
-        result[key] = processValueMutations(val, existingDocData[key]);
+        const childExisting = existing[key];
+        result[key] = processValueMutations(
+          val,
+          childExisting != null && typeof childExisting === 'object' ? childExisting : {},
+        );
       }
     } else {
       result[key] = val;
@@ -705,3 +716,6 @@ export function getDb() {
     collection: (name: string) => new ServerCollectionRef(name)
   };
 }
+
+/** @internal Regression-tested by scripts/verify-process-value-mutations.mjs */
+export { processValueMutations };
