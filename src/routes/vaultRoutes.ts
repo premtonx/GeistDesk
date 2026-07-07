@@ -358,11 +358,12 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
     });
     itemId = itemRecord.id;
 
+    const provenance = `exchange:${req.user.id}:${itemRecord.id}`;
     const encryptedShares = hasShares
-      ? shares!.map((share) => encryptExchangeAtRest(share))
+      ? shares!.map((share) => encryptExchangeAtRest(share, provenance))
       : null;
     const encryptedContent = hasContent
-      ? encryptExchangeAtRest(content!.trim())
+      ? encryptExchangeAtRest(content!.trim(), provenance)
       : null;
 
     if (encryptedShares || encryptedContent) {
@@ -621,7 +622,7 @@ router.post("/secrets/:id/upload", vaultRevealRateLimiter, async (req: Request, 
     }
 
     await updateDocDirect(VAULT_SECRETS, secretRef, {
-      encryptedContent: encryptExchangeAtRest(content),
+      encryptedContent: encryptExchangeAtRest(content, `exchange:dropzone:${item.id}`),
     });
     await updateDocDirect(VAULT_ITEMS, item.id, {
       metadata: {
@@ -672,7 +673,7 @@ router.post("/secrets/:id/content", authenticate, async (req: any, res: Response
       await updateDocDirect(VAULT_ITEMS, item.id, { secretRef });
     }
     await updateDocDirect(VAULT_SECRETS, secretRef, {
-      encryptedContent: encryptExchangeAtRest(content),
+      encryptedContent: encryptExchangeAtRest(content, `exchange:dropzone:${item.id}`),
     });
     if (req.body?.metadata) {
       await updateDocDirect(VAULT_ITEMS, item.id, { metadata: { ...(item.metadata || {}), ...req.body.metadata } });

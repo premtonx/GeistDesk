@@ -19,8 +19,9 @@ const splitShares = uint8Shares.map((share) => {
   return btoa(binary);
 });
 
-const encryptedShares = splitShares.map((share) => encryptExchangeAtRest(share));
-const encryptedContent = encryptExchangeAtRest(secret);
+const provenance = 'exchange:test:item-1';
+const encryptedShares = splitShares.map((share) => encryptExchangeAtRest(share, provenance));
+const encryptedContent = encryptExchangeAtRest(secret, provenance);
 
 const payload = { encryptedShares, encryptedContent };
 const serialized = JSON.stringify(payload);
@@ -30,8 +31,12 @@ if (!Array.isArray(roundtrip.encryptedShares) || roundtrip.encryptedShares.lengt
   console.error('FATAL: encryptedShares did not round-trip through JSON');
   process.exit(1);
 }
-if (!roundtrip.encryptedContent || roundtrip.encryptedContent.v !== 1) {
+if (!roundtrip.encryptedContent || roundtrip.encryptedContent.v !== 2) {
   console.error('FATAL: encryptedContent did not round-trip through JSON');
+  process.exit(1);
+}
+if (roundtrip.encryptedShares[0]?.alg !== 'HYBRID-MLKEM1024-X25519-AES-256-GCM') {
+  console.error('FATAL: encryptedShares are not hybrid ML-KEM payloads');
   process.exit(1);
 }
 

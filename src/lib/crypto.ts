@@ -245,12 +245,12 @@ export function encryptPayloadPreferred(plaintext: string, provenance?: string):
 }
 
 /**
- * GeistExchange at-rest encryption — AES-256-GCM (v1).
- * Used for Shamir shares + content blobs: fast, low memory, decrypts via decryptPayloadAuto.
- * Client-side Shamir splitting still provides split-knowledge before transit.
+ * GeistExchange at-rest encryption — hybrid ML-KEM-1024 + X25519 envelope (v2).
+ * Each Shamir share and the content blob get an independent KEM encapsulation.
+ * decryptPayloadAuto still reads legacy v1 AES payloads written before migration.
  */
-export function encryptExchangeAtRest(plaintext: string): EncryptedPayload {
-  return encryptString(plaintext);
+export function encryptExchangeAtRest(plaintext: string, provenance?: string): AnyEncryptedPayload {
+  return encryptPayloadPreferred(plaintext, provenance);
 }
 
 /** Encrypt an array of strings (e.g. Shamir shares) individually. */
