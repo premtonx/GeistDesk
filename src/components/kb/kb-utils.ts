@@ -35,6 +35,12 @@ export function formatArticleDate(art: { updatedAt?: { toDate?: () => Date } | D
   if (art.updatedAt instanceof Date) {
     return art.updatedAt.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   }
+  if (typeof art.updatedAt === 'string' && art.updatedAt) {
+    const parsed = new Date(art.updatedAt);
+    if (!Number.isNaN(parsed.getTime())) {
+      return parsed.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    }
+  }
   return '';
 }
 

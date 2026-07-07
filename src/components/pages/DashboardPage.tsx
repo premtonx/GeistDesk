@@ -1,14 +1,14 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Badge } from '../../components/ui/badge';
 import { Button } from '../../components/ui/button';
-import { motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { useNavigate } from 'react-router-dom';
-import { 
-  TrendingUp, 
-  Clock, 
-  CheckCircle2, 
-  Smile, 
+import {
+  TrendingUp,
+  TrendingDown,
+  Clock,
+  CheckCircle2,
+  Smile,
   Sparkles,
   Calendar,
   ChevronDown,
@@ -23,105 +23,67 @@ import {
   Plus,
   Users,
   AlertTriangle,
-  FileDown,
-  Bot
+  Bot,
 } from 'lucide-react';
-import { 
-  AreaChart, 
-  Area, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer 
+import {
+  AreaChart,
+  Area,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
 } from 'recharts';
-import { ticketService } from '../../services/ticketService';
-import { Ticket as TicketType } from '../../types';
 import { CreateTicketDialog } from '../CreateTicketDialog';
 import { usePermissions } from '../../hooks/usePermissions';
 import { useTranslation } from '../../lib/context/I18nContext';
-
-interface TicketStats {
-  total: number;
-  open: number;
-  pending: number;
-  resolved: number;
-  closed: number;
-  unassigned: number;
-  urgent: number;
-}
-
-// Visual trend points exactly resembling the premium dashboard curve
-const TRENDS_CHART_DATA = [
-  { name: 'May 12', tickets: 23 },
-  { name: 'May 13', tickets: 35 },
-  { name: 'May 14', tickets: 38 },
-  { name: 'May 15', tickets: 72 }, // peak
-  { name: 'May 16', tickets: 53 },
-  { name: 'May 17', tickets: 40 },
-  { name: 'May 18', tickets: 28 },
-];
+import {
+  executiveDashboardApi,
+  type DashboardStatsPayload,
+} from '../../services/executiveDashboardApi';
+import { formatRelativeTime, formatTrendBadge } from '../../lib/dashboard-format-utils';
 
 export default function DashboardPage() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { userProfile } = usePermissions();
-  const [tickets, setTickets] = useState<TicketType[]>([]);
   const [isNewTicketOpen, setIsNewTicketOpen] = useState(false);
-  const [serverStats, setServerStats] = useState<TicketStats>({
-    total: 0, open: 0, pending: 0, resolved: 0, closed: 0, unassigned: 0, urgent: 0
-  });
+  const [dashboardStats, setDashboardStats] = useState<DashboardStatsPayload | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  // Subscribe to real tickets (used for the recent-activity feed only)
-  useEffect(() => {
-    if (!userProfile) return;
-    const unsub = ticketService.subscribeToTickets(setTickets);
-    return () => unsub();
-  }, [userProfile]);
-
-  // Authoritative metrics are computed server-side in SQL so they match
-  // production exactly rather than being filtered/mocked in the client.
   useEffect(() => {
     if (!userProfile) return;
     let active = true;
-    const loadStats = async () => {
+
+    const load = async () => {
       try {
-        const res = await fetch('/api/stats/tickets', { credentials: 'include' });
-        if (res.ok && active) {
-          setServerStats(await res.json());
-        }
-      } catch {
-        /* transient; will retry on next dependency change */
+        const stats = await executiveDashboardApi.getStats();
+        if (active) setDashboardStats(stats);
+      } catch (error) {
+        console.error('Failed to load dashboard stats:', error);
+      } finally {
+        if (active) setLoading(false);
       }
     };
-    loadStats();
-    const intervalId = setInterval(loadStats, 10000);
-    return () => { active = false; clearInterval(intervalId); };
+
+    void load();
+    const intervalId = setInterval(load, 30000);
+    return () => {
+      active = false;
+      clearInterval(intervalId);
+    };
   }, [userProfile]);
 
-  // Derive display KPIs strictly from authoritative server counts.
-  const stats = useMemo(() => {
-    const resolved = serverStats.resolved + serverStats.closed;
-    const total = serverStats.total || 0;
-    const resolutionRate = total > 0 ? `${Math.round((resolved / total) * 1000) / 10}%` : '0%';
-    return {
-      resolutionRate,
-      avgResolutionTime: '—',
-      resolvedCount: resolved,
-      openCount: serverStats.open,
-      pendingCount: serverStats.pending,
-      unassignedCount: serverStats.unassigned,
-      overdueCount: serverStats.urgent,
-      satisfaction: '—',
-      aiSuggestionsCount: tickets.filter(t => !!(t as any).aiSummary).length
-    };
-  }, [serverStats, tickets]);
+  const stats = dashboardStats?.kpis;
+  const buckets = dashboardStats?.buckets;
+  const trendChart = dashboardStats?.trendChart ?? [];
+  const trendFooter = dashboardStats?.trendFooter;
+  const kbHealth = dashboardStats?.kbHealth;
+  const aiInsights = dashboardStats?.aiInsights;
 
-  // Recent activity is sourced exclusively from real tickets (no mock blending).
   const recentTicketsList = useMemo(() => {
-    return tickets.slice(0, 5).map((t) => {
-      const ticketAny = t as any;
-      const category = ticketAny.category || t.team || 'General';
+    return (dashboardStats?.recentTickets ?? []).map((ticket) => {
+      const category = ticket.category || 'General';
       let CatIcon = Mail;
       let colors = 'bg-[#EFF6FF] text-[#2563EB] border-[#DBEAFE]';
       if (category === 'Network' || category === 'engineering') {
@@ -139,25 +101,24 @@ export default function DashboardPage() {
       }
 
       let priorityColor = 'bg-[#FFEDD5] text-[#D97706]';
-      if (t.priority === 'urgent' || t.priority === 'high') {
+      if (ticket.priority === 'urgent' || ticket.priority === 'high') {
         priorityColor = 'bg-[#FEE2E2] text-[#DC2626]';
-      } else if (t.priority === 'low') {
+      } else if (ticket.priority === 'low') {
         priorityColor = 'bg-[#ECFDF5] text-[#059669]';
       }
 
       return {
-        id: t.id,
-        isReal: true,
-        subject: t.subject,
+        id: ticket.id,
+        subject: ticket.subject,
         category,
-        priority: t.priority || 'medium',
-        time: 'Recently',
+        priority: ticket.priority || 'medium',
+        time: formatRelativeTime(ticket.updatedAt),
         icon: CatIcon,
         iconColor: colors,
-        priorityColor
+        priorityColor,
       };
     });
-  }, [tickets]);
+  }, [dashboardStats?.recentTickets]);
 
   return (
     <div id="dashboard-scroller" className="flex-1 overflow-y-auto min-h-0 bg-[#F8F9FA] custom-scrollbar">
@@ -185,7 +146,7 @@ export default function DashboardPage() {
               className="bg-white border-gray-200 text-gray-700 h-10 px-4 rounded-xl text-xs font-semibold flex items-center gap-2 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all"
             >
               <Calendar className="w-4 h-4 text-gray-500" />
-              May 12 – May 18, 2025
+              {dashboardStats?.dateRange.label ?? t('dashboard.days7', '7 Days')}
               <ChevronDown className="w-3.5 h-3.5 text-gray-400" />
             </Button>
             
@@ -213,10 +174,8 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="mt-4 flex items-baseline gap-2">
-              <span className="text-[26px] font-bold text-[#202124] tracking-tight">{stats.resolutionRate}</span>
-              <span className="text-xs font-bold text-[#137333] flex items-center gap-0.5">
-                ↗ 12.5%
-              </span>
+              <span className="text-[26px] font-bold text-[#202124] tracking-tight">{stats?.resolutionRate ?? (loading ? '…' : '0%')}</span>
+              <TrendBadge value={stats?.trends.resolutionRate ?? null} />
             </div>
             <p className="text-[11px] text-[#80868B] mt-1 font-medium">{t('dashboard.vsLast7Days', 'vs last 7 days')}</p>
           </CardWrapper>
@@ -232,10 +191,8 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="mt-4 flex items-baseline gap-2">
-              <span className="text-[26px] font-bold text-[#202124] tracking-tight">{stats.avgResolutionTime}</span>
-              <span className="text-xs font-bold text-[#137333] flex items-center gap-0.5">
-                ↘ 18.3%
-              </span>
+              <span className="text-[26px] font-bold text-[#202124] tracking-tight">{stats?.avgResolutionTime ?? (loading ? '…' : '—')}</span>
+              <TrendBadge value={stats?.trends.avgResolutionTime ?? null} invert />
             </div>
             <p className="text-[11px] text-[#80868B] mt-1 font-medium">{t('dashboard.vsLast7Days', 'vs last 7 days')}</p>
           </CardWrapper>
@@ -251,10 +208,8 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="mt-4 flex items-baseline gap-2">
-              <span className="text-[26px] font-bold text-[#202124] tracking-tight">{stats.resolvedCount}</span>
-              <span className="text-xs font-bold text-[#137333] flex items-center gap-0.5">
-                ↗ 8.1%
-              </span>
+              <span className="text-[26px] font-bold text-[#202124] tracking-tight">{stats?.resolvedCount ?? (loading ? '…' : 0)}</span>
+              <TrendBadge value={stats?.trends.resolvedCount ?? null} />
             </div>
             <p className="text-[11px] text-[#80868B] mt-1 font-medium">{t('dashboard.vsLast7Days', 'vs last 7 days')}</p>
           </CardWrapper>
@@ -270,10 +225,8 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="mt-4 flex items-baseline gap-2">
-              <span className="text-[26px] font-bold text-[#202124] tracking-tight">{stats.satisfaction}</span>
-              <span className="text-xs font-bold text-[#137333] flex items-center gap-0.5">
-                ↗ 0.3
-              </span>
+              <span className="text-[26px] font-bold text-[#202124] tracking-tight">{stats?.satisfaction ?? (loading ? '…' : '—')}</span>
+              <TrendBadge value={stats?.trends.satisfaction ?? null} />
             </div>
             <p className="text-[11px] text-[#80868B] mt-1 font-medium">{t('dashboard.vsLast7Days', 'vs last 7 days')}</p>
           </CardWrapper>
@@ -289,10 +242,8 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="mt-4 flex items-baseline gap-2">
-              <span className="text-[26px] font-bold text-[#202124] tracking-tight">{stats.aiSuggestionsCount}</span>
-              <span className="text-xs font-bold text-[#137333] flex items-center gap-0.5">
-                ↗ 23.7%
-              </span>
+              <span className="text-[26px] font-bold text-[#202124] tracking-tight">{stats?.aiSuggestionsCount ?? (loading ? '…' : 0)}</span>
+              <TrendBadge value={stats?.trends.aiSuggestions ?? null} />
             </div>
             <p className="text-[11px] text-[#80868B] mt-1 font-medium">{t('dashboard.vsLast7Days', 'vs last 7 days')}</p>
           </CardWrapper>
@@ -309,7 +260,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex flex-col">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">{t('dashboard.open', 'Open')}</span>
-                <span className="text-xl font-bold text-gray-900 leading-tight">{stats.openCount}</span>
+                <span className="text-xl font-bold text-gray-900 leading-tight">{buckets?.open ?? 0}</span>
                 <span className="text-[11px] text-[#1A73E8] font-medium">{t('dashboard.needsAttention', 'Needs attention')}</span>
               </div>
             </div>
@@ -322,7 +273,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex flex-col">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">{t('dashboard.pending', 'Pending')}</span>
-                <span className="text-xl font-bold text-gray-900 leading-tight">{stats.pendingCount}</span>
+                <span className="text-xl font-bold text-gray-900 leading-tight">{buckets?.inProgress ?? 0}</span>
                 <span className="text-[11px] text-[#FFA000] font-medium">{t('dashboard.waitingResponse', 'Waiting response')}</span>
               </div>
             </div>
@@ -335,7 +286,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex flex-col">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">{t('dashboard.unassigned', 'Unassigned')}</span>
-                <span className="text-xl font-bold text-gray-900 leading-tight">{stats.unassignedCount}</span>
+                <span className="text-xl font-bold text-gray-900 leading-tight">{buckets?.unassigned ?? 0}</span>
                 <span className="text-[11px] text-[#DC2626] font-medium">{t('dashboard.requiresAssignment', 'Requires assignment')}</span>
               </div>
             </div>
@@ -348,7 +299,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex flex-col">
                 <span className="text-[11px] font-bold uppercase tracking-wider text-gray-400">{t('dashboard.overdue', 'Overdue')}</span>
-                <span className="text-xl font-bold text-gray-900 leading-tight">{stats.overdueCount}</span>
+                <span className="text-xl font-bold text-gray-900 leading-tight">{buckets?.overdue ?? 0}</span>
                 <span className="text-[11px] text-[#D93025] font-medium">{t('dashboard.urgent', 'Urgent')}</span>
               </div>
             </div>
@@ -383,7 +334,7 @@ export default function DashboardPage() {
               <div className="p-6">
                 <div className="h-[210px] w-full">
                   <ResponsiveContainer width="100%" height="100%">
-                    <AreaChart data={TRENDS_CHART_DATA} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
+                    <AreaChart data={trendChart} margin={{ top: 10, right: 10, left: -25, bottom: 0 }}>
                       <defs>
                         <linearGradient id="trendsColor" x1="0" y1="0" x2="0" y2="1">
                           <stop offset="5%" stopColor="#1A73E8" stopOpacity={0.16}/>
@@ -433,22 +384,19 @@ export default function DashboardPage() {
                   <div>
                     <span className="text-[11px] font-semibold text-gray-400 block uppercase tracking-wider">{t('dashboard.totalTickets', 'Total Tickets')}</span>
                     <div className="flex items-center justify-center gap-1.5 mt-1">
-                      <span className="text-[17px] font-bold text-gray-900 leading-none">324</span>
-                      <span className="text-[11px] font-bold text-green-600">↗ 12.5%</span>
+                      <span className="text-[17px] font-bold text-gray-900 leading-none">{trendFooter?.totalTickets ?? 0}</span>
                     </div>
                   </div>
                   <div className="border-x border-gray-100">
                     <span className="text-[11px] font-semibold text-gray-400 block uppercase tracking-wider">{t('dashboard.incoming', 'Incoming')}</span>
                     <div className="flex items-center justify-center gap-1.5 mt-1">
-                      <span className="text-[17px] font-bold text-gray-900 leading-none">189</span>
-                      <span className="text-[11px] font-bold text-green-600">↗ 8.3%</span>
+                      <span className="text-[17px] font-bold text-gray-900 leading-none">{trendFooter?.incoming ?? 0}</span>
                     </div>
                   </div>
                   <div>
                     <span className="text-[11px] font-semibold text-gray-400 block uppercase tracking-wider">{t('tickets.solved', 'Resolved')}</span>
                     <div className="flex items-center justify-center gap-1.5 mt-1">
-                      <span className="text-[17px] font-bold text-gray-900 leading-none">247</span>
-                      <span className="text-[11px] font-bold text-green-600">↗ 15.2%</span>
+                      <span className="text-[17px] font-bold text-gray-900 leading-none">{trendFooter?.resolved ?? 0}</span>
                     </div>
                   </div>
                 </div>
@@ -469,7 +417,10 @@ export default function DashboardPage() {
               </div>
 
               <div className="divide-y divide-gray-100">
-                {recentTicketsList.map((ticket, idx) => {
+                {recentTicketsList.length === 0 ? (
+                  <div className="px-6 py-8 text-sm text-gray-500">{t('dashboard.noRecentTickets', 'No recent ticket activity.')}</div>
+                ) : (
+                recentTicketsList.map((ticket, idx) => {
                   const IconComp = ticket.icon;
                   return (
                     <div 
@@ -506,7 +457,8 @@ export default function DashboardPage() {
                       </div>
                     </div>
                   );
-                })}
+                })
+                )}
               </div>
             </div>
 
@@ -571,36 +523,37 @@ export default function DashboardPage() {
                     <h4 className="text-[13px] font-bold">{t('dashboard.problemDetection', 'Problem Detection')}</h4>
                   </div>
                   <p className="text-[12px] text-gray-500 font-medium mt-1.5 leading-relaxed">
-                    {t('dashboard.aiProblemDetectionDesc', 'AI has identified 3 recurring issues that may require your attention.')}
+                    {aiInsights?.summary || t('dashboard.aiProblemDetectionDesc', 'AI has identified recurring issues that may require your attention.')}
                   </p>
                 </div>
 
                 <div className="space-y-4">
-                  
-                  <InsightItem 
-                    title={t('dashboard.vpnConnectionFailures', 'VPN Connection Failures')} 
-                    impact={t('dashboard.highImpact', 'High Impact')} 
-                    count={t('dashboard.similarTickets', '{{count}} similar tickets').replace('{{count}}', '23')} 
-                    badgeColor="bg-[#FEE2E2] text-[#DC2626]" 
-                    onClick={() => navigate('/insights')} 
-                  />
-
-                  <InsightItem 
-                    title={t('dashboard.emailSyncProblems', 'Email Sync Problems')} 
-                    impact={t('dashboard.mediumImpact', 'Medium')} 
-                    count={t('dashboard.similarTickets', '{{count}} similar tickets').replace('{{count}}', '18')} 
-                    badgeColor="bg-[#FFEDD5] text-[#D97706]" 
-                    onClick={() => navigate('/insights')} 
-                  />
-
-                  <InsightItem 
-                    title={t('dashboard.passwordResetDelays', 'Password Reset Delays')} 
-                    impact={t('dashboard.lowImpact', 'Low')} 
-                    count={t('dashboard.similarTickets', '{{count}} similar tickets').replace('{{count}}', '15')} 
-                    badgeColor="bg-[#ECFDF5] text-[#059669]" 
-                    onClick={() => navigate('/insights')} 
-                  />
-
+                  {(aiInsights?.items ?? []).length > 0 ? (
+                    aiInsights!.items.map((item) => (
+                      <InsightItem
+                        key={item.id}
+                        title={item.title}
+                        impact={
+                          item.impact === 'high'
+                            ? t('dashboard.highImpact', 'High Impact')
+                            : item.impact === 'medium'
+                              ? t('dashboard.mediumImpact', 'Medium')
+                              : t('dashboard.lowImpact', 'Low')
+                        }
+                        count={t('dashboard.similarTickets', '{{count}} similar tickets').replace('{{count}}', String(item.count))}
+                        badgeColor={
+                          item.impact === 'high'
+                            ? 'bg-[#FEE2E2] text-[#DC2626]'
+                            : item.impact === 'medium'
+                              ? 'bg-[#FFEDD5] text-[#D97706]'
+                              : 'bg-[#ECFDF5] text-[#059669]'
+                        }
+                        onClick={() => navigate('/insights')}
+                      />
+                    ))
+                  ) : (
+                    <p className="text-[12px] text-gray-500">{t('dashboard.noInsightsYet', 'No clustered issue patterns detected yet.')}</p>
+                  )}
                 </div>
 
                 <Button 
@@ -644,23 +597,29 @@ export default function DashboardPage() {
                         stroke="currentColor" 
                         fill="transparent" 
                         strokeDasharray="251.2"
-                        strokeDashoffset="32.65" // 87% progress ring (251.2 * 0.13)
+                        strokeDashoffset={251.2 * (1 - (kbHealth?.score ?? 0) / 100)}
                         strokeLinecap="round"
                       />
                     </svg>
                     <div className="absolute inset-0 flex flex-col items-center justify-center">
-                      <span className="text-lg font-black text-gray-800">87%</span>
+                      <span className="text-lg font-black text-gray-800">{kbHealth?.score ?? 0}%</span>
                     </div>
                   </div>
 
                   {/* Healthy details */}
                   <div className="space-y-1">
                     <span className="text-[15px] font-bold text-[#10B981] flex items-center gap-1">
-                      {t('dashboard.wellMaintained', 'Well Maintained')}
+                      {kbHealth?.label === 'wellMaintained'
+                        ? t('dashboard.wellMaintained', 'Well Maintained')
+                        : kbHealth?.label === 'stable'
+                          ? t('dashboard.stable', 'Stable')
+                          : t('dashboard.needsAttention', 'Needs Attention')}
                     </span>
-                    <p className="text-[11px] text-[#137333] font-bold">
-                      ↗ 5% {t('dashboard.vsLastMonth', 'vs last month')}
-                    </p>
+                    {typeof kbHealth?.trendPercent === 'number' ? (
+                      <p className="text-[11px] text-[#137333] font-bold">
+                        {kbHealth.trendPercent >= 0 ? '↗' : '↘'} {Math.abs(kbHealth.trendPercent)}% {t('dashboard.vsLastMonth', 'vs last month')}
+                      </p>
+                    ) : null}
                   </div>
                 </div>
 
@@ -683,6 +642,12 @@ export default function DashboardPage() {
 }
 
 // Highly stylized White Inner wrapper
+function TrendBadge({ value, invert = false }: { value: number | null; invert?: boolean }) {
+  const badge = formatTrendBadge(value, invert);
+  if (!badge) return null;
+  return <span className={cn('text-xs font-bold flex items-center gap-0.5', badge.className)}>{badge.label}</span>;
+}
+
 function CardWrapper({ children }: { children: ReactNode }) {
   return (
     <div className="bg-white border border-gray-150 p-4.5 rounded-2xl shadow-sm hover:shadow-md transition-shadow">

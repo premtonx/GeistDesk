@@ -114,10 +114,21 @@ import { filterArticlesByWorkspace, isKbOverviewMode, isKbAiAssistantMode, categ
 import {
   type KBCategoryRecord,
   UNCATEGORIZED_CATEGORY_ID,
-  slugifyCategoryId,
   resolveArticleCategoryId,
   articleMatchesCategoryId,
+  mapDbCategoryToRecord,
 } from '../kb/kbCategoryUtils';
+import { KBCategoryAdminPanel } from '../kb/KBCategoryAdminPanel';
+import { KBCategoryCreateDialog } from '../kb/KBCategoryCreateDialog';
+import {
+  computeDashboardMetrics,
+  isDraftStatus,
+  isPublishedStatus,
+  isReviewStatus,
+  isOutdatedStatus,
+  type KBGlobalSettings,
+} from '../../lib/kb-dashboard-metrics';
+import { kbCategoryApi, kbDashboardApi } from '../../services/kbDashboardApi';
 import { KBCategoryDeleteModal, type CategoryDeleteStrategy } from '../kb/KBCategoryDeleteModal';
 import { useWorkspace } from '../../lib/context/WorkspaceContext';
 import { KBImporter } from '../KBImporter';
@@ -596,7 +607,9 @@ export default function KBPage() {
   const isAiSearchReady = useMemo(() => aiAdapter.isConfigured, [aiAdapter]);
   
   // Advanced side panels & creation states
-  const [isAddingCategory, setIsAddingCategory] = useState(false);
+  const [isCategoryAdminOpen, setIsCategoryAdminOpen] = useState(false);
+  const [isCategoryCreateOpen, setIsCategoryCreateOpen] = useState(false);
+  const [kbGlobalSettings, setKbGlobalSettings] = useState<KBGlobalSettings | null>(null);
   const [isRenamingCategory, setIsRenamingCategory] = useState(false);
   const [renameCategoryId, setRenameCategoryId] = useState<string | null>(null);
   const [renameCategoryName, setRenameCategoryName] = useState('');
@@ -604,10 +617,6 @@ export default function KBPage() {
   const [selectedArticleIds, setSelectedArticleIds] = useState<Set<string>>(new Set());
   const [bulkDeleteOpen, setBulkDeleteOpen] = useState(false);
   const pendingDeleteRef = useRef<{ items: any[]; timeoutId: ReturnType<typeof setTimeout> } | null>(null);
-  const [newCategoryName, setNewCategoryName] = useState('');
-  const [newCategoryDesc, setNewCategoryDesc] = useState('');
-  const [newCategoryOwner, setNewCategoryOwner] = useState('Sarah James');
-  const [newCategoryParent, setNewCategoryParent] = useState('None');
   
   const [isAddingArticle, setIsAddingArticle] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
@@ -679,15 +688,27 @@ export default function KBPage() {
     setKbNav({ type: 'workspace', id: 'overview' });
   }, [workspace, closeArticleDraft]);
 
-  // Default internal structures
-  const [categories, setCategories] = useState<KBCategoryRecord[]>([
-    { id: 'getting-started', name: 'Getting Started', subCategory: 'Workspace Setup', desc: 'Onboarding tools, basic walk-throughs, and quick guides for setting up core nodes.', owner: 'Sarah James', updated: '2 days ago', icon: BookOpen, order: 1 },
-    { id: 'billing', name: 'Billing', subCategory: 'Invoicing Methods', desc: 'Invoices troubleshooting, subscription models, and finance integration configurations.', owner: 'John Doe', updated: '5 days ago', icon: FileText, order: 2 },
-    { id: 'api-documentation', name: 'API Documentation', subCategory: 'Authentication', desc: 'Developer integration guidelines, dynamic webhooks, API tokens, and sandbox tools.', owner: 'Anna Bell', updated: 'Yesterday', icon: FileJson, order: 3 },
-    { id: 'integrations', name: 'Integrations', subCategory: 'Slack Integrations', desc: 'Third-party notification setups, Slack pipelines, and Teams live synchronization.', owner: 'Anna Bell', updated: '1 week ago', icon: Link, order: 4 },
-    { id: 'troubleshooting', name: 'Troubleshooting', subCategory: 'VPN Configuration Issues', desc: 'Diagnostic flowcharts, DNS routing remedies, and customer hardware alignment SOPs.', owner: 'Will Coyote', updated: 'Today', icon: Wrench, order: 5 },
-    { id: 'internal-sops', name: 'Internal SOPs', subCategory: 'SOC2 Incident Playbooks', desc: 'Rigorous standard operating procedures for SOC2 sanitization audits and security operations.', owner: 'Mike Chen', updated: '6 days ago', icon: ShieldCheck, order: 6 },
-  ]);
+  const [categories, setCategories] = useState<KBCategoryRecord[]>([]);
+
+  const loadCategories = useCallback(async () => {
+    try {
+      const { categories: rows } = await kbCategoryApi.list();
+      setCategories(rows.map((row, index) => mapDbCategoryToRecord(row, index + 1)));
+    } catch (error) {
+      console.error('Failed to load KB categories:', error);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadCategories();
+  }, [loadCategories]);
+
+  useEffect(() => {
+    kbDashboardApi
+      .getGlobalSettings()
+      .then(({ settings }) => setKbGlobalSettings(settings))
+      .catch(() => setKbGlobalSettings(null));
+  }, []);
 
   // Syncing with Firestore DB
   useEffect(() => {
@@ -740,30 +761,6 @@ export default function KBPage() {
     return tmp.textContent || tmp.innerText || "";
   };
 
-  const handleAddCategory = () => {
-    if (newCategoryName.trim()) {
-      const id = slugifyCategoryId(newCategoryName);
-      if (!categories.find((c) => c.id === id || c.name === newCategoryName)) {
-        setCategories([...categories, {
-          id,
-          name: newCategoryName,
-          subCategory: newCategoryParent !== 'None' ? `${newCategoryParent} Child` : 'General Node',
-          desc: newCategoryDesc || t('kb.categoryAdd.defaultDesc', 'Enterprise custom knowledge structures pipeline.'),
-          owner: newCategoryOwner,
-          updated: t('kb.categoryAdd.justNow', 'Just now'),
-          icon: BookOpen,
-          order: categories.length + 1,
-        }]);
-        setNewCategoryName('');
-        setNewCategoryDesc('');
-        setIsAddingCategory(false);
-        toast.success(t('kb.categoryAdd.success', 'Category registered successfully.'));
-      } else {
-        toast.error(t('kb.categoryAdd.duplicate', 'Category already exists in workspace.'));
-      }
-    }
-  };
-
   const openRenameCategory = (categoryId: string) => {
     const cat = categories.find((c) => c.id === categoryId);
     if (!cat) return;
@@ -772,7 +769,7 @@ export default function KBPage() {
     setIsRenamingCategory(true);
   };
 
-  const handleRenameCategory = () => {
+  const handleRenameCategory = async () => {
     if (!renameCategoryId || !renameCategoryName.trim()) return;
     const duplicate = categories.some(
       (c) => c.id !== renameCategoryId && c.name.toLowerCase() === renameCategoryName.trim().toLowerCase(),
@@ -781,16 +778,21 @@ export default function KBPage() {
       toast.error(t('kb.categoryRename.duplicate', 'Another category already uses this name.'));
       return;
     }
-    setCategories((prev) =>
-      prev.map((c) =>
-        c.id === renameCategoryId
-          ? { ...c, name: renameCategoryName.trim(), updated: t('kb.categoryAdd.justNow', 'Just now') }
-          : c,
-      ),
-    );
-    setIsRenamingCategory(false);
-    setRenameCategoryId(null);
-    toast.success(t('kb.categoryRename.success', 'Category renamed. Article references preserved.'));
+    try {
+      const { category } = await kbCategoryApi.update(renameCategoryId, { name: renameCategoryName.trim() });
+      setCategories((prev) =>
+        prev.map((c) =>
+          c.id === renameCategoryId
+            ? mapDbCategoryToRecord(category, c.order)
+            : c,
+        ),
+      );
+      setIsRenamingCategory(false);
+      setRenameCategoryId(null);
+      toast.success(t('kb.categoryRename.success', 'Category renamed. Article references preserved.'));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to rename category.');
+    }
   };
 
   const openDeleteCategory = (categoryId: string) => {
@@ -804,36 +806,42 @@ export default function KBPage() {
     const catId = deleteCategoryTarget.id;
     const affected = articles.filter((a) => resolveArticleCategoryId(a, categories) === catId);
 
-    if (strategy === 'reassign') {
-      setArticles((prev) =>
-        prev.map((a) =>
-          resolveArticleCategoryId(a, categories) === catId
-            ? { ...a, category: UNCATEGORIZED_CATEGORY_ID }
-            : a,
-        ),
-      );
-      const firestoreItems = affected.filter((a) => !a.id.startsWith('seed-'));
-      await Promise.all(
-        firestoreItems.map((a) => kbService.updateArticle(a.id, { category: UNCATEGORIZED_CATEGORY_ID }, a.tags ?? [])),
-      );
-      toast.success(
-        t('kb.categoryDelete.reassignedToast', '{{count}} articles moved to Uncategorized.')
-          .replace('{{count}}', String(affected.length)),
-      );
-    } else {
-      schedulePermanentDelete(affected);
-      toast.success(
-        t('kb.categoryDelete.purgedToast', '{{count}} articles queued for deletion.')
-          .replace('{{count}}', String(affected.length)),
-      );
-    }
+    try {
+      await kbCategoryApi.remove(catId, strategy);
 
-    setCategories((prev) => prev.filter((c) => c.id !== catId));
-    if (selectedCategory === catId || kbNav.type === 'category' && kbNav.id === catId) {
-      setSelectedCategory('All');
-      setKbNav({ type: 'workspace', id: 'overview' });
+      if (strategy === 'reassign') {
+        setArticles((prev) =>
+          prev.map((a) =>
+            resolveArticleCategoryId(a, categories) === catId
+              ? { ...a, category: UNCATEGORIZED_CATEGORY_ID }
+              : a,
+          ),
+        );
+        const firestoreItems = affected.filter((a) => !a.id.startsWith('seed-'));
+        await Promise.all(
+          firestoreItems.map((a) => kbService.updateArticle(a.id, { category: UNCATEGORIZED_CATEGORY_ID }, a.tags ?? [])),
+        );
+        toast.success(
+          t('kb.categoryDelete.reassignedToast', '{{count}} articles moved to Uncategorized.')
+            .replace('{{count}}', String(affected.length)),
+        );
+      } else {
+        schedulePermanentDelete(affected);
+        toast.success(
+          t('kb.categoryDelete.purgedToast', '{{count}} articles queued for deletion.')
+            .replace('{{count}}', String(affected.length)),
+        );
+      }
+
+      setCategories((prev) => prev.filter((c) => c.id !== catId));
+      if (selectedCategory === catId || (kbNav.type === 'category' && kbNav.id === catId)) {
+        setSelectedCategory('All');
+        setKbNav({ type: 'workspace', id: 'overview' });
+      }
+      setDeleteCategoryTarget(null);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'Failed to delete category.');
     }
-    setDeleteCategoryTarget(null);
   };
 
   const schedulePermanentDelete = useCallback((items: any[]) => {
@@ -1071,18 +1079,18 @@ export default function KBPage() {
     if (selectedCategory !== 'All' && !matchSidebarCategory(art, selectedCategory)) return false;
 
     if (kbNav.type === 'workspace') {
-      if (kbNav.id === 'drafts' && art.status !== 'Draft') return false;
-      if (kbNav.id === 'reviews' && art.status !== 'Needs Review' && art.status !== 'Under Revision') return false;
+      if (kbNav.id === 'drafts' && !isDraftStatus(art.status)) return false;
+      if (kbNav.id === 'reviews' && !isReviewStatus(art.status)) return false;
     }
     if (kbNav.type === 'category' && !matchSidebarCategory(art, kbNav.id)) return false;
     if (kbNav.type === 'smart') {
       if (kbNav.id === 'missing' && art.tags && art.tags.length > 0) return false;
-      if (kbNav.id === 'outdated' && art.status !== 'Outdated' && art.status !== 'Archived') return false;
+      if (kbNav.id === 'outdated' && !isOutdatedStatus(art.status)) return false;
     }
 
-    if (activeSubTab === 'Published' && art.status !== 'Published') return false;
-    if (activeSubTab === 'Drafts' && art.status !== 'Draft') return false;
-    if (activeSubTab === 'Archived' && art.status !== 'Archived' && art.status !== 'Outdated') return false;
+    if (activeSubTab === 'Published' && !isPublishedStatus(art.status)) return false;
+    if (activeSubTab === 'Drafts' && !isDraftStatus(art.status)) return false;
+    if (activeSubTab === 'Archived' && !isOutdatedStatus(art.status)) return false;
 
     if (filterOwner !== 'All' && art.owner !== filterOwner) return false;
     if (filterVisibility !== 'All' && art.visibility !== filterVisibility) return false;
@@ -1104,19 +1112,24 @@ export default function KBPage() {
   // Sort articles according to the select state
   processedArticles.sort((a, b) => {
     if (kbNav.type === 'smart' && kbNav.id === 'recent') {
-      const dateA = a.updatedAt?.toDate ? a.updatedAt.toDate() : new Date(0);
-      const dateB = b.updatedAt?.toDate ? b.updatedAt.toDate() : new Date(0);
+      const dateA = a.updatedAt?.toDate ? a.updatedAt.toDate() : (a.updatedAt ? new Date(a.updatedAt as string) : new Date(0));
+      const dateB = b.updatedAt?.toDate ? b.updatedAt.toDate() : (b.updatedAt ? new Date(b.updatedAt as string) : new Date(0));
       return dateB.getTime() - dateA.getTime();
     }
     if (sortBy === 'confidence') {
       return (b.trustScore || 0) - (a.trustScore || 0);
-    } else if (sortBy === 'views' || sortBy === 'popular' || (kbNav.type === 'smart' && (kbNav.id === 'popular' || kbNav.id === 'mostViewed'))) {
-      return (b.views || 0) - (a.views || 0);
-    } else {
-      const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : (a.createdAt ? new Date(a.createdAt) : new Date(0));
-      const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : (b.createdAt ? new Date(b.createdAt) : new Date(0));
+    }
+    if (sortBy === 'date') {
+      const dateA = a.updatedAt?.toDate ? a.updatedAt.toDate() : (a.updatedAt ? new Date(a.updatedAt as string) : new Date(0));
+      const dateB = b.updatedAt?.toDate ? b.updatedAt.toDate() : (b.updatedAt ? new Date(b.updatedAt as string) : new Date(0));
       return dateB.getTime() - dateA.getTime();
     }
+    if (sortBy === 'views' || sortBy === 'popular' || (kbNav.type === 'smart' && (kbNav.id === 'popular' || kbNav.id === 'mostViewed'))) {
+      return (b.views || 0) - (a.views || 0);
+    }
+    const dateA = a.createdAt?.toDate ? a.createdAt.toDate() : (a.createdAt ? new Date(a.createdAt) : new Date(0));
+    const dateB = b.createdAt?.toDate ? b.createdAt.toDate() : (b.createdAt ? new Date(b.createdAt) : new Date(0));
+    return dateB.getTime() - dateA.getTime();
   });
 
   const handleDeleteArticle = (id: string) => {
@@ -1156,21 +1169,19 @@ export default function KBPage() {
     setSelectedArticleIds(new Set());
   };
 
-  // Library stats for compact header and tab counts
-  const publishedCount = workspaceArticles.filter(a => a.status === 'Published').length;
-  const draftCount = workspaceArticles.filter(a => a.status === 'Draft').length;
-  const needsReviewCount = workspaceArticles.filter(a => a.status === 'Needs Review' || a.status === 'Under Revision').length;
-  const archivedCount = workspaceArticles.filter(
-    (a) => a.status === 'Archived' || a.status === 'Outdated',
-  ).length;
-  const outdatedCount = workspaceArticles.filter(
-    (a) => a.status === 'Outdated' || a.status === 'Archived',
-  ).length;
-  const healthScore = Math.round(
-    workspaceArticles.reduce((sum, a) => sum + (a.trustScore || 0), 0) / Math.max(workspaceArticles.length, 1),
+  const dashboardMetrics = useMemo(
+    () => computeDashboardMetrics(workspaceArticles, kbGlobalSettings),
+    [workspaceArticles, kbGlobalSettings],
   );
-  const monthlyViews = workspaceArticles.reduce((sum, a) => sum + (a.views || 0), 0);
-  const missingTagsCount = workspaceArticles.filter((a) => !a.tags || a.tags.length === 0).length;
+
+  const publishedCount = dashboardMetrics.publishedCount;
+  const draftCount = dashboardMetrics.draftCount;
+  const needsReviewCount = dashboardMetrics.reviewCount;
+  const archivedCount = workspaceArticles.filter((a) => isOutdatedStatus(a.status)).length;
+  const outdatedCount = dashboardMetrics.outdatedCount;
+  const healthScore = dashboardMetrics.healthScore;
+  const monthlyViews = dashboardMetrics.monthlyViews;
+  const missingTagsCount = dashboardMetrics.missingTagsCount;
   const recentActivity = buildRecentActivity(workspaceArticles, t);
   const topContributors = buildTopContributors(workspaceArticles);
 
@@ -1190,8 +1201,8 @@ export default function KBPage() {
       return workspaceLabels[kbNav.id] ?? t('kb.allArticlesSection', 'All Articles');
     }
     if (kbNav.type === 'category') {
-      if (kbNav.id === 'Billing') return t('kb.sidebar.billingPlans', 'Billing & Plans');
-      return t(categoryI18nKey(kbNav.id), kbNav.id);
+      const cat = categories.find((c) => c.id === kbNav.id);
+      return cat ? t(categoryI18nKey(cat.name), cat.name) : t(categoryI18nKey(kbNav.id), kbNav.id);
     }
     const smartLabels: Record<string, string> = {
       popular: t('kb.sidebar.popularArticles', 'Popular Articles'),
@@ -1201,29 +1212,27 @@ export default function KBPage() {
       outdated: t('kb.sidebar.outdatedContent', 'Outdated Content'),
     };
     return smartLabels[kbNav.id] ?? t('kb.allArticlesSection', 'All Articles');
-  }, [kbNav, isOverviewMode, t]);
+  }, [kbNav, isOverviewMode, t, categories]);
 
   const sidebarCounts = useMemo(() => {
-    const categoryIds = [
-      'Getting Started', 'Product Guides', 'API Documentation', 'Integrations',
-      'Troubleshooting', 'Billing', 'Security', 'Internal SOPs', 'Company Policies',
-    ];
-    const categories: Record<string, number> = {};
-    for (const id of categoryIds) {
-      categories[id] = workspaceArticles.filter((a) => matchSidebarCategory(a, id)).length;
+    const categoryCounts: Record<string, number> = {};
+    for (const cat of categories) {
+      categoryCounts[cat.id] = workspaceArticles.filter((a) => matchSidebarCategory(a, cat.id)).length;
     }
+    const viewValues = workspaceArticles.map((a) => a.views ?? 0).sort((a, b) => b - a);
+    const popularThreshold = viewValues[Math.max(0, Math.floor(viewValues.length * 0.25))] ?? 100;
     return {
       all: workspaceArticles.length,
       drafts: draftCount,
       reviews: needsReviewCount,
-      categories,
-      popular: workspaceArticles.filter((a) => (a.views ?? 0) > 100).length,
+      categories: categoryCounts,
+      popular: workspaceArticles.filter((a) => (a.views ?? 0) >= popularThreshold && popularThreshold > 0).length,
       recent: workspaceArticles.length,
-      mostViewed: workspaceArticles.filter((a) => (a.views ?? 0) > 200).length,
+      mostViewed: workspaceArticles.filter((a) => (a.views ?? 0) > 0).length,
       missing: missingTagsCount,
       outdated: outdatedCount,
     };
-  }, [workspaceArticles, draftCount, needsReviewCount, missingTagsCount, outdatedCount]);
+  }, [categories, workspaceArticles, draftCount, needsReviewCount, missingTagsCount, outdatedCount]);
 
   const handleKbNavigate = (filter: KBNavFilter) => {
     closeArticleDraft();
@@ -1231,8 +1240,14 @@ export default function KBPage() {
     setKbNav(filter);
     if (filter.type === 'category') {
       setSelectedCategory(filter.id);
+      setActiveSubTab('All');
     } else {
       setSelectedCategory('All');
+      if (filter.type === 'workspace') {
+        if (filter.id === 'drafts') setActiveSubTab('Drafts');
+        else if (filter.id === 'reviews') setActiveSubTab('All');
+        else setActiveSubTab('All');
+      }
     }
     if (filter.type === 'smart') {
       if (filter.id === 'recent') setSortBy('date');
@@ -1824,6 +1839,8 @@ export default function KBPage() {
             <KBLeftSidebar
               active={kbNav}
               onNavigate={handleKbNavigate}
+              onOpenSettings={() => setIsCategoryAdminOpen(true)}
+              categories={categories}
               counts={sidebarCounts}
               healthScore={healthScore}
             />
@@ -1863,7 +1880,7 @@ export default function KBPage() {
                     onImportDocs={() => setIsImportOpen(true)}
                     onAiGenerate={() => handleKbNavigate({ type: 'workspace', id: 'ai' })}
                     onNewArticle={() => openCreateArticle()}
-                    onNewCategory={() => setIsAddingCategory(true)}
+                    onNewCategory={() => setIsCategoryCreateOpen(true)}
                   />
 
                   {isAiAssistantMode ? (
@@ -1880,6 +1897,7 @@ export default function KBPage() {
                       draftCount={draftCount}
                       healthScore={healthScore}
                       monthlyViews={monthlyViews}
+                      trends={dashboardMetrics.trends}
                     />
                   ) : null}
 
@@ -2067,7 +2085,7 @@ export default function KBPage() {
                     reviewCount={needsReviewCount}
                     missingTagsCount={missingTagsCount}
                     outdatedCount={outdatedCount}
-                    aiRecommendations={coverageData?.aiSuggestions?.length ?? 5}
+                    aiRecommendations={coverageData?.aiSuggestions?.length ?? 0}
                     contributors={topContributors}
                   />
                 </aside>
@@ -2085,82 +2103,27 @@ export default function KBPage() {
             <DialogTitle>{t('kb.actions.importDocs', 'Import Docs')}</DialogTitle>
             <DialogDescription>{t('kb.importDesc', 'Import documentation from URLs or files with AI-assisted parsing.')}</DialogDescription>
           </DialogHeader>
-          <KBImporter />
+          <KBImporter categories={categories} />
         </DialogContent>
       </Dialog>
 
 
-      {/* ======================================================== */}
-      {/* ENTERPRISE CATEGORY CONFIGURATION DIALOG MODAL           */}
-      {/* ======================================================== */}
-      <Dialog open={isAddingCategory} onOpenChange={setIsAddingCategory}>
-        <DialogContent className="max-w-[440px] rounded-2xl p-5 border shadow-2xl">
-          <DialogHeader className="pb-3 border-b">
-             <DialogTitle className="text-sm font-black uppercase text-slate-800 tracking-wider">{t('kb.categoryAdd.title', 'Create category')}</DialogTitle>
-             <DialogDescription className="text-[11px] text-slate-400 font-semibold">{t('kb.categoryAdd.description', 'Extend your knowledge structure with a new folder.')}</DialogDescription>
-          </DialogHeader>
+      <KBCategoryCreateDialog
+        open={isCategoryCreateOpen}
+        onOpenChange={setIsCategoryCreateOpen}
+        categories={categories}
+        onCategoriesChange={setCategories}
+      />
 
-          <div className="space-y-4 py-4 text-xs">
-             <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-black text-slate-400">Category name title</Label>
-                <Input 
-                  value={newCategoryName}
-                  onChange={(e) => setNewCategoryName(e.target.value)}
-                  placeholder="e.g. Azure Virtual Desktop logs..."
-                  className="h-10 rounded-xl"
-                />
-             </div>
-
-             <div className="space-y-1.5">
-                <Label className="text-[10px] uppercase font-black text-slate-400 font-bold">Category short description</Label>
-                <Input 
-                  value={newCategoryDesc}
-                  onChange={(e) => setNewCategoryDesc(e.target.value)}
-                  placeholder="Define category operational purpose bounds..."
-                  className="h-10 rounded-xl"
-                />
-             </div>
-
-             <div className="grid grid-cols-2 gap-3">
-               <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-black text-slate-400">Parent Category</Label>
-                  <select
-                    value={newCategoryParent}
-                    onChange={(e) => setNewCategoryParent(e.target.value)}
-                    className="w-full h-10 border rounded-xl bg-white px-2 cursor-pointer font-bold"
-                  >
-                     <option value="None">None (Root Node)</option>
-                     {categories.map((c, idx) => (
-                       <option key={idx} value={c.name}>{c.name}</option>
-                     ))}
-                  </select>
-               </div>
-
-               <div className="space-y-1.5">
-                  <Label className="text-[10px] uppercase font-black text-slate-400">Designated Directory Owner</Label>
-                  <select
-                    value={newCategoryOwner}
-                    onChange={(e) => setNewCategoryOwner(e.target.value)}
-                    className="w-full h-10 border rounded-xl bg-white px-2 cursor-pointer font-bold"
-                  >
-                     {ENTERPRISE_USERS.map((usr, idx) => (
-                       <option key={idx} value={usr.name}>{usr.name}</option>
-                     ))}
-                  </select>
-               </div>
-             </div>
-          </div>
-
-          <DialogFooter className="pt-3 border-t">
-             <Button variant="ghost" className="text-xs h-9" onClick={() => setIsAddingCategory(false)}>
-                {t('actions.cancel', 'Cancel')}
-             </Button>
-             <Button className="bg-indigo-650 hover:bg-indigo-700 text-white font-bold text-xs h-9.5 px-4" onClick={handleAddCategory}>
-                {t('kb.categoryAdd.confirm', 'Create category')}
-             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <KBCategoryAdminPanel
+        open={isCategoryAdminOpen}
+        onOpenChange={setIsCategoryAdminOpen}
+        categories={categories}
+        articleCountByCategory={(categoryId) =>
+          articles.filter((a) => resolveArticleCategoryId(a, categories) === categoryId).length
+        }
+        onCategoriesChange={setCategories}
+      />
 
       <KBCategoryDeleteModal
         open={!!deleteCategoryTarget}

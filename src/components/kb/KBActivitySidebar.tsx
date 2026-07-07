@@ -1,9 +1,7 @@
-import React from 'react';
 import {
   MessageSquare,
   Sparkles,
   FileWarning,
-  BookX,
   ClipboardCheck,
   Lightbulb,
   Tag,
@@ -13,6 +11,7 @@ import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { formatArticleDate } from './kb-utils';
 import { Avatar, AvatarFallback } from '../ui/avatar';
+import { isPublishedStatus, resolveArticleAuthorName } from '../../lib/kb-dashboard-metrics';
 
 interface ActivityItem {
   id: string;
@@ -30,23 +29,22 @@ interface Contributor {
 interface KBActivitySidebarProps {
   recentActivity: ActivityItem[];
   healthScore: number;
-  reviewCount?: number;
-  missingTagsCount?: number;
-  outdatedCount?: number;
+  reviewCount: number;
+  missingTagsCount: number;
+  outdatedCount: number;
   aiRecommendations?: number;
-  contributors?: Contributor[];
-  missingDocs?: number;
+  contributors: Contributor[];
   className?: string;
 }
 
 export function KBActivitySidebar({
   recentActivity,
   healthScore,
-  reviewCount = 3,
-  missingTagsCount = 5,
-  outdatedCount = 2,
-  aiRecommendations = 5,
-  contributors = [],
+  reviewCount,
+  missingTagsCount,
+  outdatedCount,
+  aiRecommendations = 0,
+  contributors,
   className,
 }: KBActivitySidebarProps) {
   const { t } = useTranslation();
@@ -56,23 +54,27 @@ export function KBActivitySidebar({
       icon: AlertCircle,
       text: t('kb.insights.reviewNeeded', '{{count}} articles need review').replace('{{count}}', String(reviewCount)),
       color: 'text-violet-700 bg-violet-50 border-violet-100',
+      visible: reviewCount > 0,
     },
     {
       icon: Tag,
       text: t('kb.insights.missingTags', '{{count}} articles missing tags').replace('{{count}}', String(missingTagsCount)),
       color: 'text-orange-700 bg-orange-50 border-orange-100',
+      visible: missingTagsCount > 0,
     },
     {
       icon: FileWarning,
       text: t('kb.insights.outdatedSops', '{{count}} outdated SOPs').replace('{{count}}', String(outdatedCount)),
       color: 'text-slate-700 bg-slate-50 border-slate-200',
+      visible: outdatedCount > 0,
     },
     {
       icon: Lightbulb,
       text: t('kb.insights.aiRecommendations', '{{count}} AI recommendations').replace('{{count}}', String(aiRecommendations)),
       color: 'text-blue-700 bg-blue-50 border-blue-100',
+      visible: aiRecommendations > 0,
     },
-  ];
+  ].filter((item) => item.visible);
 
   const typeIcon = (type: ActivityItem['type']) => {
     switch (type) {
@@ -99,40 +101,47 @@ export function KBActivitySidebar({
             {t('kb.beta', 'Beta')}
           </span>
         </div>
-        <ul className="space-y-2">
-          {insights.map((item) => (
-            <li
-              key={item.text}
-              className={cn(
-                'flex items-center gap-2 text-[11px] font-medium px-2.5 py-2 rounded-xl border',
-                item.color,
-              )}
-            >
-              <item.icon className="w-3.5 h-3.5 shrink-0" />
-              <span className="line-clamp-2">{item.text}</span>
-            </li>
-          ))}
-        </ul>
-        <button type="button" className="text-[11px] font-medium text-blue-600 mt-3 hover:underline">
-          {t('kb.viewAllInsights', 'View all insights')}
-        </button>
+        {insights.length > 0 ? (
+          <ul className="space-y-2">
+            {insights.map((item) => (
+              <li
+                key={item.text}
+                className={cn(
+                  'flex items-center gap-2 text-[11px] font-medium px-2.5 py-2 rounded-xl border',
+                  item.color,
+                )}
+              >
+                <item.icon className="w-3.5 h-3.5 shrink-0" />
+                <span className="line-clamp-2">{item.text}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[11px] text-slate-500 px-1">
+            {t('kb.insights.allClear', 'No outstanding knowledge gaps detected.')}
+          </p>
+        )}
       </div>
 
       <div className="rounded-2xl border border-slate-200/80 bg-white p-4 shadow-sm">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
           {t('kb.activity.title', 'Recent Activity')}
         </h3>
-        <ul className="space-y-3">
-          {recentActivity.slice(0, 5).map((item) => (
-            <li key={item.id} className="flex items-start gap-2.5">
-              <div className="mt-0.5 shrink-0">{typeIcon(item.type)}</div>
-              <div className="min-w-0">
-                <p className="text-xs font-medium text-slate-800 line-clamp-2">{item.title}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">{item.meta}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
+        {recentActivity.length > 0 ? (
+          <ul className="space-y-3">
+            {recentActivity.slice(0, 5).map((item) => (
+              <li key={item.id} className="flex items-start gap-2.5">
+                <div className="mt-0.5 shrink-0">{typeIcon(item.type)}</div>
+                <div className="min-w-0">
+                  <p className="text-xs font-medium text-slate-800 line-clamp-2">{item.title}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{item.meta}</p>
+                </div>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[11px] text-slate-500">{t('kb.activity.empty', 'No recent article activity.')}</p>
+        )}
       </div>
 
       {contributors.length > 0 ? (
@@ -176,34 +185,39 @@ export function buildRecentActivity(
     status?: string;
     updatedAt?: { toDate?: () => Date };
     owner?: string;
+    author?: string;
+    authorName?: string;
   }[],
   t: (key: string, fallback?: string) => string,
 ): ActivityItem[] {
   const sorted = [...articles].sort((a, b) => {
-    const aT = a.updatedAt?.toDate?.()?.getTime() ?? 0;
-    const bT = b.updatedAt?.toDate?.()?.getTime() ?? 0;
+    const aT =
+      a.updatedAt?.toDate?.()?.getTime() ??
+      (typeof a.updatedAt === 'string' ? new Date(a.updatedAt).getTime() : 0);
+    const bT =
+      b.updatedAt?.toDate?.()?.getTime() ??
+      (typeof b.updatedAt === 'string' ? new Date(b.updatedAt).getTime() : 0);
     return bT - aT;
   });
 
-  return sorted.slice(0, 8).map((art, idx) => ({
+  return sorted.slice(0, 5).map((art) => ({
     id: art.id,
     title: art.title,
-    meta:
-      art.status === 'Published'
-        ? t('kb.activity.published', 'Published · {{date}}').replace('{{date}}', formatArticleDate(art) || '—')
-        : t('kb.activity.edited', 'Edited by {{owner}} · {{date}}')
-            .replace('{{owner}}', art.owner ?? '—')
-            .replace('{{date}}', formatArticleDate(art) || '—'),
-    type: (idx % 4 === 0 ? 'ai' : art.status === 'Published' ? 'published' : 'edited') as ActivityItem['type'],
+    meta: isPublishedStatus(art.status)
+      ? t('kb.activity.published', 'Published · {{date}}').replace('{{date}}', formatArticleDate(art) || '—')
+      : t('kb.activity.edited', 'Edited by {{owner}} · {{date}}')
+          .replace('{{owner}}', resolveArticleAuthorName(art))
+          .replace('{{date}}', formatArticleDate(art) || '—'),
+    type: isPublishedStatus(art.status) ? 'published' : 'edited',
   }));
 }
 
 export function buildTopContributors(
-  articles: { owner?: string }[],
+  articles: { owner?: string; author?: string; authorName?: string }[],
 ): Contributor[] {
   const counts = new Map<string, number>();
   for (const a of articles) {
-    const name = a.owner ?? 'Unknown';
+    const name = resolveArticleAuthorName(a);
     counts.set(name, (counts.get(name) ?? 0) + 1);
   }
   return Array.from(counts.entries())

@@ -6,14 +6,6 @@ import {
   ClipboardCheck,
   Sparkles,
   BarChart3,
-  BookOpen,
-  Package,
-  Code2,
-  Plug,
-  Wrench,
-  CreditCard,
-  Shield,
-  Building2,
   TrendingUp,
   Clock,
   Eye,
@@ -24,6 +16,7 @@ import {
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { categoryI18nKey } from './kb-utils';
+import type { KBCategoryRecord } from './kbCategoryUtils';
 
 export type KBNavFilter =
   | { type: 'workspace'; id: string }
@@ -33,6 +26,8 @@ export type KBNavFilter =
 interface KBLeftSidebarProps {
   active: KBNavFilter;
   onNavigate: (filter: KBNavFilter) => void;
+  onOpenSettings?: () => void;
+  categories: KBCategoryRecord[];
   counts: {
     all: number;
     drafts: number;
@@ -56,18 +51,6 @@ const WORKSPACE_ITEMS = [
   { id: 'ai', icon: Sparkles, labelKey: 'kb.sidebar.aiAssistant', defaultLabel: 'AI Assistant' },
   { id: 'analytics', icon: BarChart3, labelKey: 'kb.sidebar.analytics', defaultLabel: 'Analytics' },
 ] as const;
-
-const CATEGORY_ITEMS: { id: string; icon: ElementType; labelKey?: string }[] = [
-  { id: 'Getting Started', icon: BookOpen },
-  { id: 'Product Guides', icon: Package },
-  { id: 'API Documentation', icon: Code2 },
-  { id: 'Integrations', icon: Plug },
-  { id: 'Troubleshooting', icon: Wrench },
-  { id: 'Billing', icon: CreditCard, labelKey: 'kb.sidebar.billingPlans' },
-  { id: 'Security', icon: Shield },
-  { id: 'Internal SOPs', icon: Shield },
-  { id: 'Company Policies', icon: Building2 },
-];
 
 const SMART_ITEMS = [
   { id: 'popular', icon: TrendingUp, labelKey: 'kb.sidebar.popularArticles', defaultLabel: 'Popular Articles' },
@@ -120,7 +103,15 @@ function SectionLabel({ children }: { children: ReactNode }) {
   );
 }
 
-export function KBLeftSidebar({ active, onNavigate, counts, healthScore, className }: KBLeftSidebarProps) {
+export function KBLeftSidebar({
+  active,
+  onNavigate,
+  onOpenSettings,
+  categories,
+  counts,
+  healthScore,
+  className,
+}: KBLeftSidebarProps) {
   const { t } = useTranslation();
 
   const isActive = (type: KBNavFilter['type'], id: string) =>
@@ -141,6 +132,8 @@ export function KBLeftSidebar({ active, onNavigate, counts, healthScore, classNa
     if (id === 'outdated') return counts.outdated;
     return undefined;
   };
+
+  const sortedCategories = [...categories].sort((a, b) => a.order - b.order);
 
   return (
     <aside
@@ -166,17 +159,13 @@ export function KBLeftSidebar({ active, onNavigate, counts, healthScore, classNa
 
         <SectionLabel>{t('kb.sidebar.categories', 'Categories')}</SectionLabel>
         <nav className="space-y-0.5">
-          {CATEGORY_ITEMS.map((item) => (
+          {sortedCategories.map((item) => (
             <NavButton
               key={item.id}
               active={isActive('category', item.id)}
               onClick={() => onNavigate({ type: 'category', id: item.id })}
               icon={item.icon}
-              label={
-                item.labelKey
-                  ? t(item.labelKey, 'Billing & Plans')
-                  : t(categoryI18nKey(item.id), item.id)
-              }
+              label={t(categoryI18nKey(item.name), item.name)}
               count={counts.categories[item.id] ?? 0}
             />
           ))}
@@ -218,7 +207,7 @@ export function KBLeftSidebar({ active, onNavigate, counts, healthScore, classNa
       <div className="border-t border-slate-200/80 p-2 shrink-0">
         <NavButton
           active={false}
-          onClick={() => {}}
+          onClick={() => onOpenSettings?.()}
           icon={Settings}
           label={t('kb.sidebar.settings', 'Settings')}
         />
