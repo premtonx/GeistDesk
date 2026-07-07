@@ -105,6 +105,13 @@ export interface ExchangeCustomTemplate {
   createdAt: string;
 }
 
+export interface ExchangeWorkspaceSettings {
+  defaultExpirationHours: number;
+  globalDownloadLimit: number;
+  storageWarningThresholdPercent: number;
+  storageQuotaGb: number;
+}
+
 export interface ModuleConfig {
   polyglotEnabled: boolean;
   languages: PolyglotLanguage[];
@@ -125,6 +132,8 @@ export interface ModuleConfig {
   ssoDomains: string[];
   /** GeistExchange — admin-defined custom upload templates. */
   exchangeCustomTemplates: ExchangeCustomTemplate[];
+  /** GeistExchange — workspace-wide defaults for expiration, downloads, and storage warnings. */
+  exchangeSettings: ExchangeWorkspaceSettings;
 }
 
 const DEFAULT_CONFIG: ModuleConfig = {
@@ -166,6 +175,12 @@ const DEFAULT_CONFIG: ModuleConfig = {
   ssoTenantId: 'common',
   ssoDomains: ['premtonxh.gmail.com', 'microsoft.onmicrosoft.com', 'entra-sso.com'],
   exchangeCustomTemplates: [],
+  exchangeSettings: {
+    defaultExpirationHours: 48,
+    globalDownloadLimit: 10,
+    storageWarningThresholdPercent: 80,
+    storageQuotaGb: 2048,
+  },
 };
 
 function inferIsoCodeFromLanguage(lang: string): string {
@@ -203,6 +218,10 @@ export function normalizeModuleConfig(parsed: Partial<ModuleConfig> | Record<str
     exchangeCustomTemplates: Array.isArray(source.exchangeCustomTemplates)
       ? source.exchangeCustomTemplates
       : DEFAULT_CONFIG.exchangeCustomTemplates,
+    exchangeSettings: {
+      ...DEFAULT_CONFIG.exchangeSettings,
+      ...(source.exchangeSettings ?? {}),
+    },
   };
 }
 

@@ -15,12 +15,14 @@ export const DB_ADMIN_ONLY_COLLECTIONS = new Set([
   'audits',
   'admins',
   'groups',
+  'exchange_analytics_cache',
 ]);
 
 /** Append-only logs: agents may write, only admins may read or mutate. */
 export const DB_APPEND_ONLY_LOG_COLLECTIONS = new Set([
   'audit_logs',
   'compliance_logs',
+  'exchange_audit_log',
 ]);
 
 /** Collections any authenticated user may read/write (subject to per-collection rules). */

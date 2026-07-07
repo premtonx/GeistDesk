@@ -1,4 +1,3 @@
-import React from 'react';
 import {
   Clock,
   ShieldCheck,
@@ -7,10 +6,16 @@ import {
   Database,
   CheckCircle2,
 } from 'lucide-react';
+import { formatDistanceToNow } from 'date-fns';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { exchangePanelClass } from './exchange-utils';
-import type { ExchangeItemRow } from './exchange-utils';
+import {
+  formatExchangeBytes,
+  type ExchangeAnalyticsCache,
+  type ExchangeAuditEntry,
+  type ExchangeStorageBreakdown,
+} from '../../services/exchangeApi';
 
 export interface ExpiringSidebarRow {
   id: string;
@@ -21,10 +26,19 @@ export interface ExpiringSidebarRow {
 
 interface ExchangeSecuritySidebarProps {
   expiringItems?: ExpiringSidebarRow[];
+  storage?: ExchangeStorageBreakdown | null;
+  analytics?: ExchangeAnalyticsCache | null;
+  auditLog?: ExchangeAuditEntry[];
   className?: string;
 }
 
-export function ExchangeSecuritySidebar({ expiringItems = [], className }: ExchangeSecuritySidebarProps) {
+export function ExchangeSecuritySidebar({
+  expiringItems = [],
+  storage,
+  analytics,
+  auditLog = [],
+  className,
+}: ExchangeSecuritySidebarProps) {
   const { t } = useTranslation();
 
   const shields = [
@@ -45,13 +59,11 @@ export function ExchangeSecuritySidebar({ expiringItems = [], className }: Excha
     'Auto Burn Policies',
   ];
 
-  const activities = [
-    { color: 'bg-blue-500', titleKey: 'exchange.activity.secretCreated', default: 'Secret Created', meta: 'Sarah@acme.com • 3m ago' },
-    { color: 'bg-indigo-500', titleKey: 'exchange.activity.secretViewed', default: 'Secret Viewed', meta: 'john.doe@client.com • 15m ago' },
-    { color: 'bg-rose-500', titleKey: 'exchange.activity.credentialBurned', default: 'Credential Burned', meta: t('exchange.activity.autoBurn', 'Auto burn • 1h ago') },
-    { color: 'bg-violet-500', titleKey: 'exchange.activity.dropzoneUploaded', default: 'Dropzone Uploaded', meta: 'Acme Systems • 2h ago' },
-    { color: 'bg-emerald-500', titleKey: 'exchange.activity.aiCompleted', default: 'AI Analysis Completed', meta: t('exchange.activity.justNow', 'Just now') },
-  ];
+  const totalBytes = storage?.totalBytes ?? 0;
+  const secretsPct = totalBytes > 0 ? Math.round(((storage?.secretsBytes ?? 0) / totalBytes) * 100) : 0;
+  const uploadsPct = totalBytes > 0 ? Math.round(((storage?.uploadsBytes ?? 0) / totalBytes) * 100) : 0;
+  const diagnosticsPct = Math.max(0, 100 - secretsPct - uploadsPct);
+  const insightCards = (analytics?.insights ?? []).slice(0, 2);
 
   return (
     <aside
@@ -69,23 +81,38 @@ export function ExchangeSecuritySidebar({ expiringItems = [], className }: Excha
 
         <div className={cn(exchangePanelClass(), 'p-4 space-y-3')}>
           <h4 className="text-[11px] font-bold uppercase tracking-wider text-indigo-700 flex items-center gap-1.5">
-            <Sparkles className="w-4 h-4" /> {t('exchange.commandCenter.aiInsights', 'AI Insights')}
+            <Sparkles className="w-4 h-4" /> {t('exchange.commandCenter.aiInsights', 'KI-Einblicke')}
           </h4>
           <div className="space-y-2 text-xs">
-            <div className="flex gap-2 p-2 rounded-xl bg-rose-50 border border-rose-100">
-              <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-rose-900">{t('exchange.aiInsights.criticalLogs', 'Critical log errors detected')}</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">logs.zip • 2 findings</p>
-              </div>
-            </div>
-            <div className="flex gap-2 p-2 rounded-xl bg-amber-50 border border-amber-100">
-              <Database className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
-              <div>
-                <p className="font-semibold text-amber-900">{t('exchange.aiInsights.sqlWarnings', 'SQL dump warnings')}</p>
-                <p className="text-[10px] text-slate-500 mt-0.5">backup.sql • 3 warnings</p>
-              </div>
-            </div>
+            {insightCards.length > 0 ? (
+              insightCards.map((card) => (
+                <div
+                  key={card.titleKey}
+                  className={cn(
+                    'flex gap-2 p-2 rounded-xl border',
+                    card.tone === 'critical'
+                      ? 'bg-rose-50 border-rose-100'
+                      : card.tone === 'warning'
+                        ? 'bg-amber-50 border-amber-100'
+                        : 'bg-blue-50 border-blue-100',
+                  )}
+                >
+                  {card.tone === 'critical' ? (
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <Database className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  )}
+                  <div>
+                    <p className="font-semibold text-slate-900">{t(card.titleKey, card.defaultTitle)}</p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      {card.count} · {t(card.descriptionKey, card.defaultDescription)}
+                    </p>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <p className="text-[11px] text-slate-400">{t('exchange.aiInsights.empty', 'Noch keine Analysedaten vorhanden.')}</p>
+            )}
           </div>
         </div>
 
@@ -96,21 +123,18 @@ export function ExchangeSecuritySidebar({ expiringItems = [], className }: Excha
             </h4>
           </div>
           <div className="space-y-2 text-xs">
-            {(expiringItems.length > 0
-              ? expiringItems
-              : [
-                  { id: 'fallback-1', title: 'Prod Firewall Credentials', meta: '23h', tone: 'text-rose-600 bg-rose-50' },
-                  { id: 'fallback-2', title: 'ACME Log Dropzone', meta: '48h', tone: 'text-amber-600 bg-amber-50' },
-                  { id: 'fallback-3', title: 'SQL Server Backup link', meta: '7d', tone: 'text-blue-600 bg-blue-50' },
-                ]
-            ).map((row) => (
-              <div key={row.id} className="flex items-center justify-between gap-2">
-                <div className="min-w-0">
-                  <p className="font-semibold text-slate-800 truncate">{row.title}</p>
+            {expiringItems.length > 0 ? (
+              expiringItems.map((row) => (
+                <div key={row.id} className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-semibold text-slate-800 truncate">{row.title}</p>
+                  </div>
+                  <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-lg shrink-0', row.tone)}>{row.meta}</span>
                 </div>
-                <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-lg shrink-0', row.tone)}>{row.meta}</span>
-              </div>
-            ))}
+              ))
+            ) : (
+              <p className="text-[11px] text-slate-400">{t('exchange.expiring.empty', 'Keine bald ablaufenden Einträge.')}</p>
+            )}
           </div>
         </div>
 
@@ -130,33 +154,62 @@ export function ExchangeSecuritySidebar({ expiringItems = [], className }: Excha
 
         <div className={cn(exchangePanelClass(), 'p-4 space-y-3')}>
           <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500">
-            {t('exchange.commandCenter.storageAnalytics', 'Storage Analytics')}
+            {t('exchange.commandCenter.storageAnalytics', 'Speicheranalyse')}
           </h4>
           <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden flex">
-            <div className="bg-blue-500 h-full w-[14%]" />
-            <div className="bg-violet-500 h-full w-[45%]" />
-            <div className="bg-amber-500 h-full w-[15%]" />
+            <div className="bg-blue-500 h-full" style={{ width: `${secretsPct}%` }} />
+            <div className="bg-violet-500 h-full" style={{ width: `${uploadsPct}%` }} />
+            <div className="bg-amber-500 h-full" style={{ width: `${diagnosticsPct}%` }} />
           </div>
           <div className="grid grid-cols-2 gap-2 text-[10px]">
-            <div><span className="text-slate-400">{t('exchange.storage.total', 'Total')}</span><p className="font-bold text-slate-800">286.7 GB</p></div>
-            <div><span className="text-slate-400">{t('exchange.storage.secrets', 'Secrets')}</span><p className="font-bold text-slate-800">12.4 GB</p></div>
-            <div><span className="text-slate-400">{t('exchange.storage.uploads', 'Uploads')}</span><p className="font-bold text-slate-800">186.3 GB</p></div>
-            <div><span className="text-slate-400">{t('exchange.storage.diagnostics', 'Diagnostics')}</span><p className="font-bold text-slate-800">88.0 GB</p></div>
+            <div>
+              <span className="text-slate-400">{t('exchange.storage.total', 'Gesamt')}</span>
+              <p className="font-bold text-slate-800">{storage ? formatExchangeBytes(storage.totalBytes) : '—'}</p>
+            </div>
+            <div>
+              <span className="text-slate-400">{t('exchange.storage.secrets', 'Geheimnisse')}</span>
+              <p className="font-bold text-slate-800">{storage ? formatExchangeBytes(storage.secretsBytes) : '—'}</p>
+            </div>
+            <div>
+              <span className="text-slate-400">{t('exchange.storage.uploads', 'Uploads')}</span>
+              <p className="font-bold text-slate-800">{storage ? formatExchangeBytes(storage.uploadsBytes) : '—'}</p>
+            </div>
+            <div>
+              <span className="text-slate-400">{t('exchange.storage.diagnostics', 'Diagnose')}</span>
+              <p className="font-bold text-slate-800">{storage ? formatExchangeBytes(storage.diagnosticsBytes) : '—'}</p>
+            </div>
           </div>
         </div>
 
         <div className={cn(exchangePanelClass(), 'p-4')}>
           <h4 className="text-[11px] font-bold uppercase tracking-wider text-slate-500 flex items-center gap-1.5 mb-3">
-            <Clock className="w-4 h-4" /> {t('exchange.commandCenter.recentActivity', 'Recent Activity')}
+            <Clock className="w-4 h-4" /> {t('exchange.commandCenter.recentActivity', 'Letzte Aktivität')}
           </h4>
           <div className="space-y-3 relative pl-3 border-l border-slate-100 text-xs">
-            {activities.map((act) => (
-              <div key={act.titleKey} className="relative pl-3">
-                <span className={cn('absolute -left-[13px] top-1.5 h-2 w-2 rounded-full border-2 border-white', act.color)} />
-                <p className="font-semibold text-slate-800">{t(act.titleKey, act.default)}</p>
-                <p className="text-[10px] text-slate-400 mt-0.5">{act.meta}</p>
-              </div>
-            ))}
+            {auditLog.length > 0 ? (
+              auditLog.map((entry) => (
+                <div key={entry.id ?? `${entry.createdAt}-${entry.message}`} className="relative pl-3">
+                  <span
+                    className={cn(
+                      'absolute -left-[13px] top-1.5 h-2 w-2 rounded-full border-2 border-white',
+                      entry.action.includes('burned') || entry.action === 'credential_burned'
+                        ? 'bg-rose-500'
+                        : entry.action.includes('upload')
+                          ? 'bg-violet-500'
+                          : entry.action.includes('created')
+                            ? 'bg-blue-500'
+                            : 'bg-indigo-500',
+                    )}
+                  />
+                  <p className="font-semibold text-slate-800">{entry.message}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">
+                    {formatDistanceToNow(new Date(entry.createdAt), { addSuffix: true })}
+                  </p>
+                </div>
+              ))
+            ) : (
+              <p className="text-[11px] text-slate-400 pl-3">{t('exchange.activity.empty', 'Noch keine Aktivitäten protokolliert.')}</p>
+            )}
           </div>
         </div>
       </div>

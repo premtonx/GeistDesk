@@ -2,19 +2,21 @@ import { type ReactNode } from 'react';
 import { Lock, FolderUp, FileDown, ShieldCheck, TrendingDown, TrendingUp } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
+import type { MonthOverMonthTrend } from '../../services/exchangeApi';
 
 interface KpiProps {
   label: string;
   value: string;
-  trend: string;
-  trendUp?: boolean;
+  trend: MonthOverMonthTrend;
   icon: ReactNode;
   accent: string;
   iconBg: string;
 }
 
-function KpiCard({ label, value, trend, trendUp, icon, accent, iconBg }: KpiProps) {
+function KpiCard({ label, value, trend, icon, accent, iconBg }: KpiProps) {
   const { t } = useTranslation();
+  const trendLabel = `${trend.up ? '+' : '-'}${trend.percent}%`;
+
   return (
     <div className="relative overflow-hidden rounded-2xl border border-slate-200/60 bg-white p-5 shadow-sm hover:shadow-md transition-shadow">
       <div className={cn('absolute inset-0 bg-gradient-to-br opacity-70 pointer-events-none', accent)} />
@@ -25,11 +27,11 @@ function KpiCard({ label, value, trend, trendUp, icon, accent, iconBg }: KpiProp
           <p
             className={cn(
               'inline-flex items-center gap-1 text-[11px] font-semibold mt-2',
-              trendUp ? 'text-emerald-600' : 'text-rose-600',
+              trend.up ? 'text-emerald-600' : 'text-rose-600',
             )}
           >
-            {trendUp ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
-            {trend} {t('exchange.kpi.vsLastMonth', 'vs last month')}
+            {trend.up ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />}
+            {trendLabel} {t('exchange.kpi.vsLastMonth', 'ggü. Vormonat')}
           </p>
         </div>
         <div className={cn('h-11 w-11 rounded-xl flex items-center justify-center shrink-0 shadow-sm', iconBg)}>
@@ -45,6 +47,12 @@ interface ExchangeKpiCardsProps {
   activeDropzones: number;
   filesReceived: number;
   securityScore: number;
+  trends: {
+    activeSecrets: MonthOverMonthTrend;
+    activeDropzones: MonthOverMonthTrend;
+    filesReceived: MonthOverMonthTrend;
+    securityScore: MonthOverMonthTrend;
+  };
   className?: string;
 }
 
@@ -53,6 +61,7 @@ export function ExchangeKpiCards({
   activeDropzones,
   filesReceived,
   securityScore,
+  trends,
   className,
 }: ExchangeKpiCardsProps) {
   const { t } = useTranslation();
@@ -60,36 +69,33 @@ export function ExchangeKpiCards({
   return (
     <div className={cn('grid grid-cols-2 xl:grid-cols-4 gap-4', className)}>
       <KpiCard
-        label={t('exchange.kpi.activeSecrets', 'Total Active Secrets')}
+        label={t('exchange.kpi.activeSecrets', 'Aktive Geheimnisse gesamt')}
         value={String(activeSecrets)}
-        trend="+16%"
-        trendUp
+        trend={trends.activeSecrets}
         icon={<Lock className="w-5 h-5 text-blue-600" />}
         accent="from-blue-50/80 to-white"
         iconBg="bg-blue-50 text-blue-600"
       />
       <KpiCard
-        label={t('exchange.kpi.activeDropzones', 'Active Dropzones')}
+        label={t('exchange.kpi.activeDropzones', 'Aktive Dropzones')}
         value={String(activeDropzones)}
-        trend="-8%"
+        trend={trends.activeDropzones}
         icon={<FolderUp className="w-5 h-5 text-violet-600" />}
         accent="from-violet-50/80 to-white"
         iconBg="bg-violet-50 text-violet-600"
       />
       <KpiCard
-        label={t('exchange.kpi.filesReceived', 'Files Received')}
+        label={t('exchange.kpi.filesReceived', 'Empfangene Dateien')}
         value={String(filesReceived)}
-        trend="+24%"
-        trendUp
+        trend={trends.filesReceived}
         icon={<FileDown className="w-5 h-5 text-emerald-600" />}
         accent="from-emerald-50/80 to-white"
         iconBg="bg-emerald-50 text-emerald-600"
       />
       <KpiCard
-        label={t('exchange.kpi.securityScore', 'Security Score')}
+        label={t('exchange.kpi.securityScore', 'Sicherheitswert')}
         value={`${securityScore}%`}
-        trend="+12%"
-        trendUp
+        trend={trends.securityScore}
         icon={<ShieldCheck className="w-5 h-5 text-amber-600" />}
         accent="from-amber-50/80 to-white"
         iconBg="bg-amber-50 text-amber-600"

@@ -1,11 +1,12 @@
 import { type ReactNode } from 'react';
-import { Sparkles, AlertTriangle, Database, Clock, ShieldCheck } from 'lucide-react';
+import { Sparkles, AlertTriangle, Database, Clock, ShieldCheck, RefreshCw } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
-import { exchangePanelClass } from './exchange-utils';
+import { Button } from '../ui/button';
+import type { ExchangeAnalyticsCache, ExchangeInsightCard } from '../../services/exchangeApi';
 
 interface InsightCardProps {
-  tone: 'critical' | 'warning' | 'info' | 'success';
+  tone: ExchangeInsightCard['tone'];
   title: string;
   description: string;
   count?: number;
@@ -36,8 +37,34 @@ function InsightCard({ tone, title, description, count, icon }: InsightCardProps
   );
 }
 
-export function ExchangeAiInsightsBanner({ className }: { className?: string }) {
+function insightIcon(tone: ExchangeInsightCard['tone']) {
+  switch (tone) {
+    case 'critical':
+      return <AlertTriangle className="w-4 h-4" />;
+    case 'warning':
+      return <Database className="w-4 h-4" />;
+    case 'info':
+      return <Clock className="w-4 h-4" />;
+    default:
+      return <ShieldCheck className="w-4 h-4" />;
+  }
+}
+
+interface ExchangeAiInsightsBannerProps {
+  analytics: ExchangeAnalyticsCache | null;
+  onRefresh?: () => void;
+  refreshing?: boolean;
+  className?: string;
+}
+
+export function ExchangeAiInsightsBanner({
+  analytics,
+  onRefresh,
+  refreshing = false,
+  className,
+}: ExchangeAiInsightsBannerProps) {
   const { t } = useTranslation();
+  const insights = analytics?.insights ?? [];
 
   return (
     <section
@@ -48,52 +75,57 @@ export function ExchangeAiInsightsBanner({ className }: { className?: string }) 
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(255,255,255,0.12),transparent_55%)] pointer-events-none" />
       <div className="relative space-y-4">
-        <div className="flex items-start gap-3">
-          <div className="h-10 w-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0 backdrop-blur-sm">
-            <Sparkles className="w-5 h-5" />
+        <div className="flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3 min-w-0">
+            <div className="h-10 w-10 rounded-xl bg-white/15 flex items-center justify-center shrink-0 backdrop-blur-sm">
+              <Sparkles className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">
+                {t('exchange.aiInsights.badge', 'KI-Sicherheitseinblicke')}
+              </p>
+              <h2 className="text-sm sm:text-base font-semibold mt-0.5">
+                {analytics
+                  ? t(analytics.headlineKey, analytics.defaultHeadline)
+                  : t('exchange.aiInsights.loading', 'Analysiere gespeicherte Exchange-Daten…')}
+              </h2>
+              {analytics?.generatedAt ? (
+                <p className="text-[10px] text-violet-100/80 mt-1">
+                  {t('exchange.aiInsights.cachedAt', 'Cache')}: {new Date(analytics.generatedAt).toLocaleString()}
+                </p>
+              ) : null}
+            </div>
           </div>
-          <div>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-violet-100">
-              {t('exchange.aiInsights.badge', 'AI Security Insights')}
-            </p>
-            <h2 className="text-sm sm:text-base font-semibold mt-0.5">
-              {t(
-                'exchange.aiInsights.headline',
-                'AI detected 2 potential risks and 4 optimization opportunities.',
-              )}
-            </h2>
-          </div>
+          {onRefresh ? (
+            <Button
+              type="button"
+              size="sm"
+              variant="secondary"
+              className="shrink-0 bg-white/15 text-white border-white/20 hover:bg-white/25"
+              disabled={refreshing}
+              onClick={onRefresh}
+            >
+              <RefreshCw className={cn('w-3.5 h-3.5 mr-1.5', refreshing && 'animate-spin')} />
+              {t('exchange.aiInsights.refresh', 'Aktualisieren')}
+            </Button>
+          ) : null}
         </div>
 
         <div className="flex gap-3 overflow-x-auto pb-1 scrollbar-thin">
-          <InsightCard
-            tone="critical"
-            count={2}
-            title={t('exchange.aiInsights.criticalLogs', 'Critical log errors detected')}
-            description={t('exchange.aiInsights.criticalLogsDesc', 'Azure socket pool timeouts in logs.zip')}
-            icon={<AlertTriangle className="w-4 h-4" />}
-          />
-          <InsightCard
-            tone="warning"
-            count={3}
-            title={t('exchange.aiInsights.sqlWarnings', 'SQL dump warnings')}
-            description={t('exchange.aiInsights.sqlWarningsDesc', 'Missing index markers in backup.sql')}
-            icon={<Database className="w-4 h-4" />}
-          />
-          <InsightCard
-            tone="info"
-            count={4}
-            title={t('exchange.aiInsights.expiringCreds', 'Expiring credentials')}
-            description={t('exchange.aiInsights.expiringCredsDesc', 'Rotate within 48 hours')}
-            icon={<Clock className="w-4 h-4" />}
-          />
-          <InsightCard
-            tone="success"
-            count={0}
-            title={t('exchange.aiInsights.malwareScan', 'Malware scan results')}
-            description={t('exchange.aiInsights.malwareScanDesc', 'All uploads passed ICAP scan')}
-            icon={<ShieldCheck className="w-4 h-4" />}
-          />
+          {insights.length > 0 ? (
+            insights.map((card) => (
+              <InsightCard
+                key={card.titleKey}
+                tone={card.tone}
+                count={card.count}
+                title={t(card.titleKey, card.defaultTitle)}
+                description={t(card.descriptionKey, card.defaultDescription)}
+                icon={insightIcon(card.tone)}
+              />
+            ))
+          ) : (
+            <p className="text-xs text-violet-100/90">{t('exchange.aiInsights.empty', 'Noch keine Analysedaten vorhanden.')}</p>
+          )}
         </div>
       </div>
     </section>

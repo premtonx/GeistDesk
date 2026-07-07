@@ -35,6 +35,7 @@ function sanitizeModuleConfigForOperators(doc: Record<string, unknown> | null) {
     ssoEnabled: doc.ssoEnabled ?? false,
     ssoDomains: Array.isArray(doc.ssoDomains) ? doc.ssoDomains : [],
     exchangeCustomTemplates: Array.isArray(doc.exchangeCustomTemplates) ? doc.exchangeCustomTemplates : [],
+    exchangeSettings: doc.exchangeSettings ?? undefined,
   };
 }
 

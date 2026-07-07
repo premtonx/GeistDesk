@@ -22,6 +22,7 @@ import {
   isVaultReadCommit,
 } from "../lib/vaultRequestUtils.js";
 import { routeParam } from "../lib/route-params.js";
+import { appendExchangeAuditLog } from "../lib/exchange-audit-log.js";
 
 const DROPZONE_VAULT_KIND = "dropzone_upload_bucket";
 
@@ -353,6 +354,24 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
       await updateDocDirect(VAULT_SECRETS, secretRef, { encryptedShares });
     }
 
+    const itemName =
+      type === "request"
+        ? String((resolvedMetadata as Record<string, unknown>).requestName || "Dropzone")
+        : String((resolvedMetadata as Record<string, unknown>).secretType || "Geheimnis");
+
+    void appendExchangeAuditLog({
+      userId: req.user.id,
+      actorId: req.user.id,
+      actorEmail: req.user.email,
+      action: type === "request" ? "dropzone_created" : "secret_created",
+      itemId: itemRecord.id,
+      itemName,
+      message:
+        type === "request"
+          ? `Dropzone „${itemName}“ erstellt von ${req.user.email || req.user.id}.`
+          : `Geheimnis erstellt von ${req.user.email || req.user.id}.`,
+    });
+
     return res.status(201).json({ id: itemRecord.id });
   } catch (e: any) {
     console.error("[Vault] Failed to create secret:", e?.message || e);
@@ -484,6 +503,19 @@ router.post("/secrets/:id/reveal", vaultRevealRateLimiter, async (req: Request, 
       );
     }
 
+    const viewerEmail = typeof req.body?.viewerEmail === "string" ? req.body.viewerEmail : "anonym";
+    void appendExchangeAuditLog({
+      userId: claimedItem.createdBy,
+      actorId: viewerEmail,
+      actorEmail: viewerEmail,
+      action: shouldBurnMaterial ? "credential_burned" : "secret_viewed",
+      itemId: claimedItem.id,
+      itemName: String(claimedItem.metadata?.requestName || claimedItem.metadata?.secretType || "Geheimnis"),
+      message: shouldBurnMaterial
+        ? `Anmeldedaten vernichtet durch Auto-Vernichtung (${viewerEmail}).`
+        : `Geheimnis angesehen von ${viewerEmail}.`,
+    });
+
     return res.json({
       id: claimedItem.id,
       type: claimedItem.type,
@@ -565,6 +597,15 @@ router.post("/secrets/:id/upload", vaultRevealRateLimiter, async (req: Request, 
         acceptingUploads: false,
       },
       viewCount: getViewCount(item) + 1,
+    });
+
+    void appendExchangeAuditLog({
+      userId: item.createdBy,
+      actorId: "client-upload",
+      action: "dropzone_uploaded",
+      itemId: item.id,
+      itemName: fileName,
+      message: `Dropzone-Datei „${fileName}“ hochgeladen.`,
     });
 
     return res.json({ success: true, fileName });
@@ -663,6 +704,17 @@ router.post("/secrets/:id/burn", authenticate, async (req: any, res: Response): 
     }
     if (item.secretRef) await deleteDocDirect(VAULT_SECRETS, item.secretRef);
     await markVaultItemBurned(item);
+
+    void appendExchangeAuditLog({
+      userId: item.createdBy,
+      actorId: req.user.id,
+      actorEmail: req.user.email,
+      action: "credential_burned",
+      itemId: item.id,
+      itemName: String(item.metadata?.requestName || item.metadata?.secretType || "Geheimnis"),
+      message: `Anmeldedaten manuell vernichtet von ${req.user.email || req.user.id}.`,
+    });
+
     return res.json({ success: true });
   } catch (e: any) {
     return res.status(500).json({ error: "Failed to burn secret." });

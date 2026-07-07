@@ -11,6 +11,7 @@ import {
 import { buildExpiringSoonSeedItems, type ExchangeItemRowSeed } from './exchange-template-utils';
 import { normalizeExchangeItemRow } from './exchange-status-utils';
 import { formatUploadLimitLabel, hasDropzoneUploadedPayload } from '../../lib/vault-dropzone-utils';
+import { isExchangeDevSeedEnabled } from './exchange-dev-seed';
 
 export interface UseExchangeFiltersParams {
   history: VaultItem[];
@@ -126,6 +127,9 @@ export function useExchangeFilters({
 }: UseExchangeFiltersParams) {
   const allExchangeItems = useMemo(() => {
     const formattedHistory = history.map((item) => formatVaultHistoryItem(item, tickets, companies));
+    if (!isExchangeDevSeedEnabled()) {
+      return formattedHistory;
+    }
     const mockRows = mockUploads.map(seedToRow);
     const expiringRows = seedExpiringItems.map(seedToRow);
     return [...formattedHistory, ...mockRows, ...expiringRows];

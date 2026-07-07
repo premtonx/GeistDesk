@@ -74,6 +74,8 @@ import { useExchangeFilters, useQuickFilterHandler } from '../exchange/useExchan
 import { useExchangeTemplates } from '../exchange/useExchangeTemplates';
 import { ExchangeDeleteConfirmModal } from '../exchange/ExchangeDeleteConfirmModal';
 import { ExchangeCreateSecretPanel } from '../exchange/ExchangeCreateSecretPanel';
+import { ExchangeSettingsPanel } from '../exchange/ExchangeSettingsPanel';
+import { useExchangeLiveData } from '../exchange/useExchangeLiveData';
 import {
   buildCreateSecretPayload,
   parseRecipientEmails,
@@ -84,7 +86,7 @@ import { copyExchangeLinkToClipboard } from '../exchange/exchange-actions';
 import { isExchangeExpiringSoon, matchesExchangeSearch } from '../exchange/exchange-filter-utils';
 import { resolveExchangeStatus } from '../exchange/exchange-status-utils';
 import { buildExpiringSoonSeedItems, type ExchangeItemRowSeed } from '../exchange/exchange-template-utils';
-import { getDevMockUploads, isDevSeedExchangeId } from '../exchange/exchange-dev-seed';
+import { getDevMockUploads, isDevSeedExchangeId, isExchangeDevSeedEnabled } from '../exchange/exchange-dev-seed';
 import type { ExchangeNavId, ExchangeQuickFilter, ExchangeItemRow } from '../exchange/exchange-utils';
 import {
   isExchangeFocusedFilterMode,
@@ -103,7 +105,20 @@ export default function VaultPage() {
   const [quickFilter, setQuickFilter] = useState<ExchangeQuickFilter>(null);
   const [selectedExchangeItem, setSelectedExchangeItem] = useState<ExchangeItemRow | null>(null);
   const [deleteTargetItem, setDeleteTargetItem] = useState<ExchangeItemRow | null>(null);
-  const [seedExpiringItems, setSeedExpiringItems] = useState(() => buildExpiringSoonSeedItems());
+  const [seedExpiringItems, setSeedExpiringItems] = useState(() =>
+    isExchangeDevSeedEnabled() ? buildExpiringSoonSeedItems() : [],
+  );
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const {
+    dashboard: exchangeDashboard,
+    storage: exchangeStorage,
+    analytics: exchangeAnalytics,
+    auditLog: exchangeAuditLog,
+    refreshingAnalytics,
+    refreshAnalytics,
+    reload: reloadExchangeMetrics,
+  } = useExchangeLiveData();
 
   useEffect(() => {
     startOrchestratorConfigSync();
@@ -272,44 +287,7 @@ export default function VaultPage() {
     };
   }, []);
 
-  // Pre-fill Template Handler
-  const handleApplyTemplate = (type: 'logs' | 'db' | 'ssl' | 'screenshots' | 'audit' | 'incident') => {
-    setActiveTab('dropzones');
-    setExchangeNav('dropzones');
-    if (type === 'logs') {
-      setRequestName('Standard System Logs request');
-      setRequestDescription('Please upload system.log files and configuration archives relative to diagnostic investigation.');
-      setAcceptedTypes(['ZIP', 'LOG', 'TXT']);
-      setUploadLimit('500MB');
-    } else if (type === 'db') {
-      setRequestName('Production Database Backup dump');
-      setRequestDescription('S sovereign storage dropzone to collect SQL server dumps or compressed server backups safely.');
-      setAcceptedTypes(['SQL', 'BAK', 'DUMP']);
-      setUploadLimit('10GB');
-    } else if (type === 'ssl') {
-      setRequestName('SSL Renewal Cryptographic Artifacts');
-      setRequestDescription('Upload certificates bundle containing PFX keys or certificates chains safely.');
-      setAcceptedTypes(['PFX', 'PEM', 'CRT']);
-      setUploadLimit('100MB');
-    } else if (type === 'screenshots') {
-      setRequestName('Descriptive Error Screenshots');
-      setRequestDescription('Upload PNG/JPG visual dumps capturing the precise error rendering.');
-      setAcceptedTypes(['PNG', 'JPG', 'PDF']);
-      setUploadLimit('100MB');
-    } else if (type === 'audit') {
-      setRequestName('Security Audit Package');
-      setRequestDescription('Collect compliance artifacts, access logs, and configuration exports for audit review.');
-      setAcceptedTypes(['ZIP', 'PDF', 'LOG', 'CSV']);
-      setUploadLimit('2GB');
-    } else if (type === 'incident') {
-      setRequestName('Incident Response Package');
-      setRequestDescription('Secure intake for forensic dumps, memory captures, and incident timeline evidence.');
-      setAcceptedTypes(['ZIP', 'LOG', 'IMG', 'JSON']);
-      setUploadLimit('5GB');
-    }
-    toast.success(t('exchange.templates.applied', 'Template applied to secure dropzone workflow.'));
-  };
-
+  // Pre-fill Template Handler — custom templates only (library-driven)
   const handleApplyCustomTemplate = (templateId: string) => {
     const template = getTemplateById(templateId);
     if (!template) return;
@@ -405,6 +383,7 @@ export default function VaultPage() {
       };
       prependExchangeHistoryItem(optimisticItem);
       void refreshExchangeHistory();
+      void reloadExchangeMetrics();
 
       setShares(splitShares);
       setIsQuantumSafe(true);
@@ -487,6 +466,7 @@ export default function VaultPage() {
       };
       prependExchangeHistoryItem(optimisticItem);
       void refreshExchangeHistory();
+      void reloadExchangeMetrics();
 
       const baseUrl = window.location.origin;
       const finalLink = `${baseUrl}/v/${requestId}`;
@@ -625,21 +605,41 @@ export default function VaultPage() {
     setEmergencyPhone('');
   };
 
-  const exchangeKpiStats = useMemo(
-    () => ({
-      activeSecrets:
-        allExchangeItems.filter(
-          (i) => i.type === 'secret' && resolveExchangeStatus(i) === 'Active',
-        ).length || 42,
-      activeDropzones:
-        allExchangeItems.filter(
-          (i) => i.type === 'request' && resolveExchangeStatus(i) === 'Active',
-        ).length || 18,
-      filesReceived: allExchangeItems.filter((i) => i.type === 'request').length || 247,
-      securityScore: 94,
-    }),
-    [allExchangeItems],
-  );
+  const exchangeKpiStats = useMemo(() => {
+    if (exchangeDashboard) {
+      return {
+        activeSecrets: exchangeDashboard.activeSecrets,
+        activeDropzones: exchangeDashboard.activeDropzones,
+        filesReceived: exchangeDashboard.filesReceived,
+        securityScore: exchangeDashboard.securityScore,
+        trends: exchangeDashboard.trends,
+      };
+    }
+
+    const activeSecrets = allExchangeItems.filter(
+      (i) => i.type === 'secret' && resolveExchangeStatus(i) === 'Active',
+    ).length;
+    const activeDropzones = allExchangeItems.filter(
+      (i) => i.type === 'request' && resolveExchangeStatus(i) === 'Active',
+    ).length;
+    const filesReceived = allExchangeItems.filter(
+      (i) => i.type === 'request' && (i.uploadedFilename || i.status === 'Uploaded' || i.status === 'Completed'),
+    ).length;
+
+    const neutralTrend = { percent: 0, up: true };
+    return {
+      activeSecrets,
+      activeDropzones,
+      filesReceived,
+      securityScore: 100,
+      trends: {
+        activeSecrets: neutralTrend,
+        activeDropzones: neutralTrend,
+        filesReceived: neutralTrend,
+        securityScore: neutralTrend,
+      },
+    };
+  }, [exchangeDashboard, allExchangeItems]);
 
   const secretItems = useMemo(
     () => allExchangeItems.filter((i) => i.type === 'secret' && matchesExchangeSearch(i, searchTerm)),
@@ -775,6 +775,7 @@ export default function VaultPage() {
     } else {
       await vaultService.deleteItem(id);
     }
+    void reloadExchangeMetrics();
     toast.success(t('exchange.delete.success', 'Exchange item removed.'));
   };
 
@@ -827,9 +828,10 @@ export default function VaultPage() {
           quickFilter={quickFilter}
           onQuickFilter={handleQuickFilter}
           counts={exchangeSidebarCounts}
-          onApplyTemplate={handleApplyTemplate}
           customTemplates={customTemplates}
           onApplyCustomTemplate={handleApplyCustomTemplate}
+          storage={exchangeStorage}
+          onOpenSettings={() => setIsSettingsOpen(true)}
         />
 
         <div className="flex flex-1 min-w-0 min-h-0 overflow-y-auto custom-scrollbar">
@@ -882,8 +884,13 @@ export default function VaultPage() {
                       activeDropzones={exchangeKpiStats.activeDropzones}
                       filesReceived={exchangeKpiStats.filesReceived}
                       securityScore={exchangeKpiStats.securityScore}
+                      trends={exchangeKpiStats.trends}
                     />
-                    <ExchangeAiInsightsBanner />
+                    <ExchangeAiInsightsBanner
+                      analytics={exchangeAnalytics}
+                      onRefresh={() => void refreshAnalytics()}
+                      refreshing={refreshingAnalytics}
+                    />
                     <ExchangeQuickActions
                       onSendSecret={() => handleExchangeNavigate('secrets')}
                       onCreateDropzone={() => handleExchangeNavigate('dropzones')}
@@ -1283,83 +1290,42 @@ export default function VaultPage() {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  
-                  <button 
-                    onClick={() => handleApplyTemplate('logs')} 
-                    className="p-6 rounded-3xl border bg-white hover:border-[#1A73E8] hover:shadow-xs text-left transition-all group flex flex-col justify-between h-48"
-                  >
-                    <div className="space-y-2">
-                      <div className="h-10 w-10 bg-blue-50 text-[#1A73E8] rounded-2xl flex items-center justify-center shrink-0 border border-blue-100 font-bold group-hover:scale-105 transition-transform">
-                        <FileText className="w-5 h-5" />
-                      </div>
-                      <h4 className="font-bold text-slate-900 leading-tight">{t('vault.reqOperationalLogs', 'Request Operational Logs')}</h4>
-                      <p className="text-xs text-slate-500 leading-relaxed font-sans mt-1">{t('vault.reqOperationalLogsDesc', 'Gathers ZIP, LOG, TXT. Optimal for diagnostics, web server crashes, software crash dumps, or error trace collections.')}</p>
+                  {customTemplates.length === 0 ? (
+                    <div className="md:col-span-2 rounded-3xl border border-dashed border-slate-200 bg-white p-10 text-center">
+                      <p className="text-sm font-semibold text-slate-700">
+                        {t('exchange.templates.emptyWorkspace', 'Noch keine globalen Exchange-Vorlagen vorhanden.')}
+                      </p>
+                      <p className="text-xs text-slate-500 mt-2 max-w-md mx-auto">
+                        {t(
+                          'exchange.templates.emptyWorkspaceDesc',
+                          'Erstellen Sie wiederverwendbare Dropzone-Layouts in der Vorlagen-Bibliothek. Sie erscheinen dann in der linken Seitenleiste unter Vorlagen.',
+                        )}
+                      </p>
+                      <Button type="button" className="mt-5" onClick={() => setIsCreateModalOpen(true)}>
+                        {t('exchange.templates.createMenu', 'Vorlage erstellen')}
+                      </Button>
                     </div>
-                    <span className="text-[10px] font-black uppercase text-[#1A73E8] tracking-widest mt-4">{t('vault.loadPreset', 'Load Preset Template →')}</span>
-                  </button>
-
-                  <button 
-                    onClick={() => handleApplyTemplate('db')} 
-                    className="p-6 rounded-3xl border bg-white hover:border-purple-600 hover:shadow-xs text-left transition-all group flex flex-col justify-between h-48"
-                  >
-                    <div className="space-y-2">
-                      <div className="h-10 w-10 bg-purple-50 text-purple-600 rounded-2xl flex items-center justify-center shrink-0 border border-purple-100 font-bold group-hover:scale-105 transition-transform">
-                        <Sliders className="w-5 h-5" />
-                      </div>
-                      <h4 className="font-bold text-slate-900 leading-tight">{t('vault.reqDbBackup', 'Request Database Backup Dump')}</h4>
-                      <p className="text-xs text-slate-500 leading-relaxed font-sans mt-1">{t('vault.reqDbBackupDesc', 'Pre-configures SQL, BAK, DUMP with massive 10GB limits. Ideal for migration diagnostics, data queries integrity reviews, and database crash support.')}</p>
-                    </div>
-                    <span className="text-[10px] font-black uppercase text-purple-600 tracking-widest mt-4">{t('vault.loadPreset', 'Load Preset Template →')}</span>
-                  </button>
-
-                  <button 
-                    onClick={() => handleApplyTemplate('ssl')} 
-                    className="p-6 rounded-3xl border bg-white hover:border-emerald-600 hover:shadow-xs text-left transition-all group flex flex-col justify-between h-48"
-                  >
-                    <div className="space-y-2">
-                      <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center shrink-0 border border-emerald-100 font-bold group-hover:scale-105 transition-transform">
-                        <ShieldCheck className="w-5 h-5" />
-                      </div>
-                      <h4 className="font-bold text-slate-900 leading-tight">{t('vault.reqSslKeys', 'Request SSL Keys & Certificates')}</h4>
-                      <p className="text-xs text-slate-500 leading-relaxed font-sans mt-1">{t('vault.reqSslKeysDesc', 'Gathers PEM, CRT, PFX cryptographic keys securely inside encrypted ML-KEM ML-1024 parameters.')}</p>
-                    </div>
-                    <span className="text-[10px] font-black uppercase text-emerald-600 tracking-widest mt-4">{t('vault.loadPreset', 'Load Preset Template →')}</span>
-                  </button>
-
-                  <button 
-                    onClick={() => handleApplyTemplate('screenshots')} 
-                    className="p-6 rounded-3xl border bg-white hover:border-orange-600 hover:shadow-xs text-left transition-all group flex flex-col justify-between h-48"
-                  >
-                    <div className="space-y-2">
-                      <div className="h-10 w-10 bg-orange-50 text-orange-600 rounded-2xl flex items-center justify-center shrink-0 border border-orange-100 font-bold group-hover:scale-105 transition-transform">
-                        <Upload className="w-5 h-5" />
-                      </div>
-                      <h4 className="font-bold text-slate-900 leading-tight">{t('vault.reqScreenVisuals', 'Request Screen Visual Dumps')}</h4>
-                      <p className="text-xs text-slate-500 leading-relaxed font-sans mt-1">{t('vault.reqScreenVisualsDesc', 'Collect client screenshots via JPG, PNG, PDF format. Optimal for initial diagnostics reviews and UI bug reports.')}</p>
-                    </div>
-                    <span className="text-[10px] font-black uppercase text-orange-600 tracking-widest mt-4">{t('vault.loadPreset', 'Load Preset Template →')}</span>
-                  </button>
-
-                  {customTemplates.map((template) => (
-                    <button
-                      key={template.id}
-                      type="button"
-                      onClick={() => handleApplyCustomTemplate(template.id)}
-                      className="p-6 rounded-3xl border bg-white hover:border-[#1A73E8] hover:shadow-xs text-left transition-all group flex flex-col justify-between h-48"
-                    >
-                      <div className="space-y-2">
-                        <div className="h-10 w-10 bg-blue-50 text-[#1A73E8] rounded-2xl flex items-center justify-center shrink-0 border border-blue-100 font-bold group-hover:scale-105 transition-transform">
-                          <FileText className="w-5 h-5" />
+                  ) : (
+                    customTemplates.map((template) => (
+                      <button
+                        key={template.id}
+                        type="button"
+                        onClick={() => handleApplyCustomTemplate(template.id)}
+                        className="p-6 rounded-3xl border bg-white hover:border-[#1A73E8] hover:shadow-xs text-left transition-all group flex flex-col justify-between h-48"
+                      >
+                        <div className="space-y-2">
+                          <div className="h-10 w-10 bg-blue-50 text-[#1A73E8] rounded-2xl flex items-center justify-center shrink-0 border border-blue-100 font-bold group-hover:scale-105 transition-transform">
+                            <FileText className="w-5 h-5" />
+                          </div>
+                          <h4 className="font-bold text-slate-900 leading-tight">{template.title}</h4>
+                          <p className="text-xs text-slate-500 leading-relaxed font-sans mt-1 line-clamp-3">{template.description}</p>
                         </div>
-                        <h4 className="font-bold text-slate-900 leading-tight">{template.title}</h4>
-                        <p className="text-xs text-slate-500 leading-relaxed font-sans mt-1 line-clamp-3">{template.description}</p>
-                      </div>
-                      <span className="text-[10px] font-black uppercase text-[#1A73E8] tracking-widest mt-4">
-                        {t('exchange.templates.loadCustom', 'Load Custom Template →')}
-                      </span>
-                    </button>
-                  ))}
-
+                        <span className="text-[10px] font-black uppercase text-[#1A73E8] tracking-widest mt-4">
+                          {t('exchange.templates.loadCustom', 'Benutzerdefinierte Vorlage laden →')}
+                        </span>
+                      </button>
+                    ))
+                  )}
                 </div>
 
               </motion.div>
@@ -1370,7 +1336,13 @@ export default function VaultPage() {
 
             </div>
 
-            <ExchangeSecuritySidebar className="hidden xl:flex" expiringItems={expiringSidebarRows} />
+            <ExchangeSecuritySidebar
+              className="hidden xl:flex"
+              expiringItems={expiringSidebarRows}
+              storage={exchangeStorage}
+              analytics={exchangeAnalytics}
+              auditLog={exchangeAuditLog}
+            />
           </div>
         </div>
       </div>
@@ -1386,6 +1358,8 @@ export default function VaultPage() {
         onClose={() => setDeleteTargetItem(null)}
         onConfirm={handleDeleteExchangeItem}
       />
+
+      <ExchangeSettingsPanel open={isSettingsOpen} onOpenChange={setIsSettingsOpen} />
 
       {createPortal(
         <ExchangeDetailDrawer

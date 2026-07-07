@@ -1,4 +1,4 @@
-import { type ElementType, type ReactNode } from 'react';
+import { useState, type ElementType, type ReactNode } from 'react';
 import {
   LayoutDashboard,
   Link2,
@@ -8,15 +8,13 @@ import {
   Activity,
   Shield,
   Settings,
-  ScrollText,
-  Database,
-  ShieldAlert,
-  Siren,
+  ChevronDown,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import type { ExchangeNavId, ExchangeQuickFilter } from './exchange-utils';
 import type { ExchangeTemplate } from './exchange-template-utils';
+import { formatExchangeBytes, type ExchangeStorageBreakdown } from '../../services/exchangeApi';
 
 interface ExchangeLeftSidebarProps {
   activeNav: ExchangeNavId;
@@ -31,9 +29,10 @@ interface ExchangeLeftSidebarProps {
     burned: number;
     archived: number;
   };
-  onApplyTemplate: (type: 'logs' | 'db' | 'audit' | 'incident') => void;
   customTemplates?: ExchangeTemplate[];
   onApplyCustomTemplate?: (templateId: string) => void;
+  storage?: ExchangeStorageBreakdown | null;
+  onOpenSettings?: () => void;
   className?: string;
 }
 
@@ -95,12 +94,14 @@ export function ExchangeLeftSidebar({
   quickFilter,
   onQuickFilter,
   counts,
-  onApplyTemplate,
   customTemplates = [],
   onApplyCustomTemplate,
+  storage,
+  onOpenSettings,
   className,
 }: ExchangeLeftSidebarProps) {
   const { t } = useTranslation();
+  const [templatesExpanded, setTemplatesExpanded] = useState(false);
 
   const workspaceItems: { id: ExchangeNavId; icon: ElementType; labelKey: string; defaultLabel: string }[] = [
     { id: 'overview', icon: LayoutDashboard, labelKey: 'exchange.sidebar.overview', defaultLabel: 'Overview' },
@@ -113,20 +114,19 @@ export function ExchangeLeftSidebar({
   ];
 
   const filterItems: { id: ExchangeQuickFilter; labelKey: string; defaultLabel: string; countKey?: keyof typeof counts; tone?: 'green' | 'orange' }[] = [
-    { id: 'active', labelKey: 'exchange.filters.active', defaultLabel: 'Active', countKey: 'active', tone: 'green' },
-    { id: 'expiring', labelKey: 'exchange.filters.expiring', defaultLabel: 'Expiring Soon', countKey: 'expiring', tone: 'orange' },
-    { id: 'shared', labelKey: 'exchange.filters.sharedByMe', defaultLabel: 'Shared By Me', countKey: 'shared' },
-    { id: 'received', labelKey: 'exchange.filters.received', defaultLabel: 'Received', countKey: 'received' },
-    { id: 'burned', labelKey: 'exchange.filters.burned', defaultLabel: 'Burned', countKey: 'burned' },
-    { id: 'archived', labelKey: 'exchange.filters.archived', defaultLabel: 'Archived', countKey: 'archived' },
+    { id: 'active', labelKey: 'exchange.filters.active', defaultLabel: 'Aktiv', countKey: 'active', tone: 'green' },
+    { id: 'expiring', labelKey: 'exchange.filters.expiring', defaultLabel: 'Läuft bald ab', countKey: 'expiring', tone: 'orange' },
+    { id: 'shared', labelKey: 'exchange.filters.sharedByMe', defaultLabel: 'Von mir geteilt', countKey: 'shared' },
+    { id: 'received', labelKey: 'exchange.filters.received', defaultLabel: 'Empfangen', countKey: 'received' },
+    { id: 'burned', labelKey: 'exchange.filters.burned', defaultLabel: 'Vernichtet', countKey: 'burned' },
+    { id: 'archived', labelKey: 'exchange.filters.archived', defaultLabel: 'Archiviert', countKey: 'archived' },
   ];
 
-  const templateItems = [
-    { type: 'logs' as const, icon: ScrollText, labelKey: 'exchange.templates.logCollection', defaultLabel: 'Log Collection' },
-    { type: 'db' as const, icon: Database, labelKey: 'exchange.templates.sqlBackup', defaultLabel: 'SQL Backup Upload' },
-    { type: 'audit' as const, icon: ShieldAlert, labelKey: 'exchange.templates.securityAudit', defaultLabel: 'Security Audit Package' },
-    { type: 'incident' as const, icon: Siren, labelKey: 'exchange.templates.incidentResponse', defaultLabel: 'Incident Response Package' },
-  ];
+  const usedPercent = storage ? Math.round(storage.usedPercent) : 0;
+  const quotaLabel = storage ? formatExchangeBytes(storage.quotaBytes) : '2 TB';
+  const usedLabel = storage ? formatExchangeBytes(storage.totalBytes) : '—';
+  const strokeDash = `${Math.max(1, usedPercent)} ${100 - Math.max(1, usedPercent)}`;
+  const storageWarning = storage ? usedPercent >= storage.warningThresholdPercent : false;
 
   return (
     <aside
@@ -152,7 +152,7 @@ export function ExchangeLeftSidebar({
           ))}
         </nav>
 
-        <SectionLabel>{t('exchange.sidebar.quickFilters', 'Quick Filters')}</SectionLabel>
+        <SectionLabel>{t('exchange.sidebar.quickFilters', 'Schnellfilter')}</SectionLabel>
         <nav className="space-y-0.5">
           {filterItems.map((item) => (
             <NavButton
@@ -167,40 +167,48 @@ export function ExchangeLeftSidebar({
           ))}
         </nav>
 
-        <SectionLabel>{t('exchange.sidebar.templatesSection', 'Templates')}</SectionLabel>
-        <nav className="space-y-0.5">
-          {templateItems.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.type}
-                type="button"
-                onClick={() => onApplyTemplate(item.type)}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 text-left transition-colors"
-              >
-                <Icon className="w-4 h-4 shrink-0 opacity-70" />
-                <span className="truncate">{t(item.labelKey, item.defaultLabel)}</span>
-              </button>
-            );
-          })}
-          {customTemplates.map((template) => (
-            <button
-              key={template.id}
-              type="button"
-              onClick={() => onApplyCustomTemplate?.(template.id)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 text-left transition-colors"
-            >
-              <FileStack className="w-4 h-4 shrink-0 opacity-70" />
-              <span className="truncate">{template.title}</span>
-            </button>
-          ))}
-        </nav>
+        <div className="px-1 pt-2">
+          <button
+            type="button"
+            onClick={() => setTemplatesExpanded((open) => !open)}
+            className="w-full flex items-center justify-between px-2 py-2 rounded-xl text-[10px] font-semibold uppercase tracking-wider text-slate-400 hover:bg-slate-50 hover:text-slate-600 transition-colors"
+          >
+            <span>{t('exchange.sidebar.templatesSection', 'Vorlagen')}</span>
+            <ChevronDown className={cn('w-4 h-4 transition-transform', templatesExpanded && 'rotate-180')} />
+          </button>
+          {templatesExpanded ? (
+            <nav className="space-y-0.5 mt-1">
+              {customTemplates.length === 0 ? (
+                <p className="px-3 py-2 text-[11px] text-slate-400">
+                  {t('exchange.templates.emptySidebar', 'Keine benutzerdefinierten Vorlagen. Erstellen Sie eine unter Vorlagen.')}
+                </p>
+              ) : (
+                customTemplates.map((template) => (
+                  <button
+                    key={template.id}
+                    type="button"
+                    onClick={() => onApplyCustomTemplate?.(template.id)}
+                    className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-[13px] font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 text-left transition-colors"
+                  >
+                    <FileStack className="w-4 h-4 shrink-0 opacity-70" />
+                    <span className="truncate">{template.title}</span>
+                  </button>
+                ))
+              )}
+            </nav>
+          ) : null}
+        </div>
       </div>
 
       <div className="border-t border-slate-200/80 p-3 shrink-0 space-y-3">
-        <div className="rounded-xl border border-slate-200/80 bg-slate-50/80 p-3">
+        <div
+          className={cn(
+            'rounded-xl border bg-slate-50/80 p-3',
+            storageWarning ? 'border-amber-200 bg-amber-50/50' : 'border-slate-200/80',
+          )}
+        >
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mb-2">
-            {t('exchange.storage.title', 'Storage')}
+            {t('exchange.storage.title', 'Speicher')}
           </p>
           <div className="flex items-center gap-3">
             <div className="relative h-12 w-12 shrink-0">
@@ -211,29 +219,55 @@ export function ExchangeLeftSidebar({
                   cy="18"
                   r="15.5"
                   fill="none"
-                  stroke="#1A73E8"
+                  stroke={storageWarning ? '#f59e0b' : '#1A73E8'}
                   strokeWidth="3"
-                  strokeDasharray="14 86"
+                  strokeDasharray={strokeDash}
                   strokeLinecap="round"
                 />
               </svg>
             </div>
             <div className="min-w-0">
-              <p className="text-xs font-bold text-slate-900">286.7 GB</p>
-              <p className="text-[10px] text-slate-500">{t('exchange.storage.ofTotal', 'of 2 TB')}</p>
+              <p className="text-xs font-bold text-slate-900">{usedLabel}</p>
+              <p className="text-[10px] text-slate-500">
+                {t('exchange.storage.ofTotal', 'von {{quota}}').replace('{{quota}}', quotaLabel)}
+              </p>
             </div>
           </div>
           <div className="mt-2 space-y-1 text-[10px] text-slate-500">
-            <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-blue-500" />{t('exchange.storage.secrets', 'Secrets')}</div>
-            <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-violet-500" />{t('exchange.storage.dropzoneFiles', 'Dropzone Files')}</div>
-            <div className="flex items-center gap-1.5"><span className="h-1.5 w-1.5 rounded-full bg-amber-500" />{t('exchange.storage.diagnostics', 'Diagnostics')}</div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-blue-500" />
+                {t('exchange.storage.secrets', 'Geheimnisse')}
+              </span>
+              <span className="font-semibold text-slate-700">
+                {storage ? formatExchangeBytes(storage.secretsBytes) : '—'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-violet-500" />
+                {t('exchange.storage.dropzoneFiles', 'Uploads')}
+              </span>
+              <span className="font-semibold text-slate-700">
+                {storage ? formatExchangeBytes(storage.uploadsBytes) : '—'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <span className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                {t('exchange.storage.diagnostics', 'Diagnose')}
+              </span>
+              <span className="font-semibold text-slate-700">
+                {storage ? formatExchangeBytes(storage.diagnosticsBytes) : '—'}
+              </span>
+            </div>
           </div>
         </div>
         <NavButton
           active={false}
-          onClick={() => {}}
+          onClick={() => onOpenSettings?.()}
           icon={Settings}
-          label={t('exchange.sidebar.settings', 'Settings')}
+          label={t('exchange.sidebar.settings', 'Einstellungen')}
         />
       </div>
     </aside>
