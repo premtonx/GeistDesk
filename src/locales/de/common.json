@@ -194,7 +194,10 @@
       "environment": "Umgebung",
       "environmentPlaceholder": "Produktion / Staging",
       "stepsToReproduce": "Schritte zur Reproduktion",
-      "devStatus": "Entwicklungsstatus"
+      "devStatus": "Entwicklungsstatus",
+      "unsavedChanges": "Ungespeicherte Änderungen",
+      "saveChanges": "Änderungen speichern",
+      "discardChanges": "Verwerfen"
     },
     "relations": {
       "title": "Relationale Verknüpfungen",

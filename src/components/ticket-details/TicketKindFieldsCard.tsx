@@ -1,8 +1,10 @@
-import React from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Check, RotateCcw } from 'lucide-react';
 import { Ticket as TicketType } from '../../types';
 import { Card, CardContent } from '../ui/card';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { Button } from '../ui/button';
 import {
   Select,
   SelectContent,
@@ -19,18 +21,106 @@ interface TicketKindFieldsCardProps {
   onUpdate: (data: Partial<TicketType>) => void;
 }
 
+type SupportDraft = {
+  slaTier: string;
+  accountHealth: string;
+};
+
+type BugDraft = {
+  affectedVersion: string;
+  environment: string;
+  stepsToReproduce: string;
+  devStatus: NonNullable<TicketType['devStatus']>;
+};
+
+function getSupportDraft(ticket: TicketType): SupportDraft {
+  return {
+    slaTier: ticket.slaTier ?? '',
+    accountHealth: ticket.accountHealth ?? '',
+  };
+}
+
+function getBugDraft(ticket: TicketType): BugDraft {
+  return {
+    affectedVersion: ticket.affectedVersion ?? '',
+    environment: ticket.environment ?? '',
+    stepsToReproduce: ticket.stepsToReproduce ?? '',
+    devStatus: ticket.devStatus ?? 'backlog',
+  };
+}
+
 export function TicketKindFieldsCard({ ticket, onUpdate }: TicketKindFieldsCardProps) {
   const { t } = useTranslation();
   const kind = getTicketKind(ticket);
+  const [supportDraft, setSupportDraft] = useState<SupportDraft>(() => getSupportDraft(ticket));
+  const [bugDraft, setBugDraft] = useState<BugDraft>(() => getBugDraft(ticket));
+  const [isSaving, setIsSaving] = useState(false);
+
+  useEffect(() => {
+    setSupportDraft(getSupportDraft(ticket));
+    setBugDraft(getBugDraft(ticket));
+  }, [
+    ticket.id,
+    ticket.slaTier,
+    ticket.accountHealth,
+    ticket.affectedVersion,
+    ticket.environment,
+    ticket.stepsToReproduce,
+    ticket.devStatus,
+  ]);
+
+  const isDirty = useMemo(() => {
+    if (kind === 'support') {
+      const saved = getSupportDraft(ticket);
+      return (
+        supportDraft.slaTier !== saved.slaTier ||
+        supportDraft.accountHealth !== saved.accountHealth
+      );
+    }
+
+    const saved = getBugDraft(ticket);
+    return (
+      bugDraft.affectedVersion !== saved.affectedVersion ||
+      bugDraft.environment !== saved.environment ||
+      bugDraft.stepsToReproduce !== saved.stepsToReproduce ||
+      bugDraft.devStatus !== saved.devStatus
+    );
+  }, [kind, ticket, supportDraft, bugDraft]);
+
+  const handleDiscard = () => {
+    if (kind === 'support') {
+      setSupportDraft(getSupportDraft(ticket));
+      return;
+    }
+    setBugDraft(getBugDraft(ticket));
+  };
+
+  const handleSave = () => {
+    if (!isDirty || isSaving) return;
+
+    setIsSaving(true);
+    try {
+      onUpdate(kind === 'support' ? supportDraft : bugDraft);
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   return (
-    <Card className="border-border rounded-xl shadow-none">
+    <Card className={`border-border rounded-xl shadow-none ${isDirty ? 'ring-1 ring-amber-400/60' : ''}`}>
       <CardContent className="p-4 space-y-3">
-        <h3 className="text-xs font-bold text-foreground">
-          {kind === 'support'
-            ? t('tickets.fields.supportContext', 'Support Context')
-            : t('tickets.fields.bugContext', 'Bug Context')}
-        </h3>
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-xs font-bold text-foreground">
+            {kind === 'support'
+              ? t('tickets.fields.supportContext', 'Support Context')
+              : t('tickets.fields.bugContext', 'Bug Context')}
+          </h3>
+          {isDirty && (
+            <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+              {t('tickets.fields.unsavedChanges', 'Unsaved changes')}
+            </span>
+          )}
+        </div>
 
         {kind === 'support' ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -38,8 +128,8 @@ export function TicketKindFieldsCard({ ticket, onUpdate }: TicketKindFieldsCardP
               <Label className="text-[11px]">{t('tickets.fields.slaTier', 'SLA Tier')}</Label>
               <Input
                 className="h-8 text-xs"
-                value={ticket.slaTier ?? ''}
-                onChange={(e) => onUpdate({ slaTier: e.target.value })}
+                value={supportDraft.slaTier}
+                onChange={(e) => setSupportDraft((prev) => ({ ...prev, slaTier: e.target.value }))}
                 placeholder={t('tickets.fields.slaTierPlaceholder', 'e.g. Platinum')}
               />
             </div>
@@ -47,8 +137,8 @@ export function TicketKindFieldsCard({ ticket, onUpdate }: TicketKindFieldsCardP
               <Label className="text-[11px]">{t('tickets.fields.accountHealth', 'Account Health')}</Label>
               <Input
                 className="h-8 text-xs"
-                value={ticket.accountHealth ?? ''}
-                onChange={(e) => onUpdate({ accountHealth: e.target.value })}
+                value={supportDraft.accountHealth}
+                onChange={(e) => setSupportDraft((prev) => ({ ...prev, accountHealth: e.target.value }))}
                 placeholder={t('tickets.fields.accountHealthPlaceholder', 'e.g. At Risk')}
               />
             </div>
@@ -60,8 +150,8 @@ export function TicketKindFieldsCard({ ticket, onUpdate }: TicketKindFieldsCardP
                 <Label className="text-[11px]">{t('tickets.fields.affectedVersion', 'Affected Version / Build')}</Label>
                 <Input
                   className="h-8 text-xs"
-                  value={ticket.affectedVersion ?? ''}
-                  onChange={(e) => onUpdate({ affectedVersion: e.target.value })}
+                  value={bugDraft.affectedVersion}
+                  onChange={(e) => setBugDraft((prev) => ({ ...prev, affectedVersion: e.target.value }))}
                   placeholder="v2.4.1"
                 />
               </div>
@@ -69,8 +159,8 @@ export function TicketKindFieldsCard({ ticket, onUpdate }: TicketKindFieldsCardP
                 <Label className="text-[11px]">{t('tickets.fields.environment', 'Environment')}</Label>
                 <Input
                   className="h-8 text-xs"
-                  value={ticket.environment ?? ''}
-                  onChange={(e) => onUpdate({ environment: e.target.value })}
+                  value={bugDraft.environment}
+                  onChange={(e) => setBugDraft((prev) => ({ ...prev, environment: e.target.value }))}
                   placeholder={t('tickets.fields.environmentPlaceholder', 'Production / Staging')}
                 />
               </div>
@@ -79,15 +169,15 @@ export function TicketKindFieldsCard({ ticket, onUpdate }: TicketKindFieldsCardP
               <Label className="text-[11px]">{t('tickets.fields.stepsToReproduce', 'Steps to Reproduce')}</Label>
               <Textarea
                 className="min-h-[72px] text-xs"
-                value={ticket.stepsToReproduce ?? ''}
-                onChange={(e) => onUpdate({ stepsToReproduce: e.target.value })}
+                value={bugDraft.stepsToReproduce}
+                onChange={(e) => setBugDraft((prev) => ({ ...prev, stepsToReproduce: e.target.value }))}
               />
             </div>
             <div className="space-y-1">
               <Label className="text-[11px]">{t('tickets.fields.devStatus', 'Dev Status')}</Label>
               <Select
-                value={ticket.devStatus ?? 'backlog'}
-                onValueChange={(v) => onUpdate({ devStatus: v as TicketType['devStatus'] })}
+                value={bugDraft.devStatus}
+                onValueChange={(v) => setBugDraft((prev) => ({ ...prev, devStatus: v as TicketType['devStatus'] }))}
               >
                 <SelectTrigger className="h-8 text-xs">
                   <SelectValue />
@@ -100,6 +190,32 @@ export function TicketKindFieldsCard({ ticket, onUpdate }: TicketKindFieldsCardP
                 </SelectContent>
               </Select>
             </div>
+          </div>
+        )}
+
+        {isDirty && (
+          <div className="flex items-center justify-end gap-2 pt-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={handleDiscard}
+              disabled={isSaving}
+            >
+              <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+              {t('tickets.fields.discardChanges', 'Discard')}
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 text-xs"
+              onClick={handleSave}
+              disabled={isSaving}
+            >
+              <Check className="w-3.5 h-3.5 mr-1.5" />
+              {t('tickets.fields.saveChanges', 'Save changes')}
+            </Button>
           </div>
         )}
       </CardContent>

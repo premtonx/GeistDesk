@@ -194,7 +194,10 @@
       "environment": "Environment",
       "environmentPlaceholder": "Production / Staging",
       "stepsToReproduce": "Steps to Reproduce",
-      "devStatus": "Dev Status"
+      "devStatus": "Dev Status",
+      "unsavedChanges": "Unsaved changes",
+      "saveChanges": "Save changes",
+      "discardChanges": "Discard"
     },
     "relations": {
       "title": "Relational Links",

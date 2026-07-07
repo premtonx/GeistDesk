@@ -51,6 +51,8 @@ import {
   Download,
   ArrowRight,
   CheckCircle2,
+  Check,
+  RotateCcw,
   XCircle,
   HelpCircle,
   Hash,
@@ -469,6 +471,7 @@ export default function TicketsPage() {
 
   const [areNotesExpanded, setAreNotesExpanded] = useState(false);
   const [isComposerExpanded, setIsComposerExpanded] = useState(false);
+  const [internalNotesDraft, setInternalNotesDraft] = useState('');
 
   useEffect(() => {
     setAreNotesExpanded(false);
@@ -923,6 +926,10 @@ export default function TicketsPage() {
   }, [totalTicketsCount, pageSize]);
 
   const selectedTicket = allTickets.find(t => t.id === selectedTicketId) as any;
+
+  useEffect(() => {
+    setInternalNotesDraft(selectedTicket?.internalNotes || '');
+  }, [selectedTicketId, selectedTicket?.internalNotes]);
 
   const handleChecklistUpdated = useCallback(
     (aiChecklist: TicketChecklistItem[]) => {
@@ -3257,17 +3264,49 @@ export default function TicketsPage() {
                      <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
                            <div className="h-3 w-1 bg-amber-500 rounded-full" />
-                           <h4 className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest">Internal Notes</h4>
+                           <h4 className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest">{t('createTicket.internalNotes', 'Internal notes')}</h4>
                         </div>
+                        {internalNotesDraft !== (selectedTicket.internalNotes || '') && (
+                          <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300">
+                            {t('tickets.fields.unsavedChanges', 'Unsaved changes')}
+                          </span>
+                        )}
                      </div>
-                     <div className="relative">
-                        <Textarea 
-                           placeholder="Add an internal note for agents..." 
-                           className="text-xs min-h-[80px] bg-amber-50/30 border-amber-200/50 rounded-xl focus:ring-amber-500/20 focus:border-amber-500"
-                           value={selectedTicket.internalNotes || ''}
-                           onChange={(e) => ticketService.updateTicket(selectedTicket.id, { internalNotes: e.target.value })}
-                        />
-                        <Info className="absolute bottom-3 right-3 w-3.5 h-3.5 text-amber-500/50" />
+                     <div className="space-y-2">
+                        <div className="relative">
+                           <Textarea 
+                              placeholder={t('createTicket.internalNotesPlaceholder', 'Start typing private agent notes...')}
+                              className={`text-xs min-h-[80px] pb-8 bg-amber-50/30 border-amber-200/50 rounded-xl focus:ring-amber-500/20 focus:border-amber-500 ${
+                                internalNotesDraft !== (selectedTicket.internalNotes || '') ? 'ring-1 ring-amber-400/60' : ''
+                              }`}
+                              value={internalNotesDraft}
+                              onChange={(e) => setInternalNotesDraft(e.target.value)}
+                           />
+                           <Info className="absolute bottom-3 right-3 w-3.5 h-3.5 text-amber-500/50 pointer-events-none" />
+                        </div>
+                        {internalNotesDraft !== (selectedTicket.internalNotes || '') && (
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => setInternalNotesDraft(selectedTicket.internalNotes || '')}
+                            >
+                              <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                              {t('tickets.fields.discardChanges', 'Discard')}
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 text-xs"
+                              onClick={() => handleInlineUpdate(selectedTicket.id, { internalNotes: internalNotesDraft })}
+                            >
+                              <Check className="w-3.5 h-3.5 mr-1.5" />
+                              {t('tickets.fields.saveChanges', 'Save changes')}
+                            </Button>
+                          </div>
+                        )}
                      </div>
                   </div>
 
