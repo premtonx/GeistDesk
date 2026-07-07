@@ -13,6 +13,7 @@ import {
   withPgTransaction,
 } from "../lib/postgres-backend.js";
 import {
+  assertVaultEncryptionConfigured,
   decryptPayloadAuto,
   encryptPayloadPreferred,
 } from "../lib/crypto.js";
@@ -41,6 +42,8 @@ const VAULT_SECRETS = "vault_item_secrets";
 
 const createSecretSchema = z.object({
   type: z.enum(["secret", "request"]).default("secret"),
+  /** Plaintext payload encrypted server-side (used alone or as Shamir reveal fallback). */
+  content: z.string().min(1).optional(),
   shares: z.array(z.string()).optional(),
   threshold: z.number().int().positive().optional(),
   expirationType: z.enum(["read", "time", "quota"]).default("quota"),
@@ -308,16 +311,27 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
   if (!parsed.success) {
     return res.status(400).json({ error: "Invalid vault payload", details: parsed.error.flatten().fieldErrors });
   }
-  const { type, shares, threshold, expirationType, expiresAt, maxViews, passphrase, metadata } = parsed.data;
+  const { type, content, shares, threshold, expirationType, expiresAt, maxViews, passphrase, metadata } = parsed.data;
+
+  let secretRef: string | null = null;
+  let itemId: string | null = null;
 
   try {
+    assertVaultEncryptionConfigured();
+
+    const hasShares = Boolean(shares && shares.length > 0);
+    const hasContent = Boolean(content && content.trim());
+    if (!hasShares && !hasContent && type !== "request") {
+      return res.status(400).json({ error: "Secret content or Shamir shares are required." });
+    }
+
     const secretRecord = await addDocDirect(VAULT_SECRETS, {
       encryptedShares: null,
       encryptedContent: null,
       createdBy: req.user.id,
       createdAt: new Date().toISOString()
     });
-    const secretRef = secretRecord.id;
+    secretRef = secretRecord.id;
     const resolvedMaxViews = isDropzoneItem({ type, metadata })
       ? 1000
       : expirationType === "read"
@@ -333,7 +347,7 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
       type,
       secretRef,
       sharesCount: shares?.length || 0,
-      threshold: threshold || (shares ? 3 : undefined),
+      threshold: threshold || (hasShares ? 3 : undefined),
       expirationType,
       expiresAt: resolvedExpiresAt,
       maxViews: resolvedMaxViews,
@@ -344,14 +358,28 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
       createdAt: new Date().toISOString(),
       metadata: resolvedMetadata
     });
+    itemId = itemRecord.id;
 
     const provenance = `exchange:${req.user.id}:${itemRecord.id}`;
-    const encryptedShares =
-      shares && shares.length > 0
-        ? shares.map((share) => encryptPayloadPreferred(share, provenance))
-        : null;
-    if (encryptedShares) {
-      await updateDocDirect(VAULT_SECRETS, secretRef, { encryptedShares });
+    const encryptedShares = hasShares
+      ? shares!.map((share) => encryptPayloadPreferred(share, provenance))
+      : null;
+    const encryptedContent = hasContent
+      ? encryptPayloadPreferred(content!.trim(), provenance)
+      : null;
+
+    if (encryptedShares || encryptedContent) {
+      await updateDocDirect(VAULT_SECRETS, secretRef, {
+        ...(encryptedShares ? { encryptedShares } : {}),
+        ...(encryptedContent ? { encryptedContent } : {}),
+      });
+    }
+
+    const stored = await getDocDirect(VAULT_SECRETS, secretRef);
+    const persistedShares = Array.isArray(stored?.encryptedShares) && stored.encryptedShares.length > 0;
+    const persistedContent = Boolean(stored?.encryptedContent);
+    if ((hasShares || hasContent) && !persistedShares && !persistedContent) {
+      throw new Error("Encrypted secret material was not persisted to the database.");
     }
 
     const itemName =
@@ -375,6 +403,18 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
     return res.status(201).json({ id: itemRecord.id });
   } catch (e: any) {
     console.error("[Vault] Failed to create secret:", e?.message || e);
+    if (secretRef) {
+      await deleteDocDirect(VAULT_SECRETS, secretRef).catch(() => undefined);
+    }
+    if (itemId) {
+      await deleteDocDirect(VAULT_ITEMS, itemId).catch(() => undefined);
+    }
+    const message = String(e?.message || "");
+    if (message.includes("VAULT_ENCRYPTION_KEY")) {
+      return res.status(503).json({
+        error: "Vault encryption is not configured on the server. Set VAULT_ENCRYPTION_KEY and redeploy.",
+      });
+    }
     return res.status(500).json({ error: "Failed to store encrypted secret." });
   }
 });

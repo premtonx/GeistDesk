@@ -89,7 +89,7 @@
     "build:strict": "npm run lint && node scripts/verify-no-react-namespace.mjs && npm run build && node scripts/verify-production-build.mjs",
     "verify:license": "node scripts/verify-license-compliance.mjs",
     "verify:hybrid-crypto": "tsx scripts/verify-hybrid-crypto.mjs",
-    "verify:release": "node scripts/verify-license-compliance.mjs && node scripts/verify-no-react-namespace.mjs && node scripts/verify-production-build.mjs && node scripts/verify-server-bundle.mjs",
+    "verify:release": "node scripts/verify-license-compliance.mjs && node scripts/verify-no-react-namespace.mjs && node scripts/verify-production-build.mjs && node scripts/verify-server-bundle.mjs && npx tsx scripts/verify-exchange-secret-crypto.mjs",
     "start": "node dist/server.cjs",
     "db:migrate": "tsx src/db/migrate.ts",
     "db:migrate:prod": "node dist/migrate.cjs",

@@ -343,6 +343,8 @@ export interface VaultItem {
   type: VaultItemType;
   content?: string; // Encrypted for secrets
   shares?: string[]; // SSS shares if used
+  sharesCount?: number;
+  threshold?: number;
   expiresAt: any;
   expirationType: 'read' | 'time' | 'quota';
   maxViews?: number;

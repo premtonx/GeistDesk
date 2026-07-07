@@ -361,7 +361,9 @@ export default function VaultPage() {
 
       const secretId = await vaultService.createItem({
         type: 'secret',
+        content: form.secretContent.trim(),
         shares: splitShares,
+        threshold: 3,
         expirationType: payload.expirationType,
         expiresAt: payload.expiresAt,
         maxViews: payload.maxViews,

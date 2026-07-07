@@ -188,8 +188,19 @@ export default function SecretViewerPage() {
       if (revealed.content) {
         resolvedContent = revealed.content;
       } else if (revealed.shares && revealed.shares.length > 0) {
+        const threshold = Math.max(1, item.threshold ?? 3);
+        if (revealed.shares.length < threshold) {
+          hasRevealedRef.current = false;
+          toast.error(
+            t(
+              'exchange.createSecret.viewer.insufficientShares',
+              'Not enough secret shards were recovered to reconstruct this payload.',
+            ),
+          );
+          return;
+        }
         try {
-          const uint8Shares = revealed.shares.slice(0, 3).map((shareB64) => {
+          const uint8Shares = revealed.shares.slice(0, threshold).map((shareB64) => {
             const binary = atob(shareB64);
             const bytes = new Uint8Array(binary.length);
             for (let i = 0; i < binary.length; i++) {

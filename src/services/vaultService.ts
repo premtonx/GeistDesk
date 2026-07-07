@@ -28,6 +28,7 @@ export const vaultService = {
     item: Omit<VaultItem, 'id' | 'createdAt' | 'createdBy' | 'isBurned'> & {
       content?: string;
       shares?: string[];
+      threshold?: number;
       passphrase?: string;
     }
   ) => {
@@ -38,7 +39,9 @@ export const vaultService = {
       method: 'POST',
       body: JSON.stringify({
         type: item.type,
-        shares: item.shares || undefined,
+        content: item.content?.trim() || undefined,
+        shares: item.shares?.length ? item.shares : undefined,
+        threshold: item.shares?.length ? item.threshold ?? 3 : undefined,
         expirationType: item.expirationType,
         expiresAt: item.expiresAt instanceof Date ? item.expiresAt.toISOString() : item.expiresAt || null,
         maxViews: item.maxViews,

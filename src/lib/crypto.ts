@@ -106,6 +106,11 @@ function buildProvenanceDigest(provenance?: string): Buffer | undefined {
  * exactly 32 bytes. Throws loudly if missing/invalid so secrets are never
  * silently written with a weak or absent key.
  */
+/** Fail fast when the server cannot encrypt vault / exchange secrets at rest. */
+export function assertVaultEncryptionConfigured(): void {
+  getVaultKey();
+}
+
 function getVaultKey(): Buffer {
   const raw = process.env.VAULT_ENCRYPTION_KEY;
   if (!raw) {
