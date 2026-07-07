@@ -20,6 +20,7 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import {
   type ModuleConfig,
   type PolyglotLanguage,
+  type PolyglotTranslationProviderMode,
 } from '../../lib/module-config';
 import { useWorkspaceModuleConfig } from '../../hooks/useWorkspaceModuleConfig';
 import {
@@ -36,6 +37,28 @@ import {
 import { cn } from '../../lib/utils';
 
 const ISO_PRESET_OPTIONS = Object.entries(ISO_LANGUAGE_PRESETS);
+
+const TRANSLATION_PROVIDER_OPTIONS: {
+  value: PolyglotTranslationProviderMode;
+  labelKey: string;
+  defaultLabel: string;
+}[] = [
+  {
+    value: 'dictionary_only',
+    labelKey: 'adminHub.polyglot.providerDictionary',
+    defaultLabel: 'Lokales statisches Wörterbuch / Local Dictionary Only (0 Tokens)',
+  },
+  {
+    value: 'deepl',
+    labelKey: 'adminHub.polyglot.providerDeepL',
+    defaultLabel: 'Externer Übersetzungs-Dienst (DeepL API)',
+  },
+  {
+    value: 'orchestrator',
+    labelKey: 'adminHub.polyglot.providerOrchestrator',
+    defaultLabel: 'Zentraler KI-Orchestrator / Main LLM Engine',
+  },
+];
 
 interface PolyglotBridgeConfigPanelProps {
   className?: string;
@@ -152,11 +175,29 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
       ...config,
       polyglot: {
         ...config.polyglot,
+        translationProviderMode: 'deepl',
         translationProviderKey: apiKeyInput.trim(),
+        allowAiFallback: false,
       },
     });
     if (saved) {
       toast.success(t('adminHub.polyglot.apiKeySaved', 'Translation provider credentials saved.'));
+    }
+  };
+
+  const handleProviderModeChange = async (mode: PolyglotTranslationProviderMode) => {
+    const saved = await persist({
+      ...config,
+      polyglot: {
+        ...config.polyglot,
+        translationProviderMode: mode,
+        allowAiFallback: mode === 'orchestrator',
+      },
+    });
+    if (saved) {
+      toast.success(
+        t('adminHub.polyglot.providerSaved', 'Translation provider updated — active immediately.'),
+      );
     }
   };
 
@@ -197,6 +238,7 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
 
   const activeLanguages = getActiveSupportedLanguages(config.languages);
   const dictionaryEntryCount = Object.keys(config.polyglot.customDictionary).length;
+  const providerMode = config.polyglot.translationProviderMode ?? 'dictionary_only';
 
   return (
     <Card className={cn('rounded-[2rem] border-slate-200/80 shadow-sm overflow-hidden', className)}>
@@ -367,10 +409,49 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
               <p className="text-xs text-muted-foreground leading-relaxed">
                 {t(
                   'adminHub.polyglot.credentialsDesc',
-                  'Configure low-cost machine translation credentials and import custom phrase dictionaries. Premium LLM tokens are never used for UI translation.',
+                  'Choose a translation backend for unresolved phrases. Static dictionary lookups are always free. Changes sync to PostgreSQL and apply immediately without a restart.',
                 )}
               </p>
 
+              <div className="space-y-2">
+                <Label htmlFor="polyglot-provider-mode">
+                  {t(
+                    'adminHub.polyglot.providerLabel',
+                    'Übersetzungsanbieter / Translation Provider',
+                  )}
+                </Label>
+                <Select value={providerMode} onValueChange={(value) => handleProviderModeChange(value as PolyglotTranslationProviderMode)}>
+                  <SelectTrigger id="polyglot-provider-mode" className="h-11">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {TRANSLATION_PROVIDER_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {t(option.labelKey, option.defaultLabel)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  {providerMode === 'dictionary_only' &&
+                    t(
+                      'adminHub.polyglot.providerDictionaryHint',
+                      'Uses imported JSON dictionaries and built-in phrase maps only. No external API calls.',
+                    )}
+                  {providerMode === 'deepl' &&
+                    t(
+                      'adminHub.polyglot.providerDeepLHint',
+                      'Falls back to DeepL machine translation when a phrase is not in the dictionary.',
+                    )}
+                  {providerMode === 'orchestrator' &&
+                    t(
+                      'adminHub.polyglot.providerOrchestratorHint',
+                      'Routes unresolved text through the workspace AI Orchestrator — uses whichever LLM (Azure OpenAI, local Ollama, etc.) is active in AI settings. No GEMINI_API_KEY required at the Polyglot layer.',
+                    )}
+                </p>
+              </div>
+
+              {providerMode === 'deepl' && (
               <div className="space-y-2">
                 <Label htmlFor="polyglot-api-key">
                   {t('adminHub.polyglot.apiKeyLabel', 'DeepL API-Schlüssel / Translation Provider Key')}
@@ -397,31 +478,21 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
                   </div>
                 </div>
               </div>
+              )}
 
-              <div className="rounded-xl border border-amber-200/80 bg-amber-50/40 p-4 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
-                <div className="space-y-1 min-w-0">
-                  <Label htmlFor="polyglot-ai-fallback" className="text-sm font-bold text-slate-800">
-                    {t('adminHub.polyglot.aiFallbackTitle', '🤖 KI-gestützte Übersetzung aktivieren')}
-                  </Label>
-                  <p className="text-xs text-muted-foreground leading-relaxed">
-                    {t(
-                      'adminHub.polyglot.aiFallbackDesc',
-                      'Erlaubt dem System, komplexe Ticket-Kontexte mittels LLM-Orchestrator zu übersetzen, falls die statischen Wörterbücher oder maschinellen Übersetzer nicht ausreichen. Achtung: Verbraucht KI-Token.',
-                    )}
-                  </p>
-                </div>
-                <Switch
-                  id="polyglot-ai-fallback"
-                  checked={config.polyglot.allowAiFallback}
-                  onCheckedChange={(allowAiFallback) =>
-                    persist({
-                      ...config,
-                      polyglot: { ...config.polyglot, allowAiFallback },
-                    })
-                  }
-                  className="shrink-0"
-                />
+              {providerMode === 'orchestrator' && (
+              <div className="rounded-xl border border-indigo-200/80 bg-indigo-50/40 p-4 space-y-1">
+                <p className="text-sm font-bold text-slate-800">
+                  {t('adminHub.polyglot.orchestratorActiveTitle', '🤖 KI-Orchestrator aktiv')}
+                </p>
+                <p className="text-xs text-muted-foreground leading-relaxed">
+                  {t(
+                    'adminHub.polyglot.orchestratorActiveDesc',
+                    'Translations use the same provider chain configured in AI Orchestrator settings (Azure, local gateway, failover priority). Token consumption follows your workspace AI budgets.',
+                  )}
+                </p>
               </div>
+              )}
             </div>
 
             <div className="space-y-2">

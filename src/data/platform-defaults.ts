@@ -94,6 +94,7 @@ export function buildDefaultModuleConfigSeed(): Record<string, unknown> {
     polyglotEnabled: true,
     languages: PLATFORM_DEFAULT_LANGUAGES.map((entry) => ({ ...entry })),
     polyglot: {
+      translationProviderMode: 'dictionary_only',
       translationProviderKey: '',
       customDictionary: {},
       allowAiFallback: false,

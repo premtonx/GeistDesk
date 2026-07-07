@@ -2,8 +2,11 @@ import { Router, type Request, type Response } from 'express';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { AI_DECISION_ENGINE_FLOW, type AiExecutionContext, type AiFeatureId } from '../types/aiOrchestrator.js';
 import { executeAiFeatureRequest } from '../lib/ai-orchestrator-service.js';
-import { translatePolyglotContent } from '../lib/polyglot-translate-service.js';
+import { translatePolyglotContent, resolvePolyglotTranslationEngine } from '../lib/polyglot-translate-service.js';
 import { getDocDirect } from '../lib/postgres-backend.js';
+import {
+  normalizePolyglotBridgeSettings,
+} from '../lib/module-config.js';
 
 const router = Router();
 
@@ -117,19 +120,21 @@ router.post('/polyglot/translate', authenticate, async (req: Request, res: Respo
 
     let polyglotOptions: {
       customDictionary?: Record<string, Record<string, string>>;
+      translationProviderMode?: 'dictionary_only' | 'deepl' | 'orchestrator';
       translationProviderKey?: string;
-      allowAiFallback?: boolean;
       mood?: string;
-    } = { allowAiFallback: false, mood };
+    } = { mood };
+    let providerMode: 'dictionary_only' | 'deepl' | 'orchestrator' = 'dictionary_only';
 
     try {
       const moduleConfig = await getDocDirect('module_config', 'global');
       if (moduleConfig?.polyglot) {
+        const polyglot = normalizePolyglotBridgeSettings(moduleConfig.polyglot);
+        providerMode = polyglot.translationProviderMode;
         polyglotOptions = {
-          customDictionary: moduleConfig.polyglot.customDictionary,
-          translationProviderKey: moduleConfig.polyglot.translationProviderKey,
-          // Server-side module config is authoritative — never trust client override alone.
-          allowAiFallback: moduleConfig.polyglot.allowAiFallback === true,
+          customDictionary: polyglot.customDictionary,
+          translationProviderMode: polyglot.translationProviderMode,
+          translationProviderKey: polyglot.translationProviderKey,
           mood,
         };
       }
@@ -138,8 +143,8 @@ router.post('/polyglot/translate', authenticate, async (req: Request, res: Respo
     }
 
     const translation = await translatePolyglotContent(text, targetLanguage, polyglotOptions);
-    const engine = polyglotOptions.allowAiFallback ? 'polyglot-bridge+ai-fallback' : 'polyglot-bridge';
-    return res.status(200).json({ translation, engine });
+    const engine = resolvePolyglotTranslationEngine(providerMode);
+    return res.status(200).json({ translation, engine, providerMode });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
     return res.status(500).json({ error: 'Polyglot translation failed.', details: message });

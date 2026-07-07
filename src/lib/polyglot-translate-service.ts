@@ -1,10 +1,12 @@
 /**
  * Server-side Polyglot Bridge translation service.
  *
- * POLYGLOT BRIDGE POLICY: Premium LLM orchestrator tokens are locked out unless the
- * workspace admin explicitly enables allowAiFallback. Default path uses static
- * dictionaries and optional DeepL only.
+ * Provider-agnostic routing: static dictionary (always free) then the admin-selected
+ * backend — DeepL API or the unified AI Orchestrator (Azure, local Ollama, etc.).
+ * No vendor-specific SDK keys are required at this layer.
  */
+
+import type { PolyglotTranslationProviderMode } from './module-config.js';
 
 const PHRASE_DICTIONARY: Record<string, Record<string, string>> = {
   Professional: {
@@ -46,10 +48,19 @@ const DEEPL_TARGET_MAP: Record<string, string> = {
 };
 
 export interface PolyglotTranslateOptions {
+  translationProviderMode?: PolyglotTranslationProviderMode;
   customDictionary?: Record<string, Record<string, string>>;
   translationProviderKey?: string;
+  /** @deprecated Use translationProviderMode === 'orchestrator' */
   allowAiFallback?: boolean;
   mood?: string;
+}
+
+function resolveProviderMode(options: PolyglotTranslateOptions): PolyglotTranslationProviderMode {
+  if (options.translationProviderMode) return options.translationProviderMode;
+  if (options.allowAiFallback === true) return 'orchestrator';
+  if (String(options.translationProviderKey || '').trim()) return 'deepl';
+  return 'dictionary_only';
 }
 
 function lookupStaticDictionary(
@@ -106,7 +117,8 @@ async function translateViaDeepL(
   return payload.translations?.[0]?.text?.trim() ?? null;
 }
 
-async function translateViaLlm(
+/** Routes translation through the workspace AI Orchestrator (provider-agnostic). */
+async function translateViaOrchestrator(
   text: string,
   targetLanguage: string,
   mood?: string,
@@ -122,14 +134,25 @@ async function translateViaLlm(
       workspaceId: 'default',
       feature: 'translation',
       prompt,
-      metadata: { targetLanguage, mood, source: 'polyglot-bridge' },
+      metadata: { targetLanguage, mood, source: 'polyglot-bridge', provider: 'orchestrator' },
     });
 
     const output = requireLifecycleOutput(result);
     return output.trim() || null;
   } catch (error) {
-    console.warn('[Polyglot Bridge] LLM translation fallback skipped:', error);
+    console.warn('[Polyglot Bridge] Orchestrator translation skipped:', error);
     return null;
+  }
+}
+
+export function resolvePolyglotTranslationEngine(mode: PolyglotTranslationProviderMode): string {
+  switch (mode) {
+    case 'deepl':
+      return 'polyglot-bridge+deepl';
+    case 'orchestrator':
+      return 'polyglot-bridge+orchestrator';
+    default:
+      return 'polyglot-bridge+dictionary';
   }
 }
 
@@ -140,18 +163,27 @@ export async function translatePolyglotContent(
 ): Promise<string> {
   if (!text.trim()) return '';
 
+  const mode = resolveProviderMode(options);
+
   const dictionaryHit = lookupStaticDictionary(text, targetLanguage, options.customDictionary);
   if (dictionaryHit) return dictionaryHit;
 
-  try {
-    const deepl = await translateViaDeepL(text, targetLanguage, options.translationProviderKey);
-    if (deepl) return deepl;
-  } catch (error) {
-    console.warn('[Polyglot Bridge] DeepL translation skipped:', error);
+  if (mode === 'dictionary_only') {
+    return text;
   }
 
-  if (options.allowAiFallback) {
-    const llm = await translateViaLlm(text, targetLanguage, options.mood);
+  if (mode === 'deepl') {
+    try {
+      const deepl = await translateViaDeepL(text, targetLanguage, options.translationProviderKey);
+      if (deepl) return deepl;
+    } catch (error) {
+      console.warn('[Polyglot Bridge] DeepL translation skipped:', error);
+    }
+    return text;
+  }
+
+  if (mode === 'orchestrator') {
+    const llm = await translateViaOrchestrator(text, targetLanguage, options.mood);
     if (llm) return llm;
   }
 

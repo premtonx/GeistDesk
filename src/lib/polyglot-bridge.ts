@@ -1,5 +1,4 @@
 import type { PolyglotLanguage, PolyglotBridgeSettings } from './module-config';
-import { getModuleConfig } from './module-config';
 
 export { DEFAULT_SUPPORTED_LANGUAGES } from './module-config';
 export type { PolyglotBridgeSettings } from './module-config';
@@ -77,8 +76,8 @@ export function inferLocaleFromFilename(filename: string): string {
 }
 
 /**
- * POLYGLOT BRIDGE POLICY — Standard UI translations use dictionary + low-cost MT first.
- * LLM orchestrator tokens are only consumed when the admin enables allowAiFallback.
+ * POLYGLOT BRIDGE POLICY — Server reads translationProviderMode from module_config.
+ * Dictionary lookups are always attempted first (0 tokens).
  */
 export async function translateSupportContent(
   text: string,
@@ -87,15 +86,12 @@ export async function translateSupportContent(
 ): Promise<string> {
   if (!text.trim()) return '';
 
-  const moduleConfig = getModuleConfig();
-
   try {
     const axios = (await import('axios')).default;
     const res = await axios.post<{ translation: string; engine?: string }>('/api/ai/polyglot/translate', {
       text,
       targetLanguage,
       mood: options?.mood,
-      allowAiFallback: moduleConfig.polyglot.allowAiFallback,
     });
     return res.data.translation?.trim() || text;
   } catch (error) {

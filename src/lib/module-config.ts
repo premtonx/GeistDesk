@@ -5,20 +5,61 @@ export interface PolyglotLanguage {
   enabled: boolean;
 }
 
+/** How unresolved Polyglot Bridge phrases are translated after the static dictionary. */
+export type PolyglotTranslationProviderMode = 'dictionary_only' | 'deepl' | 'orchestrator';
+
+export const POLYGLOT_TRANSLATION_PROVIDER_MODES: PolyglotTranslationProviderMode[] = [
+  'dictionary_only',
+  'deepl',
+  'orchestrator',
+];
+
 /** Admin-provisioned translation credentials and custom phrase dictionaries. */
 export interface PolyglotBridgeSettings {
+  /** Primary translation backend after dictionary lookup. */
+  translationProviderMode: PolyglotTranslationProviderMode;
+  /** DeepL auth key when translationProviderMode is `deepl`. */
   translationProviderKey: string;
   /** Source phrase → target language display name → translated text */
   customDictionary: Record<string, Record<string, string>>;
-  /** When true, unresolved phrases may escalate to the LLM orchestrator (consumes tokens). */
+  /**
+   * @deprecated Use translationProviderMode === 'orchestrator'. Kept in sync for legacy readers.
+   */
   allowAiFallback: boolean;
 }
 
 export const DEFAULT_POLYGLOT_BRIDGE_SETTINGS: PolyglotBridgeSettings = {
+  translationProviderMode: 'dictionary_only',
   translationProviderKey: '',
   customDictionary: {},
   allowAiFallback: false,
 };
+
+export function resolvePolyglotTranslationProviderMode(
+  polyglot: Partial<PolyglotBridgeSettings> | Record<string, unknown> | undefined,
+): PolyglotTranslationProviderMode {
+  const raw = polyglot as Partial<PolyglotBridgeSettings> | undefined;
+  const mode = raw?.translationProviderMode;
+  if (mode === 'dictionary_only' || mode === 'deepl' || mode === 'orchestrator') {
+    return mode;
+  }
+  if (raw?.allowAiFallback === true) return 'orchestrator';
+  if (String(raw?.translationProviderKey || '').trim()) return 'deepl';
+  return 'dictionary_only';
+}
+
+export function normalizePolyglotBridgeSettings(
+  polyglotRaw: Partial<PolyglotBridgeSettings> | Record<string, unknown> | undefined,
+): PolyglotBridgeSettings {
+  const mode = resolvePolyglotTranslationProviderMode(polyglotRaw);
+  const raw = (polyglotRaw ?? {}) as Partial<PolyglotBridgeSettings>;
+  return {
+    translationProviderMode: mode,
+    translationProviderKey: raw.translationProviderKey ?? '',
+    customDictionary: raw.customDictionary ?? {},
+    allowAiFallback: mode === 'orchestrator',
+  };
+}
 
 import { PLATFORM_DEFAULT_LANGUAGES } from '../data/platform-defaults';
 
@@ -157,11 +198,7 @@ export function normalizeModuleConfig(parsed: Partial<ModuleConfig> | Record<str
       enabled: lang.enabled ?? true,
       flagCode: lang.flagCode || inferIsoCodeFromLanguage(lang.lang),
     })),
-    polyglot: {
-      translationProviderKey: polyglotRaw.translationProviderKey ?? '',
-      customDictionary: polyglotRaw.customDictionary ?? {},
-      allowAiFallback: polyglotRaw.allowAiFallback ?? false,
-    },
+    polyglot: normalizePolyglotBridgeSettings(polyglotRaw),
     ssoDomains: Array.isArray(source.ssoDomains) ? source.ssoDomains : DEFAULT_CONFIG.ssoDomains,
     exchangeCustomTemplates: Array.isArray(source.exchangeCustomTemplates)
       ? source.exchangeCustomTemplates

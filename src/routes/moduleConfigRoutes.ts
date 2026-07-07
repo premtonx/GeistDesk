@@ -1,6 +1,10 @@
 import { Router, type Request, type Response } from 'express';
 import { authenticate, requireRole } from '../middleware/authMiddleware.js';
 import { getDocDirect, setDocDirect } from '../lib/postgres-backend.js';
+import {
+  normalizePolyglotBridgeSettings,
+  resolvePolyglotTranslationProviderMode,
+} from '../lib/module-config.js';
 
 const router = Router();
 const COLLECTION = 'module_config';
@@ -16,7 +20,8 @@ function sanitizeModuleConfigForOperators(doc: Record<string, unknown> | null) {
     polyglotEnabled: doc.polyglotEnabled ?? true,
     languages: doc.languages ?? [],
     polyglot: {
-      allowAiFallback: polyglot.allowAiFallback === true,
+      translationProviderMode: resolvePolyglotTranslationProviderMode(polyglot),
+      allowAiFallback: resolvePolyglotTranslationProviderMode(polyglot) === 'orchestrator',
       customDictionary: {},
       translationProviderKey: '',
     },
@@ -58,9 +63,13 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
  */
 router.put('/', authenticate, requireRole(['SYSTEM_ADMIN']), async (req: Request, res: Response) => {
   try {
-    const data = req.body;
+    const data = req.body as Record<string, unknown>;
     if (!data || typeof data !== 'object') {
       return res.status(400).json({ error: 'Invalid module configuration payload.' });
+    }
+
+    if (data.polyglot && typeof data.polyglot === 'object') {
+      data.polyglot = normalizePolyglotBridgeSettings(data.polyglot as Record<string, unknown>);
     }
 
     await setDocDirect(COLLECTION, DOC_ID, data);
