@@ -35,6 +35,7 @@ import credentialVaultRoutes from "./src/routes/credentialVaultRoutes.js";
 import kbArticleRoutes from "./src/routes/kbArticleRoutes.js";
 import kbCategoryRoutes from "./src/routes/kbCategoryRoutes.js";
 import kbDashboardRoutes from "./src/routes/kbDashboardRoutes.js";
+import executiveDashboardRoutes from "./src/routes/executiveDashboardRoutes.js";
 import { orchestratorEventBus } from "./src/lib/ai-orchestrator-events.js";
 import { hashPassword, verifyPassword } from "./src/lib/crypto.js";
 import { calculateCoverage, getDashboardData } from "./src/services/coverageEngine.js";
@@ -410,6 +411,7 @@ async function startServer() {
   app.use("/api/kb/articles", kbArticleRoutes);
   app.use("/api/kb/categories", kbCategoryRoutes);
   app.use("/api/kb/dashboard", kbDashboardRoutes);
+  app.use("/api/dashboard", executiveDashboardRoutes);
   app.use("/api/module-config", moduleConfigRoutes);
 
   // Workspace AI orchestrator — redacted config for agents; full config via /api/admin/orchestrator/config

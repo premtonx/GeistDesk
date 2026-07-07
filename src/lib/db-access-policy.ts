@@ -43,6 +43,7 @@ export const DB_AUTHENTICATED_COLLECTIONS = new Set([
   'kb_article_history',
   'kb_categories',
   'kb_settings',
+  'platform_analytics',
 ]);
 
 export type DbAction = 'get_doc' | 'get_docs' | 'add_doc' | 'update_doc' | 'set_doc' | 'delete_doc';

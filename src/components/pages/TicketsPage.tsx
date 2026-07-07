@@ -151,7 +151,8 @@ import { Ticket as TicketType, Message, KBArticle, TicketStatus, TicketPriority,
 import { redactPII, isTextSensitive } from '../../lib/ai/pii-shield';
 import { AIAdapter } from '../../lib/ai/provider-adapter';
 import { subscribeOrchestratorConfig, startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
-import { getModuleConfig, ModuleConfig } from '../../lib/module-config';
+import { useWorkspaceModuleConfig } from '../../hooks/useWorkspaceModuleConfig';
+import { getActiveSupportedLanguages } from '../../lib/polyglot-bridge';
 import { useTheme } from '../../lib/context/ThemeContext';
 
 import { logAudit } from '../../services/auditService';
@@ -659,7 +660,11 @@ export default function TicketsPage() {
   });
 
   // Polyglot Bridge State
-  const [moduleConfig, setModuleConfig] = useState<ModuleConfig>(getModuleConfig());
+  const { config: moduleConfig } = useWorkspaceModuleConfig();
+  const activePolyglotLanguages = useMemo(
+    () => getActiveSupportedLanguages(moduleConfig.languages),
+    [moduleConfig.languages],
+  );
   const [agentLanguage, setAgentLanguage] = useState<string>(() => {
     return localStorage.getItem('agentLanguage') || 'English';
   });
@@ -731,12 +736,6 @@ export default function TicketsPage() {
       setMessages(msgs);
     });
   }, [selectedTicketId]);
-
-  useEffect(() => {
-    const handleConfigChange = () => setModuleConfig(getModuleConfig());
-    window.addEventListener('module-config-changed', handleConfigChange);
-    return () => window.removeEventListener('module-config-changed', handleConfigChange);
-  }, []);
 
   const [hoveredTicketId, setHoveredTicketId] = useState<string | null>(null);
   const [peekMessages, setPeekMessages] = useState<Message[]>([]);
@@ -1661,10 +1660,10 @@ export default function TicketsPage() {
         selectedTicketId={selectedTicketId}
         isMobileSidebarOpen={isMobileSidebarOpen}
         footer={
-          moduleConfig.polyglotEnabled ? (
-            <div className={cn('mt-auto p-4 border-t border-border bg-card/50', effectiveCollapsed && 'p-2')}>
+          moduleConfig.polyglotEnabled && activePolyglotLanguages.length > 0 ? (
+            <div className={cn('p-2', effectiveCollapsed && 'px-1')}>
               {!effectiveCollapsed && (
-                <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-2 mb-2 px-1">
                   <Languages className="w-3.5 h-3.5 text-primary" />
                   <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
                     Polyglot Bridge
@@ -1672,22 +1671,20 @@ export default function TicketsPage() {
                 </div>
               )}
               <div className={cn('flex flex-wrap gap-2', effectiveCollapsed && 'flex-col items-center')}>
-                {moduleConfig.languages
-                  .filter((l) => l.enabled)
-                  .map((f) => (
-                    <button
-                      key={f.isoCode || f.lang}
-                      type="button"
-                      onClick={() => setAgentLanguage(f.lang)}
-                      className={cn(
-                        'h-8 w-8 rounded-full border border-transparent hover:bg-card flex items-center justify-center text-sm shadow-none transition-all shrink-0',
-                        agentLanguage === f.lang && 'border-primary bg-card shadow-sm scale-110',
-                      )}
-                      title={`${t('settings.polyglotBridge', 'Polyglot Bridge')}: ${f.lang}`}
-                    >
-                      <FlagIcon code={f.flagCode || languageToFlagCode(f.lang)} className="w-5 h-3.5" />
-                    </button>
-                  ))}
+                {activePolyglotLanguages.map((f) => (
+                  <button
+                    key={f.isoCode || f.lang}
+                    type="button"
+                    onClick={() => setAgentLanguage(f.lang)}
+                    className={cn(
+                      'h-8 w-8 rounded-full border border-transparent hover:bg-card flex items-center justify-center text-sm shadow-none transition-all shrink-0',
+                      agentLanguage === f.lang && 'border-primary bg-card shadow-sm scale-110',
+                    )}
+                    title={`${t('settings.polyglotBridge', 'Polyglot Bridge')}: ${f.lang}`}
+                  >
+                    <FlagIcon code={f.flagCode || languageToFlagCode(f.lang)} className="w-5 h-3.5" />
+                  </button>
+                ))}
               </div>
             </div>
           ) : undefined

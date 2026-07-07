@@ -240,15 +240,15 @@ export function TicketsLeftSidebar({
   return (
     <div
       className={cn(
-        'border-r bg-muted flex flex-col py-3 shrink-0 h-full transition-all duration-300 ease-in-out overflow-y-auto custom-scrollbar shadow-inner',
+        'border-r bg-muted flex flex-col h-full min-h-0 shrink-0 transition-all duration-300 ease-in-out overflow-hidden shadow-inner',
         isMobileSidebarOpen ? 'w-full flex' : 'hidden md:flex',
-        effectiveCollapsed ? 'md:w-20 overflow-hidden' : 'md:w-64',
+        effectiveCollapsed ? 'md:w-20' : 'md:w-64',
         selectedTicketId ? 'hidden md:flex' : '',
         className,
       )}
     >
       {!effectiveCollapsed && (
-        <div className="px-3 pb-2 flex items-center justify-between gap-2 shrink-0">
+        <div className="px-3 pb-2 pt-3 flex items-center justify-between gap-2 shrink-0">
           <div className="flex items-center gap-2 pl-1 min-w-0">
             <Sparkles className="w-4 h-4 text-primary animate-pulse shrink-0" />
             <h2 className="text-[10px] font-black text-slate-800 dark:text-slate-100 uppercase tracking-[0.2em] truncate">
@@ -266,8 +266,7 @@ export function TicketsLeftSidebar({
         </div>
       )}
 
-      <div className="flex-1 space-y-0 px-2 min-h-0">
-        {/* Favorites */}
+      <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar px-2 py-1">
         {!effectiveCollapsed && favoriteItems.length > 0 && (
           <div className="space-y-0.5 pb-2.5 mb-0.5 border-b border-border/70">
             <button
@@ -320,8 +319,10 @@ export function TicketsLeftSidebar({
         {orderedGroups.map((cat, index) => renderGroup(cat, index > 0 || favoriteItems.length > 0))}
       </div>
 
-      <TicketsAiQualityScore collapsed={effectiveCollapsed} className="mt-auto shrink-0" />
-      {footer}
+      <div className="shrink-0 border-t border-border/70 bg-muted/95 backdrop-blur-sm px-2 py-2 space-y-2">
+        <TicketsAiQualityScore collapsed={effectiveCollapsed} />
+        {footer}
+      </div>
     </div>
   );
 }
