@@ -140,6 +140,8 @@ A custom `docker-compose.yml` file is provided, mapping essential environment va
 docker-compose up --build -d
 ```
 
+**Zero-config bootstrap:** The container entrypoint automatically deploys the PostgreSQL schema, seeds German platform defaults, and starts the server — no manual `npm run seed` required. See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full one-command bootstrapping guide.
+
 ---
 
 ## 🔒 Environment Variables Reference
