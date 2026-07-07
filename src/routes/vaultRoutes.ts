@@ -326,8 +326,6 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
     }
 
     const secretRecord = await addDocDirect(VAULT_SECRETS, {
-      encryptedShares: null,
-      encryptedContent: null,
       createdBy: req.user.id,
       createdAt: new Date().toISOString()
     });
