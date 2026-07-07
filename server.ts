@@ -146,7 +146,20 @@ async function startServer() {
   const PORT = 3000;
 
   app.use(helmet({
-    contentSecurityPolicy: IS_PROD ? undefined : false,
+    contentSecurityPolicy: IS_PROD
+      ? {
+          useDefaults: true,
+          directives: {
+            // External bootstrap only — no unsafe-inline scripts (see public/storage-bootstrap.js).
+            scriptSrc: ["'self'"],
+            styleSrc: ["'self'", "'unsafe-inline'"],
+            imgSrc: ["'self'", "data:", "blob:", "https:"],
+            connectSrc: ["'self'", "https:", "wss:"],
+            fontSrc: ["'self'", "https://fonts.gstatic.com", "data:"],
+            objectSrc: ["'none'"],
+          },
+        }
+      : false,
   }));
   app.use(cookieParser());
   app.use(express.json({ limit: "1mb" }));
