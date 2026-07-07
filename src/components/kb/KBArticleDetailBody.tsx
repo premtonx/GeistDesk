@@ -4,35 +4,22 @@ import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { KB_ARTICLE_CONTENT_WRAP_CLASS } from './kb-article-detail-utils';
 import { RichTextPreview } from '../RichTextPreview';
+import type { KBArticleAlert, KBArticleAlertType } from '../../types';
 
 const RichTextEditor = lazy(() =>
   import('../RichTextEditor').then((module) => ({ default: module.RichTextEditor })),
 );
 
-const CALLOUT_EXAMPLES = [
+const CALLOUT_STYLES: Record<
+  KBArticleAlertType,
   {
-    type: 'warning' as const,
-    title: 'Warning',
-    body: 'Rotating Azure AD client secrets requires a maintenance window and coordinated SSO re-authentication across all integrated nodes.',
-  },
-  {
-    type: 'info' as const,
-    title: 'Information',
-    body: 'Enterprise tenants should map GeistDesk roles to Azure AD security groups before enabling automated provisioning.',
-  },
-  {
-    type: 'success' as const,
-    title: 'Success',
-    body: 'SSO validation passed for all production identity providers in the last compliance sweep.',
-  },
-  {
-    type: 'critical' as const,
-    title: 'Critical',
-    body: 'Disabling MFA enforcement on federated accounts will immediately downgrade the article trust score and trigger a security review.',
-  },
-];
-
-const CALLOUT_STYLES = {
+    icon: typeof AlertTriangle;
+    container: string;
+    iconColor: string;
+    titleColor: string;
+    bodyColor: string;
+  }
+> = {
   warning: {
     icon: AlertTriangle,
     container: 'border-amber-200 bg-amber-50/50',
@@ -65,7 +52,7 @@ const CALLOUT_STYLES = {
 
 interface KBArticleDetailBodyProps {
   htmlContent: string;
-  showCalloutSamples?: boolean;
+  alerts?: KBArticleAlert[];
   isEditing?: boolean;
   editedContent?: string;
   onContentChange?: (value: string) => void;
@@ -73,7 +60,7 @@ interface KBArticleDetailBodyProps {
 
 export function KBArticleDetailBody({
   htmlContent,
-  showCalloutSamples = true,
+  alerts = [],
   isEditing = false,
   editedContent = '',
   onContentChange,
@@ -126,14 +113,14 @@ export function KBArticleDetailBody({
         />
       )}
 
-      {!isEditing && showCalloutSamples ? (
+      {!isEditing && alerts.length > 0 ? (
         <div className="space-y-3 print:hidden">
-          {CALLOUT_EXAMPLES.map((callout) => {
-            const style = CALLOUT_STYLES[callout.type];
+          {alerts.map((callout, index) => {
+            const style = CALLOUT_STYLES[callout.type] || CALLOUT_STYLES.info;
             const Icon = style.icon;
             return (
               <div
-                key={callout.type}
+                key={`${callout.type}-${callout.title}-${index}`}
                 className={cn('flex gap-3 rounded-xl border px-4 py-3', style.container)}
               >
                 <Icon className={cn('w-4 h-4 shrink-0 mt-0.5', style.iconColor)} />

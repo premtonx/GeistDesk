@@ -8,6 +8,8 @@ import {
 } from '../ui/dialog';
 import { Button } from '../ui/button';
 import { toast } from 'sonner';
+import type { KBArticleHistoryEntry } from '../../types';
+import { formatArticleDate } from '../../lib/kb-article-defaults';
 
 export type KBArticleToolbarPanel = 'share' | 'history' | 'compare' | 'ai-explain' | null;
 
@@ -21,22 +23,15 @@ interface KBArticleToolbarPanelsProps {
     reviewer?: string;
     visibility?: string;
     lastEditor?: string;
-    updatedAt?: { toDate?: () => Date };
-    createdAt?: { toDate?: () => Date };
+    updatedAt?: unknown;
+    createdAt?: unknown;
   };
   articleUrl: string;
+  historyEntries?: KBArticleHistoryEntry[];
+  isHistoryLoading?: boolean;
   aiExplainContent?: string;
   isAiExplainLoading?: boolean;
   onCopyLink: () => void;
-}
-
-function formatDate(value?: { toDate?: () => Date }): string {
-  try {
-    const date = value?.toDate?.();
-    return date ? date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' }) : '—';
-  } catch {
-    return '—';
-  }
 }
 
 export function KBArticleToolbarPanels({
@@ -44,6 +39,8 @@ export function KBArticleToolbarPanels({
   onClose,
   article,
   articleUrl,
+  historyEntries = [],
+  isHistoryLoading = false,
   aiExplainContent,
   isAiExplainLoading,
   onCopyLink,
@@ -94,26 +91,25 @@ export function KBArticleToolbarPanels({
               Governance timeline for &ldquo;{article.title}&rdquo;
             </DialogDescription>
           </DialogHeader>
-          <ol className="space-y-3 text-sm border-l border-slate-200 pl-4 ml-1">
-            <li>
-              <p className="text-xs font-semibold text-slate-900">Published revision</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                {formatDate(article.updatedAt)} · {article.lastEditor || article.owner || 'System'}
-              </p>
-            </li>
-            <li>
-              <p className="text-xs font-semibold text-slate-900">Initial draft</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                {formatDate(article.createdAt)} · {article.owner || 'Author'}
-              </p>
-            </li>
-            <li>
-              <p className="text-xs font-semibold text-slate-900">Reviewer sign-off</p>
-              <p className="text-[11px] text-slate-500 mt-0.5">
-                {article.reviewer || 'Pending'} · Compliance checkpoint
-              </p>
-            </li>
-          </ol>
+          {isHistoryLoading ? (
+            <p className="text-sm text-slate-500 animate-pulse">Loading revision history…</p>
+          ) : historyEntries.length > 0 ? (
+            <ol className="space-y-3 text-sm border-l border-slate-200 pl-4 ml-1 max-h-[360px] overflow-y-auto">
+              {historyEntries.map((entry) => (
+                <li key={entry.id}>
+                  <p className="text-xs font-semibold text-slate-900">{entry.changeSummary}</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    {formatArticleDate(entry.createdAt)} · {entry.authorName || 'System'}
+                  </p>
+                  {entry.snapshotTitle ? (
+                    <p className="text-[10px] text-slate-400 mt-0.5 truncate">{entry.snapshotTitle}</p>
+                  ) : null}
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="text-sm text-slate-500">No revision history recorded yet.</p>
+          )}
         </DialogContent>
       </Dialog>
 
@@ -129,20 +125,25 @@ export function KBArticleToolbarPanels({
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2">
-            {['Current published', 'Previous revision', 'Imported source'].map((label) => (
+            {historyEntries.slice(0, 3).map((entry) => (
               <button
-                key={label}
+                key={entry.id}
                 type="button"
                 className="w-full text-left rounded-xl border border-slate-200 px-3 py-2.5 text-sm hover:bg-slate-50 transition-colors"
                 onClick={() => {
-                  toast.info(`Compare mode: loading diff for "${label}".`);
+                  toast.info(`Compare mode: loading diff for "${entry.changeSummary}".`);
                   onClose();
                 }}
               >
-                <p className="font-medium text-slate-800">{label}</p>
-                <p className="text-[11px] text-slate-500 mt-0.5">Open side-by-side markdown diff</p>
+                <p className="font-medium text-slate-800">{entry.changeSummary}</p>
+                <p className="text-[11px] text-slate-500 mt-0.5">
+                  {formatArticleDate(entry.createdAt)} · {entry.authorName || 'System'}
+                </p>
               </button>
             ))}
+            {historyEntries.length === 0 ? (
+              <p className="text-sm text-slate-500">Save revisions to enable version comparison.</p>
+            ) : null}
           </div>
         </DialogContent>
       </Dialog>

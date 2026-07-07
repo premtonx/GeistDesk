@@ -40,6 +40,7 @@ export const DB_AUTHENTICATED_COLLECTIONS = new Set([
   'vaults',
   'vault_folders',
   'kb_coverage',
+  'kb_article_history',
 ]);
 
 export type DbAction = 'get_doc' | 'get_docs' | 'add_doc' | 'update_doc' | 'set_doc' | 'delete_doc';

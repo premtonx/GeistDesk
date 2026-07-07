@@ -27,7 +27,7 @@ export function KBArticleDetailHeader({
   onBack,
 }: KBArticleDetailHeaderProps) {
   const badges = deriveArticleBadges({ ...article, category, subCategory });
-  const ticketRef = article.linkedTicket || 'TKT-184';
+  const ticketRef = article.linkedTicket || '—';
 
   return (
     <header className="space-y-4 pb-4 border-b border-slate-200/80">
@@ -63,10 +63,10 @@ export function KBArticleDetailHeader({
       </div>
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 text-[11px]">
-        <ContextItem label="Owner" value={article.owner || 'Sarah James'} />
-        <ContextItem label="Reviewer" value={article.reviewer || 'Mike Chen'} />
-        <ContextItem label="Review Due" value={article.reviewDueDate || '2026-09-01'} />
-        <ContextItem label="Views" value={formatArticleViews(article.views ?? 14280)} />
+        <ContextItem label="Owner" value={article.owner || '—'} />
+        <ContextItem label="Reviewer" value={article.reviewer || '—'} />
+        <ContextItem label="Review Due" value={article.reviewDueDate || '—'} />
+        <ContextItem label="Views" value={formatArticleViews(article.views ?? 0)} />
         <ContextItem label="Tickets" value={ticketRef} />
       </div>
     </header>

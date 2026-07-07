@@ -123,7 +123,7 @@ import { useWorkspace } from '../../lib/context/WorkspaceContext';
 import { KBImporter } from '../KBImporter';
 import { KBAutopilotDashboard } from '../KBAutopilotDashboard';
 import { KBArticle } from '../../types';
-import { KBArticleDetailView } from '../kb/KBArticleDetailView';
+import { KnowledgeBaseArticlePage } from './KnowledgeBaseArticlePage';
 import { buildKbArticleDeepLink } from '../kb/kb-content-format';
 import { trustScoreService, generateDefaultTrustScore } from '../../services/trustScoreService';
 import { AIRelationshipGraph2 } from '../AIRelationshipGraph2';
@@ -161,6 +161,28 @@ const ENTERPRISE_SEED_ARTICLES: any[] = [
     unhelpfulCount: 4,
     avgReadTime: "6m 40s",
     language: "English",
+    alerts: [
+      {
+        type: 'warning',
+        title: 'Warning',
+        body: 'Rotating Azure AD client secrets requires a maintenance window and coordinated SSO re-authentication across all integrated nodes.',
+      },
+      {
+        type: 'info',
+        title: 'Information',
+        body: 'Enterprise tenants should map GeistDesk roles to Azure AD security groups before enabling automated provisioning.',
+      },
+      {
+        type: 'success',
+        title: 'Success',
+        body: 'SSO validation passed for all production identity providers in the last compliance sweep.',
+      },
+      {
+        type: 'critical',
+        title: 'Critical',
+        body: 'Disabling MFA enforcement on federated accounts will immediately downgrade the article trust score and trigger a security review.',
+      },
+    ],
     createdAt: { toDate: () => new Date("2026-05-15") },
     updatedAt: { toDate: () => new Date("2026-06-01") }
   },
@@ -614,12 +636,8 @@ export default function KBPage() {
     setEditingArticleId(null);
   }, []);
 
-  const [activeReadingLanguage, setActiveReadingLanguage] = useState<string>('English');
-  const [articleTranslations, setArticleTranslations] = useState<Record<string, Record<string, string>>>({});
-
   const dismissArticleDetail = useCallback(() => {
     setViewingArticle(null);
-    setActiveReadingLanguage('English');
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete('article');
@@ -639,8 +657,6 @@ export default function KBPage() {
       openArticleView(matched);
     }
   };
-  const [isTranslating, setIsTranslating] = useState<boolean>(false);
-  
   const [newArticle, setNewArticle] = useState<KBArticleDraft>({
     title: '',
     content: '',
@@ -1029,68 +1045,6 @@ export default function KBPage() {
     });
   };
 
-  const handleTranslateArticle = async (targetLang: string) => {
-    if (!viewingArticle) return;
-
-    const baseLanguage = viewingArticle.language || 'English';
-    if (targetLang === baseLanguage || targetLang === 'English') {
-      setActiveReadingLanguage(targetLang);
-      return;
-    }
-
-    const cached = articleTranslations[viewingArticle.id]?.[targetLang];
-    if (cached) {
-      setActiveReadingLanguage(targetLang);
-      toast.success(`Showing ${targetLang} translation.`);
-      return;
-    }
-
-    if (!isAiSearchReady) {
-      toast.error(t('kb.aiNotConfigured', 'Geist AI is not configured. Connect a model in AI Orchestrator settings.'));
-      return;
-    }
-
-    setIsTranslating(true);
-    toast.info(`Orchestrating AI translation into ${targetLang}…`);
-
-    try {
-      const source = viewingArticle.content || '';
-      const plainSource = source.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-      const translated = await aiAdapter.translate(plainSource, targetLang, 'Professional');
-      const htmlTranslated = `<div class="kb-translated-body">${translated.replace(/\n/g, '<br/>')}</div>`;
-
-      setArticleTranslations((prev) => ({
-        ...prev,
-        [viewingArticle.id]: {
-          ...(prev[viewingArticle.id] || {}),
-          [targetLang]: htmlTranslated,
-        },
-      }));
-      setActiveReadingLanguage(targetLang);
-      toast.success(`Article successfully localized to ${targetLang}.`);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Translation failed.';
-      toast.error(message);
-      throw error;
-    } finally {
-      setIsTranslating(false);
-    }
-  };
-
-  const handleAiExplainArticle = async (): Promise<string> => {
-    if (!viewingArticle) return '';
-
-    if (!isAiSearchReady) {
-      throw new Error(t('kb.aiNotConfigured', 'Geist AI is not configured. Connect a model in AI Orchestrator settings.'));
-    }
-
-    return aiAdapter.explainArticleLayout(
-      viewingArticle.title,
-      viewingArticle.content || '',
-      viewingArticle.id,
-    );
-  };
-
   // Global search & tags & owner matching logic
   const searchNormalized = searchQuery.toLowerCase();
 
@@ -1359,16 +1313,22 @@ export default function KBPage() {
     [articles, workspace, isAiSearchReady, aiAdapter, t],
   );
 
-  // Helper translations for preview reading
-  const getLocalizedTitle = (art: any, lang: string) => {
-    if (!art) return '';
-    if (lang === 'German') return `[DE] ${art.title} - Deutsch Handbuch`;
-    if (lang === 'French') return `[FR] Guide de l'utilisateur: ${art.title}`;
-    if (lang === 'Spanish') return `[ES] Manual de Procedimiento: ${art.title}`;
-    if (lang === 'Japanese') return `[JA] 用語集・ドキュメント: ${art.title}`;
-    if (lang === 'Italian') return `[IT] Guida Completa: ${art.title}`;
-    if (lang === 'Dutch') return `[NL] Handleiding: ${art.title}`;
-    return art.title;
+  const renderArticleDetailView = () => {
+    if (!viewingArticle) return null;
+
+    return (
+      <KnowledgeBaseArticlePage
+        article={viewingArticle}
+        isAiSearchReady={isAiSearchReady}
+        aiAdapter={aiAdapter}
+        onBack={dismissArticleDetail}
+        onCopyLink={handleCopyArticleLink}
+        onArticleUpdated={(articleId, patch) => {
+          setArticles((prev) => prev.map((a) => (a.id === articleId ? { ...a, ...patch } : a)));
+          setViewingArticle((prev) => (prev && prev.id === articleId ? { ...prev, ...patch } : prev));
+        }}
+      />
+    );
   };
 
   const renderCoverageDashboard = () => {
@@ -1850,99 +1810,6 @@ export default function KBPage() {
         </div>
 
       </div>
-    );
-  };
-
-  const getLocalizedContent = (art: any, lang: string) => {
-    if (!art) return '';
-    const baseLanguage = art.language || 'English';
-    if (lang === baseLanguage) return art.content;
-
-    const cached = articleTranslations[art.id]?.[lang];
-    if (cached) return cached;
-
-    if (lang === 'German') return `<h3>Souveränitäts-Verschlüsselungsprüfung</h3><p>Automatisch übersetzte Version des Artikels unter Beibehaltung aller Kernschlüsselvariablen.</p>${art.content}`;
-    if (lang === 'French') return `<h3>Vérification du chiffrement souverain</h3><p>Version traduite automatiquement du document préservant les paramètres cryptographiques d'origine.</p>${art.content}`;
-    if (lang === 'Spanish') return `<h3>Verificación del sistema de protección</h3><p>Documento localizado con traducciones simuladas por IA manteniendo los bloques técnicos intactos.</p>${art.content}`;
-    if (lang === 'Japanese') return `<h3>暗号化およびセキュアチャネル仕様書</h3><p>英語の原文をインテリジェントに直訳したリファレンスドキュメントです。</p>${art.content}`;
-    return art.content;
-  };
-
-  const renderArticleDetailView = () => {
-    if (!viewingArticle) return null;
-
-    const handleHelpful = async () => {
-      const updatedHelpful = (viewingArticle.helpfulCount || 0) + 1;
-      await kbService.updateArticle(viewingArticle.id, { helpfulCount: updatedHelpful });
-      try {
-        const trust = await trustScoreService.getTrustScore(viewingArticle.id, viewingArticle);
-        const updatedInputs = { ...trust.inputs, helpfulCount: updatedHelpful };
-        await trustScoreService.updateTrustScore(viewingArticle.id, updatedInputs, trust.score, trust.history);
-      } catch (e) {
-        console.warn('Could not save trust score logs:', e);
-      }
-      setArticles((prev) => prev.map((a) => (a.id === viewingArticle.id ? { ...a, helpfulCount: updatedHelpful } : a)));
-      setViewingArticle((prev) => (prev ? { ...prev, helpfulCount: updatedHelpful } : null));
-      toast.success('Thank you! Positive rating logged.');
-    };
-
-    const handleUnhelpful = async () => {
-      const updatedUnhelpful = (viewingArticle.unhelpfulCount || 0) + 1;
-      await kbService.updateArticle(viewingArticle.id, { unhelpfulCount: updatedUnhelpful });
-      try {
-        const trust = await trustScoreService.getTrustScore(viewingArticle.id, viewingArticle);
-        const updatedInputs = { ...trust.inputs, unhelpfulCount: updatedUnhelpful };
-        await trustScoreService.updateTrustScore(viewingArticle.id, updatedInputs, trust.score, trust.history);
-      } catch (e) {
-        console.warn('Could not save trust score logs:', e);
-      }
-      setArticles((prev) => prev.map((a) => (a.id === viewingArticle.id ? { ...a, unhelpfulCount: updatedUnhelpful } : a)));
-      setViewingArticle((prev) => (prev ? { ...prev, unhelpfulCount: updatedUnhelpful } : null));
-      toast.success('Feedback recorded. Trust metrics adjusted.');
-    };
-
-    const handleSaveContent = async (content: string) => {
-      if (!viewingArticle) return;
-
-      if (viewingArticle.id.startsWith('seed-')) {
-        setArticles((prev) =>
-          prev.map((a) =>
-            a.id === viewingArticle.id
-              ? { ...a, content, updatedAt: { toDate: () => new Date() } }
-              : a,
-          ),
-        );
-        setViewingArticle((prev) => (prev ? { ...prev, content } : null));
-      } else {
-        await kbService.updateArticle(viewingArticle.id, { content }, viewingArticle.tags || []);
-        setArticles((prev) =>
-          prev.map((a) => (a.id === viewingArticle.id ? { ...a, content } : a)),
-        );
-        setViewingArticle((prev) => (prev ? { ...prev, content } : null));
-      }
-    };
-
-    return (
-      <KBArticleDetailView
-        article={viewingArticle}
-        title={getLocalizedTitle(viewingArticle, activeReadingLanguage)}
-        htmlContent={getLocalizedContent(viewingArticle, activeReadingLanguage)}
-        activeReadingLanguage={activeReadingLanguage}
-        onBack={() => {
-          dismissArticleDetail();
-        }}
-        onCopyLink={() => handleCopyArticleLink(viewingArticle.id)}
-        onTranslate={handleTranslateArticle}
-        onAiExplain={handleAiExplainArticle}
-        isTranslating={isTranslating}
-        onSaveContent={handleSaveContent}
-        onHelpful={handleHelpful}
-        onUnhelpful={handleUnhelpful}
-        onTrustScoreUpdated={(newScore) => {
-          setArticles((prev) => prev.map((a) => (a.id === viewingArticle.id ? { ...a, trustScore: newScore } : a)));
-          setViewingArticle((prev) => (prev ? { ...prev, trustScore: newScore } : null));
-        }}
-      />
     );
   };
 

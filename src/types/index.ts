@@ -287,6 +287,52 @@ export interface KBArticle {
   language?: string;
   parentCategory?: string;
   subCategory?: string;
+  aiSummary?: string;
+  alerts?: KBArticleAlert[];
+  infrastructureTrust?: KBArticleInfrastructureTrust;
+  workflowSteps?: KBArticleWorkflowStep[];
+  translations?: Record<string, KBArticleTranslation>;
+  linkedTicket?: string;
+  trustScore?: number;
+}
+
+export type KBArticleAlertType = 'warning' | 'info' | 'success' | 'critical';
+
+export interface KBArticleAlert {
+  type: KBArticleAlertType;
+  title: string;
+  body: string;
+}
+
+export interface KBArticleInfrastructureTrust {
+  reviewed?: boolean;
+  technicallyVerified?: boolean;
+  trustScore?: number;
+  hallucinationRisk?: string;
+  coverage?: string;
+  freshness?: string;
+}
+
+export interface KBArticleWorkflowStep {
+  id: string;
+  label: string;
+  status: 'complete' | 'active' | 'pending';
+}
+
+export interface KBArticleTranslation {
+  title: string;
+  content: string;
+  alerts?: KBArticleAlert[];
+}
+
+export interface KBArticleHistoryEntry {
+  id: string;
+  articleId: string;
+  authorId?: string;
+  authorName?: string;
+  changeSummary: string;
+  snapshotTitle?: string;
+  createdAt: any;
 }
 
 export type VaultItemType = 'secret' | 'request';

@@ -1,3 +1,4 @@
+import { useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   Sparkles,
@@ -9,121 +10,174 @@ import {
   Ticket,
   Building2,
   Server,
-  ClipboardList,
-  UserPlus,
-  GitPullRequest,
+  Tag,
+  User,
+  Calendar,
+  Loader2,
+  RefreshCw,
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { cn } from '../../lib/utils';
+import { useTranslation } from '../../lib/context/I18nContext';
+import type {
+  KBArticleAlert,
+  KBArticleInfrastructureTrust,
+  KBArticleWorkflowStep,
+} from '../../types';
+import { KBRelationship } from '../../services/kbRelationshipService';
+import { KBKnowledgeGraphModal } from './KBKnowledgeGraphModal';
+import { formatArticleDate, parseSummaryBullets } from '../../lib/kb-article-defaults';
 
 interface KBKnowledgeIntelligencePanelProps {
   article: {
+    id?: string;
     title?: string;
     owner?: string;
     reviewer?: string;
+    authorId?: string;
+    tags?: string[];
+    createdAt?: unknown;
+    updatedAt?: unknown;
     trustScore?: number;
     category?: string;
     linkedTicket?: string;
+    workflowSteps?: KBArticleWorkflowStep[];
   };
-  onAskAi: () => void;
-  onTrustScoreUpdated?: (score: number) => void;
-  onGenerateRunbook: () => void;
-  onCreatePlaybook: () => void;
-  onAssignReviewer: () => void;
-  onOpenPullRequest: () => void;
+  infrastructureTrust: KBArticleInfrastructureTrust;
+  aiSummary?: string | null;
+  isSummaryLoading?: boolean;
+  relationships: KBRelationship[];
+  onAskAi: (forceRefresh?: boolean) => void;
 }
 
-const WORKFLOW_STEPS = [
-  { id: 'owner', label: 'Owner', status: 'complete' as const },
-  { id: 'reviewer', label: 'Reviewer', status: 'complete' as const },
-  { id: 'security', label: 'Security', status: 'active' as const },
-  { id: 'compliance', label: 'Compliance', status: 'pending' as const },
+const DEFAULT_WORKFLOW: KBArticleWorkflowStep[] = [
+  { id: 'owner', label: 'Owner', status: 'complete' },
+  { id: 'reviewer', label: 'Reviewer', status: 'complete' },
+  { id: 'security', label: 'Security', status: 'active' },
+  { id: 'compliance', label: 'Compliance', status: 'pending' },
 ];
-
-const GRAPH_NODES = [
-  { id: 'article', label: 'Article', x: 50, y: 50, type: 'primary' },
-  { id: 'ticket', label: 'TKT-184', x: 20, y: 25, type: 'ticket' },
-  { id: 'customer', label: 'Acme Corp', x: 80, y: 22, type: 'customer' },
-  { id: 'asset', label: 'Azure AD', x: 25, y: 78, type: 'asset' },
-  { id: 'sop', label: 'SSO SOP', x: 75, y: 75, type: 'sop' },
-];
-
-const GRAPH_EDGES = [
-  ['article', 'ticket'],
-  ['article', 'customer'],
-  ['article', 'asset'],
-  ['article', 'sop'],
-  ['ticket', 'customer'],
-] as const;
 
 export function KBKnowledgeIntelligencePanel({
   article,
+  infrastructureTrust,
+  aiSummary,
+  isSummaryLoading = false,
+  relationships,
   onAskAi,
-  onGenerateRunbook,
-  onCreatePlaybook,
-  onAssignReviewer,
-  onOpenPullRequest,
 }: KBKnowledgeIntelligencePanelProps) {
-  const trustScore = article.trustScore ?? 92;
+  const { t } = useTranslation();
+  const [graphOpen, setGraphOpen] = useState(false);
+  const summaryBullets = useMemo(() => parseSummaryBullets(aiSummary), [aiSummary]);
+  const workflowSteps = article.workflowSteps?.length ? article.workflowSteps : DEFAULT_WORKFLOW;
+
+  const trustScore = infrastructureTrust.trustScore ?? article.trustScore ?? 0;
   const trustLabel = trustScore >= 90 ? 'Excellent' : trustScore >= 75 ? 'Good' : 'Review';
+
+  const graphPreview = useMemo(() => {
+    const titleKey = (article.title || '').toLowerCase();
+    const relevant = relationships.filter(
+      (rel) =>
+        rel.sourceName.toLowerCase().includes(titleKey) ||
+        rel.targetName.toLowerCase().includes(titleKey),
+    );
+    const nodeNames = new Set<string>([article.title || 'Article']);
+    for (const rel of relevant.slice(0, 6)) {
+      nodeNames.add(rel.sourceName);
+      nodeNames.add(rel.targetName);
+    }
+    return Array.from(nodeNames).slice(0, 6);
+  }, [article.title, relationships]);
 
   return (
     <div className="space-y-4">
-      <PanelCard title="AI Summary" icon={Sparkles}>
-        <ul className="space-y-2 text-[11px] text-slate-600 leading-relaxed">
-          <li className="flex gap-2">
-            <span className="text-blue-600 font-bold shrink-0">•</span>
-            <span><strong className="text-slate-800">Key Takeaways:</strong> Federated SSO via Azure AD requires mapped security groups and rotated client secrets every 90 days.</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-blue-600 font-bold shrink-0">•</span>
-            <span><strong className="text-slate-800">Dependencies:</strong> Azure AD tenant, GeistDesk RBAC module, and active MFA enforcement policy.</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-blue-600 font-bold shrink-0">•</span>
-            <span><strong className="text-slate-800">Permissions:</strong> Global Admin or Identity Administrator role required for initial connector setup.</span>
-          </li>
-          <li className="flex gap-2">
-            <span className="text-blue-600 font-bold shrink-0">•</span>
-            <span><strong className="text-slate-800">Limitations:</strong> SCIM auto-provisioning is not supported for external guest tenants in this release.</span>
-          </li>
-        </ul>
+      <PanelCard title={t('kb.detail.metadata', 'Article metadata')} icon={BookOpen}>
+        <div className="space-y-2 text-[11px]">
+          <MetaRow icon={User} label={t('kb.detail.author', 'Author')} value={article.owner || article.authorId || '—'} />
+          <MetaRow icon={Calendar} label={t('kb.detail.created', 'Created')} value={formatArticleDate(article.createdAt)} />
+          <MetaRow icon={Calendar} label={t('kb.detail.lastUpdated', 'Last updated')} value={formatArticleDate(article.updatedAt)} />
+        </div>
+        {article.tags?.length ? (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {article.tags.map((tag) => (
+              <span
+                key={tag}
+                className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600"
+              >
+                <Tag className="w-3 h-3" />
+                {tag}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[10px] text-slate-400 mt-2">{t('kb.detail.noTags', 'No tags')}</p>
+        )}
+      </PanelCard>
+
+      <PanelCard title={t('kb.detail.aiSummary', 'AI Summary')} icon={Sparkles}>
+        {isSummaryLoading ? (
+          <div className="flex items-center gap-2 text-[11px] text-slate-500 py-2">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            {t('kb.detail.generatingSummary', 'Generating summary…')}
+          </div>
+        ) : summaryBullets.length > 0 ? (
+          <ul className="space-y-2 text-[11px] text-slate-600 leading-relaxed">
+            {summaryBullets.map((line) => (
+              <li key={line} className="flex gap-2">
+                <span className="text-blue-600 font-bold shrink-0">•</span>
+                <span>{line}</span>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="text-[11px] text-slate-500">
+            {t('kb.detail.noSummaryYet', 'No cached summary yet. Ask AI to generate one.')}
+          </p>
+        )}
         <Button
           type="button"
           variant="outline"
           size="sm"
           className="w-full mt-3 h-8 rounded-xl text-[11px] font-semibold border-blue-200 text-blue-700 hover:bg-blue-50"
-          onClick={onAskAi}
+          onClick={() => onAskAi(true)}
+          disabled={isSummaryLoading}
         >
-          <Sparkles className="w-3.5 h-3.5 mr-1.5" />
-          Ask AI about this article
+          {isSummaryLoading ? (
+            <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+          ) : (
+            <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+          )}
+          {t('kb.detail.askAiAgain', 'Ask AI about this article')}
         </Button>
       </PanelCard>
 
-      <PanelCard title="Infrastructure & Trust" icon={ShieldCheck}>
+      <PanelCard title={t('kb.detail.infrastructureTrust', 'Infrastructure & Trust')} icon={ShieldCheck}>
         <div className="space-y-2 text-[11px]">
-          <ValidationRow label="Reviewed" />
-          <ValidationRow label="Technically Verified" />
+          {infrastructureTrust.reviewed ? <ValidationRow label={t('kb.detail.reviewed', 'Reviewed')} /> : null}
+          {infrastructureTrust.technicallyVerified ? (
+            <ValidationRow label={t('kb.detail.technicallyVerified', 'Technically verified')} />
+          ) : null}
         </div>
         <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2.5">
-          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">Enterprise Trust Score</p>
+          <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+            {t('kb.detail.enterpriseTrustScore', 'Enterprise trust score')}
+          </p>
           <p className="text-lg font-semibold text-slate-900 mt-0.5">
-            {trustScore}/100 <span className="text-sm font-medium text-emerald-600">({trustLabel})</span>
+            {trustScore}/100{' '}
+            <span className="text-sm font-medium text-emerald-600">({trustLabel})</span>
           </p>
         </div>
         <div className="grid grid-cols-3 gap-2 mt-3">
-          <MetricCell label="Hallucination Risk" value="Low" tone="emerald" />
-          <MetricCell label="Coverage" value="97%" tone="blue" />
-          <MetricCell label="Freshness" value="94%" tone="blue" />
+          <MetricCell label={t('kb.detail.hallucinationRisk', 'Hallucination risk')} value={infrastructureTrust.hallucinationRisk || '—'} tone="emerald" />
+          <MetricCell label={t('kb.detail.coverage', 'Coverage')} value={infrastructureTrust.coverage || '—'} tone="blue" />
+          <MetricCell label={t('kb.detail.freshness', 'Freshness')} value={infrastructureTrust.freshness || '—'} tone="blue" />
         </div>
-        <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400 mt-3 mb-1.5">AI Quality Analytics</p>
       </PanelCard>
 
-      <PanelCard title="Review Workflow" icon={GitBranch}>
+      <PanelCard title={t('kb.detail.reviewWorkflow', 'Review workflow')} icon={GitBranch}>
         <div className="space-y-0">
-          {WORKFLOW_STEPS.map((step, idx) => (
+          {workflowSteps.map((step, idx) => (
             <div key={step.id} className="flex items-center gap-2 relative">
-              {idx < WORKFLOW_STEPS.length - 1 ? (
+              {idx < workflowSteps.length - 1 ? (
                 <span className="absolute left-[7px] top-5 w-px h-6 bg-slate-200" />
               ) : null}
               <span
@@ -134,10 +188,12 @@ export function KBKnowledgeIntelligencePanel({
                   step.status === 'pending' && 'bg-white border-slate-300',
                 )}
               />
-              <span className={cn(
-                'text-[11px] py-2',
-                step.status === 'active' ? 'font-semibold text-slate-900' : 'text-slate-600',
-              )}>
+              <span
+                className={cn(
+                  'text-[11px] py-2',
+                  step.status === 'active' ? 'font-semibold text-slate-900' : 'text-slate-600',
+                )}
+              >
                 {step.label}
               </span>
             </div>
@@ -145,45 +201,32 @@ export function KBKnowledgeIntelligencePanel({
         </div>
       </PanelCard>
 
-      <PanelCard title="Knowledge Graph" icon={Network}>
-        <div className="relative h-[140px] rounded-xl border border-slate-200 bg-slate-50 overflow-hidden">
+      <PanelCard title={t('kb.detail.knowledgeGraph', 'Knowledge graph')} icon={Network}>
+        <button
+          type="button"
+          onClick={() => setGraphOpen(true)}
+          className="relative h-[140px] w-full rounded-xl border border-slate-200 bg-slate-50 overflow-hidden hover:border-blue-300 hover:shadow-sm transition-all"
+          aria-label={t('kb.detail.openKnowledgeGraph', 'Open full knowledge graph')}
+        >
           <svg viewBox="0 0 100 100" className="w-full h-full" aria-hidden>
-            {GRAPH_EDGES.map(([from, to]) => {
-              const a = GRAPH_NODES.find((n) => n.id === from)!;
-              const b = GRAPH_NODES.find((n) => n.id === to)!;
+            {graphPreview.map((label, index) => {
+              const angle = (index / graphPreview.length) * Math.PI * 2;
+              const x = index === 0 ? 50 : 50 + Math.cos(angle) * 28;
+              const y = index === 0 ? 50 : 50 + Math.sin(angle) * 28;
               return (
-                <line
-                  key={`${from}-${to}`}
-                  x1={a.x}
-                  y1={a.y}
-                  x2={b.x}
-                  y2={b.y}
-                  stroke="#CBD5E1"
-                  strokeWidth="0.8"
-                />
+                <g key={label}>
+                  <circle cx={x} cy={y} r={index === 0 ? 5 : 3.5} fill={index === 0 ? '#2563EB' : '#94A3B8'} />
+                  <text x={x} y={y + 8} textAnchor="middle" fontSize="3.5" fill="#475569">
+                    {label.length > 16 ? `${label.slice(0, 14)}…` : label}
+                  </text>
+                </g>
               );
             })}
-            {GRAPH_NODES.map((node) => (
-              <g key={node.id}>
-                <circle
-                  cx={node.x}
-                  cy={node.y}
-                  r={node.type === 'primary' ? 6 : 4.5}
-                  fill={node.type === 'primary' ? '#2563EB' : '#94A3B8'}
-                />
-                <text
-                  x={node.x}
-                  y={node.y + (node.type === 'primary' ? 12 : 10)}
-                  textAnchor="middle"
-                  fontSize="4"
-                  fill="#475569"
-                >
-                  {node.label}
-                </text>
-              </g>
-            ))}
           </svg>
-        </div>
+          <span className="absolute bottom-2 right-2 text-[9px] font-semibold uppercase tracking-wide text-blue-700 bg-white/90 px-2 py-0.5 rounded-full border border-blue-100">
+            {t('kb.detail.expandGraph', 'Expand')}
+          </span>
+        </button>
         <div className="flex flex-wrap gap-2 mt-2">
           <GraphLegend icon={BookOpen} label="Article" />
           <GraphLegend icon={Ticket} label="Ticket" />
@@ -192,14 +235,12 @@ export function KBKnowledgeIntelligencePanel({
         </div>
       </PanelCard>
 
-      <PanelCard title="Smart Actions" icon={ClipboardList}>
-        <div className="grid grid-cols-1 gap-1.5">
-          <ActionButton label="Generate Runbook" onClick={onGenerateRunbook} />
-          <ActionButton label="Create Incident Playbook" onClick={onCreatePlaybook} />
-          <ActionButton label="Assign Reviewer" onClick={onAssignReviewer} icon={UserPlus} />
-          <ActionButton label="Open Pull Request" onClick={onOpenPullRequest} icon={GitPullRequest} />
-        </div>
-      </PanelCard>
+      <KBKnowledgeGraphModal
+        open={graphOpen}
+        onClose={() => setGraphOpen(false)}
+        articleTitle={article.title || 'Article'}
+        relationships={relationships}
+      />
     </div>
   );
 }
@@ -221,6 +262,26 @@ function PanelCard({
       </div>
       {children}
     </section>
+  );
+}
+
+function MetaRow({
+  icon: Icon,
+  label,
+  value,
+}: {
+  icon: typeof User;
+  label: string;
+  value: string;
+}) {
+  return (
+    <div className="flex items-start gap-2">
+      <Icon className="w-3.5 h-3.5 text-slate-400 mt-0.5 shrink-0" />
+      <div className="min-w-0">
+        <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
+        <p className="font-medium text-slate-800 truncate">{value}</p>
+      </div>
+    </div>
   );
 }
 
@@ -250,28 +311,5 @@ function GraphLegend({ icon: Icon, label }: { icon: typeof BookOpen; label: stri
       <Icon className="w-3 h-3" />
       {label}
     </span>
-  );
-}
-
-function ActionButton({
-  label,
-  onClick,
-  icon: Icon,
-}: {
-  label: string;
-  onClick: () => void;
-  icon?: typeof ClipboardList;
-}) {
-  return (
-    <Button
-      type="button"
-      variant="outline"
-      size="sm"
-      className="h-8 justify-start rounded-xl text-[11px] font-semibold border-slate-200 text-slate-700 hover:bg-slate-50"
-      onClick={onClick}
-    >
-      {Icon ? <Icon className="w-3.5 h-3.5 mr-2 text-slate-500" /> : null}
-      {label}
-    </Button>
   );
 }

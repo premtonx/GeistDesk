@@ -11,37 +11,55 @@ import { KBKnowledgeIntelligencePanel } from './KBKnowledgeIntelligencePanel';
 import { KBArticleToolbarPanels, type KBArticleToolbarPanel } from './KBArticleToolbarPanels';
 import { extractArticleHeadings, injectHeadingIds } from './kb-article-detail-utils';
 import { buildKbArticleDeepLink, toEditableHtml, toRenderableHtml } from './kb-content-format';
+import type { KBArticleAlert, KBArticleHistoryEntry, KBArticleInfrastructureTrust } from '../../types';
+import type { KBRelationship } from '../../services/kbRelationshipService';
 
 export interface KBArticleDetailViewProps {
   article: any;
   title: string;
   htmlContent: string;
+  alerts?: KBArticleAlert[];
   activeReadingLanguage: string;
   isTranslating?: boolean;
+  infrastructureTrust: KBArticleInfrastructureTrust;
+  aiSummary?: string | null;
+  isSummaryLoading?: boolean;
+  relationships: KBRelationship[];
+  historyEntries?: KBArticleHistoryEntry[];
+  isHistoryLoading?: boolean;
   onBack: () => void;
   onCopyLink: () => void;
   onTranslate: (language: KBTranslateLanguage) => Promise<void>;
   onAiExplain: () => Promise<string>;
+  onRegenerateSummary: (forceRefresh?: boolean) => Promise<void>;
+  onLoadHistory: () => Promise<void>;
   onSaveContent: (content: string) => Promise<void>;
   onHelpful: () => Promise<void>;
   onUnhelpful: () => Promise<void>;
-  onTrustScoreUpdated?: (score: number) => void;
 }
 
 export function KBArticleDetailView({
   article,
   title,
   htmlContent,
+  alerts = [],
   activeReadingLanguage,
   isTranslating = false,
+  infrastructureTrust,
+  aiSummary,
+  isSummaryLoading = false,
+  relationships,
+  historyEntries = [],
+  isHistoryLoading = false,
   onBack,
   onCopyLink,
   onTranslate,
   onAiExplain,
+  onRegenerateSummary,
+  onLoadHistory,
   onSaveContent,
   onHelpful,
   onUnhelpful,
-  onTrustScoreUpdated,
 }: KBArticleDetailViewProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -53,13 +71,12 @@ export function KBArticleDetailView({
   const scrollAreaRootRef = useRef<HTMLDivElement>(null);
 
   const articleUrl = useMemo(() => buildKbArticleDeepLink(article.id), [article.id]);
-
   const viewSourceContent = article.content ?? htmlContent;
 
   const renderedHtml = useMemo(() => {
     const displayHtml = toRenderableHtml(htmlContent);
-    const headings = extractArticleHeadings(displayHtml);
-    return injectHeadingIds(displayHtml, headings);
+    const headingList = extractArticleHeadings(displayHtml);
+    return injectHeadingIds(displayHtml, headingList);
   }, [htmlContent]);
 
   const headings = useMemo(() => extractArticleHeadings(toRenderableHtml(htmlContent)), [htmlContent]);
@@ -137,6 +154,16 @@ export function KBArticleDetailView({
     [onTranslate],
   );
 
+  const openHistoryPanel = useCallback(async () => {
+    setActivePanel('history');
+    await onLoadHistory();
+  }, [onLoadHistory]);
+
+  const openComparePanel = useCallback(async () => {
+    setActivePanel('compare');
+    await onLoadHistory();
+  }, [onLoadHistory]);
+
   return (
     <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden bg-[#FAFBFC] print:block print:overflow-visible print:bg-white">
       <div className="flex-[7] min-w-0 flex flex-col min-h-0 border-r border-slate-200/80 print:w-full print:max-w-none print:border-none print:min-h-0">
@@ -165,8 +192,8 @@ export function KBArticleDetailView({
                 onEdit={handleToggleEdit}
                 onSave={() => void handleSave()}
                 onShare={() => setActivePanel('share')}
-                onHistory={() => setActivePanel('history')}
-                onCompare={() => setActivePanel('compare')}
+                onHistory={() => void openHistoryPanel()}
+                onCompare={() => void openComparePanel()}
                 onTranslate={(lang) => void handleTranslate(lang)}
                 onAiExplain={() => void handleAiExplain()}
                 onExportPdf={handleExportPdf}
@@ -190,10 +217,10 @@ export function KBArticleDetailView({
               ) : null}
               <KBArticleDetailBody
                 htmlContent={renderedHtml}
+                alerts={alerts}
                 isEditing={isEditing}
                 editedContent={editedContent}
                 onContentChange={setEditedContent}
-                showCalloutSamples={!isEditing}
               />
             </div>
 
@@ -230,12 +257,11 @@ export function KBArticleDetailView({
       <aside className="kb-detail-no-print print:hidden flex-[3] min-w-[280px] max-w-[400px] shrink-0 min-h-0 overflow-y-auto bg-white p-4 custom-scrollbar">
         <KBKnowledgeIntelligencePanel
           article={article}
-          onTrustScoreUpdated={onTrustScoreUpdated}
-          onAskAi={() => void handleAiExplain()}
-          onGenerateRunbook={() => toast.info('Generating operational runbook from article context.')}
-          onCreatePlaybook={() => toast.info('Creating incident playbook draft.')}
-          onAssignReviewer={() => toast.info('Reviewer assignment workflow opened.')}
-          onOpenPullRequest={() => toast.info('Documentation pull request queued.')}
+          infrastructureTrust={infrastructureTrust}
+          aiSummary={aiSummary}
+          isSummaryLoading={isSummaryLoading}
+          relationships={relationships}
+          onAskAi={(forceRefresh) => void onRegenerateSummary(forceRefresh)}
         />
       </aside>
 
@@ -244,6 +270,8 @@ export function KBArticleDetailView({
         onClose={() => setActivePanel(null)}
         article={article}
         articleUrl={articleUrl}
+        historyEntries={historyEntries}
+        isHistoryLoading={isHistoryLoading}
         aiExplainContent={aiExplainContent}
         isAiExplainLoading={isAiExplainLoading}
         onCopyLink={onCopyLink}
