@@ -1,20 +1,17 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { 
   Server, 
   ShieldCheck, 
-  Key, 
   FileText,
   Send,
   Upload,
   Lock,
   Copy,
-  Compass,
   Trash2
 } from 'lucide-react';
 import { Ticket as TicketType, VaultItem } from '../../types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Badge } from '../ui/badge';
-import { Separator } from '../ui/separator';
 import { Button } from '../ui/button';
 import { Textarea } from '../ui/textarea';
 import { vaultService } from '../../services/vaultService';
@@ -58,7 +55,6 @@ export function AssetsTabContent({ ticket }: AssetsTabContentProps) {
     [t]
   );
 
-  const [subView, setSubView] = useState<'exchange_workspace' | 'licensed_assets'>('exchange_workspace');
   const [currentTicketItems, setCurrentTicketItems] = useState<VaultItem[]>([]);
   const [isSendingSecret, setIsSendingSecret] = useState(false);
   const [secretContent, setSecretContent] = useState('');
@@ -186,55 +182,9 @@ export function AssetsTabContent({ ticket }: AssetsTabContentProps) {
     toast.success(t('tickets.assetsTab.copiedClipboard', 'Copied to clipboard'));
   };
 
-  const licensedAssets = useMemo(() => {
-    const isMobile = (ticket.product || 'geistdesktech').toLowerCase().includes('mobile');
-    return [
-      {
-        id: 'asset-1',
-        title: isMobile
-          ? t('tickets.assetsTab.mobileLicense', 'GeistDesk mobile license')
-          : t('tickets.assetsTab.proCore', 'GeistDeskTech Pro Core'),
-        serial: isMobile ? 'GDM-4491-BB10' : 'GDT-8842-AX9',
-        type: t('tickets.assetsTab.softwareSubscription', 'Software subscription'),
-        status: t('tickets.assetsTab.active', 'Active'),
-        expiry: t('tickets.assetsTab.expiryDec2026', 'Dec 31, 2026')
-      },
-      {
-        id: 'asset-2',
-        title: t('tickets.assetsTab.sandboxPool', 'Central sandbox tenant pool'),
-        serial: 'TEN-POOL-883',
-        type: t('tickets.assetsTab.cloudEnvironment', 'Cloud environment'),
-        status: t('tickets.assetsTab.active', 'Active'),
-        expiry: t('tickets.assetsTab.onDemand', 'On demand')
-      }
-    ];
-  }, [ticket, t]);
-
   return (
     <div className="space-y-6">
-      <div className="flex bg-slate-100 p-1 rounded-xl w-fit self-start gap-1">
-        <button 
-          onClick={() => setSubView('exchange_workspace')}
-          className={cn(
-            "px-4 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5",
-            subView === 'exchange_workspace' ? "bg-white text-[#1A73E8] shadow-xs" : "text-[#5F6368] hover:text-slate-800"
-          )}
-        >
-          <Lock className="w-3.5 h-3.5 text-[#1A73E8]" /> {t('tickets.assetsTab.secureActions', 'GeistExchange secure actions')}
-        </button>
-        <button 
-          onClick={() => setSubView('licensed_assets')}
-          className={cn(
-            "px-4 py-1.5 text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5",
-            subView === 'licensed_assets' ? "bg-white text-[#1A73E8] shadow-xs" : "text-[#5F6368] hover:text-slate-800"
-          )}
-        >
-          <Compass className="w-3.5 h-3.5" /> {t('tickets.assetsTab.licensedAssets', 'Licensed assets')} ({licensedAssets.length})
-        </button>
-      </div>
-
-      {subView === 'exchange_workspace' ? (
-        <div className="space-y-6">
+      <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <Card className="border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
               <CardHeader className="bg-slate-50/50 pb-4">
@@ -444,49 +394,7 @@ export function AssetsTabContent({ ticket }: AssetsTabContentProps) {
               </table>
             </CardContent>
           </Card>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {licensedAssets.map(asset => (
-            <Card key={asset.id} className="border-border rounded-xl shadow-sm hover:border-indigo-150 transition-all bg-white">
-              <CardContent className="p-5 space-y-4">
-                <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-2.5">
-                    <div className="h-9 w-9 bg-primary/5 rounded-lg border border-primary/15 flex items-center justify-center text-primary shrink-0">
-                      <Key className="w-4.5 h-4.5" />
-                    </div>
-                    <div>
-                      <h4 className="text-xs font-black text-foreground">{asset.title}</h4>
-                      <span className="text-[9px] text-muted-foreground font-semibold uppercase">{asset.type}</span>
-                    </div>
-                  </div>
-                  <Badge className="bg-emerald-100 text-[#137333] border-none text-[8.5px] uppercase font-black px-1.5 h-4.5 leading-none">
-                    {asset.status}
-                  </Badge>
-                </div>
-
-                <Separator className="bg-border/40" />
-
-                <div className="grid grid-cols-2 gap-3.5 text-xs">
-                  <div>
-                    <span className="text-muted-foreground block text-[9.5px] uppercase tracking-wider">{t('tickets.assetsTab.serialKey', 'Serial / license key')}</span>
-                    <span className="font-mono text-foreground font-bold">{asset.serial}</span>
-                  </div>
-                  <div>
-                    <span className="text-muted-foreground block text-[9.5px] uppercase tracking-wider">{t('tickets.assetsTab.expiryRenewal', 'Expiry / renewal')}</span>
-                    <span className="font-semibold text-foreground">{asset.expiry}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-1 text-[9px] text-[#137333] font-bold">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>{t('tickets.assetsTab.verifiedSubscription', 'Verified client subscription')}</span>
-                </div>
-              </CardContent>
-            </Card>
-          ))}
-        </div>
-      )}
+      </div>
     </div>
   );
 }
