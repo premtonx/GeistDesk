@@ -369,8 +369,10 @@ export default function CredentialVaultPage() {
   };
   
   const isDemoVaultMode = import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === 'true';
+  const [vaultGateMode, setVaultGateMode] = useState<'discovering' | 'setup' | 'unlock'>('discovering');
   const [isLocked, setIsLocked] = useState(true);
   const [masterPassword, setMasterPassword] = useState(isDemoVaultMode ? 'password123' : '');
+  const [confirmPassword, setConfirmPassword] = useState('');
   const [derivedKey, setDerivedKey] = useState<Uint8Array | null>(null);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -550,7 +552,6 @@ export default function CredentialVaultPage() {
     setIsCreateFolderOpen(true);
   }, []);
 
-  // Seeding default high-fidelity items into Dexie if empty
   const seedCredentialItem = async (key: Uint8Array, item: (typeof SEEDED_CREDENTIALS)[number]) => {
     const encryptedPassword = await encryptCredentialSecret(item.plainPass || '', key);
     await localDB.credentials.add({
@@ -632,23 +633,116 @@ export default function CredentialVaultPage() {
     }
   };
 
+  const wipeLocalPersonalVaultCache = async () => {
+    const creds = await localDB.credentials.where('vaultId').equals('local').toArray();
+    for (const cred of creds) {
+      if (cred.id != null) await localDB.credentials.delete(Number(cred.id));
+    }
+    const folders = await localDB.folders.where('vaultId').equals('local').toArray();
+    for (const folder of folders) {
+      await localDB.folders.delete(folder.id);
+    }
+    setDerivedKey(null);
+    setMasterPassword(isDemoVaultMode ? 'password123' : '');
+    setConfirmPassword('');
+  };
+
+  const discoverVaultGateMode = useCallback(async () => {
+    if (!user) return;
+    setVaultGateMode('discovering');
+    try {
+      let initialized = false;
+      try {
+        const localPersonalCount = await localDB.credentials.where('vaultId').equals('local').count();
+        initialized = localPersonalCount > 0;
+      } catch (err) {
+        console.warn('Local vault cache probe failed', err);
+      }
+
+      try {
+        const { initialized: serverInitialized } = await credentialVaultService.getPersonalVaultStatus();
+        if (!serverInitialized) {
+          if (initialized) {
+            try {
+              await credentialVaultService.initializePersonalVault();
+            } catch (promoteErr) {
+              console.warn('Could not promote local vault initialization flag to server', promoteErr);
+            }
+            setVaultGateMode('unlock');
+            setIsLocked(true);
+            return;
+          }
+          await wipeLocalPersonalVaultCache();
+          setVaultGateMode('setup');
+          setIsLocked(true);
+          return;
+        }
+        initialized = initialized || serverInitialized;
+      } catch (err) {
+        console.warn('Server vault status unavailable; falling back to local cache', err);
+      }
+
+      setVaultGateMode(initialized ? 'unlock' : 'setup');
+      setIsLocked(true);
+    } catch (err) {
+      console.error('Vault initialization discovery failed', err);
+      setVaultGateMode('setup');
+      setIsLocked(true);
+    }
+  }, [user, isDemoVaultMode]);
+
+  useEffect(() => {
+    void discoverVaultGateMode();
+  }, [discoverVaultGateMode]);
+
+  const completeVaultUnlock = async (key: Uint8Array) => {
+    setDerivedKey(normalizeDerivedKey(key));
+    if (isDemoVaultMode) {
+      await seedDefaultCredentials(key);
+    }
+    await syncFoldersFromServer('local');
+    setIsLocked(false);
+    logAudit({ module: 'credentials', action: 'vault_unlocked', details: { vaultType: 'personal_local' } });
+    toast.success('Sovereign Personal Vault Unlocked Successfully!');
+  };
+
   const handleUnlock = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     if (!masterPassword || !user) return;
     setIsUnlocking(true);
     try {
-      // Argon2 key derivation bound to user specific salt string
       const key = await deriveMasterKey(masterPassword, `user-salt-${user.uid}`);
-      setDerivedKey(normalizeDerivedKey(key));
-      if (isDemoVaultMode) {
-        await seedDefaultCredentials(key);
-      }
-      await syncFoldersFromServer('local');
-      setIsLocked(false);
-      logAudit({ module: 'credentials', action: 'vault_unlocked', details: { vaultType: 'personal_local' } });
-      toast.success("Sovereign Personal Vault Unlocked Successfully!");
+      await completeVaultUnlock(key);
     } catch (err) {
-      toast.error("Failed to unlock. Ensure Master Password conforms.");
+      toast.error('Failed to unlock. Ensure Master Password conforms.');
+    } finally {
+      setIsUnlocking(false);
+    }
+  };
+
+  const handleInitializeVault = async (e?: FormEvent) => {
+    if (e) e.preventDefault();
+    if (!masterPassword || !user) return;
+    if (masterPassword.length < 8) {
+      toast.error('Master password must be at least 8 characters.');
+      return;
+    }
+    if (masterPassword !== confirmPassword) {
+      toast.error('Passwords do not match. Please confirm your master password.');
+      return;
+    }
+
+    setIsUnlocking(true);
+    try {
+      await wipeLocalPersonalVaultCache();
+      const key = await deriveMasterKey(masterPassword, `user-salt-${user.uid}`);
+      await credentialVaultService.initializePersonalVault();
+      await completeVaultUnlock(key);
+      setVaultGateMode('unlock');
+      logAudit({ module: 'credentials', action: 'vault_initialized', details: { vaultType: 'personal_local' } });
+      toast.success('Persönlicher Tresor initialisiert. Ihr Master-Passwort verlässt niemals diesen Browser.');
+    } catch (err) {
+      toast.error('Initialisierung fehlgeschlagen. Bitte erneut versuchen.');
     } finally {
       setIsUnlocking(false);
     }
@@ -974,9 +1068,11 @@ export default function CredentialVaultPage() {
 
   useEffect(() => {
     if (!user || !isLocked || isUnlocking || autoUnlockAttemptedRef.current) return;
+    if (vaultGateMode !== 'unlock') return;
+    if (!isDemoVaultMode || !masterPassword) return;
     autoUnlockAttemptedRef.current = true;
     void handleUnlock();
-  }, [user, isLocked, isUnlocking]);
+  }, [user, isLocked, isUnlocking, vaultGateMode, isDemoVaultMode, masterPassword]);
 
   const resolveActiveKey = async (): Promise<Uint8Array | null> => {
     const cached = normalizeDerivedKey(derivedKey);
@@ -1417,6 +1513,23 @@ export default function CredentialVaultPage() {
 
   // Locked display render
   if (isLocked) {
+    if (vaultGateMode === 'discovering') {
+      return (
+        <div className="flex flex-col items-center justify-center min-h-[70vh] p-8 select-none">
+          <motion.div
+            initial={{ scale: 0.95, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            className="w-full max-w-[460px] bg-white border border-[#DADCE0] rounded-3xl p-8 shadow-lg flex flex-col items-center text-center space-y-4"
+          >
+            <RefreshCw className="w-8 h-8 text-[#1A73E8] animate-spin" />
+            <p className="text-sm font-semibold text-slate-500">Tresor-Status wird ermittelt…</p>
+          </motion.div>
+        </div>
+      );
+    }
+
+    const isSetupMode = vaultGateMode === 'setup';
+
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] p-8 select-none">
         <motion.div 
@@ -1429,15 +1542,31 @@ export default function CredentialVaultPage() {
           </div>
 
           <div className="space-y-1">
-            <h2 className="text-xl font-bold text-slate-800 tracking-tight">{t('vault.lockTitle', 'Unlock GeistVault Enterprise')}</h2>
+            <h2 className="text-xl font-bold text-slate-800 tracking-tight">
+              {isSetupMode
+                ? t('vault.initTitle', 'Persönlichen Tresor initialisieren / Setup Your Master Password')
+                : t('vault.lockTitle', 'Unlock GeistVault Enterprise')}
+            </h2>
             <p className="text-[11px] text-slate-400 max-w-sm font-semibold leading-relaxed">
-              {t('vault.lockSubtitle', 'Zero-Knowledge Architecture: Keys decrypted locally in-browser using Argon2id. Central cloud engines never receive your private secrets payload.')}
+              {isSetupMode
+                ? t(
+                    'vault.initSubtitle',
+                    'Zero-Knowledge: Wählen Sie ein neues Master-Passwort. Es wird nur lokal per Argon2id abgeleitet und niemals an den Server übertragen.',
+                  )
+                : t(
+                    'vault.lockSubtitle',
+                    'Zero-Knowledge Architecture: Keys decrypted locally in-browser using Argon2id. Central cloud engines never receive your private secrets payload.',
+                  )}
             </p>
           </div>
 
-          <form onSubmit={handleUnlock} className="w-full space-y-4">
+          <form onSubmit={isSetupMode ? handleInitializeVault : handleUnlock} className="w-full space-y-4">
             <div className="space-y-1 text-left">
-              <label className="text-[10px] font-black text-[#5F6368] uppercase tracking-widest pl-1">{t('vault.masterPassword', 'Master Password')}</label>
+              <label className="text-[10px] font-black text-[#5F6368] uppercase tracking-widest pl-1">
+                {isSetupMode
+                  ? t('vault.masterPasswordSetup', 'Master-Passwort festlegen')
+                  : t('vault.masterPassword', 'Master-Passwort eingeben')}
+              </label>
               <Input 
                 type="password"
                 placeholder={t('vault.masterPasswordPlaceholder', 'Enter master password...')}
@@ -1446,7 +1575,21 @@ export default function CredentialVaultPage() {
                 className="bg-white border-[#DADCE0] focus:ring-1 focus:ring-[#1A73E8] rounded-xl text-sm h-11 px-4 text-center placeholder-gray-300"
                 autoFocus
               />
-              {isDemoVaultMode ? (
+              {isSetupMode ? (
+                <div className="space-y-1 text-left pt-2">
+                  <label className="text-[10px] font-black text-[#5F6368] uppercase tracking-widest pl-1">
+                    {t('vault.confirmMasterPassword', 'Master-Passwort bestätigen')}
+                  </label>
+                  <Input
+                    type="password"
+                    placeholder={t('vault.confirmMasterPasswordPlaceholder', 'Confirm master password...')}
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="bg-white border-[#DADCE0] focus:ring-1 focus:ring-[#1A73E8] rounded-xl text-sm h-11 px-4 text-center placeholder-gray-300"
+                  />
+                </div>
+              ) : null}
+              {!isSetupMode && isDemoVaultMode ? (
                 <p className="text-[10px] text-center text-slate-400 mt-1 select-none font-semibold">
                   {t('vault.passwordTip', 'Tip: Default password is set to password123')}
                 </p>
@@ -1458,7 +1601,11 @@ export default function CredentialVaultPage() {
               disabled={isUnlocking}
               className="w-full bg-[#1A73E8] hover:bg-[#155fc0] text-white font-semibold text-xs h-11 rounded-xl shadow-md transition-all flex items-center justify-center gap-1"
             >
-              {isUnlocking ? t('vault.derivingKeys', 'Deriving keys locally...') : t('vault.unlockButton', 'Unlock Vault Node')}
+              {isUnlocking
+                ? t('vault.derivingKeys', 'Deriving keys locally...')
+                : isSetupMode
+                  ? t('vault.initializeButton', 'Tresor initialisieren')
+                  : t('vault.unlockButton', 'Unlock Vault Node')}
             </Button>
           </form> 
         </motion.div>

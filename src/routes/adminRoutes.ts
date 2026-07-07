@@ -12,6 +12,7 @@ import {
   queryDb,
 } from "../lib/postgres-backend.js";
 import { hashPassword } from "../lib/crypto.js";
+import { purgePersonalVaultMetadata } from "../lib/personal-vault-store.js";
 import {
   appendOrchestratorAudit,
   getOrchestratorAudit,
@@ -166,7 +167,8 @@ router.get("/users", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Re
         createdAt: u.createdAt || null,
         updatedAt: u.updatedAt || null,
         visibilityScope: u.visibilityScope || "all",
-        groups: u.groups || []
+        groups: u.groups || [],
+        personalVaultInitialized: u.personalVaultInitialized === true,
       };
     });
 
@@ -410,6 +412,50 @@ router.post("/users/:id/set-password", authenticate, requireRole(["SYSTEM_ADMIN"
     return res.status(200).json({ success: true, message: "Password set successfully." });
   } catch (error: any) {
     console.error("[Admin Users API] Error setting user password:", error);
+    return res.status(500).json({ error: "Internal Server Error", details: error.message || String(error) });
+  }
+});
+
+/**
+ * 3c. POST /api/admin/users/:id/reset-personal-vault
+ * Structural wipe of a user's personal vault metadata. Zero-knowledge: the admin
+ * never receives or sets the user's master password.
+ */
+router.post("/users/:id/reset-personal-vault", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Request, res: Response): Promise<any> => {
+  try {
+    const id = routeParam(req.params.id);
+    if (!id || id.trim() === "") {
+      return res.status(400).json({ error: "Missing required user id parameter." });
+    }
+
+    const userProfile = await getDocDirect("users", id);
+    if (!userProfile) {
+      return res.status(404).json({ error: "Not Found: No active user profile matched the provided ID." });
+    }
+
+    const purgeResult = await purgePersonalVaultMetadata(id);
+
+    try {
+      await addDocDirect("audits", {
+        action: "RESET_PERSONAL_VAULT",
+        targetUserId: id,
+        targetEmail: userProfile.email,
+        performedBy: req.user?.email || "SYSTEM_ADMIN",
+        details: `Administrator triggered structural personal vault wipe (folders: ${purgeResult.deletedFolders}, vault docs: ${purgeResult.deletedVaults}).`,
+        timestamp: new Date().toISOString(),
+      });
+    } catch (auditErr) {
+      console.error("[Admin Users API] Failed logging reset-personal-vault audit:", auditErr);
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: "Personal vault metadata purged. Shared corporate and department vaults were not modified.",
+      ...purgeResult,
+      initialized: false,
+    });
+  } catch (error: any) {
+    console.error("[Admin Users API] Error resetting personal vault:", error);
     return res.status(500).json({ error: "Internal Server Error", details: error.message || String(error) });
   }
 });

@@ -49,6 +49,7 @@ import { User } from '../../types';
 import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { useWorkspaceModuleConfig } from '../../hooks/useWorkspaceModuleConfig';
+import { PersonalVaultResetButton, usePersonalVaultReset } from '../admin/UserManagementPanel';
 
 export default function WorkforcePage() {
   const { config, persist } = useWorkspaceModuleConfig({ admin: true });
@@ -73,6 +74,8 @@ export default function WorkforcePage() {
     role: 'agent',
     password: '',
   });
+
+  const { openResetDialog, resetDialog } = usePersonalVaultReset();
 
   // Load agents
   useEffect(() => {
@@ -210,6 +213,7 @@ export default function WorkforcePage() {
 
   return (
     <div className="flex-1 overflow-y-auto bg-slate-50 custom-scrollbar min-h-screen">
+      {resetDialog}
       <div className="p-8 max-w-7xl mx-auto space-y-8 pb-32">
         
         {/* Breadcrumb pathing */}
@@ -342,6 +346,7 @@ export default function WorkforcePage() {
                   <th className="px-6 py-4 text-xs font-black uppercase tracking-wider text-slate-400">Auth Method</th>
                   <th className="px-6 py-4 text-xs font-black uppercase tracking-wider text-slate-400">System Role Constraint</th>
                   <th className="px-6 py-4 text-xs font-black uppercase tracking-wider text-slate-400">Account status</th>
+                  <th className="px-6 py-4 text-xs font-black uppercase tracking-wider text-slate-400 text-right">GeistVault</th>
                   <th className="px-6 py-4 text-xs font-black uppercase tracking-wider text-slate-400 text-right">Protection</th>
                 </tr>
               </thead>
@@ -349,7 +354,7 @@ export default function WorkforcePage() {
                 <AnimatePresence mode="popLayout">
                   {filteredUsers.length === 0 ? (
                     <tr>
-                      <td colSpan={5} className="text-center p-12 text-slate-400">
+                      <td colSpan={6} className="text-center p-12 text-slate-400">
                         <Users className="w-10 h-10 mx-auto text-slate-300 stroke-1 mb-2" />
                         <p className="text-sm font-semibold">No operatives map the chosen criteria.</p>
                         <p className="text-xs text-slate-400 mt-1">Try broadening your search guidelines.</p>
@@ -438,6 +443,18 @@ export default function WorkforcePage() {
                                 {currentStatus ? 'Active' : 'Suspended'}
                               </span>
                             </div>
+                          </td>
+
+                          {/* GeistVault personal reset — structural wipe only; zero-knowledge */}
+                          <td className="px-6 py-4 text-right">
+                            {!isSovereign ? (
+                              <PersonalVaultResetButton
+                                user={{ id: user.id, name: user.name, email: user.email }}
+                                onClick={openResetDialog}
+                              />
+                            ) : (
+                              <span className="text-[10px] font-bold text-slate-300 uppercase">—</span>
+                            )}
                           </td>
 
                           {/* Security Level Tag */}

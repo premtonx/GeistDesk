@@ -10,6 +10,12 @@ import {
   deleteDocDirect,
 } from '../lib/postgres-backend.js';
 import { routeParam } from '../lib/route-params.js';
+import {
+  getPersonalVaultInitialized,
+  setPersonalVaultInitialized,
+  PERSONAL_VAULT_ID,
+  PERSONAL_VAULT_TYPE,
+} from '../lib/personal-vault-store.js';
 
 const router = Router();
 const COLLECTION = 'geist_vault_portfolios';
@@ -30,6 +36,30 @@ const updateFolderSchema = createFolderSchema.partial().omit({ vaultId: true });
 function folderId(): string {
   return `folder-${crypto.randomUUID()}`;
 }
+
+/** GET /api/credential-vault/status — whether the authenticated user has initialized a personal vault */
+router.get('/status', authenticate, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = req.user!.id;
+    const initialized = await getPersonalVaultInitialized(userId);
+    return res.json({ initialized });
+  } catch (err: any) {
+    console.error('[credential-vault] status', err);
+    return res.status(500).json({ error: 'Failed to resolve personal vault status' });
+  }
+});
+
+/** POST /api/credential-vault/initialize — mark personal vault as initialized (zero-knowledge: no password stored) */
+router.post('/initialize', authenticate, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const userId = req.user!.id;
+    await setPersonalVaultInitialized(userId, true);
+    return res.status(200).json({ success: true, initialized: true });
+  } catch (err: any) {
+    console.error('[credential-vault] initialize', err);
+    return res.status(500).json({ error: 'Failed to register personal vault initialization' });
+  }
+});
 
 async function userCanAccessVaultFolder(vaultId: string, userId: string, isAdmin: boolean): Promise<boolean> {
   if (isAdmin) return true;
@@ -87,11 +117,14 @@ router.post('/folders', authenticate, async (req: Request, res: Response): Promi
 
     const id = folderId();
     const now = new Date().toISOString();
+    const isPersonalVault = vaultId === PERSONAL_VAULT_ID;
     const data = {
       name,
       icon,
       parentId,
       vaultId,
+      vaultType: isPersonalVault ? PERSONAL_VAULT_TYPE : undefined,
+      ownerId: isPersonalVault ? userId : undefined,
       sortOrder: sortOrder ?? 0,
       createdBy: userId,
       createdAt: now,

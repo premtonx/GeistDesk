@@ -118,6 +118,12 @@ export const credentialVaultService = {
 
   deleteFolder: (id: string) =>
     apiFetch<{ success: boolean }>(`/folders/${id}`, { method: 'DELETE' }),
+
+  getPersonalVaultStatus: () =>
+    apiFetch<{ initialized: boolean }>('/status'),
+
+  initializePersonalVault: () =>
+    apiFetch<{ success: boolean; initialized: boolean }>('/initialize', { method: 'POST' }),
 };
 
 export const VAULT_ROLE_LABELS: Record<VaultPortfolioRole, string> = {

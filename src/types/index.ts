@@ -73,6 +73,7 @@ export interface User {
   updatedAt?: any;
   password?: string;
   authMethod?: 'sso' | 'password';
+  personalVaultInitialized?: boolean;
 }
 
 export interface Group {
