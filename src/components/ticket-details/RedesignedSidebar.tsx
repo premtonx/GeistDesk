@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   Sparkles, 
   ChevronDown, 
@@ -30,7 +30,9 @@ import {
   BookOpen,
   Send,
   UserCheck,
-  X
+  X,
+  Check,
+  RotateCcw,
 } from 'lucide-react';
 import { Ticket as TicketType, Company, Contact, KBArticle } from '../../types';
 import { Button } from '../ui/button';
@@ -38,9 +40,11 @@ import { Badge } from '../ui/badge';
 import { Input } from '../ui/input';
 import { Separator } from '../ui/separator';
 import { Avatar, AvatarFallback } from '../ui/avatar';
-import { text } from 'd3';
 import { SuggestedLink } from '../../services/neuralLinkService';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { getTicketKind } from '../../lib/ticketWorkspace';
+import { deriveAccountHealth } from '../../lib/account-health';
+import { AccountHealthSmiley, accountHealthAriaLabel } from './AccountHealthSmiley';
 
 const STATUS_KEYS = ['open', 'pending', 'resolved', 'closed', 'qs', 'merged', 'trash'] as const;
 
@@ -86,6 +90,42 @@ export function RedesignedSidebar({
   onCloseMobile
 }: RedesignedSidebarProps) {
   const { t } = useTranslation();
+  const ticketKind = getTicketKind(ticket);
+  const [slaTierDraft, setSlaTierDraft] = useState(ticket.slaTier ?? '');
+  const syncedHealthTicketId = useRef<string | null>(null);
+
+  useEffect(() => {
+    setSlaTierDraft(ticket.slaTier ?? '');
+  }, [ticket.id, ticket.slaTier]);
+
+  const companyOpenTickets = useMemo(() => {
+    if (!ticket.companyId && !ticket.company) return 0;
+    return allTickets.filter(
+      (row) =>
+        (row.companyId && row.companyId === ticket.companyId) ||
+        (row.company && row.company.toLowerCase() === ticket.company?.toLowerCase()),
+    ).filter((row) => row.status !== 'resolved' && row.status !== 'closed').length;
+  }, [allTickets, ticket.companyId, ticket.company]);
+
+  const accountHealthStatus = useMemo(
+    () =>
+      deriveAccountHealth(ticket, {
+        openTicketsCount: companyOpenTickets,
+        companyHealthScore: (company as { healthScore?: number } | null)?.healthScore,
+      }),
+    [ticket, companyOpenTickets, company],
+  );
+
+  const slaTierDirty = slaTierDraft !== (ticket.slaTier ?? '');
+  const healthFromAi = Boolean(ticket.aiSummary || ticket.aiSentiment);
+
+  useEffect(() => {
+    if (!ticket.id || ticket.accountHealth) return;
+    if (syncedHealthTicketId.current === ticket.id) return;
+    syncedHealthTicketId.current = ticket.id;
+    onUpdateTicketField({ accountHealth: accountHealthStatus });
+  }, [ticket.id, ticket.accountHealth, accountHealthStatus, onUpdateTicketField]);
+
   const statusLabel = (st: string) => t(`tickets.statusLabels.${st}`, st);
   const sentimentLabel = (sentiment?: string) => {
     if (sentiment === 'angry') return t('tickets.context.sentimentAngry', 'Angry');
@@ -244,6 +284,87 @@ export function RedesignedSidebar({
             </Button>
           </div>
         </div>
+
+        {ticketKind === 'support' && (
+          <div className="bg-card border border-border shadow-xs rounded-xl p-3.5 space-y-3 mb-2">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <Clock className="w-3.5 h-3.5 text-primary" />
+                <span>{t('tickets.sidebar.supportAccountContext', 'Support & account')}</span>
+              </span>
+              {slaTierDirty && (
+                <span className="text-[9px] font-semibold text-amber-700 dark:text-amber-300">
+                  {t('tickets.fields.unsavedChanges', 'Unsaved changes')}
+                </span>
+              )}
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[9.5px] font-black text-muted-foreground uppercase">
+                {t('tickets.fields.slaTier', 'SLA Tier')}
+              </label>
+              <Input
+                className={`h-9 text-xs rounded-xl ${slaTierDirty ? 'ring-1 ring-amber-400/60' : ''}`}
+                value={slaTierDraft}
+                onChange={(e) => setSlaTierDraft(e.target.value)}
+                placeholder={t('tickets.fields.slaTierPlaceholder', 'e.g. Platinum')}
+              />
+            </div>
+
+            {slaTierDirty && (
+              <div className="flex items-center justify-end gap-2">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => setSlaTierDraft(ticket.slaTier ?? '')}
+                >
+                  <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
+                  {t('tickets.fields.discardChanges', 'Discard')}
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => onUpdateTicketField({ slaTier: slaTierDraft })}
+                >
+                  <Check className="w-3.5 h-3.5 mr-1.5" />
+                  {t('tickets.fields.saveChanges', 'Save changes')}
+                </Button>
+              </div>
+            )}
+
+            <div className="space-y-1 pt-1 border-t border-border/60">
+              <label className="text-[9.5px] font-black text-muted-foreground uppercase">
+                {t('tickets.fields.accountHealth', 'Account Health')}
+              </label>
+              <div
+                className="p-3 bg-muted/30 border border-border rounded-xl flex items-center justify-between gap-3"
+                title={accountHealthAriaLabel(accountHealthStatus)}
+              >
+                <div className="min-w-0">
+                  <p className="text-[10px] text-muted-foreground font-semibold">
+                    {healthFromAi
+                      ? t('tickets.sidebar.aiAccountHealth', 'AI assessment')
+                      : t('tickets.sidebar.estimatedAccountHealth', 'Estimated from signals')}
+                  </p>
+                  <p className="text-[11px] font-bold text-foreground truncate">
+                    {accountHealthStatus === 'good'
+                      ? t('tickets.sidebar.healthGood', 'Healthy relationship')
+                      : accountHealthStatus === 'bad'
+                        ? t('tickets.sidebar.healthBad', 'Needs attention')
+                        : t('tickets.sidebar.healthAtRisk', 'At risk')}
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {healthFromAi && <Sparkles className="w-3.5 h-3.5 text-indigo-500" aria-hidden />}
+                  <AccountHealthSmiley status={accountHealthStatus} size="lg" />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* SECTION 1: AI COPILOT WORKSPACE (Highlight section!) */}
         <div className="space-y-2">

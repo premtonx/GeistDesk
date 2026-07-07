@@ -1,3 +1,4 @@
+import { normalizeAccountHealth } from './account-health';
 import { withChecklistTaskIdsFromAi } from './ticket-checklist-utils';
 
 export interface TicketAnalysisPayload {
@@ -6,6 +7,7 @@ export interface TicketAnalysisPayload {
   aiRootCause: string;
   aiChecklist: { task: string; completed: boolean }[];
   aiSentiment: string;
+  accountHealth: 'good' | 'bad' | 'at_risk';
 }
 
 export function buildTicketMessagesText(
@@ -35,6 +37,7 @@ The JSON object must have exactly these keys:
 3. "aiRootCause": A sentence stating the clear diagnosed technical root cause of the issue.
 4. "aiChecklist": An array of action items (tasks) to solve this ticket, each having keys "task" (string description) and "completed" (boolean, default false). Please draft 3 realistic tasks.
 5. "aiSentiment": One of "Angry", "Neutral", "Positive" depending on user language and frustration.
+6. "accountHealth": One of "good", "at_risk", "bad" — overall customer/account relationship health inferred from tone, frustration, escalation risk, and thread context.
 
 Respond only with the raw valid JSON payload.`;
 }
@@ -53,12 +56,17 @@ export function parseTicketAnalysisOutput(
   try {
     const parsed = JSON.parse(cleaned) as Partial<TicketAnalysisPayload>;
     if (parsed.aiSummary?.trim()) {
+      const accountHealth =
+        normalizeAccountHealth(typeof parsed.accountHealth === 'string' ? parsed.accountHealth : null) ??
+        accountHealthFromSentimentLabel(parsed.aiSentiment);
+
       return {
         aiSummary: parsed.aiSummary,
         aiInsights: Array.isArray(parsed.aiInsights) ? parsed.aiInsights : [],
         aiRootCause: parsed.aiRootCause ?? '',
         aiChecklist: Array.isArray(parsed.aiChecklist) ? parsed.aiChecklist : [],
         aiSentiment: parsed.aiSentiment ?? 'Neutral',
+        accountHealth,
       };
     }
   } catch {
@@ -77,10 +85,26 @@ export function parseTicketAnalysisOutput(
           : fallback?.sentiment === 'positive'
             ? 'Positive'
             : 'Neutral',
+      accountHealth: accountHealthFromSentimentLabel(
+        fallback?.sentiment === 'angry'
+          ? 'Angry'
+          : fallback?.sentiment === 'positive'
+            ? 'Positive'
+            : 'Neutral',
+      ),
     };
   }
 
   return buildTicketAnalysisFallback(fallback);
+}
+
+function accountHealthFromSentimentLabel(
+  aiSentiment?: string,
+): TicketAnalysisPayload['accountHealth'] {
+  const label = (aiSentiment || '').toLowerCase();
+  if (label === 'angry' || label === 'negative') return 'bad';
+  if (label === 'positive' || label === 'happy') return 'good';
+  return 'at_risk';
 }
 
 export function buildTicketAnalysisFallback(ticket?: {
@@ -114,6 +138,13 @@ export function buildTicketAnalysisFallback(ticket?: {
         : ticket?.sentiment === 'positive'
           ? 'Positive'
           : 'Neutral',
+    accountHealth: accountHealthFromSentimentLabel(
+      ticket?.sentiment === 'angry'
+        ? 'Angry'
+        : ticket?.sentiment === 'positive'
+          ? 'Positive'
+          : 'Neutral',
+    ),
   };
 }
 
@@ -124,5 +155,6 @@ export function ticketAnalysisPatch(payload: TicketAnalysisPayload): Record<stri
     aiRootCause: payload.aiRootCause,
     aiChecklist: withChecklistTaskIdsFromAi(payload.aiChecklist),
     aiSentiment: payload.aiSentiment,
+    accountHealth: payload.accountHealth,
   };
 }

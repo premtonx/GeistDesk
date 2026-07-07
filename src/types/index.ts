@@ -213,7 +213,7 @@ export interface Ticket {
   product?: 'GeistDeskTech' | 'GeistDeskMobile';
   slaDueAt?: any;
   slaTier?: string;
-  accountHealth?: string;
+  accountHealth?: 'good' | 'bad' | 'at_risk' | string;
   affectedVersion?: string;
   environment?: string;
   stepsToReproduce?: string;

@@ -107,7 +107,6 @@ export function CreateTicketDialog({
     assignee: 'unassigned',
     ticketKind: 'support' as 'support' | 'bug',
     slaTier: '',
-    accountHealth: '',
     affectedVersion: '',
     environment: '',
     stepsToReproduce: '',
@@ -455,16 +454,10 @@ export function CreateTicketDialog({
                                     </Select>
                                 </div>
                                 {formData.ticketKind === 'support' ? (
-                                  <>
-                                    <div className="space-y-2.5">
-                                      <Label className="text-[12px] font-bold text-slate-600 ml-1">{t('tickets.fields.slaTier', 'SLA Tier')}</Label>
-                                      <Input className="h-11 rounded-xl" value={formData.slaTier} onChange={(e) => setFormData({ ...formData, slaTier: e.target.value })} />
-                                    </div>
-                                    <div className="space-y-2.5">
-                                      <Label className="text-[12px] font-bold text-slate-600 ml-1">{t('tickets.fields.accountHealth', 'Account Health')}</Label>
-                                      <Input className="h-11 rounded-xl" value={formData.accountHealth} onChange={(e) => setFormData({ ...formData, accountHealth: e.target.value })} />
-                                    </div>
-                                  </>
+                                  <div className="space-y-2.5">
+                                    <Label className="text-[12px] font-bold text-slate-600 ml-1">{t('tickets.fields.slaTier', 'SLA Tier')}</Label>
+                                    <Input className="h-11 rounded-xl" value={formData.slaTier} onChange={(e) => setFormData({ ...formData, slaTier: e.target.value })} />
+                                  </div>
                                 ) : (
                                   <>
                                     <div className="space-y-2.5">
