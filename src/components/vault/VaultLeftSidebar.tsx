@@ -2,32 +2,30 @@ import { type ReactNode } from 'react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import {
+  VAULT_DEFINITIONS,
   ACCESS_CATEGORIES,
-  VAULT_AUTHORITY_SCOPES,
-  type VaultAuthorityScope,
+  type VaultDefinition,
 } from './vault-utils';
-import { VaultFolderSidebarTree } from './VaultFolderSidebarTree';
-import type { VaultFolderNode } from './vaultFolderTypes';
 
 export type VaultSmartFilter = 'favorites' | 'recently' | 'pinned' | 'expiring' | 'alerts' | 'archived';
 
 interface VaultLeftSidebarProps {
-  activeVaultScope: VaultAuthorityScope;
+  activeVaultId: string;
+  onVaultChange: (id: string) => void;
+  vaultCounts: Record<string, number>;
+  dynamicVaults?: Array<{
+    id: string;
+    emoji: string;
+    name: string;
+    permission?: string;
+  }>;
+  onCreateVault?: () => void;
   selectedCategory: string;
   onCategoryChange: (id: string) => void;
   categoryCounts: Record<string, number>;
-  onVaultScopeChange: (scope: VaultAuthorityScope) => void;
-  scopeCounts: Partial<Record<VaultAuthorityScope, number>>;
-  allowedVaultScope: VaultAuthorityScope;
   smartFilter: VaultSmartFilter | null;
-  onSmartFilterChange: (filter: VaultSmartFilter | null) => void;
+  onSmartFilterChange: (filter: VaultSmartFilter) => void;
   smartCounts: Partial<Record<VaultSmartFilter, number>>;
-  folders?: VaultFolderNode[];
-  vaultId?: string;
-  activeFolderId?: string | null;
-  onFolderSelect?: (folderId: string | null) => void;
-  onCreateFolderIn?: (parentId: string | null) => void;
-  folderCounts?: Record<string, number>;
   collapsed?: boolean;
 }
 
@@ -41,13 +39,11 @@ function SectionTitle({ children }: { children: ReactNode }) {
 
 function NavButton({
   active,
-  disabled,
   onClick,
   children,
   trailing,
 }: {
   active?: boolean;
-  disabled?: boolean;
   onClick: () => void;
   children: ReactNode;
   trailing?: ReactNode;
@@ -55,13 +51,10 @@ function NavButton({
   return (
     <button
       type="button"
-      disabled={disabled}
       onClick={onClick}
       className={cn(
         'w-full flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-left text-xs font-medium transition-colors',
-        disabled && 'opacity-40 pointer-events-none cursor-not-allowed',
-        !disabled && active && 'bg-violet-600 text-white shadow-sm',
-        !disabled && !active && 'text-slate-700 hover:bg-slate-100',
+        active ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-700 hover:bg-slate-100',
       )}
     >
       <span className="flex-1 min-w-0 truncate">{children}</span>
@@ -70,25 +63,44 @@ function NavButton({
   );
 }
 
+function PermissionBadge({ vault, active }: { vault: VaultDefinition; active?: boolean }) {
+  const { t } = useTranslation();
+  return (
+    <span
+      className={cn(
+        'text-[9px] font-semibold px-1.5 py-0.5 rounded-full shrink-0',
+        active ? 'bg-white/20 text-white' : 'bg-slate-100 text-slate-500',
+      )}
+    >
+      {t(vault.permissionKey, vault.defaultPermission)}
+    </span>
+  );
+}
+
 export function VaultLeftSidebar({
-  activeVaultScope,
+  activeVaultId,
+  onVaultChange,
+  vaultCounts,
+  dynamicVaults = [],
+  onCreateVault,
   selectedCategory,
   onCategoryChange,
   categoryCounts,
-  onVaultScopeChange,
-  scopeCounts,
-  allowedVaultScope,
   smartFilter,
   onSmartFilterChange,
   smartCounts,
-  folders = [],
-  vaultId = 'local',
-  activeFolderId = null,
-  onFolderSelect,
-  onCreateFolderIn,
-  folderCounts,
 }: VaultLeftSidebarProps) {
   const { t } = useTranslation();
+
+  const staticIds = new Set(VAULT_DEFINITIONS.map((v) => v.id));
+  const extraVaults = dynamicVaults.filter((v) => !staticIds.has(v.id));
+
+  const authorities = [
+    { key: 'personal', label: t('vault.authorities.personal', 'Personal'), vaults: 1, permission: t('vault.permissions.owner', 'Owner') },
+    { key: 'department', label: t('vault.authorities.department', 'Department'), vaults: 2, permission: t('vault.permissions.editor', 'Editor') },
+    { key: 'team', label: t('vault.authorities.team', 'Shared Team'), vaults: 2, permission: t('vault.permissions.admin', 'Admin') },
+    { key: 'global', label: t('vault.authorities.global', 'Company Global'), vaults: 1, permission: t('vault.permissions.viewer', 'Viewer') },
+  ];
 
   const smartFilters: { id: VaultSmartFilter; emoji: string; labelKey: string; defaultLabel: string }[] = [
     { id: 'favorites', emoji: '⭐', labelKey: 'vault.filters.favorites', defaultLabel: 'Favorites' },
@@ -101,117 +113,123 @@ export function VaultLeftSidebar({
 
   return (
     <aside className="w-[240px] shrink-0 border-r border-slate-200/80 bg-white flex flex-col">
-      <div className="p-3 flex-1 overflow-y-auto custom-scrollbar">
+      <div className="p-3 flex-1">
+        <SectionTitle>{t('vault.sections.vaults', 'Vaults')}</SectionTitle>
+        <div className="space-y-0.5">
+          {VAULT_DEFINITIONS.map((vault) => {
+            const active = activeVaultId === vault.id;
+            const count = vaultCounts[vault.id] ?? 0;
+            return (
+              <NavButton
+                key={vault.id}
+                active={active}
+                onClick={() => onVaultChange(vault.id)}
+                trailing={
+                  <span className="flex items-center gap-1 shrink-0">
+                    <span className={cn('text-[10px] tabular-nums', active ? 'text-white/80' : 'text-slate-400')}>{count}</span>
+                    <PermissionBadge vault={vault} active={active} />
+                  </span>
+                }
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <span aria-hidden>{vault.emoji}</span>
+                  <span className="truncate">{t(vault.nameKey, vault.defaultName)}</span>
+                </span>
+              </NavButton>
+            );
+          })}
+          {extraVaults.map((vault) => {
+            const active = activeVaultId === vault.id;
+            const count = vaultCounts[vault.id] ?? 0;
+            return (
+              <NavButton
+                key={vault.id}
+                active={active}
+                onClick={() => onVaultChange(vault.id)}
+                trailing={
+                  <span className={cn('text-[10px] tabular-nums', active ? 'text-white/80' : 'text-slate-400')}>
+                    {count}
+                  </span>
+                }
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <span aria-hidden>{vault.emoji}</span>
+                  <span className="truncate">{vault.name}</span>
+                </span>
+              </NavButton>
+            );
+          })}
+          {onCreateVault ? (
+            <NavButton onClick={onCreateVault}>
+              <span className="flex items-center gap-2 text-blue-600">
+                <span aria-hidden>＋</span>
+                {t('vault.newVault', 'New Vault')}
+              </span>
+            </NavButton>
+          ) : null}
+        </div>
+
         <SectionTitle>{t('vault.sections.categories', 'Access Categories')}</SectionTitle>
         <div className="space-y-0.5">
           <NavButton active={selectedCategory === 'all'} onClick={() => onCategoryChange('all')}>
             {t('vault.allCategories', 'All categories')}
           </NavButton>
-          {ACCESS_CATEGORIES.map((cat) => {
-            const count = categoryCounts[cat.id] ?? 0;
-            const disabled = count === 0;
-            const active = selectedCategory === cat.id;
-            return (
-              <NavButton
-                key={cat.id}
-                active={active}
-                disabled={disabled}
-                onClick={() => onCategoryChange(cat.id)}
-                trailing={
-                  <span
-                    className={cn(
-                      'text-[10px] tabular-nums',
-                      active ? 'text-white/80' : disabled ? 'text-slate-300' : 'text-slate-400',
-                    )}
-                  >
-                    {count}
-                  </span>
-                }
-              >
-                <span className="flex items-center gap-2">
-                  <span>{cat.emoji}</span>
-                  {t(cat.nameKey, cat.defaultName)}
+          {ACCESS_CATEGORIES.map((cat) => (
+            <NavButton
+              key={cat.id}
+              active={selectedCategory === cat.id}
+              onClick={() => onCategoryChange(cat.id)}
+              trailing={
+                <span className={cn('text-[10px] tabular-nums', selectedCategory === cat.id ? 'text-white/80' : 'text-slate-400')}>
+                  {categoryCounts[cat.id] ?? 0}
                 </span>
-              </NavButton>
-            );
-          })}
+              }
+            >
+              <span className="flex items-center gap-2">
+                <span>{cat.emoji}</span>
+                {t(cat.nameKey, cat.defaultName)}
+              </span>
+            </NavButton>
+          ))}
         </div>
 
         <SectionTitle>{t('vault.sections.authorities', 'Vault Authorities')}</SectionTitle>
-        <div className="space-y-0.5">
-          {VAULT_AUTHORITY_SCOPES.map((auth) => {
-            const active = activeVaultScope === auth.id;
-            const count = scopeCounts[auth.id] ?? 0;
-            const scopeMismatch = auth.id !== allowedVaultScope;
-            const disabled = scopeMismatch || count === 0;
-            return (
-              <NavButton
-                key={auth.id}
-                active={active}
-                disabled={disabled}
-                onClick={() => onVaultScopeChange(auth.id)}
-                trailing={
-                  <span
-                    className={cn(
-                      'text-[10px] tabular-nums',
-                      active ? 'text-white/80' : disabled ? 'text-slate-300' : 'text-slate-400',
-                    )}
-                  >
-                    {count}
-                  </span>
-                }
-              >
-                {t(auth.nameKey, auth.defaultLabel)}
-              </NavButton>
-            );
-          })}
+        <div className="space-y-2 px-1">
+          {authorities.map((auth) => (
+            <div key={auth.key} className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-2">
+              <p className="text-xs font-semibold text-slate-800">{auth.label}</p>
+              <p className="text-[10px] text-slate-500 mt-0.5">
+                {t('vault.authorities.vaultCount', '{{count}} vaults · {{permission}}')
+                  .replace('{{count}}', String(auth.vaults))
+                  .replace('{{permission}}', auth.permission)}
+              </p>
+              <p className="text-[10px] text-emerald-600 font-medium mt-1">{t('vault.authorities.secure', 'Secure')}</p>
+            </div>
+          ))}
         </div>
 
         <SectionTitle>{t('vault.sections.smartFilters', 'Smart Filters')}</SectionTitle>
         <div className="space-y-0.5">
-          {smartFilters.map((f) => {
-            const count = smartCounts[f.id];
-            const disabled = count === 0;
-            const active = smartFilter === f.id;
-            return (
-              <NavButton
-                key={f.id}
-                active={active}
-                disabled={disabled}
-                onClick={() => onSmartFilterChange(active ? null : f.id)}
-                trailing={
-                  count !== undefined ? (
-                    <span
-                      className={cn(
-                        'text-[10px] tabular-nums',
-                        active ? 'text-white/80' : disabled ? 'text-slate-300' : 'text-slate-400',
-                      )}
-                    >
-                      {count}
-                    </span>
-                  ) : null
-                }
-              >
-                <span className="flex items-center gap-2">
-                  <span>{f.emoji}</span>
-                  {t(f.labelKey, f.defaultLabel)}
-                </span>
-              </NavButton>
-            );
-          })}
+          {smartFilters.map((f) => (
+            <NavButton
+              key={f.id}
+              active={smartFilter === f.id}
+              onClick={() => onSmartFilterChange(f.id)}
+              trailing={
+                smartCounts[f.id] !== undefined ? (
+                  <span className={cn('text-[10px] tabular-nums', smartFilter === f.id ? 'text-white/80' : 'text-slate-400')}>
+                    {smartCounts[f.id]}
+                  </span>
+                ) : null
+              }
+            >
+              <span className="flex items-center gap-2">
+                <span>{f.emoji}</span>
+                {t(f.labelKey, f.defaultLabel)}
+              </span>
+            </NavButton>
+          ))}
         </div>
-
-        <SectionTitle>📁 DATENSTRUKTUR / FOLDERS</SectionTitle>
-        {onFolderSelect && onCreateFolderIn ? (
-          <VaultFolderSidebarTree
-            folders={folders}
-            vaultId={vaultId}
-            activeFolderId={activeFolderId}
-            onFolderSelect={onFolderSelect}
-            onCreateFolderIn={onCreateFolderIn}
-            folderCounts={folderCounts}
-          />
-        ) : null}
       </div>
     </aside>
   );

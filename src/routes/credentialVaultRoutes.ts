@@ -8,6 +8,7 @@ import {
   setDocDirect,
   updateDocDirect,
   deleteDocDirect,
+  addDocDirect,
 } from '../lib/postgres-backend.js';
 import { routeParam } from '../lib/route-params.js';
 import {
@@ -20,6 +21,8 @@ import {
 const router = Router();
 const COLLECTION = 'geist_vault_portfolios';
 const FOLDER_COLLECTION = 'vault_folders';
+/** Zero-knowledge encrypted credential blobs (separate from UI folder tree). */
+const ENCRYPTED_VAULT_STORE = 'geist_vault_encrypted_stores';
 
 const folderIconSchema = z.enum(['folder', 'lock', 'server', 'key', 'database', 'cloud']);
 
@@ -361,6 +364,204 @@ router.delete('/portfolios/:id', authenticate, async (req: Request, res: Respons
   } catch (err: any) {
     console.error('[credential-vault] delete portfolio', err);
     return res.status(500).json({ error: 'Failed to delete vault portfolio' });
+  }
+});
+
+// -----------------------------------------------------------------------------
+// Zero-knowledge encrypted vault stores (ciphertext only — separate collection)
+// -----------------------------------------------------------------------------
+
+const encryptedVaultLayoutSchema = z
+  .object({
+    permission: z.string().optional(),
+    sortOrder: z.number().int().optional(),
+    collapsed: z.boolean().optional(),
+    color: z.string().optional(),
+  })
+  .optional();
+
+const createEncryptedVaultSchema = z.object({
+  name: z.string().min(1).max(120),
+  slug: z
+    .string()
+    .min(1)
+    .max(80)
+    .regex(/^[a-z0-9][a-z0-9-]*$/)
+    .optional(),
+  type: z.enum(['personal', 'shared']),
+  emoji: z.string().max(8).optional(),
+  layout: encryptedVaultLayoutSchema,
+  sharedWith: z.array(z.string().email()).optional(),
+  encryptedBlob: z.string().min(1),
+  blobVersion: z.number().int().positive().optional().default(1),
+});
+
+const updateEncryptedVaultSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  emoji: z.string().max(8).optional(),
+  layout: encryptedVaultLayoutSchema,
+  sharedWith: z.array(z.string().email()).optional(),
+  encryptedBlob: z.string().min(1).optional(),
+  blobVersion: z.number().int().positive().optional(),
+});
+
+function slugifyEncryptedVaultName(name: string): string {
+  const base = name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '');
+  return base || `vault-${Date.now()}`;
+}
+
+function formatEncryptedVaultRow(row: any) {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    type: row.type,
+    emoji: row.emoji ?? '🔒',
+    layout: row.layout ?? {},
+    createdBy: row.createdBy,
+    ownerEmail: row.ownerEmail ?? null,
+    sharedWith: Array.isArray(row.sharedWith) ? row.sharedWith : [],
+    encryptedBlob: row.encryptedBlob,
+    blobVersion: row.blobVersion ?? 1,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  };
+}
+
+function userCanWriteEncryptedVault(vault: any, user: any): boolean {
+  if (!vault || !user) return false;
+  if (user.role === 'SYSTEM_ADMIN') return true;
+  if (vault.createdBy === user.id) return true;
+  if (vault.type !== 'shared') return false;
+  const email = String(user.email || '').toLowerCase();
+  const sharedWith: string[] = Array.isArray(vault.sharedWith) ? vault.sharedWith : [];
+  return sharedWith.some((entry) => String(entry).toLowerCase() === email);
+}
+
+async function listAccessibleEncryptedVaults(user: any): Promise<any[]> {
+  const email = String(user.email || '').toLowerCase();
+  const owned = await getDocsDirect(ENCRYPTED_VAULT_STORE, [
+    { type: 'where', field: 'createdBy', op: '==', value: user.id },
+  ]);
+  const sharedCandidates = await getDocsDirect(ENCRYPTED_VAULT_STORE, [
+    { type: 'where', field: 'type', op: '==', value: 'shared' },
+  ]);
+  const shared = sharedCandidates.filter((row) => {
+    const sharedWith: string[] = Array.isArray(row.sharedWith) ? row.sharedWith : [];
+    return sharedWith.some((entry) => String(entry).toLowerCase() === email);
+  });
+
+  const byId = new Map<string, any>();
+  for (const row of [...owned, ...shared]) {
+    if (row?.id) byId.set(row.id, row);
+  }
+  return Array.from(byId.values()).map(formatEncryptedVaultRow);
+}
+
+router.get('/vaults', authenticate, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const vaults = await listAccessibleEncryptedVaults(req.user);
+    return res.json({ vaults });
+  } catch (e: any) {
+    console.error('[credential-vault] list encrypted vaults', e?.message || e);
+    return res.status(500).json({ error: 'Failed to load credential vault folders.' });
+  }
+});
+
+router.post('/vaults', authenticate, async (req: Request, res: Response): Promise<any> => {
+  const parsed = createEncryptedVaultSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid vault payload', details: parsed.error.flatten().fieldErrors });
+  }
+
+  const { name, type, emoji, layout, sharedWith, encryptedBlob, blobVersion } = parsed.data;
+  const slug = parsed.data.slug || slugifyEncryptedVaultName(name);
+  const now = new Date().toISOString();
+
+  try {
+    const existing = await getDocsDirect(ENCRYPTED_VAULT_STORE, [
+      { type: 'where', field: 'createdBy', op: '==', value: req.user!.id },
+      { type: 'where', field: 'slug', op: '==', value: slug },
+    ]);
+    if (existing.length > 0) {
+      return res.status(409).json({ error: 'A vault with this identifier already exists.' });
+    }
+
+    const record = await addDocDirect(ENCRYPTED_VAULT_STORE, {
+      name: name.trim(),
+      slug,
+      type,
+      emoji: emoji || (type === 'shared' ? '👥' : '🔒'),
+      layout: layout || {},
+      createdBy: req.user!.id,
+      ownerEmail: req.user!.email || null,
+      sharedWith: type === 'shared' ? (sharedWith || []) : [],
+      encryptedBlob,
+      blobVersion,
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    const stored = await getDocDirect(ENCRYPTED_VAULT_STORE, record.id);
+    return res.status(201).json({ vault: formatEncryptedVaultRow({ id: record.id, ...stored }) });
+  } catch (e: any) {
+    console.error('[credential-vault] create encrypted vault', e?.message || e);
+    return res.status(500).json({ error: 'Failed to store encrypted vault folder.' });
+  }
+});
+
+router.put('/vaults/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
+  const parsed = updateEncryptedVaultSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid vault update payload', details: parsed.error.flatten().fieldErrors });
+  }
+
+  try {
+    const vaultId = routeParam(req.params.id);
+    const existing = await getDocDirect(ENCRYPTED_VAULT_STORE, vaultId);
+    if (!existing) return res.status(404).json({ error: 'Vault folder not found.' });
+    if (!userCanWriteEncryptedVault(existing, req.user)) {
+      return res.status(403).json({ error: 'Forbidden: you cannot modify this vault folder.' });
+    }
+
+    const patch: Record<string, unknown> = {
+      updatedAt: new Date().toISOString(),
+    };
+    const data = parsed.data;
+    if (data.name !== undefined) patch.name = data.name.trim();
+    if (data.emoji !== undefined) patch.emoji = data.emoji;
+    if (data.layout !== undefined) patch.layout = data.layout;
+    if (data.sharedWith !== undefined && existing.type === 'shared') patch.sharedWith = data.sharedWith;
+    if (data.encryptedBlob !== undefined) patch.encryptedBlob = data.encryptedBlob;
+    if (data.blobVersion !== undefined) patch.blobVersion = data.blobVersion;
+
+    await updateDocDirect(ENCRYPTED_VAULT_STORE, vaultId, patch);
+    const stored = await getDocDirect(ENCRYPTED_VAULT_STORE, vaultId);
+    return res.json({ vault: formatEncryptedVaultRow({ id: vaultId, ...stored }) });
+  } catch (e: any) {
+    console.error('[credential-vault] update encrypted vault', e?.message || e);
+    return res.status(500).json({ error: 'Failed to update encrypted vault folder.' });
+  }
+});
+
+router.delete('/vaults/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const vaultId = routeParam(req.params.id);
+    const existing = await getDocDirect(ENCRYPTED_VAULT_STORE, vaultId);
+    if (!existing) return res.status(404).json({ error: 'Vault folder not found.' });
+    if (existing.createdBy !== req.user!.id && req.user!.role !== 'SYSTEM_ADMIN') {
+      return res.status(403).json({ error: 'Forbidden: only the vault owner can delete this folder.' });
+    }
+
+    await deleteDocDirect(ENCRYPTED_VAULT_STORE, vaultId);
+    return res.json({ success: true });
+  } catch (e: any) {
+    console.error('[credential-vault] delete encrypted vault', e?.message || e);
+    return res.status(500).json({ error: 'Failed to delete vault folder.' });
   }
 });
 

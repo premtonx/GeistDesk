@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, useRef, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
 import { 
   Lock, 
@@ -35,7 +35,7 @@ import {
   File,
   Tag,
   ExternalLink,
-  User as UserIcon,
+  User,
   Sliders,
   History,
   CheckSquare,
@@ -52,9 +52,23 @@ import { Badge } from '../../components/ui/badge';
 import { Textarea } from '../../components/ui/textarea';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
-import { argon2id } from 'hash-wasm';
-import Dexie, { type Table } from 'dexie';
-import { useLiveQuery } from 'dexie-react-hooks';
+import {
+  buildVaultKeySalt,
+  decryptData,
+  deriveMasterKey,
+  encryptData,
+  slugifyVaultName,
+} from '../../lib/credential-vault-crypto';
+import {
+  createVaultFolderOnServer,
+  ensureDefaultPersonalVault,
+  fetchAndDecryptVaults,
+  PERSONAL_VAULT_SLUG,
+  useVaultPersistence,
+  type VaultCategory,
+  type VaultCredential,
+} from '../../lib/credential-vault-sync';
+import type { CredentialVaultFolder } from '../../services/credentialVaultApi';
 
 import { 
   Dialog, 
@@ -83,17 +97,6 @@ import { useAuth, useAdmin } from '../../lib/hooks';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { ModuleToolbarSelect } from '../ui/module-page';
 import { logAudit } from '../../services/auditService';
-import { userService } from '../../services/userService';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  addDoc, 
-  doc, 
-  getDoc
-} from 'firebase/firestore';
-import { db } from '../../lib/firebase';
 
 // Import GeistVault Modular Components
 import { GeistVaultSessionLauncher } from './geistvault/GeistVaultSessionLauncher';
@@ -103,207 +106,28 @@ import { GeistVaultEmergency } from './geistvault/GeistVaultEmergency';
 import { GeistVaultAccessRequests } from './geistvault/GeistVaultAccessRequests';
 
 // Redesigned high-fidelity subcomponents
-import { SEEDED_CREDENTIALS, MOCK_CHROME_EXTENSION, BRANDED_SHOWCASE_CREDENTIALS } from './geistvault/DefaultData';
+import { SEEDED_CREDENTIALS, MOCK_CHROME_EXTENSION } from './geistvault/DefaultData';
 import { CredentialDrawer } from './geistvault/CredentialDrawer';
 import { VaultPageHeader } from '../vault/VaultPageHeader';
 import { VaultKpiCards } from '../vault/VaultKpiCards';
 import { VaultAiSecurityBanner } from '../vault/VaultAiSecurityBanner';
 import { VaultSearchSection } from '../vault/VaultSearchSection';
 import { VaultLeftSidebar, type VaultSmartFilter } from '../vault/VaultLeftSidebar';
-import { VaultTopTabBar } from '../vault/VaultTopTabBar';
 import { VaultSecuritySidebar } from '../vault/VaultSecuritySidebar';
 import { VaultViewModeSelector, type VaultAssetViewMode } from '../vault/VaultViewModeSelector';
 import { VaultAssetViews } from '../vault/VaultAssetViews';
 import { VaultFabMenu } from '../vault/VaultFabMenu';
-import { VaultEntryCreateWorkspace } from '../vault/VaultEntryCreateWorkspace';
-import { VaultImportDialog } from '../vault/VaultImportDialog';
-import { VaultFolderCreateModal } from '../vault/VaultFolderCreateModal';
-import { VaultFolderBreadcrumbStrip } from '../vault/VaultFolderBreadcrumbStrip';
-import { VaultCredentialEditSidebar } from '../vault/VaultCredentialEditSidebar';
-import { VaultCreateInstancePanel } from '../vault/VaultCreateInstancePanel';
-import { VaultShareAccessPanel } from '../vault/VaultShareAccessPanel';
-import { VaultDeleteConfirmBanner } from '../vault/VaultDeleteConfirmBanner';
-import {
-  resolveCredFolderId,
-  resolveFolderIconId,
-  type VaultFolderIconId,
-  type VaultFolderNode,
-} from '../vault/vaultFolderTypes';
 import {
   ACCESS_CATEGORIES,
   VAULT_DEFINITIONS,
   resolveCredVaultId,
-  resolveVaultScope,
   isWeakCred,
   isExpiringCred,
-  type VaultDefinition,
-  type VaultAuthorityScope,
 } from '../vault/vault-utils';
-import {
-  credentialVaultService,
-  roleToDefaultPermission,
-  roleToPermissionKey,
-  type AccessibleVaultPortfolio,
-  type VaultPortfolioAssignment,
-} from '../../lib/vault-service';
-import type { User as WorkspaceUser } from '../../types';
-import { processVaultImport, type VaultImportFormat } from '../../lib/vault-import-processor';
-import {
-  buildVaultProvenance,
-  decryptWithWebCryptoAesGcm,
-  encryptWithWebCryptoAesGcm,
-} from '../../lib/client-aes-gcm';
-import { isCryptoIntegrityError } from '../../lib/crypto-integrity';
 
 // --- Database Schema ---
-interface Credential {
-  id?: number | string; // Permit both local number IDs and Remote string IDs
-  type: string;
-  label: string;
-  username: string;
-  encryptedPassword: string;
-  host?: string;
-  port?: string;
-  domain?: string;
-  gateway?: string;
-  configData?: string;
-  notes?: string;
-  updatedAt: number;
-  icon?: string;
-  iconType?: 'preset' | 'custom';
-  lastModifiedBy?: string;
-  favorite?: boolean;
-  deleted?: boolean;
-  vaultId?: string;
-  folderId?: string | null;
-
-  // Enterprise Extensions
-  visibility?: string;
-  owner?: string;
-  team?: string;
-  department?: string;
-  linkedCompany?: string;
-  linkedAsset?: string;
-  linkedTicket?: string;
-  tags?: string[];
-  expirationPolicy?: string;
-  rotationPolicy?: string;
-  totpSecret?: string;
-  backupCodes?: string;
-  recoveryKeys?: string;
-  authenticatorNotes?: string;
-  attachments?: { name: string; size: string; type: string }[];
-  securitySettings?: {
-    burnAfterRead?: boolean;
-    requireApproval?: boolean;
-    jitAccess?: boolean;
-    requireMfa?: boolean;
-    disableExport?: boolean;
-    disableCopy?: boolean;
-  };
-}
-
-interface CustomCategory {
-  id?: number;
-  name: string;
-  slug: string;
-  icon: string;
-}
-
-type StoredVaultFolder = VaultFolderNode;
-
-class SovereignDB extends Dexie {
-  credentials!: Table<Credential>;
-  categories!: Table<CustomCategory>;
-  folders!: Table<StoredVaultFolder>;
-
-  constructor() {
-    super('SovereignVault');
-    this.version(1).stores({
-      credentials: '++id, type, label, username, updatedAt'
-    });
-    this.version(2).stores({
-      credentials: '++id, type, label, username, updatedAt',
-      categories: '++id, name, &slug'
-    });
-    this.version(3).stores({
-      credentials: '++id, type, label, username, updatedAt, folderId, vaultId',
-      categories: '++id, name, &slug',
-      folders: 'id, vaultId, parentId, name',
-    });
-  }
-}
-
-const localDB = new SovereignDB();
-
-// --- Crypto Helpers ---
-function isVaultWasmBlockedError(err: unknown): boolean {
-  const msg = err instanceof Error ? err.message : String(err);
-  return /WebAssembly|wasm-unsafe-eval|Wasm code generation disallowed|WebAssembly is not supported/i.test(msg);
-}
-
-function vaultCryptoErrorMessage(err: unknown, fallback: string): string {
-  if (isVaultWasmBlockedError(err)) {
-    return 'Vault cryptography was blocked by browser security policy (WebAssembly). Reload after deploy, or contact your administrator.';
-  }
-  if (err instanceof Error && err.message.trim()) {
-    return err.message;
-  }
-  return fallback;
-}
-
-async function deriveMasterKey(password: string, salt: string) {
-  try {
-    const result = await argon2id({
-      password: password,
-      salt: salt,
-      parallelism: 1,
-      iterations: 10,
-      memorySize: 65536, // 64MB
-      hashLength: 32,
-      outputType: 'binary',
-    });
-    return result instanceof Uint8Array ? result : new Uint8Array(result);
-  } catch (err) {
-    console.error('[GeistVault] Argon2id key derivation failed:', err);
-    throw err;
-  }
-}
-
-function normalizeDerivedKey(key: Uint8Array | ArrayBuffer | null): Uint8Array | null {
-  if (!key) return null;
-  if (key instanceof Uint8Array) return key;
-  return new Uint8Array(key);
-}
-
-function entryHasShareableSecret(entry: Partial<Credential>, rawPassword: string): boolean {
-  return Boolean(
-    entry.username?.trim() ||
-      rawPassword.trim() ||
-      entry.totpSecret?.trim() ||
-      entry.notes?.trim() ||
-      entry.host?.trim(),
-  );
-}
-
-async function encryptCredentialSecret(rawPassword: string, key: Uint8Array): Promise<string> {
-  return encryptData(rawPassword, key);
-}
-
-async function encryptData(data: string, key: Uint8Array, provenance?: string) {
-  return encryptWithWebCryptoAesGcm(data, key, provenance);
-}
-
-async function decryptData(encryptedB64: string, key: Uint8Array, provenance?: string) {
-  try {
-    return await decryptWithWebCryptoAesGcm(encryptedB64, key, provenance);
-  } catch (error) {
-    if (provenance && isCryptoIntegrityError(error)) {
-      return decryptWithWebCryptoAesGcm(encryptedB64, key);
-    }
-    throw error;
-  }
-}
+type Credential = VaultCredential;
+type CustomCategory = VaultCategory;
 
 // --- Main Component ---
 export default function CredentialVaultPage() {
@@ -312,87 +136,41 @@ export default function CredentialVaultPage() {
   const { isAdmin } = useAdmin();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeVaultId, setActiveVaultId] = useState<string>('local');
-  const [activeVaultScope, setActiveVaultScope] = useState<VaultAuthorityScope>('personal');
   const [accessCategory, setAccessCategory] = useState<string>('all');
   const [smartFilter, setSmartFilter] = useState<VaultSmartFilter | null>(null);
   const [assetViewMode, setAssetViewMode] = useState<VaultAssetViewMode>('table');
-  const [dynamicPortfolios, setDynamicPortfolios] = useState<AccessibleVaultPortfolio[]>([]);
-  const [isImportOpen, setIsImportOpen] = useState(false);
-  const [isImporting, setIsImporting] = useState(false);
-  const [isCreatingVaultInstance, setIsCreatingVaultInstance] = useState(false);
-  const [newVaultName, setNewVaultName] = useState('');
-  const [newVaultDescription, setNewVaultDescription] = useState('');
-  const [newVaultEmoji, setNewVaultEmoji] = useState('🔒');
-  const [newVaultScope, setNewVaultScope] = useState<VaultAuthorityScope>('personal');
-  const [isSubmittingVaultCreate, setIsSubmittingVaultCreate] = useState(false);
-  const [vaultShareOpen, setVaultShareOpen] = useState(false);
-  const [vaultDeleteOpen, setVaultDeleteOpen] = useState(false);
-  const [deleteConfirmName, setDeleteConfirmName] = useState('');
-  const [isDeletingVault, setIsDeletingVault] = useState(false);
-  const [isSavingShare, setIsSavingShare] = useState(false);
-  const [workspaceUsers, setWorkspaceUsers] = useState<WorkspaceUser[]>([]);
-  const [activeFolderId, setActiveFolderId] = useState<string | null>(null);
-  const [isCreateFolderOpen, setIsCreateFolderOpen] = useState(false);
-  const [createFolderParentId, setCreateFolderParentId] = useState<string | null>(null);
+  const [vaultFolders, setVaultFolders] = useState<CredentialVaultFolder[]>([]);
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+  const [isHydratingVault, setIsHydratingVault] = useState(false);
+  const { persistFolder, schedulePersistFolder } = useVaultPersistence();
+
+  const folderBySlug = useMemo(() => {
+    const map = new Map<string, CredentialVaultFolder>();
+    for (const folder of vaultFolders) map.set(folder.slug, folder);
+    return map;
+  }, [vaultFolders]);
+
+  const syncVaultSlug = useCallback(
+    (
+      slug: string,
+      nextCredentials: Credential[],
+      nextCategories: CustomCategory[],
+      key: Uint8Array,
+    ) => {
+      const folder = folderBySlug.get(slug);
+      if (!folder) return;
+      schedulePersistFolder(folder, nextCredentials, nextCategories, key);
+    },
+    [folderBySlug, schedulePersistFolder],
+  );
 
   useEffect(() => {
     startOrchestratorConfigSync();
   }, []);
-
-  const portfolioVaultDefinitions: VaultDefinition[] = dynamicPortfolios.map((p) => ({
-    id: p.id,
-    emoji: p.emoji || '🔒',
-    nameKey: `vault.dynamic.${p.id}`,
-    defaultName: p.name,
-    permissionKey: roleToPermissionKey(p.userRole),
-    defaultPermission: roleToDefaultPermission(p.userRole),
-    scope: p.scope,
-    isDynamic: true,
-  }));
-
-  const staticVaultIds = new Set(VAULT_DEFINITIONS.map((v) => v.id));
-  const allVaultDefinitions: VaultDefinition[] = [
-    ...VAULT_DEFINITIONS,
-    ...portfolioVaultDefinitions.filter((v) => !staticVaultIds.has(v.id)),
-  ];
-
-  const activePortfolio = useMemo(
-    () => dynamicPortfolios.find((p) => p.id === activeVaultId) ?? null,
-    [dynamicPortfolios, activeVaultId],
-  );
-
-  const isVaultOwner = activePortfolio?.userRole === 'Besitzer';
-
-  const openCreateVaultInstance = useCallback(() => {
-    setIsCreatingVaultInstance(true);
-    setVaultShareOpen(false);
-    setVaultDeleteOpen(false);
-    setIsCreatingEntry(false);
-    setEditingCred(null);
-  }, []);
-
-  const closeCreateVaultInstance = useCallback(() => {
-    setIsCreatingVaultInstance(false);
-    setNewVaultName('');
-    setNewVaultDescription('');
-    setNewVaultEmoji('🔒');
-    setNewVaultScope('personal');
-  }, []);
-
-  const loadAccessiblePortfolios = async () => {
-    try {
-      const { portfolios } = await credentialVaultService.listMyPortfolios();
-      setDynamicPortfolios(portfolios);
-    } catch (err) {
-      console.warn('Could not load vault portfolios', err);
-    }
-  };
   
-  const isDemoVaultMode = import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === 'true';
-  const [vaultGateMode, setVaultGateMode] = useState<'discovering' | 'setup' | 'unlock'>('discovering');
   const [isLocked, setIsLocked] = useState(true);
-  const [masterPassword, setMasterPassword] = useState(isDemoVaultMode ? 'password123' : '');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [masterPassword, setMasterPassword] = useState('password123'); // Preset password123 for seamless testing!
   const [derivedKey, setDerivedKey] = useState<Uint8Array | null>(null);
   const [isUnlocking, setIsUnlocking] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -400,20 +178,14 @@ export default function CredentialVaultPage() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedView, setSelectedView] = useState<'all' | 'favorites' | 'recently' | 'shared' | 'trash'>('all');
   const [selectedType, setSelectedType] = useState<string>('all');
-  const [isCreatingEntry, setIsCreatingEntry] = useState(false);
+  const [showAddModal, setShowAddModal] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-
-  useEffect(() => {
-    if (!isLocked && user) {
-      loadAccessiblePortfolios();
-    }
-  }, [isLocked, user]);
 
   useEffect(() => {
     if (searchParams.get('action') === 'create') {
       if (!isLocked) {
         setSearchParams({}, { replace: true });
-        setIsCreatingEntry(true);
+        setShowAddModal(true);
       }
     }
   }, [searchParams, setSearchParams, isLocked]);
@@ -540,270 +312,170 @@ export default function CredentialVaultPage() {
   // Chrome Extension simulate settings
   const [chromeSyncActive, setChromeSyncActive] = useState(true);
 
-  // Local state query from dexie (reactive)
-  const credentialsQuery = useLiveQuery(async () => {
-    let items = await localDB.credentials.toArray();
-    return items.sort((a, b) => b.updatedAt - a.updatedAt);
-  }) || [];
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [showCreateVaultModal, setShowCreateVaultModal] = useState(false);
+  const [newVaultName, setNewVaultName] = useState('');
+  const [newVaultType, setNewVaultType] = useState<'personal' | 'shared'>('personal');
+  const [newVaultSharedEmails, setNewVaultSharedEmails] = useState('');
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatIcon, setNewCatIcon] = useState('layers');
 
-  const customCategories = useLiveQuery(async () => {
-    try {
-      return await localDB.categories.toArray();
-    } catch {
-      return [];
+  const seedDefaultCredentials = async (key: Uint8Array): Promise<{ credentials: Credential[]; categories: CustomCategory[] }> => {
+    const defaultCats: CustomCategory[] = [
+      { name: 'Kubernetes Nodes', slug: 'k8s', icon: 'server' },
+      { name: 'Slack Workspaces', slug: 'slack', icon: 'layers' },
+    ];
+    const seeded: Credential[] = [];
+    for (const item of SEEDED_CREDENTIALS) {
+      const encryptedPassword = await encryptData(item.plainPass, key);
+      seeded.push({
+        id: crypto.randomUUID(),
+        type: item.type,
+        label: item.label,
+        username: item.username,
+        encryptedPassword,
+        host: item.host,
+        notes: item.notes,
+        updatedAt: Date.now() - item.offsetHours * 3600 * 1000,
+        lastModifiedBy: item.lastModifiedBy,
+        favorite: item.favorite,
+        deleted: false,
+        vaultId: item.vaultId || PERSONAL_VAULT_SLUG,
+      });
     }
-  }) || [];
-
-  const vaultFolders = (useLiveQuery(async () => {
-    try {
-      return await localDB.folders.toArray();
-    } catch {
-      return [];
-    }
-  }, []) ?? []) as VaultFolderNode[];
-
-  const foldersForActiveVault = useMemo(
-    () => (vaultFolders ?? []).filter((folder) => folder.vaultId === activeVaultId),
-    [vaultFolders, activeVaultId],
-  );
-
-  const openCreateFolderModal = useCallback((parentId: string | null = null) => {
-    setCreateFolderParentId(parentId);
-    setIsCreateFolderOpen(true);
-  }, []);
-
-  const seedCredentialItem = async (key: Uint8Array, item: (typeof SEEDED_CREDENTIALS)[number]) => {
-    const encryptedPassword = await encryptCredentialSecret(item.plainPass || '', key);
-    await localDB.credentials.add({
-      type: item.type,
-      label: item.label,
-      username: item.username || '',
-      encryptedPassword,
-      host: item.host,
-      notes: item.notes,
-      updatedAt: Date.now() - item.offsetHours * 3600 * 1000,
-      lastModifiedBy: item.lastModifiedBy,
-      favorite: item.favorite,
-      deleted: false,
-      vaultId: item.vaultId,
-      folderId: item.folderId ?? null,
-      icon: item.icon,
-      iconType: item.icon ? ('preset' as const) : undefined,
-      tags: item.tags,
-    });
+    logAudit({ module: 'credentials', action: 'vault_seeded', details: { source: 'high_fidelity_screenshot_data' } });
+    return { credentials: seeded, categories: defaultCats };
   };
 
-  const syncFoldersFromServer = async (vaultId: string) => {
+  const hydrateVaultFromServer = async (key: Uint8Array) => {
+    setIsHydratingVault(true);
     try {
-      const { folders } = await credentialVaultService.listFolders(vaultId);
-      const existing = await localDB.folders.where('vaultId').equals(vaultId).toArray();
-      for (const folder of existing) {
-        await localDB.folders.delete(folder.id);
-      }
-      for (const folder of folders) {
-        await localDB.folders.put({
-          id: folder.id,
-          name: folder.name,
-          icon: resolveFolderIconId(folder.icon),
-          parentId: folder.parentId,
-          vaultId: folder.vaultId,
-          createdAt: new Date(folder.createdAt).getTime() || Date.now(),
-          sortOrder: folder.sortOrder,
-        });
-      }
-    } catch (err) {
-      console.error('Failed to sync vault folders from database', err);
-    }
-  };
+      let { folders, credentials: remoteCredentials, categories: remoteCategories } =
+        await fetchAndDecryptVaults(key);
 
-  const seedDefaultCredentials = async (key: Uint8Array) => {
-    if (!isDemoVaultMode) return;
-    try {
-      // Seed default categories
-      try {
-        const catCount = await localDB.categories.count();
-        if (catCount === 0) {
-          const defaultCats = [
-            { name: 'Kubernetes Nodes', slug: 'k8s', icon: 'server' },
-            { name: 'Slack Workspaces', slug: 'slack', icon: 'layers' }
-          ];
-          for (const cat of defaultCats) {
-            await localDB.categories.add(cat);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to seed default categories", err);
+      let personalFolder = await ensureDefaultPersonalVault(key, folders);
+      if (!folders.some((f) => f.id === personalFolder.id)) {
+        folders = [personalFolder, ...folders];
       }
 
-      const count = await localDB.credentials.count();
-      if (count === 0) {
-        for (const item of SEEDED_CREDENTIALS) {
-          await seedCredentialItem(key, item);
-        }
-        logAudit({ module: 'credentials', action: 'vault_seeded', details: { source: 'high_fidelity_screenshot_data' } });
-      } else {
-        for (const item of SEEDED_CREDENTIALS) {
-          const existing = await localDB.credentials.filter((c) => c.label === item.label).count();
-          if (existing > 0) continue;
-          await seedCredentialItem(key, item);
-        }
-      }
-    } catch (err) {
-      console.error("Failed to seed default database items", err);
-    }
-  };
+      let mergedCredentials = remoteCredentials;
+      let mergedCategories = remoteCategories;
 
-  const wipeLocalPersonalVaultCache = async (options?: { preserveMasterPassword?: boolean }) => {
-    const creds = await localDB.credentials.where('vaultId').equals('local').toArray();
-    for (const cred of creds) {
-      if (cred.id != null) await localDB.credentials.delete(Number(cred.id));
-    }
-    const folders = await localDB.folders.where('vaultId').equals('local').toArray();
-    for (const folder of folders) {
-      await localDB.folders.delete(folder.id);
-    }
-    setDerivedKey(null);
-    if (!options?.preserveMasterPassword) {
-      setMasterPassword(isDemoVaultMode ? 'password123' : '');
-      setConfirmPassword('');
-    }
-  };
-
-  const discoverVaultGateMode = useCallback(async () => {
-    if (!user) return;
-    setVaultGateMode('discovering');
-    try {
-      let initialized = false;
-      try {
-        const localPersonalCount = await localDB.credentials.where('vaultId').equals('local').count();
-        initialized = localPersonalCount > 0;
-      } catch (err) {
-        console.warn('Local vault cache probe failed', err);
+      if (mergedCredentials.length === 0) {
+        const seeded = await seedDefaultCredentials(key);
+        mergedCredentials = seeded.credentials;
+        mergedCategories = seeded.categories;
+        personalFolder = await persistFolder(personalFolder, mergedCredentials, mergedCategories, key);
+        folders = folders.map((f) => (f.id === personalFolder.id ? personalFolder : f));
       }
 
-      try {
-        const { initialized: serverInitialized } = await credentialVaultService.getPersonalVaultStatus();
-        if (!serverInitialized) {
-          if (initialized) {
-            try {
-              await credentialVaultService.initializePersonalVault();
-            } catch (promoteErr) {
-              console.warn('Could not promote local vault initialization flag to server', promoteErr);
-            }
-            setVaultGateMode('unlock');
-            setIsLocked(true);
-            return;
-          }
-          await wipeLocalPersonalVaultCache();
-          setVaultGateMode('setup');
-          setIsLocked(true);
-          return;
-        }
-        initialized = initialized || serverInitialized;
-      } catch (err) {
-        console.warn('Server vault status unavailable; falling back to local cache', err);
-      }
-
-      setVaultGateMode(initialized ? 'unlock' : 'setup');
-      setIsLocked(true);
-    } catch (err) {
-      console.error('Vault initialization discovery failed', err);
-      setVaultGateMode('setup');
-      setIsLocked(true);
+      setVaultFolders(folders);
+      setCredentials(mergedCredentials.sort((a, b) => b.updatedAt - a.updatedAt));
+      setCustomCategories(mergedCategories);
+      setIsLocked(false);
+      logAudit({ module: 'credentials', action: 'vault_unlocked', details: { vaultType: 'server_backed_zero_knowledge' } });
+      toast.success('Sovereign vault unlocked — data loaded from secure PostgreSQL storage.');
+    } finally {
+      setIsHydratingVault(false);
     }
-  }, [user, isDemoVaultMode]);
-
-  useEffect(() => {
-    void discoverVaultGateMode();
-  }, [discoverVaultGateMode]);
-
-  const completeVaultUnlock = async (key: Uint8Array) => {
-    setDerivedKey(normalizeDerivedKey(key));
-    if (isDemoVaultMode) {
-      await seedDefaultCredentials(key);
-    }
-    await syncFoldersFromServer('local');
-    setIsLocked(false);
-    logAudit({ module: 'credentials', action: 'vault_unlocked', details: { vaultType: 'personal_local' } });
-    toast.success('Sovereign Personal Vault Unlocked Successfully!');
   };
 
   const handleUnlock = async (e?: FormEvent) => {
     if (e) e.preventDefault();
     if (!masterPassword || !user) return;
     setIsUnlocking(true);
-    const passwordForDerivation = masterPassword;
     try {
-      const key = await deriveMasterKey(passwordForDerivation, `user-salt-${user.uid}`);
-      await completeVaultUnlock(key);
-    } catch (err) {
-      console.error('[GeistVault] Vault unlock failed:', err);
-      toast.error(vaultCryptoErrorMessage(err, 'Failed to unlock. Check your master password and try again.'));
+      const key = await deriveMasterKey(masterPassword, buildVaultKeySalt(user.uid));
+      setDerivedKey(key);
+      await hydrateVaultFromServer(key);
+    } catch (err: any) {
+      console.error('[GeistVault] unlock failed', err);
+      toast.error(err?.message || 'Failed to unlock. Verify your master password.');
+      setDerivedKey(null);
+      setIsLocked(true);
     } finally {
       setIsUnlocking(false);
     }
   };
 
-  const handleInitializeVault = async (e?: FormEvent) => {
-    if (e) e.preventDefault();
-    if (!masterPassword || !user) return;
-    if (masterPassword.length < 8) {
-      toast.error('Master password must be at least 8 characters.');
-      return;
-    }
-    if (masterPassword !== confirmPassword) {
-      toast.error('Passwords do not match. Please confirm your master password.');
+  const handleCreateVault = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!derivedKey || !newVaultName.trim()) {
+      toast.error('Vault name is required.');
       return;
     }
 
-    setIsUnlocking(true);
-    const passwordForDerivation = masterPassword;
+    const slug = slugifyVaultName(newVaultName);
+    if (vaultFolders.some((f) => f.slug === slug)) {
+      toast.error('A vault with this name already exists.');
+      return;
+    }
+
+    setIsSaving(true);
     try {
-      await wipeLocalPersonalVaultCache({ preserveMasterPassword: true });
-      const key = await deriveMasterKey(passwordForDerivation, `user-salt-${user.uid}`);
-      await credentialVaultService.initializePersonalVault();
-      await completeVaultUnlock(key);
-      setVaultGateMode('unlock');
-      logAudit({ module: 'credentials', action: 'vault_initialized', details: { vaultType: 'personal_local' } });
-      toast.success('Persönlicher Tresor initialisiert. Ihr Master-Passwort verlässt niemals diesen Browser.');
-    } catch (err) {
-      console.error('[GeistVault] Vault initialization failed:', err);
-      toast.error(vaultCryptoErrorMessage(err, 'Initialisierung fehlgeschlagen. Bitte erneut versuchen.'));
+      const sharedWith =
+        newVaultType === 'shared'
+          ? newVaultSharedEmails
+              .split(/[\s,;]+/)
+              .map((email) => email.trim().toLowerCase())
+              .filter(Boolean)
+          : undefined;
+
+      const created = await createVaultFolderOnServer({
+        name: newVaultName.trim(),
+        type: newVaultType,
+        emoji: newVaultType === 'shared' ? '👥' : '🔒',
+        sharedWith,
+        derivedKey,
+        slug,
+      });
+
+      setVaultFolders((prev) => [...prev, created]);
+      setActiveVaultId(created.slug);
+      setShowCreateVaultModal(false);
+      setNewVaultName('');
+      setNewVaultType('personal');
+      setNewVaultSharedEmails('');
+      toast.success(`Vault "${created.name}" created and persisted securely.`);
+      logAudit({
+        module: 'credentials',
+        action: 'vault_folder_created',
+        details: { name: created.name, type: created.type, slug: created.slug },
+      });
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to create vault folder.');
     } finally {
-      setIsUnlocking(false);
+      setIsSaving(false);
     }
   };
+
+  const handleCreateFolder = () => setShowCreateVaultModal(true);
 
   // Safe Decrypt helper passed to subcomponents using derivedKey
   const handleDecryptPassword = async (cred: Credential): Promise<string | null> => {
     if (!derivedKey) return null;
     try {
-      const provenance = user
-        ? buildVaultProvenance(user.uid, activeVaultId, String(cred.id ?? 'unknown'))
-        : undefined;
-      const plain = await decryptData(cred.encryptedPassword, derivedKey, provenance);
+      const plain = await decryptData(cred.encryptedPassword, derivedKey);
       return plain;
     } catch (err) {
       return null;
     }
   };
 
-  // Favorites toggle with direct IndexedDB write back
   const handleToggleFavorite = async (cred: Credential) => {
-    if (!cred.id) return;
+    if (!cred.id || !derivedKey) return;
     try {
       const newFav = !cred.favorite;
-      await localDB.credentials.update(Number(cred.id), { favorite: newFav });
-      toast.success(newFav ? "Added to Pinned Favorites" : "Removed from Favorites");
+      const nextCredentials = credentials.map((item) =>
+        item.id === cred.id ? { ...item, favorite: newFav } : item,
+      );
+      setCredentials(nextCredentials);
+      syncVaultSlug(resolveCredVaultId(cred), nextCredentials, customCategories, derivedKey);
+      toast.success(newFav ? 'Added to Pinned Favorites' : 'Removed from Favorites');
     } catch (err) {
-      toast.error("Could not toggle favorite status");
+      toast.error('Could not toggle favorite status');
     }
   };
-
-  // Category Modal States
-  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatIcon, setNewCatIcon] = useState('layers');
 
   const handleCreateCategory = async (e: FormEvent) => {
     e.preventDefault();
@@ -818,179 +490,31 @@ export default function CredentialVaultPage() {
     }
 
     const existingBuiltIn = slug === 'rdp' || slug === 'vpn' || slug === 'ssh' || slug === 'web' || slug === 'db' || slug === 'api' || slug === 'cloud' || slug === 'cert';
-    let existingCustom = false;
-    try {
-      const dbCats = await localDB.categories.toArray();
-      existingCustom = dbCats.some(c => c.slug === slug);
-    } catch (err) {
-      console.error(err);
-    }
+    const existingCustom = customCategories.some((c) => c.slug === slug);
 
     if (existingBuiltIn || existingCustom) {
       toast.error("A category with this label or system slug already exists.");
       return;
     }
 
+    if (!derivedKey) return;
+
     try {
-      await localDB.categories.add({
+      const nextCategory: CustomCategory = {
         name: newCatName.trim(),
         slug,
-        icon: newCatIcon
-      });
+        icon: newCatIcon,
+      };
+      const nextCategories = [...customCategories, nextCategory];
+      setCustomCategories(nextCategories);
+      syncVaultSlug(PERSONAL_VAULT_SLUG, credentials, nextCategories, derivedKey);
       toast.success(`Category "${newCatName.trim()}" created successfully!`);
       logAudit({ module: 'credentials', action: 'category_created', details: { name: newCatName.trim(), slug, icon: newCatIcon } });
       setNewCatName('');
       setNewCatIcon('layers');
       setShowAddCategoryModal(false);
     } catch (err) {
-      toast.error("Failed to write category to database storage.");
-    }
-  };
-
-  const handleImportCredentials = async (file: File, format: VaultImportFormat) => {
-    if (!derivedKey) {
-      toast.error(t('vault.import.unlockFirst', 'Unlock the vault before importing.'));
-      return;
-    }
-    setIsImporting(true);
-    try {
-      const content = await file.text();
-      const result = processVaultImport(file.name, content);
-      if (result.entries.length === 0) {
-        toast.error(result.warnings[0] || t('vault.import.noEntries', 'No importable entries found.'));
-        return;
-      }
-
-      let imported = 0;
-      for (const entry of result.entries) {
-        const encryptedPassword = await encryptData(entry.password, derivedKey);
-        await localDB.credentials.add({
-          type: entry.type,
-          label: entry.label,
-          username: entry.username,
-          encryptedPassword,
-          host: entry.host || '',
-          notes: entry.notes || '',
-          updatedAt: Date.now(),
-          lastModifiedBy: 'Import',
-          favorite: false,
-          deleted: false,
-          vaultId: activeVaultId,
-          tags: entry.tags,
-        });
-        imported++;
-      }
-
-      logAudit({
-        module: 'credentials',
-        action: 'credentials_imported',
-        details: { format, count: imported, vaultId: activeVaultId },
-      });
-      toast.success(
-        t('vault.import.success', 'Imported {{count}} credentials into vault.').replace('{{count}}', String(imported)),
-      );
-      setIsImportOpen(false);
-    } catch (err) {
-      toast.error(t('vault.import.failed', 'Import failed. Check file format.'));
-    } finally {
-      setIsImporting(false);
-    }
-  };
-
-  const handleCreateVaultInstance = async (e?: FormEvent) => {
-    if (e) e.preventDefault();
-    if (!newVaultName.trim()) {
-      toast.error(t('vault.create.nameRequired', 'Vault name is required'));
-      return;
-    }
-    setIsSubmittingVaultCreate(true);
-    try {
-      const { portfolio } = await credentialVaultService.createPortfolio({
-        name: newVaultName.trim(),
-        description: newVaultDescription.trim(),
-        emoji: newVaultEmoji.trim() || '🔒',
-        scope: newVaultScope,
-      });
-      await loadAccessiblePortfolios();
-      handleVaultTabChange(portfolio.id);
-      closeCreateVaultInstance();
-      toast.success(t('vault.create.success', 'New vault instance created'));
-      logAudit({ module: 'credentials', action: 'vault_instance_created', details: { vaultId: portfolio.id } });
-    } catch (err: any) {
-      toast.error(err.message || t('vault.create.failed', 'Failed to create vault'));
-    } finally {
-      setIsSubmittingVaultCreate(false);
-    }
-  };
-
-  const openVaultSharePanel = useCallback(async () => {
-    setVaultShareOpen(true);
-    setVaultDeleteOpen(false);
-    setIsCreatingVaultInstance(false);
-    try {
-      const agents = await userService.getAgents();
-      setWorkspaceUsers(agents);
-    } catch {
-      setWorkspaceUsers([]);
-    }
-  }, []);
-
-  const handleSaveVaultShare = async (assignments: VaultPortfolioAssignment[]) => {
-    if (!activePortfolio) return;
-    setIsSavingShare(true);
-    try {
-      await credentialVaultService.shareVault(activePortfolio.id, assignments);
-      await loadAccessiblePortfolios();
-      toast.success(t('vault.share.saved', 'Tresor-Zugriff gespeichert'));
-      setVaultShareOpen(false);
-      logAudit({
-        module: 'credentials',
-        action: 'vault_shared',
-        details: { vaultId: activePortfolio.id, memberCount: assignments.length },
-      });
-    } catch (err: any) {
-      toast.error(err.message || t('vault.share.failed', 'Freigabe konnte nicht gespeichert werden'));
-    } finally {
-      setIsSavingShare(false);
-    }
-  };
-
-  const purgeLocalVaultData = async (vaultId: string) => {
-    const creds = await localDB.credentials.where('vaultId').equals(vaultId).toArray();
-    for (const cred of creds) {
-      if (cred.id != null) await localDB.credentials.delete(Number(cred.id));
-    }
-    try {
-      const { folders } = await credentialVaultService.listFolders(vaultId);
-      for (const folder of folders) {
-        await credentialVaultService.deleteFolder(folder.id);
-      }
-    } catch (err) {
-      console.warn('Could not purge server vault folders', err);
-    }
-    const folders = await localDB.folders.where('vaultId').equals(vaultId).toArray();
-    for (const folder of folders) {
-      await localDB.folders.delete(folder.id);
-    }
-  };
-
-  const handleDeleteVaultInstance = async () => {
-    if (!activePortfolio || deleteConfirmName.trim() !== activePortfolio.name.trim()) return;
-    setIsDeletingVault(true);
-    try {
-      await credentialVaultService.deletePortfolio(activePortfolio.id);
-      await purgeLocalVaultData(activePortfolio.id);
-      await loadAccessiblePortfolios();
-      setVaultDeleteOpen(false);
-      setVaultShareOpen(false);
-      setDeleteConfirmName('');
-      handleVaultTabChange('local');
-      toast.success(t('vault.delete.success', 'Tresor wurde gelöscht'));
-      logAudit({ module: 'credentials', action: 'vault_instance_deleted', details: { vaultId: activePortfolio.id } });
-    } catch (err: any) {
-      toast.error(err.message || t('vault.delete.failed', 'Tresor konnte nicht gelöscht werden'));
-    } finally {
-      setIsDeletingVault(false);
+      toast.error("Failed to write category to secure vault storage.");
     }
   };
 
@@ -1066,22 +590,28 @@ export default function CredentialVaultPage() {
         }
       ];
 
+      const imported: Credential[] = [];
       for (const item of extraItems) {
         const encryptedPassword = await encryptData(item.plainPass, derivedKey);
-        await localDB.credentials.add({
+        imported.push({
+          id: crypto.randomUUID(),
           type: item.type,
           label: item.label,
           username: item.username,
           encryptedPassword,
           host: item.host,
           notes: item.notes,
-          updatedAt: Date.now() - (item.offsetHours * 3600 * 1000),
+          updatedAt: Date.now() - item.offsetHours * 3600 * 1000,
           lastModifiedBy: 'Operator',
           favorite: false,
           deleted: false,
-          vaultId: 'local'
+          vaultId: PERSONAL_VAULT_SLUG,
         });
       }
+
+      const nextCredentials = [...credentials, ...imported].sort((a, b) => b.updatedAt - a.updatedAt);
+      setCredentials(nextCredentials);
+      syncVaultSlug(PERSONAL_VAULT_SLUG, nextCredentials, customCategories, derivedKey);
 
       toast.success("Imported full high-fidelity dummy credentials dataset!");
       logAudit({ module: 'credentials', action: 'dummy_data_imported', details: { dataset: 'high_fidelity_infrastructure' } });
@@ -1090,51 +620,22 @@ export default function CredentialVaultPage() {
     }
   };
 
-  const autoUnlockAttemptedRef = useRef(false);
-
-  useEffect(() => {
-    if (!user || !isLocked || isUnlocking || autoUnlockAttemptedRef.current) return;
-    if (vaultGateMode !== 'unlock') return;
-    if (!isDemoVaultMode || !masterPassword) return;
-    autoUnlockAttemptedRef.current = true;
-    void handleUnlock();
-  }, [user, isLocked, isUnlocking, vaultGateMode, isDemoVaultMode, masterPassword]);
-
-  const resolveActiveKey = async (): Promise<Uint8Array | null> => {
-    const cached = normalizeDerivedKey(derivedKey);
-    if (cached) return cached;
-    if (!user || !masterPassword) return null;
-    const key = await deriveMasterKey(masterPassword, `user-salt-${user.uid}`);
-    const normalized = normalizeDerivedKey(key);
-    setDerivedKey(normalized);
-    return normalized;
-  };
-
   // Create new credentials
   const handleCreateEntry = async (e: FormEvent) => {
     e.preventDefault();
-    if (!newEntry.label?.trim()) {
-      toast.error('Asset name is required.');
-      return;
-    }
-    if (!entryHasShareableSecret(newEntry, rawPassword)) {
-      toast.error('Provide at least a username, password, host, notes, or TOTP secret.');
+    if (!newEntry.label || !newEntry.username || !rawPassword || !derivedKey) {
+      toast.error("Required fields missing. Ensure label, username and password are provided.");
       return;
     }
 
     setIsSaving(true);
     try {
-      const activeKey = await resolveActiveKey();
-      if (!activeKey) {
-        toast.error('Unlock the vault before saving entries.');
-        return;
-      }
-
-      const encryptedPassword = await encryptCredentialSecret(rawPassword, activeKey);
+      const encryptedPassword = await encryptData(rawPassword, derivedKey);
       const toAdd: Credential = {
-        type: newEntry.type as Credential['type'],
-        label: newEntry.label.trim(),
-        username: newEntry.username?.trim() || '',
+        id: crypto.randomUUID(),
+        type: newEntry.type as any,
+        label: newEntry.label || '',
+        username: newEntry.username || '',
         encryptedPassword,
         host: newEntry.host || '',
         notes: newEntry.notes || '',
@@ -1142,15 +643,16 @@ export default function CredentialVaultPage() {
         lastModifiedBy: 'You',
         favorite: false,
         deleted: false,
-        vaultId: activeVaultId === 'local' ? (newEntry.vaultId || 'local') : activeVaultId,
-        folderId: activeFolderId,
+        vaultId: activeVaultId === PERSONAL_VAULT_SLUG ? (newEntry.vaultId || PERSONAL_VAULT_SLUG) : activeVaultId,
+
+        // Enterprise metadata
         owner: newEntry.owner || 'You',
         team: newEntry.team || 'Platform Ops',
         department: newEntry.department || 'Infrastructure',
-        linkedCompany: newEntry.linkedCompany || '',
-        linkedAsset: newEntry.linkedAsset || '',
-        linkedTicket: newEntry.linkedTicket || '',
-        tags: newEntry.tags || [],
+        linkedCompany: newEntry.linkedCompany || 'Acme Global',
+        linkedAsset: newEntry.linkedAsset || 'Server Cluster',
+        linkedTicket: newEntry.linkedTicket || 'Ticket #442',
+        tags: newEntry.tags || ['Production'],
         expirationPolicy: newEntry.expirationPolicy || 'Never',
         rotationPolicy: newEntry.rotationPolicy || 'Manual',
         totpSecret: newEntry.totpSecret || '',
@@ -1164,13 +666,15 @@ export default function CredentialVaultPage() {
           jitAccess: false,
           requireMfa: false,
           disableExport: false,
-          disableCopy: false,
-        },
+          disableCopy: false
+        }
       };
 
-      await localDB.credentials.add(toAdd);
+      const nextCredentials = [toAdd, ...credentials].sort((a, b) => b.updatedAt - a.updatedAt);
+      setCredentials(nextCredentials);
+      syncVaultSlug(resolveCredVaultId(toAdd), nextCredentials, customCategories, derivedKey);
       logAudit({ module: 'credentials', action: 'credential_created', details: { label: toAdd.label, type: toAdd.type } });
-      toast.success("Secret encrypted and captured in enterprise secure vault!");
+      toast.success("Secret encrypted and persisted to sovereign PostgreSQL vault!");
       
       // Reset
       setNewEntry({
@@ -1208,10 +712,9 @@ export default function CredentialVaultPage() {
       });
       setRawPassword('');
       setWizardStep(1);
-      setIsCreatingEntry(false);
+      setShowAddModal(false);
     } catch (err) {
-      console.error('[GeistVault] Failed to create credential entry:', err);
-      toast.error(err instanceof Error ? err.message : 'Failed to commit cryptography record');
+      toast.error("Failed to commit cryptography record");
     } finally {
       setIsSaving(false);
     }
@@ -1220,30 +723,31 @@ export default function CredentialVaultPage() {
   // Modify / Save edited credentials
   const handleSaveEdit = async (e: FormEvent) => {
     e.preventDefault();
-    if (!editingCred || !editingCred.id) return;
+    if (!editingCred || !editingCred.id || !derivedKey) return;
     setIsSaving(true);
     try {
-      const activeKey = await resolveActiveKey();
-      if (!activeKey) {
-        toast.error('Unlock the vault before saving changes.');
-        return;
-      }
-
       let encryptedPassword = editingCred.encryptedPassword;
       if (rawPassword) {
-        encryptedPassword = await encryptData(rawPassword, activeKey);
+        encryptedPassword = await encryptData(rawPassword, derivedKey);
       }
 
-      await localDB.credentials.update(Number(editingCred.id), {
-        label: editingCred.label,
-        type: editingCred.type,
-        username: editingCred.username,
-        host: editingCred.host,
-        notes: editingCred.notes,
-        encryptedPassword,
-        updatedAt: Date.now(),
-        lastModifiedBy: 'You'
-      });
+      const nextCredentials = credentials.map((item) =>
+        item.id === editingCred.id
+          ? {
+              ...item,
+              label: editingCred.label,
+              type: editingCred.type,
+              username: editingCred.username,
+              host: editingCred.host,
+              notes: editingCred.notes,
+              encryptedPassword,
+              updatedAt: Date.now(),
+              lastModifiedBy: 'You',
+            }
+          : item,
+      );
+      setCredentials(nextCredentials);
+      syncVaultSlug(resolveCredVaultId(editingCred), nextCredentials, customCategories, derivedKey);
 
       toast.success("Credential updated successfully");
       setEditingCred(null);
@@ -1257,17 +761,24 @@ export default function CredentialVaultPage() {
 
   // Soft Deletion & Hard Deletion helper
   const handleDeleteEntry = async (id: number | string) => {
+    if (!derivedKey) return;
     try {
+      let nextCredentials: Credential[];
       if (selectedView === 'trash') {
-        // Permanent deletion from Dexie
-        await localDB.credentials.delete(Number(id));
-        toast.success("Credential permanently erased from your hard disk.");
+        nextCredentials = credentials.filter((item) => item.id !== id);
+        toast.success("Credential permanently erased from secure vault storage.");
         if (selectedCredential && selectedCredential.id === id) setSelectedCredential(null);
       } else {
-        // Soft move to Trash
-        await localDB.credentials.update(Number(id), { deleted: true });
+        nextCredentials = credentials.map((item) =>
+          item.id === id ? { ...item, deleted: true } : item,
+        );
         toast.success("Secret moved to Trash folder.");
         if (selectedCredential && selectedCredential.id === id) setSelectedCredential(null);
+      }
+      setCredentials(nextCredentials);
+      const changed = credentials.find((item) => item.id === id);
+      if (changed) {
+        syncVaultSlug(resolveCredVaultId(changed), nextCredentials, customCategories, derivedKey);
       }
     } catch (err) {
       toast.error("Operation failed");
@@ -1275,8 +786,16 @@ export default function CredentialVaultPage() {
   };
 
   const handleRestoreEntry = async (id: number | string) => {
+    if (!derivedKey) return;
     try {
-      await localDB.credentials.update(Number(id), { deleted: false });
+      const nextCredentials = credentials.map((item) =>
+        item.id === id ? { ...item, deleted: false } : item,
+      );
+      setCredentials(nextCredentials);
+      const changed = credentials.find((item) => item.id === id);
+      if (changed) {
+        syncVaultSlug(resolveCredVaultId(changed), nextCredentials, customCategories, derivedKey);
+      }
       toast.success("Secret restored to storage center.");
     } catch (err) {
       toast.error("Could not restore entry");
@@ -1284,99 +803,8 @@ export default function CredentialVaultPage() {
   };
 
   // Filter computations (fully reactive based on active states)
-  const nonDeletedItems = credentialsQuery.filter(c => !c.deleted);
-  const trashItems = credentialsQuery.filter(c => c.deleted);
-
-  const activeVaultDefinition = useMemo(
-    () => allVaultDefinitions.find((v) => v.id === activeVaultId),
-    [allVaultDefinitions, activeVaultId],
-  );
-  const allowedVaultScope = activeVaultDefinition?.scope ?? 'personal';
-
-  const vaultScopedItems = useMemo(
-    () => nonDeletedItems.filter((c) => resolveCredVaultId(c) === activeVaultId),
-    [nonDeletedItems, activeVaultId],
-  );
-
-  const vaultScopedTrash = useMemo(
-    () => trashItems.filter((c) => resolveCredVaultId(c) === activeVaultId),
-    [trashItems, activeVaultId],
-  );
-
-  const folderCounts = useMemo(() => {
-    const counts: Record<string, number> = {};
-    for (const cred of vaultScopedItems) {
-      const folderId = resolveCredFolderId(cred);
-      if (folderId) {
-        counts[folderId] = (counts[folderId] ?? 0) + 1;
-      }
-    }
-    return counts;
-  }, [vaultScopedItems]);
-
-  const handleVaultTabChange = useCallback(
-    (id: string) => {
-      const vault = allVaultDefinitions.find((v) => v.id === id);
-      setActiveVaultId(id);
-      setActiveVaultScope(vault?.scope ?? 'personal');
-      setActiveFolderId(null);
-      setIsCreatingVaultInstance(false);
-      setVaultShareOpen(false);
-      setVaultDeleteOpen(false);
-      setAccessCategory('all');
-      setSelectedType('all');
-      setSmartFilter(null);
-      setSelectedView('all');
-      setIsCreatingEntry(false);
-    },
-    [allVaultDefinitions],
-  );
-
-  const openEditEntry = useCallback((cred: Credential) => {
-    setEditingCred({ ...cred });
-    setRawPassword('');
-    setSelectedCredential(null);
-    setIsCreatingEntry(false);
-  }, []);
-
-  useEffect(() => {
-    if (!isLocked && user && activeVaultId) {
-      void syncFoldersFromServer(activeVaultId);
-    }
-  }, [isLocked, user, activeVaultId]);
-
-  const handleCreateFolder = async (payload: {
-    name: string;
-    icon: VaultFolderIconId;
-    parentId: string | null;
-  }) => {
-    try {
-      const { folder } = await credentialVaultService.createFolder({
-        name: payload.name,
-        icon: payload.icon,
-        parentId: payload.parentId,
-        vaultId: activeVaultId,
-      });
-      await localDB.folders.put({
-        id: folder.id,
-        name: folder.name,
-        icon: resolveFolderIconId(folder.icon),
-        parentId: folder.parentId,
-        vaultId: folder.vaultId,
-        createdAt: new Date(folder.createdAt).getTime() || Date.now(),
-        sortOrder: folder.sortOrder,
-      });
-      logAudit({
-        module: 'credentials',
-        action: 'folder_created',
-        details: { name: folder.name, vaultId: folder.vaultId, parentId: folder.parentId },
-      });
-      toast.success(`Ordner „${folder.name}“ wurde angelegt.`);
-      setActiveFolderId(folder.id);
-    } catch (err: any) {
-      toast.error(err?.message || 'Ordner konnte nicht angelegt werden.');
-    }
-  };
+  const nonDeletedItems = credentials.filter(c => !c.deleted);
+  const trashItems = credentials.filter(c => c.deleted);
 
   // Compute stats for overview cards
   const totalEntries = nonDeletedItems.length;
@@ -1387,33 +815,34 @@ export default function CredentialVaultPage() {
   const recentCount = Math.min(6, nonDeletedItems.length);
 
   const getFilteredCredentials = () => {
-    let list = [...credentialsQuery];
+    let list = [...credentials];
 
-    if (smartFilter === 'archived') {
-      list = vaultScopedTrash;
+    // Smart filter / view modes
+    const effectiveView = smartFilter === 'archived' ? 'trash' : smartFilter === 'pinned' || smartFilter === 'favorites' ? 'favorites' : smartFilter === 'recently' ? 'recently' : selectedView;
+
+    if (effectiveView === 'trash' || smartFilter === 'archived') {
+      list = list.filter((c) => c.deleted);
     } else {
-      list = [...vaultScopedItems];
+      list = list.filter((c) => !c.deleted);
 
-      if (smartFilter === 'favorites' || smartFilter === 'pinned') {
+      if (effectiveView === 'favorites' || smartFilter === 'pinned' || smartFilter === 'favorites') {
         list = list.filter((c) => c.favorite);
-      } else if (smartFilter === 'recently') {
+      } else if (effectiveView === 'recently' || smartFilter === 'recently') {
         list = list.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 12);
-      } else if (smartFilter === 'expiring') {
+      } else if (selectedView === 'shared') {
+        list = list.filter((c) => c.vaultId === 'shared');
+      }
+
+      if (smartFilter === 'expiring') {
         list = list.filter((c) => isExpiringCred(c));
       } else if (smartFilter === 'alerts') {
         list = list.filter((c) => isWeakCred(c));
-      } else if (selectedView === 'favorites') {
-        list = list.filter((c) => c.favorite);
-      } else if (selectedView === 'recently') {
-        list = list.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 12);
-      } else if (selectedView === 'shared') {
-        list = list.filter((c) => c.vaultId === 'shared' || resolveCredVaultId(c) === 'shared-company');
       }
 
-      list = list.filter(
-        (c) => resolveVaultScope(resolveCredVaultId(c), allVaultDefinitions) === activeVaultScope,
-      );
+      // Vault scope
+      list = list.filter((c) => resolveCredVaultId(c) === activeVaultId);
 
+      // Access category
       if (accessCategory !== 'all') {
         const cat = ACCESS_CATEGORIES.find((x) => x.id === accessCategory);
         if (cat) {
@@ -1422,12 +851,9 @@ export default function CredentialVaultPage() {
       } else if (selectedType !== 'all') {
         list = list.filter((c) => c.type === selectedType);
       }
-
-      if (activeFolderId) {
-        list = list.filter((c) => resolveCredFolderId(c) === activeFolderId);
-      }
     }
 
+    // Filter by global text search query
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter(c => 
@@ -1451,111 +877,60 @@ export default function CredentialVaultPage() {
 
   const currentList = getFilteredCredentials();
 
-  const vaultCounts = allVaultDefinitions.reduce<Record<string, number>>((acc, v) => {
-    acc[v.id] = nonDeletedItems.filter((c) => resolveCredVaultId(c) === v.id).length;
+  const vaultCounts = useMemo(() => {
+    const acc: Record<string, number> = {};
+    for (const v of VAULT_DEFINITIONS) {
+      acc[v.id] = nonDeletedItems.filter((c) => resolveCredVaultId(c) === v.id).length;
+    }
+    for (const folder of vaultFolders) {
+      acc[folder.slug] = nonDeletedItems.filter((c) => resolveCredVaultId(c) === folder.slug).length;
+    }
     return acc;
-  }, {});
+  }, [nonDeletedItems, vaultFolders]);
 
-  const scopeCounts = (['personal', 'department', 'team', 'global'] as VaultAuthorityScope[]).reduce<
-    Partial<Record<VaultAuthorityScope, number>>
-  >((acc, scope) => {
-    acc[scope] = vaultScopedItems.filter(
-      (c) => resolveVaultScope(resolveCredVaultId(c), allVaultDefinitions) === scope,
-    ).length;
-    return acc;
-  }, {});
+  const dynamicSidebarVaults = useMemo(
+    () =>
+      vaultFolders
+        .filter((folder) => !VAULT_DEFINITIONS.some((v) => v.id === folder.slug))
+        .map((folder) => ({
+          id: folder.slug,
+          emoji: folder.emoji || (folder.type === 'shared' ? '👥' : '🔒'),
+          name: folder.name,
+          permission: folder.layout?.permission,
+        })),
+    [vaultFolders],
+  );
 
   const categoryCounts = ACCESS_CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
-    acc[cat.id] = vaultScopedItems.filter((c) => cat.types.includes(c.type)).length;
+    acc[cat.id] = nonDeletedItems.filter((c) => cat.types.includes(c.type)).length;
     return acc;
   }, {});
 
-  const vaultPinnedCount = vaultScopedItems.filter((c) => c.favorite).length;
-  const vaultExpiringCount = vaultScopedItems.filter((c) => isExpiringCred(c)).length;
-  const vaultWeakCount = vaultScopedItems.filter((c) => isWeakCred(c)).length;
-  const vaultRecentCount = Math.min(12, vaultScopedItems.length);
-
   const smartCounts: Partial<Record<VaultSmartFilter, number>> = {
-    favorites: vaultPinnedCount,
-    pinned: vaultPinnedCount,
-    recently: vaultRecentCount,
-    expiring: vaultExpiringCount,
-    alerts: vaultWeakCount,
-    archived: vaultScopedTrash.length,
+    favorites: pinnedCount,
+    pinned: pinnedCount,
+    recently: recentCount,
+    expiring: expiringCount,
+    alerts: weakCount,
+    archived: trashItems.length,
   };
-
-  useEffect(() => {
-    if (accessCategory !== 'all' && (categoryCounts[accessCategory] ?? 0) === 0) {
-      setAccessCategory('all');
-    }
-  }, [accessCategory, categoryCounts]);
-
-  useEffect(() => {
-    if (smartFilter && (smartCounts[smartFilter] ?? 0) === 0) {
-      setSmartFilter(null);
-      setSelectedView('all');
-    }
-  }, [smartFilter, smartCounts]);
-
-  useEffect(() => {
-    if (activeFolderId && !foldersForActiveVault.some((folder) => folder.id === activeFolderId)) {
-      setActiveFolderId(null);
-    }
-  }, [activeFolderId, foldersForActiveVault]);
 
   const healthScore = Math.max(0, 100 - Math.min(40, weakCount * 12) - Math.min(20, expiringCount * 8));
   const securityScore = Math.min(99, healthScore + 8);
   const strengthPercent = Math.round(((nonDeletedItems.length - weakCount) / Math.max(nonDeletedItems.length, 1)) * 100);
 
   const openNewAsset = (type: string) => {
-    setNewEntry((prev) => ({ ...prev, type, vaultId: activeVaultId === 'local' ? 'local' : activeVaultId }));
-    setIsCreatingEntry(true);
+    setNewEntry((prev) => ({ ...prev, type, vaultId: activeVaultId === PERSONAL_VAULT_SLUG ? PERSONAL_VAULT_SLUG : activeVaultId }));
+    setShowAddModal(true);
   };
 
-  const closeCreateEntry = () => {
-    setIsCreatingEntry(false);
-    setWizardStep(1);
-  };
-
-  const handleSaveTemporaryDraft = () => {
-    toast.success('Draft saved in browser memory.');
-    closeCreateEntry();
-  };
-
-  // Sync mechanisms: legacy firestore placeholder (superseded by portfolio API)
-  useEffect(() => {
-    if (!user) return;
-    const qCol = query(collection(db, 'vaults'));
-    const unsub = onSnapshot(qCol, () => {
-      // Portfolio assignments are loaded via credentialVaultService.listMyPortfolios()
-    });
-    return unsub;
-  }, [user]);
-
-  const handleConflictResolution = async (choice: 'sync' | 'overwrite') => {
+  const handleConflictResolution = async (_choice: 'sync' | 'overwrite') => {
     toast.success("Conflict resolved successfully.");
     setConflictItem(null);
   };
 
   // Locked display render
   if (isLocked) {
-    if (vaultGateMode === 'discovering') {
-      return (
-        <div className="flex flex-col items-center justify-center min-h-[70vh] p-8 select-none">
-          <motion.div
-            initial={{ scale: 0.95, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            className="w-full max-w-[460px] bg-white border border-[#DADCE0] rounded-3xl p-8 shadow-lg flex flex-col items-center text-center space-y-4"
-          >
-            <RefreshCw className="w-8 h-8 text-[#1A73E8] animate-spin" />
-            <p className="text-sm font-semibold text-slate-500">Tresor-Status wird ermittelt…</p>
-          </motion.div>
-        </div>
-      );
-    }
-
-    const isSetupMode = vaultGateMode === 'setup';
-
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh] p-8 select-none">
         <motion.div 
@@ -1568,31 +943,15 @@ export default function CredentialVaultPage() {
           </div>
 
           <div className="space-y-1">
-            <h2 className="text-xl font-bold text-slate-800 tracking-tight">
-              {isSetupMode
-                ? t('vault.initTitle', 'Persönlichen Tresor initialisieren / Setup Your Master Password')
-                : t('vault.lockTitle', 'Unlock GeistVault Enterprise')}
-            </h2>
+            <h2 className="text-xl font-bold text-slate-800 tracking-tight">{t('vault.lockTitle', 'Unlock GeistVault Enterprise')}</h2>
             <p className="text-[11px] text-slate-400 max-w-sm font-semibold leading-relaxed">
-              {isSetupMode
-                ? t(
-                    'vault.initSubtitle',
-                    'Zero-Knowledge: Wählen Sie ein neues Master-Passwort. Es wird nur lokal per Argon2id abgeleitet und niemals an den Server übertragen.',
-                  )
-                : t(
-                    'vault.lockSubtitle',
-                    'Zero-Knowledge Architecture: Keys decrypted locally in-browser using Argon2id. Central cloud engines never receive your private secrets payload.',
-                  )}
+              {t('vault.lockSubtitle', 'Zero-Knowledge Architecture: credentials are encrypted locally with Argon2id + AES-GCM, then persisted as ciphertext in PostgreSQL. Clearing browser cache does not erase your vault.')}
             </p>
           </div>
 
-          <form onSubmit={isSetupMode ? handleInitializeVault : handleUnlock} className="w-full space-y-4">
+          <form onSubmit={handleUnlock} className="w-full space-y-4">
             <div className="space-y-1 text-left">
-              <label className="text-[10px] font-black text-[#5F6368] uppercase tracking-widest pl-1">
-                {isSetupMode
-                  ? t('vault.masterPasswordSetup', 'Master-Passwort festlegen')
-                  : t('vault.masterPassword', 'Master-Passwort eingeben')}
-              </label>
+              <label className="text-[10px] font-black text-[#5F6368] uppercase tracking-widest pl-1">{t('vault.masterPassword', 'Master Password')}</label>
               <Input 
                 type="password"
                 placeholder={t('vault.masterPasswordPlaceholder', 'Enter master password...')}
@@ -1601,25 +960,9 @@ export default function CredentialVaultPage() {
                 className="bg-white border-[#DADCE0] focus:ring-1 focus:ring-[#1A73E8] rounded-xl text-sm h-11 px-4 text-center placeholder-gray-300"
                 autoFocus
               />
-              {isSetupMode ? (
-                <div className="space-y-1 text-left pt-2">
-                  <label className="text-[10px] font-black text-[#5F6368] uppercase tracking-widest pl-1">
-                    {t('vault.confirmMasterPassword', 'Master-Passwort bestätigen')}
-                  </label>
-                  <Input
-                    type="password"
-                    placeholder={t('vault.confirmMasterPasswordPlaceholder', 'Confirm master password...')}
-                    value={confirmPassword}
-                    onChange={(e) => setConfirmPassword(e.target.value)}
-                    className="bg-white border-[#DADCE0] focus:ring-1 focus:ring-[#1A73E8] rounded-xl text-sm h-11 px-4 text-center placeholder-gray-300"
-                  />
-                </div>
-              ) : null}
-              {!isSetupMode && isDemoVaultMode ? (
-                <p className="text-[10px] text-center text-slate-400 mt-1 select-none font-semibold">
-                  {t('vault.passwordTip', 'Tip: Default password is set to password123')}
-                </p>
-              ) : null}
+              <p className="text-[10px] text-center text-slate-400 mt-1 select-none font-semibold">
+                {t('vault.passwordTip', 'Tip: Default password is set to password123')}
+              </p>
             </div>
             
             <Button 
@@ -1627,11 +970,7 @@ export default function CredentialVaultPage() {
               disabled={isUnlocking}
               className="w-full bg-[#1A73E8] hover:bg-[#155fc0] text-white font-semibold text-xs h-11 rounded-xl shadow-md transition-all flex items-center justify-center gap-1"
             >
-              {isUnlocking
-                ? t('vault.derivingKeys', 'Deriving keys locally...')
-                : isSetupMode
-                  ? t('vault.initializeButton', 'Tresor initialisieren')
-                  : t('vault.unlockButton', 'Unlock Vault Node')}
+              {isUnlocking || isHydratingVault ? t('vault.derivingKeys', 'Deriving keys locally...') : t('vault.unlockButton', 'Unlock Vault Node')}
             </Button>
           </form> 
         </motion.div>
@@ -1658,88 +997,20 @@ export default function CredentialVaultPage() {
       ) : (
         <div className="flex flex-1 min-h-0 w-full overflow-y-auto">
           <VaultLeftSidebar
-            activeVaultScope={activeVaultScope}
+            activeVaultId={activeVaultId}
+            onVaultChange={(id) => { setActiveVaultId(id); setSmartFilter(null); }}
+            vaultCounts={vaultCounts}
+            dynamicVaults={dynamicSidebarVaults}
+            onCreateVault={handleCreateFolder}
             selectedCategory={accessCategory}
-            onCategoryChange={(id) => {
-              setAccessCategory(id);
-              setSelectedType('all');
-              setIsCreatingEntry(false);
-            }}
+            onCategoryChange={(id) => { setAccessCategory(id); setSelectedType('all'); setSmartFilter(null); }}
             categoryCounts={categoryCounts}
-            onVaultScopeChange={(scope) => {
-              setActiveVaultScope(scope);
-              setIsCreatingEntry(false);
-            }}
-            scopeCounts={scopeCounts}
-            allowedVaultScope={allowedVaultScope}
             smartFilter={smartFilter}
-            onSmartFilterChange={(f) => {
-              setSmartFilter(f);
-              if (f === 'archived') setSelectedView('trash');
-              else setSelectedView('all');
-              setIsCreatingEntry(false);
-            }}
+            onSmartFilterChange={(f) => { setSmartFilter(f); if (f === 'archived') setSelectedView('trash'); else setSelectedView('all'); }}
             smartCounts={smartCounts}
-            folders={foldersForActiveVault}
-            vaultId={activeVaultId}
-            activeFolderId={activeFolderId}
-            onFolderSelect={setActiveFolderId}
-            onCreateFolderIn={openCreateFolderModal}
-            folderCounts={folderCounts}
           />
 
-          <main className="flex-1 min-w-0 w-full flex flex-col min-h-0">
-            {isCreatingEntry ? (
-              <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
-                <div className="px-4 sm:px-6 pt-4 pb-3 border-b border-slate-100 bg-white shrink-0">
-                  <button
-                    type="button"
-                    onClick={closeCreateEntry}
-                    className="flex items-center gap-1 text-slate-500 hover:text-slate-800 font-extrabold text-xs cursor-pointer transition-colors select-none group"
-                  >
-                    <ArrowLeft className="w-3.5 h-3.5 text-slate-450 group-hover:text-slate-650 transition-colors" />
-                    {t('vault.backToAssets', 'Back to vault assets')}
-                  </button>
-                </div>
-                <VaultEntryCreateWorkspace
-                  newEntry={newEntry}
-                  setNewEntry={setNewEntry}
-                  wizardStep={wizardStep}
-                  setWizardStep={setWizardStep}
-                  rawPassword={rawPassword}
-                  setRawPassword={setRawPassword}
-                  tagInput={tagInput}
-                  setTagInput={setTagInput}
-                  handleAddNewTag={handleAddNewTag}
-                  handleRemoveExistingTag={handleRemoveExistingTag}
-                  revealPassword={revealPassword}
-                  setRevealPassword={setRevealPassword}
-                  genLength={genLength}
-                  setGenLength={setGenLength}
-                  genUpper={genUpper}
-                  setGenUpper={setGenUpper}
-                  genLower={genLower}
-                  setGenLower={setGenLower}
-                  genNumbers={genNumbers}
-                  setGenNumbers={setGenNumbers}
-                  genSymbols={genSymbols}
-                  setGenSymbols={setGenSymbols}
-                  genExclude={genExclude}
-                  setGenExclude={setGenExclude}
-                  showGenOptions={showGenOptions}
-                  setShowGenOptions={setShowGenOptions}
-                  draggingFile={draggingFile}
-                  setDraggingFile={setDraggingFile}
-                  handleGeneratePasswordSubmit={handleGeneratePasswordSubmit}
-                  getPasswordStrengthScore={getPasswordStrengthScore}
-                  isSaving={isSaving}
-                  onSubmit={handleCreateEntry}
-                  onClose={closeCreateEntry}
-                  onSaveDraft={handleSaveTemporaryDraft}
-                  className="flex-1 min-h-0"
-                />
-              </div>
-            ) : (
+          <main className="flex-1 min-w-0 w-full">
             <div className="p-6 space-y-5 w-full min-w-0">
               <div className="flex items-start justify-between gap-4">
                 <VaultPageHeader />
@@ -1750,75 +1021,9 @@ export default function CredentialVaultPage() {
                   <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl text-xs" onClick={() => setVaultViewMode('emergency')}>
                     {t('vault.breakGlass', 'Break Glass Emergency')}
                   </Button>
-                  <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl text-xs" onClick={openCreateVaultInstance}>
-                    {t('vault.createVault', 'New Vault')}
-                  </Button>
-                  <VaultFabMenu onNewAsset={openNewAsset} onImport={() => setIsImportOpen(true)} />
+                  <VaultFabMenu onNewAsset={openNewAsset} onImport={handleImportDummyData} />
                 </div>
               </div>
-
-              <VaultTopTabBar
-                vaultDefinitions={allVaultDefinitions}
-                activeVaultId={activeVaultId}
-                onVaultChange={handleVaultTabChange}
-                vaultCounts={vaultCounts}
-              />
-
-              {isVaultOwner && activePortfolio ? (
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 rounded-xl text-[11px] font-semibold"
-                    onClick={openVaultSharePanel}
-                  >
-                    👥 {t('vault.share.button', 'Teilen')}
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="h-8 rounded-xl text-[11px] font-semibold border-red-200 text-red-600 hover:bg-red-50"
-                    onClick={() => {
-                      setVaultDeleteOpen(true);
-                      setVaultShareOpen(false);
-                      setDeleteConfirmName('');
-                    }}
-                  >
-                    🗑️ {t('vault.delete.button', 'Tresor löschen')}
-                  </Button>
-                </div>
-              ) : null}
-
-              {vaultDeleteOpen && activePortfolio ? (
-                <VaultDeleteConfirmBanner
-                  vaultName={activePortfolio.name}
-                  confirmText={deleteConfirmName}
-                  onConfirmTextChange={setDeleteConfirmName}
-                  isDeleting={isDeletingVault}
-                  onConfirm={handleDeleteVaultInstance}
-                  onCancel={() => {
-                    setVaultDeleteOpen(false);
-                    setDeleteConfirmName('');
-                  }}
-                />
-              ) : null}
-
-              {vaultShareOpen && activePortfolio ? (
-                <VaultShareAccessPanel
-                  portfolio={activePortfolio}
-                  users={workspaceUsers}
-                  isSaving={isSavingShare}
-                  onSaveAssignments={handleSaveVaultShare}
-                  onClose={() => setVaultShareOpen(false)}
-                  onRequestDelete={() => {
-                    setVaultShareOpen(false);
-                    setVaultDeleteOpen(true);
-                    setDeleteConfirmName('');
-                  }}
-                />
-              ) : null}
 
               <VaultKpiCards
                 totalAssets={totalEntries}
@@ -1849,87 +1054,31 @@ export default function CredentialVaultPage() {
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <p className="text-[11px] text-slate-400 font-medium">
                   {t('vault.showingEntries', 'Showing {{count}} entries').replace('{{count}}', String(currentList.length))}
-                  {activeFolderId
-                    ? ` · ${foldersForActiveVault.find((folder) => folder.id === activeFolderId)?.name ?? 'Ordner'}`
-                    : ''}
                 </p>
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => openCreateFolderModal(activeFolderId)}
-                    className="h-8 rounded-xl text-[11px] font-semibold border-slate-200"
-                  >
-                    📁 Ordner erstellen
-                  </Button>
-                  <VaultViewModeSelector value={assetViewMode} onChange={setAssetViewMode} />
-                </div>
+                <VaultViewModeSelector value={assetViewMode} onChange={setAssetViewMode} />
               </div>
 
-              <VaultFolderBreadcrumbStrip
-                folders={foldersForActiveVault}
-                vaultId={activeVaultId}
-                activeFolderId={activeFolderId}
-                onFolderSelect={setActiveFolderId}
+              <VaultAssetViews
+                assets={currentList}
+                viewMode={assetViewMode}
+                activeVaultId={activeVaultId}
+                onSelect={(cred) => setSelectedCredential(cred as Credential)}
+                onEdit={(cred) => setEditingCred(cred as Credential)}
+                onToggleFavorite={handleToggleFavorite}
+                onDecryptPassword={handleDecryptPassword}
+                onShare={() => toast.success(t('vault.shareAuthorized', 'Secure sharing protocols authorized.'))}
               />
-
-              {isCreatingVaultInstance ? (
-                <VaultCreateInstancePanel
-                  name={newVaultName}
-                  description={newVaultDescription}
-                  scope={newVaultScope}
-                  emoji={newVaultEmoji}
-                  onNameChange={setNewVaultName}
-                  onDescriptionChange={setNewVaultDescription}
-                  onScopeChange={setNewVaultScope}
-                  onEmojiChange={setNewVaultEmoji}
-                  isSubmitting={isSubmittingVaultCreate}
-                  onSubmit={handleCreateVaultInstance}
-                  onCancel={closeCreateVaultInstance}
-                />
-              ) : (
-                <VaultAssetViews
-                  assets={currentList}
-                  viewMode={assetViewMode}
-                  activeVaultId={activeVaultId}
-                  onSelect={(cred) => setSelectedCredential(cred as Credential)}
-                  onEdit={(cred) => openEditEntry(cred as Credential)}
-                  onToggleFavorite={handleToggleFavorite}
-                  onDecryptPassword={handleDecryptPassword}
-                  onShare={() => toast.success(t('vault.shareAuthorized', 'Secure sharing protocols authorized.'))}
-                />
-              )}
             </div>
-            )}
           </main>
 
-          {!isCreatingEntry ? (
-            editingCred ? (
-              <VaultCredentialEditSidebar
-                credential={editingCred}
-                onChange={(next) => setEditingCred((prev) => (prev ? { ...prev, ...next } : prev))}
-                rawPassword={rawPassword}
-                onRawPasswordChange={setRawPassword}
-                customCategories={customCategories}
-                isSaving={isSaving}
-                onSubmit={handleSaveEdit}
-                onCancel={() => {
-                  setEditingCred(null);
-                  setRawPassword('');
-                }}
-              />
-            ) : (
-              <VaultSecuritySidebar
-                strengthPercent={strengthPercent}
-                mfaCoverage={98}
-                rotationDue={weakCount + expiringCount}
-                recentViewed={nonDeletedItems.slice(0, 4)}
-                recentModified={[...nonDeletedItems].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4)}
-                sharedItems={nonDeletedItems.filter((c) => c.vaultId === 'shared').slice(0, 4)}
-              />
-            )
-          ) : null}
+          <VaultSecuritySidebar
+            strengthPercent={strengthPercent}
+            mfaCoverage={98}
+            rotationDue={weakCount + expiringCount}
+            recentViewed={nonDeletedItems.slice(0, 4)}
+            recentModified={[...nonDeletedItems].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4)}
+            sharedItems={nonDeletedItems.filter((c) => c.vaultId === 'shared').slice(0, 4)}
+          />
         </div>
       )}
 
@@ -1941,13 +1090,1294 @@ export default function CredentialVaultPage() {
             onClose={() => setSelectedCredential(null)}
             onDecryptPassword={handleDecryptPassword}
             onToggleFavorite={handleToggleFavorite}
-            onEdit={(cred) => openEditEntry(cred)}
+            onEdit={(cred) => { setEditingCred(cred); setSelectedCredential(null); }}
             onDelete={(id) => { handleDeleteEntry(id); setSelectedCredential(null); }}
           />
         )}
       </AnimatePresence>
 
-      {/* Edit Credential Entry — right sidebar panel (see VaultCredentialEditSidebar) */}
+      {/* Edit Credential Entry dialog Modal form */}
+      <Dialog open={!!editingCred} onOpenChange={() => setEditingCred(null)}>
+        {editingCred && (
+          <DialogContent className="sm:max-w-[500px] rounded-[32px] border-[#DADCE0] p-0 overflow-hidden bg-[#F8F9FA]">
+            <form onSubmit={handleSaveEdit}>
+              <DialogHeader className="bg-white border-b border-[#F1F3F4] px-8 py-6">
+                <DialogTitle className="text-xl font-medium">Edit Sovereign Asset</DialogTitle>
+                <DialogDescription className="text-xs">
+                  All updates encrypted locally in client node before writing to disc.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="p-8 space-y-4 max-h-[60vh] overflow-y-auto">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Name Label</label>
+                  <Input 
+                    value={editingCred.label}
+                    onChange={(e) => setEditingCred({ ...editingCred, label: e.target.value })}
+                    className="bg-white border-[#DADCE0] rounded-xl text-sm"
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Category Type</label>
+                    <Select 
+                      value={editingCred.type}
+                      onValueChange={(val: any) => setEditingCred({ ...editingCred, type: val })}
+                    >
+                      <SelectTrigger className="bg-white border-[#DADCE0] rounded-xl text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="web">Standard Web Login</SelectItem>
+                        <SelectItem value="rdp">Remote Desktop (RDP)</SelectItem>
+                        <SelectItem value="vpn">VPN Tunnel</SelectItem>
+                        <SelectItem value="ssh">Secure Shell (SSH)</SelectItem>
+                        <SelectItem value="db">Database Account</SelectItem>
+                        <SelectItem value="api">API Token & Key</SelectItem>
+                        <SelectItem value="cloud">Cloud Account</SelectItem>
+                        {customCategories.map((c) => (
+                          <SelectItem key={c.slug} value={c.slug}>{c.name}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Host Endpoint Address</label>
+                    <Input 
+                      value={editingCred.host || ''}
+                      onChange={(e) => setEditingCred({ ...editingCred, host: e.target.value })}
+                      className="bg-white border-[#DADCE0] rounded-xl text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Username / ID</label>
+                    <Input 
+                      value={editingCred.username}
+                      onChange={(e) => setEditingCred({ ...editingCred, username: e.target.value })}
+                      className="bg-white border-[#DADCE0] rounded-xl text-sm"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">New Password (leave empty)</label>
+                    <Input 
+                      type="password"
+                      placeholder="••••••••"
+                      value={rawPassword}
+                      onChange={(e) => setRawPassword(e.target.value)}
+                      className="bg-white border-[#DADCE0] rounded-xl text-sm"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Operational Internal Notes</label>
+                  <Textarea 
+                    value={editingCred.notes || ''}
+                    onChange={(e) => setEditingCred({ ...editingCred, notes: e.target.value })}
+                    className="bg-white border-[#DADCE0] rounded-xl text-sm resize-none h-20"
+                  />
+                </div>
+              </div>
+
+              <DialogFooter className="bg-white border-t border-[#F1F3F4] px-8 py-5">
+                <Button 
+                  type="button" 
+                  variant="ghost" 
+                  onClick={() => setEditingCred(null)}
+                  className="rounded-full text-xs font-bold text-[#5F6368]"
+                >
+                  Cancel
+                </Button>
+                <Button 
+                  type="submit" 
+                  disabled={isSaving}
+                  className="bg-[#1A73E8] hover:bg-[#155fc0] text-white rounded-full font-bold text-xs h-10 px-8"
+                >
+                  {isSaving ? "Re-Encrypting..." : "Update Secrets Record"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        )}
+      </Dialog>
+
+      {/* Redesigned High-Fidelity Enterprise Secrets Creator Wizard Modal */}
+      <Dialog open={showAddModal} onOpenChange={(open) => {
+        if (!open) {
+          // Reset wizard state on close
+          setWizardStep(1);
+        }
+        setShowAddModal(open);
+      }}>
+        <DialogContent className="sm:max-w-[1280px] w-[95vw] h-[85vh] max-h-[85vh] p-0 flex flex-col rounded-[24px] border-[#DADCE0] overflow-hidden bg-[#F8F9FA] shadow-2xl">
+          <form onSubmit={handleCreateEntry} className="flex flex-col h-full w-full">
+            
+            {/* Modal Body: Sidebar + Main Content Grid */}
+            <div className="flex-1 flex flex-col md:flex-row overflow-y-auto md:overflow-hidden min-h-0">
+              
+              {/* 1. Left Sidebar Navigation & Status (width: 320px on md+) */}
+              <div className="w-full md:w-[320px] bg-white border-b md:border-b-0 md:border-r border-[#E5E7EB] flex flex-col p-6 overflow-y-auto md:shrink-0 space-y-6">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900 tracking-tight leading-none">Create New Vault Entry</h3>
+                  <p className="text-[11px] text-slate-500 font-medium mt-1.5 leading-relaxed">
+                    Securely capture and store sensitive corporate infrastructure access details.
+                  </p>
+                </div>
+
+                {/* Vertical Navigation Steps */}
+                <div id="wizard-navigation" className="space-y-1 py-2">
+                  {[
+                    { id: 1, label: 'Asset Details', sub: 'Basic label and class info' },
+                    { id: 2, label: 'Access Credentials', sub: 'ID, raw secrets & TOTP code' },
+                    { id: 3, label: 'Advanced Settings', sub: 'Policies, tags & asset links' },
+                    { id: 4, label: 'Review & Publish', sub: 'Validate configuration options' }
+                  ].map((step) => {
+                    const isActive = wizardStep === step.id;
+                    const isCompleted = wizardStep > step.id;
+                    return (
+                      <button
+                        key={step.id}
+                        type="button"
+                        onClick={() => setWizardStep(step.id as any)}
+                        className={cn(
+                          "w-full text-left p-3 rounded-xl flex items-start gap-3 transition-all",
+                          isActive 
+                            ? "bg-blue-50/50 border border-blue-100 text-[#1A73E8]" 
+                            : "hover:bg-slate-50 text-slate-600 border border-transparent"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-6 h-6 rounded-full flex items-center justify-center text-xs font-black shrink-0 mt-0.5",
+                          isActive 
+                            ? "bg-[#1A73E8] text-white" 
+                            : isCompleted 
+                              ? "bg-green-100 text-green-700" 
+                              : "bg-slate-100 text-slate-500"
+                        )}>
+                          {isCompleted ? <Check className="w-3.5 h-3.5" /> : step.id}
+                        </div>
+                        <div className="truncate">
+                          <span className={cn("text-xs font-bold block", isActive ? "text-[#1A73E8]" : "text-slate-800")}>
+                            {step.label}
+                          </span>
+                          <span className="text-[9px] text-slate-400 font-medium tracking-wide block">
+                            {step.sub}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Zero-Knowledge Privacy Card */}
+                <div className="bg-gradient-to-br from-blue-50/40 to-indigo-50/30 border border-blue-100/60 p-4 rounded-2xl space-y-2">
+                  <div className="flex items-center gap-2 text-[#1A73E8]">
+                    <Shield className="w-4 h-4" />
+                    <span className="text-[10px] font-black uppercase tracking-wider">Zero-Knowledge Security</span>
+                  </div>
+                  <p className="text-[10px] text-slate-500 leading-relaxed">
+                    Credentials are key-derived using <strong>Argon2</strong> and locally encrypted in client memory with <strong>AES-256</strong> prior to backup sync.
+                  </p>
+                  <div className="text-[9px] text-[#1a73e8] font-bold hover:underline cursor-pointer flex items-center gap-1">
+                    Learn encryption mechanism <ArrowRight className="w-2.5 h-2.5" />
+                  </div>
+                </div>
+
+                {/* Real-time Document Live Preview Card */}
+                <div className="bg-[#F8F9FA] border border-[#DADCE0] p-4 rounded-2xl space-y-3 shadow-xs">
+                  <span className="text-[9px] font-black text-[#5F6368] uppercase tracking-widest block">
+                    Record Live Preview
+                  </span>
+                  
+                  <div className="space-y-2 text-[11px] leading-none">
+                    <div className="flex justify-between pb-1.5 border-b border-dashed border-slate-200">
+                      <span className="text-slate-400 font-medium">Category</span>
+                      <span className="font-bold text-slate-700 capitalize flex items-center gap-1">
+                        {newEntry.type || 'Web'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between pb-1.5 border-b border-dashed border-slate-200">
+                      <span className="text-slate-400 font-medium">Vault</span>
+                      <span className="font-bold text-slate-700">
+                        {newEntry.vaultId === 'local' ? 'Personal Local Vault' : 
+                         newEntry.vaultId === 'team' ? 'Team Shared Vault' :
+                         newEntry.vaultId === 'department' ? 'Department Vault' : 'Emergency Vault'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between pb-1.5 border-b border-dashed border-slate-200">
+                      <span className="text-slate-400 font-medium">Encryption Status</span>
+                      <span className="font-bold text-[#137333] bg-green-50 px-1.5 py-0.5 rounded text-[9px]">
+                        AES-256 Enabled
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between pb-1.5 border-b border-dashed border-slate-200">
+                      <span className="text-slate-400 font-medium">Visibility Scope</span>
+                      <span className="font-bold text-slate-700 capitalize">
+                        {newEntry.visibility || 'Private'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between pb-1.5 border-b border-dashed border-slate-200">
+                      <span className="text-slate-400 font-medium">Company Context</span>
+                      <span className="font-bold text-[#1A73E8]">
+                        {newEntry.linkedCompany || 'Unset'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between pb-1.5 border-b border-dashed border-slate-200">
+                      <span className="text-slate-400 font-medium">Asset Name</span>
+                      <span className="font-bold text-slate-700 truncate max-w-[120px]" title={newEntry.label}>
+                        {newEntry.label || 'e.g. AWS Console'}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span className="text-slate-400 font-medium">Owner Assigned</span>
+                      <span className="font-bold text-slate-700 truncate max-w-[120px]">
+                        {newEntry.owner || 'You'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. Main Tabbed Layout Panel */}
+              <div className="flex-1 bg-white overflow-y-auto p-8 flex flex-col justify-between">
+                <div>
+                  
+                  {/* Step Header */}
+                  {wizardStep === 1 && (
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#1A73E8] flex items-center justify-center font-black text-sm">
+                          1
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-slate-800 leading-snug">Asset Details</h4>
+                          <p className="text-xs text-slate-400 font-medium mt-0.5">
+                            Select the class classification and declare friendly identifiers for infrastructure.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-black text-[#1A73E8] bg-blue-50 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        Step 1 of 4
+                      </span>
+                    </div>
+                  )}
+
+                  {wizardStep === 2 && (
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-black text-sm">
+                          2
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-slate-800 leading-snug">Access Credentials</h4>
+                          <p className="text-xs text-slate-400 font-medium mt-0.5">
+                            Capture identifiers and secure credentials. Leverage built-in enterprise generation parameters.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-black text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        Step 2 of 4
+                      </span>
+                    </div>
+                  )}
+
+                  {wizardStep === 3 && (
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center font-black text-sm">
+                          3
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-slate-800 leading-snug">Advanced Settings</h4>
+                          <p className="text-xs text-slate-400 font-medium mt-0.5">
+                            Enforce access controls, policy timers, linkages, and document classification markers.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-black text-purple-600 bg-purple-50 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        Step 3 of 4
+                      </span>
+                    </div>
+                  )}
+
+                  {wizardStep === 4 && (
+                    <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-6">
+                      <div className="flex items-start gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center font-black text-sm">
+                          4
+                        </div>
+                        <div>
+                          <h4 className="text-sm font-black text-slate-800 leading-snug">Review & Publish Secure Entry</h4>
+                          <p className="text-xs text-slate-400 font-medium mt-0.5">
+                            Review policies and local verification parameters before sealing raw payload in IndexedDB.
+                          </p>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-black text-amber-600 bg-amber-50 px-2.5 py-1 rounded-full uppercase tracking-wider">
+                        Final Review
+                      </span>
+                    </div>
+                  )}
+
+                  {/* -------------------- STEP 1 CONTAINER -------------------- */}
+                  {wizardStep === 1 && (
+                    <div className="space-y-6">
+                      {/* Grid Category Selector */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
+                          Asset Category Model Selection <span className="text-red-500">*</span>
+                        </label>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                          {[
+                            { slug: 'web', name: 'Web Login', desc: 'Secure connection logs to web interfaces & SaaS pipelines.', icon: Globe },
+                            { slug: 'rdp', name: 'RDP Session', desc: 'Remote desktop systems console access.', icon: Monitor },
+                            { slug: 'vpn', name: 'VPN Access', desc: 'Sovereign security tunnel points & clients.', icon: Shield },
+                            { slug: 'ssh', name: 'SSH Node', desc: 'Command line network core servers & nodes.', icon: Terminal },
+                            { slug: 'db', name: 'Database', desc: 'Relational or NoSQL active datastores & servers.', icon: Database },
+                            { slug: 'api', name: 'API Key', desc: 'Integration tokens, payment terminals & API keys.', icon: KeyIcon },
+                            { slug: 'cert', name: 'Certificate', desc: 'TLS/SSL domain identities & root key strings.', icon: FileCode },
+                            { slug: 'note', name: 'Secure Note', desc: 'Disaster recovery manuals & critical parameters.', icon: FileCode },
+                            { slug: 'cloud', name: 'Cloud Account', desc: 'AWS consoles, GCP clouds & Azure directories.', icon: Cloud }
+                          ].map((cat) => {
+                            const IconComp = cat.icon;
+                            const isSelected = newEntry.type === cat.slug;
+                            return (
+                              <button
+                                key={cat.slug}
+                                type="button"
+                                onClick={() => setNewEntry({ ...newEntry, type: cat.slug })}
+                                className={cn(
+                                  "text-left p-3.5 rounded-2xl border transition-all flex gap-3 h-24 items-start select-none",
+                                  isSelected 
+                                    ? "border-[#1A73E8] bg-blue-50/20 shadow-xs ring-1 ring-[#1A73E8]"
+                                    : "border-[#DADCE0] hover:border-slate-300 bg-white"
+                                )}
+                              >
+                                <div className={cn(
+                                  "p-2 rounded-xl mt-0.5",
+                                  isSelected ? "bg-blue-100/50 text-[#1A73E8]" : "bg-slate-50 text-slate-400"
+                                )}>
+                                  <IconComp className="w-4 h-4" />
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="text-xs font-black text-slate-800 block">{cat.name}</span>
+                                  <p className="text-[10px] text-slate-400 font-medium leading-relaxed mt-0.5 line-clamp-2">
+                                    {cat.desc}
+                                  </p>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Name Label & Endpoint URL */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
+                            Asset Friendly Name <span className="text-red-500">*</span>
+                          </label>
+                          <Input 
+                            placeholder="e.g. AWS Production Console" 
+                            value={newEntry.label || ''}
+                            onChange={(e) => setNewEntry({ ...newEntry, label: e.target.value })}
+                            className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm"
+                            required
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
+                            Host Target / Endpoint URL
+                          </label>
+                          <Input 
+                            placeholder="e.g. console.aws.amazon.com or 10.0.1.200" 
+                            value={newEntry.host || ''}
+                            onChange={(e) => setNewEntry({ ...newEntry, host: e.target.value })}
+                            className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Internal Notes Description Area */}
+                      <div className="space-y-1">
+                        <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
+                          Internal Documentation & Instructions
+                        </label>
+                        <Textarea 
+                          placeholder="Provide detailed instructions, restore recovery guidelines or administration context notes..."
+                          value={newEntry.notes || ''}
+                          onChange={(e) => setNewEntry({ ...newEntry, notes: e.target.value })}
+                          className="bg-white border-[#DADCE0] rounded-xl text-sm h-20 resize-none"
+                        />
+                      </div>
+
+                      {/* Vault Assignation & Visibility level */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
+                            Assign to Secure Vault Partition
+                          </label>
+                          <Select 
+                            value={newEntry.vaultId} 
+                            onValueChange={(val) => setNewEntry({ ...newEntry, vaultId: val })}
+                          >
+                            <SelectTrigger className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm">
+                              <SelectValue placeholder="Personal Local Vault" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="local">Personal Local Vault (Standard)</SelectItem>
+                              <SelectItem value="team">Team Shared Vault (Joint Ops)</SelectItem>
+                              <SelectItem value="department">Department Vault (Scoped)</SelectItem>
+                              <SelectItem value="emergency">Emergency Vault (Breakglass)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
+                            Access Visibility Level
+                          </label>
+                          <Select 
+                            value={newEntry.visibility || 'private'} 
+                            onValueChange={(val) => setNewEntry({ ...newEntry, visibility: val })}
+                          >
+                            <SelectTrigger className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="private">Private (Only You)</SelectItem>
+                              <SelectItem value="shared">Shared (Designated Peers)</SelectItem>
+                              <SelectItem value="department_vis">Department Scoped (SysAdmins)</SelectItem>
+                              <SelectItem value="organization">Organization (Full MSP / SOC Access)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* -------------------- STEP 2 CONTAINER -------------------- */}
+                  {wizardStep === 2 && (
+                    <div className="space-y-6">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
+                            Username / System Principal Access Identifier <span className="text-red-500">*</span>
+                          </label>
+                          <Input 
+                            placeholder="e.g. root, administrator, ec2-user" 
+                            value={newEntry.username || ''}
+                            onChange={(e) => setNewEntry({ ...newEntry, username: e.target.value })}
+                            className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm"
+                            required
+                          />
+                        </div>
+
+                        {/* Password with Strength Indicator */}
+                        <div className="space-y-1">
+                          <div className="flex justify-between items-center pr-1">
+                            <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
+                              Sovereign Secret Password / Key Token <span className="text-red-500">*</span>
+                            </label>
+                            {rawPassword && (
+                              <div className={cn(
+                                "text-[10px] font-black uppercase px-2 py-0.5 rounded-full border",
+                                getPasswordStrengthScore(rawPassword).color
+                              )}>
+                                Strength: {getPasswordStrengthScore(rawPassword).text}
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="relative">
+                            <Input 
+                              type={revealPassword ? "text" : "password"}
+                              placeholder="Type or click Generate" 
+                              value={rawPassword}
+                              onChange={(e) => setRawPassword(e.target.value)}
+                              className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm pr-20"
+                              required
+                            />
+                            <div className="absolute right-1.5 top-1 flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => setRevealPassword(!revealPassword)}
+                                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-colors"
+                                title="Toggle Visibility"
+                              >
+                                {revealPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  if (rawPassword) {
+                                    navigator.clipboard.writeText(rawPassword);
+                                    toast.success("Password copied to clipboard");
+                                  } else {
+                                    toast.error("Generate a password first");
+                                  }
+                                }}
+                                className="p-1.5 hover:bg-slate-100 rounded-lg text-slate-400 hover:text-slate-700 transition-colors"
+                                title="Copy Secret"
+                              >
+                                <Copy className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Built-in Enterprise Password Generator Panel */}
+                      <div className="border border-[#DADCE0] rounded-2xl bg-[#F8F9FA] p-5 space-y-4">
+                        <div className="flex items-center justify-between">
+                          <button
+                            type="button"
+                            onClick={() => setShowGenOptions(!showGenOptions)}
+                            className="flex items-center gap-2 text-xs font-black text-slate-700 hover:text-[#1A73E8] focus:outline-none"
+                          >
+                            <Sliders className="w-4 h-4 text-[#1A73E8]" />
+                            {showGenOptions ? 'Hide Password Generator Parameters' : 'Deploy Password Generator Parameters'}
+                          </button>
+                          
+                          <Button 
+                            type="button"
+                            onClick={handleGeneratePasswordSubmit}
+                            className="bg-[#1A73E8] hover:bg-blue-700 text-white rounded-full text-xs font-bold px-4 h-8 select-none"
+                          >
+                            <Sparkles className="w-3.5 h-3.5 mr-1" />
+                            Generate & Apply
+                          </Button>
+                        </div>
+
+                        {showGenOptions && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-3 border-t border-slate-200">
+                            <div className="space-y-3">
+                              <div className="flex justify-between text-xs">
+                                <span className="font-bold text-slate-600">Password Length:</span>
+                                <span className="font-black text-[#1A73E8]">{genLength}</span>
+                              </div>
+                              <input 
+                                type="range" 
+                                min="8" 
+                                max="64" 
+                                value={genLength}
+                                onChange={(e) => setGenLength(Number(e.target.value))}
+                                className="w-full h-1 bg-slate-200 rounded-lg appearance-none cursor-pointer accent-[#1A73E8]"
+                              />
+                              <div className="flex gap-2 justify-between">
+                                <button type="button" onClick={() => setGenLength(12)} className="text-[10px] font-bold text-slate-400 hover:text-slate-700 bg-white border px-2 py-0.5 rounded">12 Chars</button>
+                                <button type="button" onClick={() => setGenLength(16)} className="text-[10px] font-bold text-slate-400 hover:text-slate-700 bg-white border px-2 py-0.5 rounded">16 Chars</button>
+                                <button type="button" onClick={() => setGenLength(24)} className="text-[10px] font-bold text-slate-400 hover:text-slate-700 bg-white border px-2 py-0.5 rounded">24 Chars</button>
+                                <button type="button" onClick={() => setGenLength(32)} className="text-[10px] font-bold text-slate-400 hover:text-slate-700 bg-white border px-2 py-0.5 rounded">32 Chars</button>
+                              </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <span className="text-[10px] font-black uppercase text-slate-400 block tracking-wide">Included Set</span>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-600 select-none">
+                                  <input type="checkbox" checked={genUpper} onChange={(e) => setGenUpper(e.target.checked)} className="rounded text-[#1A73E8]" />
+                                  A-Z (Uppercase)
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-600 select-none">
+                                  <input type="checkbox" checked={genLower} onChange={(e) => setGenLower(e.target.checked)} className="rounded text-[#1A73E8]" />
+                                  a-z (Lowercase)
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-600 select-none">
+                                  <input type="checkbox" checked={genNumbers} onChange={(e) => setGenNumbers(e.target.checked)} className="rounded text-[#1A73E8]" />
+                                  0-9 (Numbers)
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer font-medium text-slate-600 select-none">
+                                  <input type="checkbox" checked={genSymbols} onChange={(e) => setGenSymbols(e.target.checked)} className="rounded text-[#1A73E8]" />
+                                  !@#$%^ (Symbols)
+                                </label>
+                              </div>
+                              <div className="pt-2">
+                                <label className="text-[9px] font-bold text-slate-400 block uppercase">Exclude Characters</label>
+                                <Input 
+                                  placeholder="e.g. l, O, 1, 0" 
+                                  value={genExclude}
+                                  onChange={(e) => setGenExclude(e.target.value)}
+                                  className="h-7 bg-white text-xs rounded-lg mt-1"
+                                />
+                              </div>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* MFA Authentication TOTP Token Seeding Area */}
+                      <div className="border border-slate-100 rounded-2xl p-5 space-y-4 shadow-xs">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wide block">
+                          Multi-Factor Authentication (MFA) Seeding Setup
+                        </span>
+                        
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
+                              MFA TOTP Key Token Secret
+                            </label>
+                            <Input 
+                              placeholder="e.g. JBSWY3DPEHPK3PXP or secret string" 
+                              value={newEntry.totpSecret || ''}
+                              onChange={(e) => setNewEntry({ ...newEntry, totpSecret: e.target.value })}
+                              className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm"
+                            />
+                          </div>
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
+                              Backup Emergency Recovery Keys
+                            </label>
+                            <Input 
+                              placeholder="e.g. 5532-1246-8801 or single emergency tokens" 
+                              value={newEntry.backupCodes || ''}
+                              onChange={(e) => setNewEntry({ ...newEntry, backupCodes: e.target.value })}
+                              className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm"
+                            />
+                          </div>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
+                            MFA Authenticator Configurations Note
+                          </label>
+                          <Input 
+                            placeholder="e.g. Google Authenticator key, required every 24 hours, backups in locked filing room." 
+                            value={newEntry.authenticatorNotes || ''}
+                            onChange={(e) => setNewEntry({ ...newEntry, authenticatorNotes: e.target.value })}
+                            className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* -------------------- STEP 3 CONTAINER -------------------- */}
+                  {wizardStep === 3 && (
+                    <div className="space-y-6">
+                      
+                      {/* Asset Assignment & Ownership Segment */}
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="space-y-1 block">
+                          <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">Principal Owner</label>
+                          <Input 
+                            value={newEntry.owner || 'You'}
+                            onChange={(e) => setNewEntry({ ...newEntry, owner: e.target.value })}
+                            className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1 block">
+                          <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">Responsible Operations Team</label>
+                          <Input 
+                            value={newEntry.team || 'Platform Ops'}
+                            onChange={(e) => setNewEntry({ ...newEntry, team: e.target.value })}
+                            className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm"
+                          />
+                        </div>
+                        <div className="space-y-1 block">
+                          <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">Department Scope</label>
+                          <Input 
+                            value={newEntry.department || 'Infrastructure'}
+                            onChange={(e) => setNewEntry({ ...newEntry, department: e.target.value })}
+                            className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Asset Linking & Infrastructure Relations */}
+                      <div className="border border-slate-100 rounded-2xl p-5 space-y-4 shadow-xs">
+                        <div className="flex items-center gap-2 text-slate-700 font-bold text-xs">
+                          <ExternalLink className="w-4 h-4 text-purple-500" />
+                          <span>Enterprise Infrastructure Relationship Mapping</span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">Link corporate client company</label>
+                            <Select 
+                              value={newEntry.linkedCompany || 'Acme Global'} 
+                              onValueChange={(val) => setNewEntry({ ...newEntry, linkedCompany: val })}
+                            >
+                              <SelectTrigger className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Acme Global">Acme Global Enterprise</SelectItem>
+                                <SelectItem value="Cyberdyne">Cyberdyne Systems</SelectItem>
+                                <SelectItem value="FinStream">FinStream Financials</SelectItem>
+                                <SelectItem value="None">None (Internal Infrastructure)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">Link infrastructure node</label>
+                            <Select 
+                              value={newEntry.linkedAsset || 'Server Cluster'} 
+                              onValueChange={(val) => setNewEntry({ ...newEntry, linkedAsset: val })}
+                            >
+                              <SelectTrigger className="bg-[#ffffff] border-[#DADCE0] rounded-xl h-10 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Firewall">Cisco Core Firewall Appliance</SelectItem>
+                                <SelectItem value="Database">Postgres Master Storage cluster</SelectItem>
+                                <SelectItem value="Server">Edge Virtual Machine Node</SelectItem>
+                                <SelectItem value="VPN Gateway">Frankfurt tunnel concentrator</SelectItem>
+                                <SelectItem value="AWS Environment">AWS Production VPC cluster</SelectItem>
+                                <SelectItem value="Server Cluster">Sovereign Cluster Server Segment</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+
+                          <div className="space-y-1">
+                            <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">Link administrative task ticket</label>
+                            <Select 
+                              value={newEntry.linkedTicket || 'Ticket #442'} 
+                              onValueChange={(val) => setNewEntry({ ...newEntry, linkedTicket: val })}
+                            >
+                              <SelectTrigger className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="Ticket #442">Ticket #442 - Deploy AWS Gateway</SelectItem>
+                                <SelectItem value="Ticket #518">Ticket #518 - Firewall Configuration Audit</SelectItem>
+                                <SelectItem value="Ticket #901">Ticket #901 - Database Principal Access Roll</SelectItem>
+                                <SelectItem value="None">Unlinked (Ad-Hoc Asset)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Expiration and Rotation Schedules / Policies */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">Sovereign Password Lifespan Policy</label>
+                          <Select 
+                            value={newEntry.expirationPolicy || 'Never'} 
+                            onValueChange={(val) => setNewEntry({ ...newEntry, expirationPolicy: val })}
+                          >
+                            <SelectTrigger className="bg-[#ffffff] border-[#DADCE0] rounded-xl h-10 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Never">Never Expire (Static credential)</SelectItem>
+                              <SelectItem value="30">Expire in 30 Days</SelectItem>
+                              <SelectItem value="60">Expire in 60 Days</SelectItem>
+                              <SelectItem value="90">Expire in 90 Days</SelectItem>
+                              <SelectItem value="180">Expire in 180 Days</SelectItem>
+                              <SelectItem value="Custom">Custom Audit policy override</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div className="space-y-1">
+                          <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">Scheduled Rotation Frequency</label>
+                          <Select 
+                            value={newEntry.rotationPolicy || 'Manual'} 
+                            onValueChange={(val) => setNewEntry({ ...newEntry, rotationPolicy: val })}
+                          >
+                            <SelectTrigger className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Manual">Manual Rotation (Triggered by administrator)</SelectItem>
+                              <SelectItem value="Auto">Automatic Rotation sequence enabled</SelectItem>
+                              <SelectItem value="30">Rotate every 30 Days</SelectItem>
+                              <SelectItem value="60">Rotate every 60 Days</SelectItem>
+                              <SelectItem value="90">Rotate every 90 Days</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+
+                      {/* Tags Section */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
+                          Security Tags classification
+                        </label>
+                        <div className="flex flex-wrap gap-1.5 p-3.5 border border-[#DADCE0] bg-white rounded-2xl min-h-[50px] items-center">
+                          {newEntry.tags?.map((tag, idx) => (
+                            <Badge key={idx} className="bg-blue-50 text-slate-700 hover:bg-blue-100/50 flex items-center gap-1.5 py-1 px-2.5 rounded-full border border-blue-200">
+                              <Tag className="w-3 h-3 text-[#1A73E8]" />
+                              {tag}
+                              <button type="button" onClick={() => handleRemoveExistingTag(idx)} className="text-slate-400 hover:text-red-500 font-black text-xs">×</button>
+                            </Badge>
+                          ))}
+                          <input 
+                            placeholder="Type tag and press Enter" 
+                            value={tagInput}
+                            onChange={(e) => setTagInput(e.target.value)}
+                            onKeyDown={handleAddNewTag}
+                            className="bg-transparent border-none outline-none text-xs min-w-0 flex-1 text-slate-800 placeholder-slate-400 font-medium"
+                          />
+                        </div>
+                        <div className="flex items-center gap-2 pt-1 text-[11px] text-slate-400 select-none">
+                          <span className="font-bold">Quick add tags:</span>
+                          {['Production', 'VPN', 'AWS', 'Critical', 'Finance', 'Linux', 'Shared'].map(t => (
+                            <button
+                              key={t}
+                              type="button"
+                              onClick={() => {
+                                if (!newEntry.tags?.includes(t)) {
+                                  setNewEntry({ ...newEntry, tags: [...(newEntry.tags || []), t] });
+                                }
+                              }}
+                              className="text-[10px] bg-slate-50 border px-2 py-0.5 rounded-lg font-semibold hover:bg-slate-100 text-slate-600 transition-colors"
+                            >
+                              + {t}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* File Attachments Section */}
+                      <div className="space-y-2">
+                        <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1 block">
+                          Hardware Configurations / Profile Attachments
+                        </label>
+                        
+                        <div
+                          onDragOver={(e) => { e.preventDefault(); setDraggingFile(true); }}
+                          onDragLeave={() => setDraggingFile(false)}
+                          onDrop={(e) => {
+                            e.preventDefault();
+                            setDraggingFile(false);
+                            if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+                              const files = Array.from(e.dataTransfer.files).map(f => ({
+                                name: f.name,
+                                size: (f.size / 1024).toFixed(1) + ' KB',
+                                type: f.type || 'application/octet-stream'
+                              }));
+                              setNewEntry({
+                                ...newEntry,
+                                attachments: [...(newEntry.attachments || []), ...files]
+                              });
+                              toast.success("Security profile assets attached!");
+                            }
+                          }}
+                          className={cn(
+                            "cursor-pointer border-2 border-dashed rounded-2xl p-6 text-center select-none flex flex-col items-center justify-center space-y-2 transition-all",
+                            draggingFile 
+                              ? "border-[#1A73E8] bg-blue-100/10 text-[#1A73E8]"
+                              : "border-[#DADCE0] hover:border-slate-300 hover:bg-slate-50 text-slate-400"
+                          )}
+                        >
+                          <input 
+                            type="file" 
+                            id="vault-wizard-file" 
+                            className="hidden" 
+                            multiple 
+                            onChange={(e) => {
+                              if (e.target.files && e.target.files.length > 0) {
+                                const files = Array.from(e.target.files).map(f => ({
+                                  name: f.name,
+                                  size: (f.size / 1024).toFixed(1) + ' KB',
+                                  type: f.type || 'application/octet-stream'
+                                }));
+                                setNewEntry({
+                                  ...newEntry,
+                                  attachments: [...(newEntry.attachments || []), ...files]
+                                });
+                                toast.success("Security profile assets attached!");
+                              }
+                            }}
+                          />
+                          <label htmlFor="vault-wizard-file" className="cursor-pointer w-full flex flex-col items-center">
+                            <Upload className="w-6 h-6 text-slate-400" />
+                            <span className="text-xs font-bold text-slate-700 block mt-2">
+                              Drag and drop configuration profiles or select locally
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium block mt-1">
+                              Supports Configuration profiles, CA Key files, VPN Certs, TLS bundles up to 50MB. See zero-knowledge encryption guarantees.
+                            </span>
+                          </label>
+                        </div>
+
+                        {/* List of attachments */}
+                        {newEntry.attachments && newEntry.attachments.length > 0 && (
+                          <div className="grid grid-cols-2 gap-2 mt-2">
+                            {newEntry.attachments.map((file, idx) => (
+                              <div key={idx} className="flex items-center justify-between p-2.5 bg-slate-50 border rounded-xl text-xs font-semibold">
+                                <div className="flex items-center gap-2 truncate text-slate-700">
+                                  <FileCode className="w-4 h-4 text-slate-500" />
+                                  <span className="truncate" title={file.name}>{file.name}</span>
+                                  <span className="text-[10px] text-slate-400">({file.size})</span>
+                                </div>
+                                <button 
+                                  type="button" 
+                                  onClick={() => {
+                                    const list = [...(newEntry.attachments || [])];
+                                    list.splice(idx, 1);
+                                    setNewEntry({ ...newEntry, attachments: list });
+                                    toast.success("Attachment unlinked.");
+                                  }}
+                                  className="text-slate-400 hover:text-red-500 font-bold px-1 text-sm mr-1"
+                                >
+                                  ×
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Advanced Security Configuration Guards Checkboxes */}
+                      <div className="space-y-3 pt-2">
+                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-wide block">
+                          Hardened Cryptographic Security Policies & Guards
+                        </span>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs leading-relaxed">
+                          {[
+                            { key: 'burnAfterRead', title: 'Burn After Read', sub: 'Destruct and expire from central storage instantly after first decryptions sequence.' },
+                            { key: 'requireApproval', title: 'Require Manager Approval', sub: 'Access requests must be verified by delegated Operations supervisor before client key extraction.' },
+                            { key: 'jitAccess', title: 'JIT 1-Hour Escalated Access', sub: 'Grant ephemeral, time-gated decryption permissions only during authorized support tickets active times.' },
+                            { key: 'requireMfa', title: 'Require step-up MFA verification Challenge', sub: 'Assert hardware keys or security token challenge check prior to reveals.' },
+                            { key: 'disableExport', title: 'Block Bulk Export sequence', sub: 'Exclude this credential block from global workspace database backups or JSON extractions.' },
+                            { key: 'disableCopy', title: 'Block Copy-to-Clipboard actions', sub: 'Force interactive manual type-in from launcher drawer or console views, blocking clipboard hooks.' }
+                          ].map((pol) => (
+                            <label key={pol.key} className="flex items-start gap-3 p-3.5 bg-white border hover:border-slate-300 rounded-[16px] cursor-pointer select-none">
+                              <input 
+                                type="checkbox" 
+                                checked={!!(newEntry.securitySettings as any)?.[pol.key]} 
+                                onChange={(e) => {
+                                  setNewEntry({
+                                    ...newEntry,
+                                    securitySettings: {
+                                      ...(newEntry.securitySettings || {}),
+                                      [pol.key]: e.target.checked
+                                    }
+                                  });
+                                }}
+                                className="rounded text-[#1A73E8] mt-0.5 focus:ring-offset-0 focus:ring-0" 
+                              />
+                              <div className="min-w-0">
+                                <span className="font-bold text-slate-700 block text-xs leading-none mb-1">{pol.title}</span>
+                                <span className="text-[10px] text-slate-400 font-medium leading-normal block">{pol.sub}</span>
+                              </div>
+                            </label>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* -------------------- STEP 4 CONTAINER -------------------- */}
+                  {wizardStep === 4 && (
+                    <div className="space-y-6">
+                      <div className="text-center p-6 bg-slate-50 border border-slate-100 rounded-3xl space-y-2">
+                        <div className="w-12 h-12 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center mx-auto shadow-sm">
+                          <CheckCircle2 className="w-7 h-7" />
+                        </div>
+                        <h5 className="text-sm font-black text-slate-800">Secrets Deployment Schema Ready</h5>
+                        <p className="text-xs text-slate-500 font-medium max-w-lg mx-auto">
+                          Verify the record properties below. Once published, your password is encrypted in memory inside this sandbox context before sync write operations.
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        
+                        {/* Summary Block 1 */}
+                        <div className="border rounded-2xl p-5 space-y-3 bg-white">
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-wide block border-b pb-1.5 border-dashed">
+                            Core Characteristics
+                          </span>
+
+                          <div className="grid grid-cols-2 gap-y-3 text-xs">
+                            <div>
+                              <span className="text-slate-400 block mb-0.5 font-medium">Category Class:</span>
+                              <span className="font-bold text-slate-800 flex items-center gap-1 capitalize">
+                                {newEntry.type}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block mb-0.5 font-medium">Friendly Asset Label:</span>
+                              <span className="font-bold text-[#1A73E8] truncate block" title={newEntry.label}>
+                                {newEntry.label || 'Unset name'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block mb-0.5 font-medium">Username Principal:</span>
+                              <span className="font-bold text-slate-800 block truncate" title={newEntry.username}>
+                                {newEntry.username}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block mb-0.5 font-medium">Destination Host IP:</span>
+                              <span className="font-bold text-slate-700 block truncate" title={newEntry.host}>
+                                {newEntry.host || '127.0.0.1 (Unset)'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Summary Block 2 */}
+                        <div className="border rounded-2xl p-5 space-y-3 bg-white">
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-wide block border-b pb-1.5 border-dashed">
+                            Governance & Linking
+                          </span>
+
+                          <div className="grid grid-cols-2 gap-y-3 text-xs">
+                            <div>
+                              <span className="text-slate-400 block mb-0.5 font-medium">Owner principal:</span>
+                              <span className="font-bold text-slate-800">{newEntry.owner}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block mb-0.5 font-medium">Linked Company:</span>
+                              <span className="font-bold text-[#1A73E8]">{newEntry.linkedCompany}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block mb-0.5 font-medium">Linked Infra Item:</span>
+                              <span className="font-bold text-slate-700">{newEntry.linkedAsset}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block mb-0.5 font-medium">Responsible Team:</span>
+                              <span className="font-bold text-slate-700">{newEntry.team}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Summary Block 3 */}
+                        <div className="border rounded-2xl p-5 space-y-3 bg-white">
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-wide block border-b pb-1.5 border-dashed">
+                            Policy Schedules
+                          </span>
+
+                          <div className="grid grid-cols-2 gap-y-3 text-xs">
+                            <div>
+                              <span className="text-slate-400 block mb-0.5 font-medium">Sovereign Lifespan:</span>
+                              <span className="font-bold text-slate-800">{newEntry.expirationPolicy === 'Never' ? 'Static (Never)' : `Expire ${newEntry.expirationPolicy} days`}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block mb-0.5 font-medium">Scheduled Rotation:</span>
+                              <span className="font-bold text-slate-800">{newEntry.rotationPolicy === 'Manual' ? 'Manual trigger' : `Schedule ${newEntry.rotationPolicy} days`}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block mb-0.5 font-medium">Compliance Tag classification:</span>
+                              <div className="flex gap-1 flex-wrap mt-0.5">
+                                {newEntry.tags?.map((t, idx) => (
+                                  <span key={idx} className="bg-slate-50 text-slate-600 border text-[9px] font-black px-1.5 py-0.2 rounded">
+                                    {t}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block mb-0.5 font-medium">MFA token Key seeded:</span>
+                              <span className="font-bold text-slate-700">
+                                {newEntry.totpSecret ? 'Yes (MFA Configured)' : 'No MFA Setup'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Summary Block 4 */}
+                        <div className="border rounded-2xl p-5 space-y-3 bg-white">
+                          <span className="text-[10px] font-black uppercase text-slate-400 tracking-wide block border-b pb-1.5 border-dashed">
+                            Hardened Security Policies Enforced
+                          </span>
+
+                          <div className="flex flex-wrap gap-1">
+                            {newEntry.securitySettings && Object.entries(newEntry.securitySettings).some(([_, v]) => v) ? (
+                              Object.entries(newEntry.securitySettings)
+                                .filter(([_, v]) => v)
+                                .map(([k]) => {
+                                  const titles: Record<string, string> = {
+                                    burnAfterRead: 'Burn On Read',
+                                    requireApproval: 'Approval Required',
+                                    jitAccess: 'Ephemeral JIT',
+                                    requireMfa: 'Step-up MFA',
+                                    disableExport: 'No Exports',
+                                    disableCopy: 'No copy'
+                                  };
+                                  return (
+                                    <span key={k} className="bg-rose-50 text-rose-700 text-[10px] font-black px-2.5 py-0.5 rounded-full border border-rose-200 uppercase/60">
+                                      🛡️ {titles[k] || k}
+                                    </span>
+                                  );
+                                })
+                            ) : (
+                              <span className="text-slate-400 text-xs font-semibold block">None configured. Standard database protections apply.</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Footer Action buttons row */}
+                <div className="bg-white border-t border-[#F1F3F4] pt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mt-8">
+                  {/* Left: Cancel and Draft option */}
+                  <div className="flex items-center gap-2">
+                    <Button 
+                      type="button" 
+                      variant="ghost" 
+                      onClick={() => {
+                        setShowAddModal(false);
+                        setWizardStep(1);
+                      }}
+                      className="rounded-full text-xs font-bold text-[#5F6368] h-10 px-5 border"
+                    >
+                      Cancel
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant="ghost" 
+                      onClick={() => {
+                        toast.success("Draft saved in browser memory.");
+                        setShowAddModal(false);
+                        setWizardStep(1);
+                      }}
+                      className="rounded-full text-xs font-bold text-slate-400 hover:text-slate-700 h-10 px-5"
+                    >
+                      Save Temporary Draft
+                    </Button>
+                  </div>
+
+                  {/* Centered safety telemetry readout */}
+                  <div className="hidden lg:flex items-center gap-1.5 text-[10px] text-slate-400 font-bold select-none">
+                    <ShieldCheck className="w-3.5 h-3.5 text-green-600" />
+                    <span>All credentials encrypted locally</span>
+                  </div>
+
+                  {/* Right: Steps controls */}
+                  <div className="flex items-center gap-2 justify-end">
+                    {wizardStep > 1 && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        onClick={() => setWizardStep((wizardStep - 1) as any)}
+                        className="rounded-full text-xs font-bold text-[#1A73E8] hover:bg-blue-50 h-10 px-5 border border-blue-200"
+                      >
+                        Back
+                      </Button>
+                    )}
+
+                    {wizardStep < 4 ? (
+                      <Button
+                        type="button"
+                        onClick={() => {
+                          // Basic validation before changing steps
+                          if (wizardStep === 1) {
+                            if (!newEntry.label) {
+                              toast.error("Please provide an Asset Friendly Name before proceeding.");
+                              return;
+                            }
+                          } else if (wizardStep === 2) {
+                            if (!newEntry.username || !rawPassword) {
+                              toast.error("Please provide Username ID and raw Password secret before proceeding.");
+                              return;
+                            }
+                          }
+                          setWizardStep((wizardStep + 1) as any);
+                        }}
+                        className="bg-[#1A73E8] hover:bg-blue-700 text-white rounded-full font-bold text-xs h-10 px-6 shadow-sm flex items-center gap-2"
+                      >
+                        Continue
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </Button>
+                    ) : (
+                      <Button 
+                        type="submit" 
+                        disabled={isSaving}
+                        className="bg-[#34A853] hover:bg-[#2c8d46] text-white rounded-full font-bold text-xs h-10 px-8 shadow-sm flex items-center gap-1.5"
+                      >
+                        {isSaving ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            Encrypting & Sealing...
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5" />
+                            Create Secure Vault Entry
+                          </>
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                </div>
+
+              </div>
+            </div>
+
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Personal / Shared Vault Folder */}
+      <Dialog open={showCreateVaultModal} onOpenChange={setShowCreateVaultModal}>
+        <DialogContent className="sm:max-w-[480px] rounded-[32px] border-[#DADCE0] p-0 overflow-hidden bg-[#F8F9FA]">
+          <form onSubmit={handleCreateVault}>
+            <DialogHeader className="bg-white border-b border-[#F1F3F4] px-8 py-6">
+              <DialogTitle className="text-xl font-bold text-slate-800">Create Secure Vault Folder</DialogTitle>
+              <DialogDescription className="text-xs text-slate-400 font-medium">
+                Zero-knowledge: credentials are encrypted in your browser before PostgreSQL persistence. The server stores ciphertext only.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="p-8 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Vault Name</label>
+                <Input
+                  placeholder="e.g. Platform Ops Shared"
+                  value={newVaultName}
+                  onChange={(e) => setNewVaultName(e.target.value)}
+                  className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Vault Type</label>
+                <Select value={newVaultType} onValueChange={(val) => setNewVaultType(val as 'personal' | 'shared')}>
+                  <SelectTrigger className="bg-white border-[#DADCE0] rounded-xl text-sm h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="personal">Personal Vault</SelectItem>
+                    <SelectItem value="shared">Shared Team Vault</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {newVaultType === 'shared' ? (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Share With (emails)</label>
+                  <Textarea
+                    placeholder="ops@company.com, admin@company.com"
+                    value={newVaultSharedEmails}
+                    onChange={(e) => setNewVaultSharedEmails(e.target.value)}
+                    className="bg-white border-[#DADCE0] rounded-xl text-sm min-h-[72px]"
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <DialogFooter className="bg-white border-t border-[#F1F3F4] px-8 py-5">
+              <Button type="button" variant="ghost" onClick={() => setShowCreateVaultModal(false)} className="rounded-xl text-xs">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSaving} className="bg-[#1A73E8] hover:bg-blue-700 text-white rounded-xl text-xs h-10 px-6">
+                {isSaving ? 'Encrypting & Saving...' : 'Create Vault'}
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
 
       {/* Create Dynamic Category Dialog */}
       <Dialog open={showAddCategoryModal} onOpenChange={setShowAddCategoryModal}>
@@ -2012,26 +2442,6 @@ export default function CredentialVaultPage() {
           </form>
         </DialogContent>
       </Dialog>
-
-      <VaultImportDialog
-        open={isImportOpen}
-        onOpenChange={setIsImportOpen}
-        onImport={handleImportCredentials}
-        isImporting={isImporting}
-      />
-
-      <VaultFolderCreateModal
-        open={isCreateFolderOpen}
-        onOpenChange={(open) => {
-          setIsCreateFolderOpen(open);
-          if (!open) setCreateFolderParentId(null);
-        }}
-        vaultId={activeVaultId}
-        vaultLabel={activeVaultDefinition?.defaultName ?? activeVaultId}
-        folders={foldersForActiveVault}
-        onCreate={handleCreateFolder}
-        initialParentId={createFolderParentId}
-      />
     </div>
   );
 }

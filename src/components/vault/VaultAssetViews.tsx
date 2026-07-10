@@ -289,7 +289,7 @@ function AssetTableRow({
 }) {
   const { t } = useTranslation();
   const status = getAssetStatus(asset);
-  const vaultId = resolveCredVaultId(asset, index);
+  const vaultId = resolveCredVaultId(asset);
   const vault = VAULT_DEFINITIONS.find((v) => v.id === vaultId);
   const strength = strengthFromTags(asset.tags);
 
@@ -364,7 +364,7 @@ function AssetCard({
 }) {
   const { t } = useTranslation();
   const status = getAssetStatus(asset);
-  const vaultId = resolveCredVaultId(asset, index);
+  const vaultId = resolveCredVaultId(asset);
 
   return (
     <div
