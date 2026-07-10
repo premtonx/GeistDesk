@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent, type KeyboardEvent } from 'react';
+import { useCallback, useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
 import { 
   Lock, 
@@ -52,9 +52,23 @@ import { Badge } from '../../components/ui/badge';
 import { Textarea } from '../../components/ui/textarea';
 import { toast } from 'sonner';
 import { cn } from '../../lib/utils';
-import { argon2id } from 'hash-wasm';
-import Dexie, { type Table } from 'dexie';
-import { useLiveQuery } from 'dexie-react-hooks';
+import {
+  buildVaultKeySalt,
+  decryptData,
+  deriveMasterKey,
+  encryptData,
+  slugifyVaultName,
+} from '../../lib/credential-vault-crypto';
+import {
+  createVaultFolderOnServer,
+  ensureDefaultPersonalVault,
+  fetchAndDecryptVaults,
+  PERSONAL_VAULT_SLUG,
+  useVaultPersistence,
+  type VaultCategory,
+  type VaultCredential,
+} from '../../lib/credential-vault-sync';
+import type { CredentialVaultFolder } from '../../services/credentialVaultApi';
 
 import { 
   Dialog, 
@@ -83,16 +97,6 @@ import { useAuth, useAdmin } from '../../lib/hooks';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { ModuleToolbarSelect } from '../ui/module-page';
 import { logAudit } from '../../services/auditService';
-import { 
-  collection, 
-  query, 
-  where, 
-  onSnapshot, 
-  addDoc, 
-  doc, 
-  getDoc
-} from 'firebase/firestore';
-import { db } from '../../lib/firebase';
 
 // Import GeistVault Modular Components
 import { GeistVaultSessionLauncher } from './geistvault/GeistVaultSessionLauncher';
@@ -122,132 +126,8 @@ import {
 } from '../vault/vault-utils';
 
 // --- Database Schema ---
-interface Credential {
-  id?: number | string; // Permit both local number IDs and Remote string IDs
-  type: string;
-  label: string;
-  username: string;
-  encryptedPassword: string;
-  host?: string;
-  port?: string;
-  domain?: string;
-  gateway?: string;
-  configData?: string;
-  notes?: string;
-  updatedAt: number;
-  icon?: string;
-  iconType?: 'preset' | 'custom';
-  lastModifiedBy?: string;
-  favorite?: boolean;
-  deleted?: boolean;
-  vaultId?: string;
-
-  // Enterprise Extensions
-  visibility?: string;
-  owner?: string;
-  team?: string;
-  department?: string;
-  linkedCompany?: string;
-  linkedAsset?: string;
-  linkedTicket?: string;
-  tags?: string[];
-  expirationPolicy?: string;
-  rotationPolicy?: string;
-  totpSecret?: string;
-  backupCodes?: string;
-  recoveryKeys?: string;
-  authenticatorNotes?: string;
-  attachments?: { name: string; size: string; type: string }[];
-  securitySettings?: {
-    burnAfterRead?: boolean;
-    requireApproval?: boolean;
-    jitAccess?: boolean;
-    requireMfa?: boolean;
-    disableExport?: boolean;
-    disableCopy?: boolean;
-  };
-}
-
-interface CustomCategory {
-  id?: number;
-  name: string;
-  slug: string;
-  icon: string;
-}
-
-class SovereignDB extends Dexie {
-  credentials!: Table<Credential>;
-  categories!: Table<CustomCategory>;
-
-  constructor() {
-    super('SovereignVault');
-    this.version(1).stores({
-      credentials: '++id, type, label, username, updatedAt'
-    });
-    this.version(2).stores({
-      credentials: '++id, type, label, username, updatedAt',
-      categories: '++id, name, &slug'
-    });
-  }
-}
-
-const localDB = new SovereignDB();
-
-// --- Crypto Helpers ---
-async function deriveMasterKey(password: string, salt: string) {
-  const result = await argon2id({
-    password: password,
-    salt: salt,
-    parallelism: 1,
-    iterations: 10,
-    memorySize: 65536, // 64MB
-    hashLength: 32,
-    outputType: 'binary',
-  });
-  return result;
-}
-
-async function encryptData(data: string, key: Uint8Array) {
-  const iv = crypto.getRandomValues(new Uint8Array(12));
-  const encodedData = new TextEncoder().encode(data);
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    key as any,
-    { name: 'AES-GCM' },
-    false,
-    ['encrypt']
-  );
-  const encrypted = await crypto.subtle.encrypt(
-    { name: 'AES-GCM', iv },
-    cryptoKey,
-    encodedData
-  );
-  
-  // Combine IV and Encrypted Data
-  const combined = new Uint8Array(iv.length + encrypted.byteLength);
-  combined.set(iv);
-  combined.set(new Uint8Array(encrypted), iv.length);
-  return btoa(String.fromCharCode(...combined));
-}
-
-async function decryptData(encryptedB64: string, key: Uint8Array) {
-  const combined = new Uint8Array(atob(encryptedB64).split('').map(c => c.charCodeAt(0)));
-  const iv = combined.slice(0, 12);
-  const data = combined.slice(12);
-  const cryptoKey = await crypto.subtle.importKey(
-    'raw',
-    key as any,
-    { name: 'AES-GCM' },
-    false,
-    ['decrypt']
-  );
-  const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv },
-    cryptoKey,
-    data
-  );
-  return new TextDecoder().decode(decrypted);
-}
+type Credential = VaultCredential;
+type CustomCategory = VaultCategory;
 
 // --- Main Component ---
 export default function CredentialVaultPage() {
@@ -259,7 +139,31 @@ export default function CredentialVaultPage() {
   const [accessCategory, setAccessCategory] = useState<string>('all');
   const [smartFilter, setSmartFilter] = useState<VaultSmartFilter | null>(null);
   const [assetViewMode, setAssetViewMode] = useState<VaultAssetViewMode>('table');
-  const [sharedVaults, setSharedVaults] = useState<any[]>([]);
+  const [vaultFolders, setVaultFolders] = useState<CredentialVaultFolder[]>([]);
+  const [credentials, setCredentials] = useState<Credential[]>([]);
+  const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
+  const [isHydratingVault, setIsHydratingVault] = useState(false);
+  const { persistFolder, schedulePersistFolder } = useVaultPersistence();
+
+  const folderBySlug = useMemo(() => {
+    const map = new Map<string, CredentialVaultFolder>();
+    for (const folder of vaultFolders) map.set(folder.slug, folder);
+    return map;
+  }, [vaultFolders]);
+
+  const syncVaultSlug = useCallback(
+    (
+      slug: string,
+      nextCredentials: Credential[],
+      nextCategories: CustomCategory[],
+      key: Uint8Array,
+    ) => {
+      const folder = folderBySlug.get(slug);
+      if (!folder) return;
+      schedulePersistFolder(folder, nextCredentials, nextCategories, key);
+    },
+    [folderBySlug, schedulePersistFolder],
+  );
 
   useEffect(() => {
     startOrchestratorConfigSync();
@@ -408,61 +312,71 @@ export default function CredentialVaultPage() {
   // Chrome Extension simulate settings
   const [chromeSyncActive, setChromeSyncActive] = useState(true);
 
-  // Local state query from dexie (reactive)
-  const credentialsQuery = useLiveQuery(async () => {
-    let items = await localDB.credentials.toArray();
-    return items.sort((a, b) => b.updatedAt - a.updatedAt);
-  }) || [];
+  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
+  const [showCreateVaultModal, setShowCreateVaultModal] = useState(false);
+  const [newVaultName, setNewVaultName] = useState('');
+  const [newVaultType, setNewVaultType] = useState<'personal' | 'shared'>('personal');
+  const [newVaultSharedEmails, setNewVaultSharedEmails] = useState('');
+  const [newCatName, setNewCatName] = useState('');
+  const [newCatIcon, setNewCatIcon] = useState('layers');
 
-  const customCategories = useLiveQuery(async () => {
-    try {
-      return await localDB.categories.toArray();
-    } catch {
-      return [];
+  const seedDefaultCredentials = async (key: Uint8Array): Promise<{ credentials: Credential[]; categories: CustomCategory[] }> => {
+    const defaultCats: CustomCategory[] = [
+      { name: 'Kubernetes Nodes', slug: 'k8s', icon: 'server' },
+      { name: 'Slack Workspaces', slug: 'slack', icon: 'layers' },
+    ];
+    const seeded: Credential[] = [];
+    for (const item of SEEDED_CREDENTIALS) {
+      const encryptedPassword = await encryptData(item.plainPass, key);
+      seeded.push({
+        id: crypto.randomUUID(),
+        type: item.type,
+        label: item.label,
+        username: item.username,
+        encryptedPassword,
+        host: item.host,
+        notes: item.notes,
+        updatedAt: Date.now() - item.offsetHours * 3600 * 1000,
+        lastModifiedBy: item.lastModifiedBy,
+        favorite: item.favorite,
+        deleted: false,
+        vaultId: item.vaultId || PERSONAL_VAULT_SLUG,
+      });
     }
-  }) || [];
+    logAudit({ module: 'credentials', action: 'vault_seeded', details: { source: 'high_fidelity_screenshot_data' } });
+    return { credentials: seeded, categories: defaultCats };
+  };
 
-  // Seeding default high-fidelity items into Dexie if empty
-  const seedDefaultCredentials = async (key: Uint8Array) => {
+  const hydrateVaultFromServer = async (key: Uint8Array) => {
+    setIsHydratingVault(true);
     try {
-      // Seed default categories
-      try {
-        const catCount = await localDB.categories.count();
-        if (catCount === 0) {
-          const defaultCats = [
-            { name: 'Kubernetes Nodes', slug: 'k8s', icon: 'server' },
-            { name: 'Slack Workspaces', slug: 'slack', icon: 'layers' }
-          ];
-          for (const cat of defaultCats) {
-            await localDB.categories.add(cat);
-          }
-        }
-      } catch (err) {
-        console.error("Failed to seed default categories", err);
+      let { folders, credentials: remoteCredentials, categories: remoteCategories } =
+        await fetchAndDecryptVaults(key);
+
+      let personalFolder = await ensureDefaultPersonalVault(key, folders);
+      if (!folders.some((f) => f.id === personalFolder.id)) {
+        folders = [personalFolder, ...folders];
       }
 
-      const count = await localDB.credentials.count();
-      if (count === 0) {
-        for (const item of SEEDED_CREDENTIALS) {
-          const encryptedPassword = await encryptData(item.plainPass, key);
-          await localDB.credentials.add({
-            type: item.type,
-            label: item.label,
-            username: item.username,
-            encryptedPassword,
-            host: item.host,
-            notes: item.notes,
-            updatedAt: Date.now() - (item.offsetHours * 3600 * 1000),
-            lastModifiedBy: item.lastModifiedBy,
-            favorite: item.favorite,
-            deleted: false,
-            vaultId: item.vaultId
-          });
-        }
-        logAudit({ module: 'credentials', action: 'vault_seeded', details: { source: 'high_fidelity_screenshot_data' } });
+      let mergedCredentials = remoteCredentials;
+      let mergedCategories = remoteCategories;
+
+      if (mergedCredentials.length === 0) {
+        const seeded = await seedDefaultCredentials(key);
+        mergedCredentials = seeded.credentials;
+        mergedCategories = seeded.categories;
+        personalFolder = await persistFolder(personalFolder, mergedCredentials, mergedCategories, key);
+        folders = folders.map((f) => (f.id === personalFolder.id ? personalFolder : f));
       }
-    } catch (err) {
-      console.error("Failed to seed default database items", err);
+
+      setVaultFolders(folders);
+      setCredentials(mergedCredentials.sort((a, b) => b.updatedAt - a.updatedAt));
+      setCustomCategories(mergedCategories);
+      setIsLocked(false);
+      logAudit({ module: 'credentials', action: 'vault_unlocked', details: { vaultType: 'server_backed_zero_knowledge' } });
+      toast.success('Sovereign vault unlocked — data loaded from secure PostgreSQL storage.');
+    } finally {
+      setIsHydratingVault(false);
     }
   };
 
@@ -471,19 +385,71 @@ export default function CredentialVaultPage() {
     if (!masterPassword || !user) return;
     setIsUnlocking(true);
     try {
-      // Argon2 key derivation bound to user specific salt string
-      const key = await deriveMasterKey(masterPassword, `user-salt-${user.uid}`);
+      const key = await deriveMasterKey(masterPassword, buildVaultKeySalt(user.uid));
       setDerivedKey(key);
-      await seedDefaultCredentials(key);
-      setIsLocked(false);
-      logAudit({ module: 'credentials', action: 'vault_unlocked', details: { vaultType: 'personal_local' } });
-      toast.success("Sovereign Personal Vault Unlocked Successfully!");
-    } catch (err) {
-      toast.error("Failed to unlock. Ensure Master Password conforms.");
+      await hydrateVaultFromServer(key);
+    } catch (err: any) {
+      console.error('[GeistVault] unlock failed', err);
+      toast.error(err?.message || 'Failed to unlock. Verify your master password.');
+      setDerivedKey(null);
+      setIsLocked(true);
     } finally {
       setIsUnlocking(false);
     }
   };
+
+  const handleCreateVault = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!derivedKey || !newVaultName.trim()) {
+      toast.error('Vault name is required.');
+      return;
+    }
+
+    const slug = slugifyVaultName(newVaultName);
+    if (vaultFolders.some((f) => f.slug === slug)) {
+      toast.error('A vault with this name already exists.');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      const sharedWith =
+        newVaultType === 'shared'
+          ? newVaultSharedEmails
+              .split(/[\s,;]+/)
+              .map((email) => email.trim().toLowerCase())
+              .filter(Boolean)
+          : undefined;
+
+      const created = await createVaultFolderOnServer({
+        name: newVaultName.trim(),
+        type: newVaultType,
+        emoji: newVaultType === 'shared' ? '👥' : '🔒',
+        sharedWith,
+        derivedKey,
+        slug,
+      });
+
+      setVaultFolders((prev) => [...prev, created]);
+      setActiveVaultId(created.slug);
+      setShowCreateVaultModal(false);
+      setNewVaultName('');
+      setNewVaultType('personal');
+      setNewVaultSharedEmails('');
+      toast.success(`Vault "${created.name}" created and persisted securely.`);
+      logAudit({
+        module: 'credentials',
+        action: 'vault_folder_created',
+        details: { name: created.name, type: created.type, slug: created.slug },
+      });
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to create vault folder.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleCreateFolder = () => setShowCreateVaultModal(true);
 
   // Safe Decrypt helper passed to subcomponents using derivedKey
   const handleDecryptPassword = async (cred: Credential): Promise<string | null> => {
@@ -496,22 +462,20 @@ export default function CredentialVaultPage() {
     }
   };
 
-  // Favorites toggle with direct IndexedDB write back
   const handleToggleFavorite = async (cred: Credential) => {
-    if (!cred.id) return;
+    if (!cred.id || !derivedKey) return;
     try {
       const newFav = !cred.favorite;
-      await localDB.credentials.update(Number(cred.id), { favorite: newFav });
-      toast.success(newFav ? "Added to Pinned Favorites" : "Removed from Favorites");
+      const nextCredentials = credentials.map((item) =>
+        item.id === cred.id ? { ...item, favorite: newFav } : item,
+      );
+      setCredentials(nextCredentials);
+      syncVaultSlug(resolveCredVaultId(cred), nextCredentials, customCategories, derivedKey);
+      toast.success(newFav ? 'Added to Pinned Favorites' : 'Removed from Favorites');
     } catch (err) {
-      toast.error("Could not toggle favorite status");
+      toast.error('Could not toggle favorite status');
     }
   };
-
-  // Category Modal States
-  const [showAddCategoryModal, setShowAddCategoryModal] = useState(false);
-  const [newCatName, setNewCatName] = useState('');
-  const [newCatIcon, setNewCatIcon] = useState('layers');
 
   const handleCreateCategory = async (e: FormEvent) => {
     e.preventDefault();
@@ -526,32 +490,31 @@ export default function CredentialVaultPage() {
     }
 
     const existingBuiltIn = slug === 'rdp' || slug === 'vpn' || slug === 'ssh' || slug === 'web' || slug === 'db' || slug === 'api' || slug === 'cloud' || slug === 'cert';
-    let existingCustom = false;
-    try {
-      const dbCats = await localDB.categories.toArray();
-      existingCustom = dbCats.some(c => c.slug === slug);
-    } catch (err) {
-      console.error(err);
-    }
+    const existingCustom = customCategories.some((c) => c.slug === slug);
 
     if (existingBuiltIn || existingCustom) {
       toast.error("A category with this label or system slug already exists.");
       return;
     }
 
+    if (!derivedKey) return;
+
     try {
-      await localDB.categories.add({
+      const nextCategory: CustomCategory = {
         name: newCatName.trim(),
         slug,
-        icon: newCatIcon
-      });
+        icon: newCatIcon,
+      };
+      const nextCategories = [...customCategories, nextCategory];
+      setCustomCategories(nextCategories);
+      syncVaultSlug(PERSONAL_VAULT_SLUG, credentials, nextCategories, derivedKey);
       toast.success(`Category "${newCatName.trim()}" created successfully!`);
       logAudit({ module: 'credentials', action: 'category_created', details: { name: newCatName.trim(), slug, icon: newCatIcon } });
       setNewCatName('');
       setNewCatIcon('layers');
       setShowAddCategoryModal(false);
     } catch (err) {
-      toast.error("Failed to write category to database storage.");
+      toast.error("Failed to write category to secure vault storage.");
     }
   };
 
@@ -627,22 +590,28 @@ export default function CredentialVaultPage() {
         }
       ];
 
+      const imported: Credential[] = [];
       for (const item of extraItems) {
         const encryptedPassword = await encryptData(item.plainPass, derivedKey);
-        await localDB.credentials.add({
+        imported.push({
+          id: crypto.randomUUID(),
           type: item.type,
           label: item.label,
           username: item.username,
           encryptedPassword,
           host: item.host,
           notes: item.notes,
-          updatedAt: Date.now() - (item.offsetHours * 3600 * 1000),
+          updatedAt: Date.now() - item.offsetHours * 3600 * 1000,
           lastModifiedBy: 'Operator',
           favorite: false,
           deleted: false,
-          vaultId: 'local'
+          vaultId: PERSONAL_VAULT_SLUG,
         });
       }
+
+      const nextCredentials = [...credentials, ...imported].sort((a, b) => b.updatedAt - a.updatedAt);
+      setCredentials(nextCredentials);
+      syncVaultSlug(PERSONAL_VAULT_SLUG, nextCredentials, customCategories, derivedKey);
 
       toast.success("Imported full high-fidelity dummy credentials dataset!");
       logAudit({ module: 'credentials', action: 'dummy_data_imported', details: { dataset: 'high_fidelity_infrastructure' } });
@@ -663,6 +632,7 @@ export default function CredentialVaultPage() {
     try {
       const encryptedPassword = await encryptData(rawPassword, derivedKey);
       const toAdd: Credential = {
+        id: crypto.randomUUID(),
         type: newEntry.type as any,
         label: newEntry.label || '',
         username: newEntry.username || '',
@@ -673,7 +643,7 @@ export default function CredentialVaultPage() {
         lastModifiedBy: 'You',
         favorite: false,
         deleted: false,
-        vaultId: activeVaultId === 'local' ? (newEntry.vaultId || 'local') : activeVaultId,
+        vaultId: activeVaultId === PERSONAL_VAULT_SLUG ? (newEntry.vaultId || PERSONAL_VAULT_SLUG) : activeVaultId,
 
         // Enterprise metadata
         owner: newEntry.owner || 'You',
@@ -700,9 +670,11 @@ export default function CredentialVaultPage() {
         }
       };
 
-      await localDB.credentials.add(toAdd);
+      const nextCredentials = [toAdd, ...credentials].sort((a, b) => b.updatedAt - a.updatedAt);
+      setCredentials(nextCredentials);
+      syncVaultSlug(resolveCredVaultId(toAdd), nextCredentials, customCategories, derivedKey);
       logAudit({ module: 'credentials', action: 'credential_created', details: { label: toAdd.label, type: toAdd.type } });
-      toast.success("Secret encrypted and captured in enterprise secure vault!");
+      toast.success("Secret encrypted and persisted to sovereign PostgreSQL vault!");
       
       // Reset
       setNewEntry({
@@ -759,16 +731,23 @@ export default function CredentialVaultPage() {
         encryptedPassword = await encryptData(rawPassword, derivedKey);
       }
 
-      await localDB.credentials.update(Number(editingCred.id), {
-        label: editingCred.label,
-        type: editingCred.type,
-        username: editingCred.username,
-        host: editingCred.host,
-        notes: editingCred.notes,
-        encryptedPassword,
-        updatedAt: Date.now(),
-        lastModifiedBy: 'You'
-      });
+      const nextCredentials = credentials.map((item) =>
+        item.id === editingCred.id
+          ? {
+              ...item,
+              label: editingCred.label,
+              type: editingCred.type,
+              username: editingCred.username,
+              host: editingCred.host,
+              notes: editingCred.notes,
+              encryptedPassword,
+              updatedAt: Date.now(),
+              lastModifiedBy: 'You',
+            }
+          : item,
+      );
+      setCredentials(nextCredentials);
+      syncVaultSlug(resolveCredVaultId(editingCred), nextCredentials, customCategories, derivedKey);
 
       toast.success("Credential updated successfully");
       setEditingCred(null);
@@ -782,17 +761,24 @@ export default function CredentialVaultPage() {
 
   // Soft Deletion & Hard Deletion helper
   const handleDeleteEntry = async (id: number | string) => {
+    if (!derivedKey) return;
     try {
+      let nextCredentials: Credential[];
       if (selectedView === 'trash') {
-        // Permanent deletion from Dexie
-        await localDB.credentials.delete(Number(id));
-        toast.success("Credential permanently erased from your hard disk.");
+        nextCredentials = credentials.filter((item) => item.id !== id);
+        toast.success("Credential permanently erased from secure vault storage.");
         if (selectedCredential && selectedCredential.id === id) setSelectedCredential(null);
       } else {
-        // Soft move to Trash
-        await localDB.credentials.update(Number(id), { deleted: true });
+        nextCredentials = credentials.map((item) =>
+          item.id === id ? { ...item, deleted: true } : item,
+        );
         toast.success("Secret moved to Trash folder.");
         if (selectedCredential && selectedCredential.id === id) setSelectedCredential(null);
+      }
+      setCredentials(nextCredentials);
+      const changed = credentials.find((item) => item.id === id);
+      if (changed) {
+        syncVaultSlug(resolveCredVaultId(changed), nextCredentials, customCategories, derivedKey);
       }
     } catch (err) {
       toast.error("Operation failed");
@@ -800,8 +786,16 @@ export default function CredentialVaultPage() {
   };
 
   const handleRestoreEntry = async (id: number | string) => {
+    if (!derivedKey) return;
     try {
-      await localDB.credentials.update(Number(id), { deleted: false });
+      const nextCredentials = credentials.map((item) =>
+        item.id === id ? { ...item, deleted: false } : item,
+      );
+      setCredentials(nextCredentials);
+      const changed = credentials.find((item) => item.id === id);
+      if (changed) {
+        syncVaultSlug(resolveCredVaultId(changed), nextCredentials, customCategories, derivedKey);
+      }
       toast.success("Secret restored to storage center.");
     } catch (err) {
       toast.error("Could not restore entry");
@@ -809,8 +803,8 @@ export default function CredentialVaultPage() {
   };
 
   // Filter computations (fully reactive based on active states)
-  const nonDeletedItems = credentialsQuery.filter(c => !c.deleted);
-  const trashItems = credentialsQuery.filter(c => c.deleted);
+  const nonDeletedItems = credentials.filter(c => !c.deleted);
+  const trashItems = credentials.filter(c => c.deleted);
 
   // Compute stats for overview cards
   const totalEntries = nonDeletedItems.length;
@@ -821,7 +815,7 @@ export default function CredentialVaultPage() {
   const recentCount = Math.min(6, nonDeletedItems.length);
 
   const getFilteredCredentials = () => {
-    let list = [...credentialsQuery];
+    let list = [...credentials];
 
     // Smart filter / view modes
     const effectiveView = smartFilter === 'archived' ? 'trash' : smartFilter === 'pinned' || smartFilter === 'favorites' ? 'favorites' : smartFilter === 'recently' ? 'recently' : selectedView;
@@ -846,7 +840,7 @@ export default function CredentialVaultPage() {
       }
 
       // Vault scope
-      list = list.filter((c, idx) => resolveCredVaultId(c, idx) === activeVaultId);
+      list = list.filter((c) => resolveCredVaultId(c) === activeVaultId);
 
       // Access category
       if (accessCategory !== 'all') {
@@ -883,10 +877,29 @@ export default function CredentialVaultPage() {
 
   const currentList = getFilteredCredentials();
 
-  const vaultCounts = VAULT_DEFINITIONS.reduce<Record<string, number>>((acc, v) => {
-    acc[v.id] = nonDeletedItems.filter((c, idx) => resolveCredVaultId(c, idx) === v.id).length;
+  const vaultCounts = useMemo(() => {
+    const acc: Record<string, number> = {};
+    for (const v of VAULT_DEFINITIONS) {
+      acc[v.id] = nonDeletedItems.filter((c) => resolveCredVaultId(c) === v.id).length;
+    }
+    for (const folder of vaultFolders) {
+      acc[folder.slug] = nonDeletedItems.filter((c) => resolveCredVaultId(c) === folder.slug).length;
+    }
     return acc;
-  }, {});
+  }, [nonDeletedItems, vaultFolders]);
+
+  const dynamicSidebarVaults = useMemo(
+    () =>
+      vaultFolders
+        .filter((folder) => !VAULT_DEFINITIONS.some((v) => v.id === folder.slug))
+        .map((folder) => ({
+          id: folder.slug,
+          emoji: folder.emoji || (folder.type === 'shared' ? '👥' : '🔒'),
+          name: folder.name,
+          permission: folder.layout?.permission,
+        })),
+    [vaultFolders],
+  );
 
   const categoryCounts = ACCESS_CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
     acc[cat.id] = nonDeletedItems.filter((c) => cat.types.includes(c.type)).length;
@@ -907,25 +920,11 @@ export default function CredentialVaultPage() {
   const strengthPercent = Math.round(((nonDeletedItems.length - weakCount) / Math.max(nonDeletedItems.length, 1)) * 100);
 
   const openNewAsset = (type: string) => {
-    setNewEntry((prev) => ({ ...prev, type, vaultId: activeVaultId === 'local' ? 'local' : activeVaultId }));
+    setNewEntry((prev) => ({ ...prev, type, vaultId: activeVaultId === PERSONAL_VAULT_SLUG ? PERSONAL_VAULT_SLUG : activeVaultId }));
     setShowAddModal(true);
   };
 
-  // Sync mechanisms: subscribe to firestore placeholders
-  useEffect(() => {
-    if (!user) return;
-    const qCol = query(collection(db, 'vaults'));
-    const unsub = onSnapshot(qCol, (snap) => {
-      const list: any[] = [];
-      snap.forEach((doc) => {
-        list.push({ id: doc.id, ...doc.data() });
-      });
-      setSharedVaults(list);
-    });
-    return unsub;
-  }, [user]);
-
-  const handleConflictResolution = async (choice: 'sync' | 'overwrite') => {
+  const handleConflictResolution = async (_choice: 'sync' | 'overwrite') => {
     toast.success("Conflict resolved successfully.");
     setConflictItem(null);
   };
@@ -946,7 +945,7 @@ export default function CredentialVaultPage() {
           <div className="space-y-1">
             <h2 className="text-xl font-bold text-slate-800 tracking-tight">{t('vault.lockTitle', 'Unlock GeistVault Enterprise')}</h2>
             <p className="text-[11px] text-slate-400 max-w-sm font-semibold leading-relaxed">
-              {t('vault.lockSubtitle', 'Zero-Knowledge Architecture: Keys decrypted locally in-browser using Argon2id. Central cloud engines never receive your private secrets payload.')}
+              {t('vault.lockSubtitle', 'Zero-Knowledge Architecture: credentials are encrypted locally with Argon2id + AES-GCM, then persisted as ciphertext in PostgreSQL. Clearing browser cache does not erase your vault.')}
             </p>
           </div>
 
@@ -971,7 +970,7 @@ export default function CredentialVaultPage() {
               disabled={isUnlocking}
               className="w-full bg-[#1A73E8] hover:bg-[#155fc0] text-white font-semibold text-xs h-11 rounded-xl shadow-md transition-all flex items-center justify-center gap-1"
             >
-              {isUnlocking ? t('vault.derivingKeys', 'Deriving keys locally...') : t('vault.unlockButton', 'Unlock Vault Node')}
+              {isUnlocking || isHydratingVault ? t('vault.derivingKeys', 'Deriving keys locally...') : t('vault.unlockButton', 'Unlock Vault Node')}
             </Button>
           </form> 
         </motion.div>
@@ -1001,6 +1000,8 @@ export default function CredentialVaultPage() {
             activeVaultId={activeVaultId}
             onVaultChange={(id) => { setActiveVaultId(id); setSmartFilter(null); }}
             vaultCounts={vaultCounts}
+            dynamicVaults={dynamicSidebarVaults}
+            onCreateVault={handleCreateFolder}
             selectedCategory={accessCategory}
             onCategoryChange={(id) => { setAccessCategory(id); setSelectedType('all'); setSmartFilter(null); }}
             categoryCounts={categoryCounts}
@@ -2313,6 +2314,67 @@ export default function CredentialVaultPage() {
               </div>
             </div>
 
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Personal / Shared Vault Folder */}
+      <Dialog open={showCreateVaultModal} onOpenChange={setShowCreateVaultModal}>
+        <DialogContent className="sm:max-w-[480px] rounded-[32px] border-[#DADCE0] p-0 overflow-hidden bg-[#F8F9FA]">
+          <form onSubmit={handleCreateVault}>
+            <DialogHeader className="bg-white border-b border-[#F1F3F4] px-8 py-6">
+              <DialogTitle className="text-xl font-bold text-slate-800">Create Secure Vault Folder</DialogTitle>
+              <DialogDescription className="text-xs text-slate-400 font-medium">
+                Zero-knowledge: credentials are encrypted in your browser before PostgreSQL persistence. The server stores ciphertext only.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="p-8 space-y-4">
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Vault Name</label>
+                <Input
+                  placeholder="e.g. Platform Ops Shared"
+                  value={newVaultName}
+                  onChange={(e) => setNewVaultName(e.target.value)}
+                  className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Vault Type</label>
+                <Select value={newVaultType} onValueChange={(val) => setNewVaultType(val as 'personal' | 'shared')}>
+                  <SelectTrigger className="bg-white border-[#DADCE0] rounded-xl text-sm h-10">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="personal">Personal Vault</SelectItem>
+                    <SelectItem value="shared">Shared Team Vault</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {newVaultType === 'shared' ? (
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Share With (emails)</label>
+                  <Textarea
+                    placeholder="ops@company.com, admin@company.com"
+                    value={newVaultSharedEmails}
+                    onChange={(e) => setNewVaultSharedEmails(e.target.value)}
+                    className="bg-white border-[#DADCE0] rounded-xl text-sm min-h-[72px]"
+                  />
+                </div>
+              ) : null}
+            </div>
+
+            <DialogFooter className="bg-white border-t border-[#F1F3F4] px-8 py-5">
+              <Button type="button" variant="ghost" onClick={() => setShowCreateVaultModal(false)} className="rounded-xl text-xs">
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSaving} className="bg-[#1A73E8] hover:bg-blue-700 text-white rounded-xl text-xs h-10 px-6">
+                {isSaving ? 'Encrypting & Saving...' : 'Create Vault'}
+              </Button>
+            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>

@@ -13,6 +13,13 @@ interface VaultLeftSidebarProps {
   activeVaultId: string;
   onVaultChange: (id: string) => void;
   vaultCounts: Record<string, number>;
+  dynamicVaults?: Array<{
+    id: string;
+    emoji: string;
+    name: string;
+    permission?: string;
+  }>;
+  onCreateVault?: () => void;
   selectedCategory: string;
   onCategoryChange: (id: string) => void;
   categoryCounts: Record<string, number>;
@@ -74,6 +81,8 @@ export function VaultLeftSidebar({
   activeVaultId,
   onVaultChange,
   vaultCounts,
+  dynamicVaults = [],
+  onCreateVault,
   selectedCategory,
   onCategoryChange,
   categoryCounts,
@@ -82,6 +91,9 @@ export function VaultLeftSidebar({
   smartCounts,
 }: VaultLeftSidebarProps) {
   const { t } = useTranslation();
+
+  const staticIds = new Set(VAULT_DEFINITIONS.map((v) => v.id));
+  const extraVaults = dynamicVaults.filter((v) => !staticIds.has(v.id));
 
   const authorities = [
     { key: 'personal', label: t('vault.authorities.personal', 'Personal'), vaults: 1, permission: t('vault.permissions.owner', 'Owner') },
@@ -126,6 +138,35 @@ export function VaultLeftSidebar({
               </NavButton>
             );
           })}
+          {extraVaults.map((vault) => {
+            const active = activeVaultId === vault.id;
+            const count = vaultCounts[vault.id] ?? 0;
+            return (
+              <NavButton
+                key={vault.id}
+                active={active}
+                onClick={() => onVaultChange(vault.id)}
+                trailing={
+                  <span className={cn('text-[10px] tabular-nums', active ? 'text-white/80' : 'text-slate-400')}>
+                    {count}
+                  </span>
+                }
+              >
+                <span className="flex items-center gap-2 min-w-0">
+                  <span aria-hidden>{vault.emoji}</span>
+                  <span className="truncate">{vault.name}</span>
+                </span>
+              </NavButton>
+            );
+          })}
+          {onCreateVault ? (
+            <NavButton onClick={onCreateVault}>
+              <span className="flex items-center gap-2 text-blue-600">
+                <span aria-hidden>＋</span>
+                {t('vault.newVault', 'New Vault')}
+              </span>
+            </NavButton>
+          ) : null}
         </div>
 
         <SectionTitle>{t('vault.sections.categories', 'Access Categories')}</SectionTitle>

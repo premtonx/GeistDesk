@@ -39,13 +39,12 @@ export const ACCESS_CATEGORIES: AccessCategoryDef[] = [
   { id: 'apps', emoji: '📱', nameKey: 'vault.categories.applications', defaultName: 'Applications', types: ['slack', 'k8s'] },
 ];
 
-export function resolveCredVaultId(cred: { vaultId?: string }, index: number): string {
-  if (cred.vaultId && cred.vaultId !== 'local') {
+export function resolveCredVaultId(cred: { vaultId?: string }): string {
+  if (cred.vaultId) {
     if (cred.vaultId === 'shared') return 'shared-company';
     return cred.vaultId;
   }
-  const ids = VAULT_DEFINITIONS.map((v) => v.id);
-  return ids[index % ids.length];
+  return 'local';
 }
 
 export function isWeakCred(cred: { notes?: string; label: string; username: string }): boolean {
