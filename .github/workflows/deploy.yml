@@ -40,6 +40,7 @@ jobs:
         env:
           BUILD_ID: ${{ github.sha }}
           VAULT_ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+          VITE_DEMO_MODE: 'true'
         run: |
           set -euo pipefail
           npm run build 2>&1 | tee build.log

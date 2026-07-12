@@ -38,7 +38,8 @@ import {
   LogIn,
   Network,
   Cpu,
-  Layers
+  Layers,
+  Sparkles
 } from 'lucide-react';
 import { getModuleConfig } from '../../lib/module-config';
 import { GeistDeskLogo } from '../ui/GeistDeskLogo';
@@ -67,6 +68,10 @@ const LOCAL_TEXTS = {
     architectureCert: "Sicherheitsarchitektur zertifiziert",
     regulatedIndustries: "Für regulierte Branchen entwickelt",
     autofillDemo: "Demo-Zugang ausfüllen",
+    demoLoginBtn: "Als Demo-Benutzer anmelden",
+    demoLoginSub: "Voller Admin-Zugang · Keine Registrierung nötig",
+    demoLoginHint: "Ideal zum Erkunden der Showcase-Umgebung",
+    orSignInWithAccount: "oder mit eigenem Konto anmelden",
     welcomeTitle: "Willkommen zurück",
     welcomeSub: "Sicherer Zugriff auf Ihre GeistDesk-Arbeitsumgebung",
     registerTitle: "Souveräne Zugangsdaten erstellen",
@@ -135,6 +140,10 @@ const LOCAL_TEXTS = {
     architectureCert: "Security Architecture Certified",
     regulatedIndustries: "Built for Regulated Industries",
     autofillDemo: "Autofill Auth Demo",
+    demoLoginBtn: "Login as Demo User",
+    demoLoginSub: "Full admin access · No signup required",
+    demoLoginHint: "Perfect for exploring the showcase environment",
+    orSignInWithAccount: "or sign in with your account",
     welcomeTitle: "Welcome Back",
     welcomeSub: "Secure access to your GeistDesk workspace",
     registerTitle: "Create Sovereign Credentials",
@@ -280,14 +289,15 @@ export default function LoginPage() {
   const isDemoMode = import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === 'true';
   const DEMO_EMAIL = 'demo@geistdesk.com';
   const DEMO_PASSWORD = 'GeistDeskDemo2026';
-  const handleAutofill = async () => {
-    if (!isDemoMode) return;
+
+  const handleDemoLogin = async () => {
     setEmail(DEMO_EMAIL);
     setPassword(DEMO_PASSWORD);
+    setIsRegister(false);
     setLoading(true);
     try {
       await signInWithEmailAndPassword(auth, DEMO_EMAIL, DEMO_PASSWORD);
-      toast.success(texts.toasts.credentialsVerified);
+      toast.success(texts.toasts.workspaceAuth);
     } catch (error: any) {
       console.error(error);
       toast.error(error.message || texts.toasts.authFailed);
@@ -545,20 +555,7 @@ export default function LoginPage() {
           </div>
 
           <div className="flex gap-2 items-center">
-            {isDemoMode ? (
-              <>
-                <Button 
-                  type="button"
-                  variant="outline" 
-                  size="sm"
-                  onClick={handleAutofill}
-                  className="text-[9px] uppercase font-black tracking-wider text-rose-600 bg-rose-50/50 hover:bg-rose-50 border-rose-200/60 rounded-full h-7 px-3 cursor-pointer hover:shadow-sm"
-                >
-                  {texts.autofillDemo}
-                </Button>
-                <div className="h-4 w-px bg-slate-200" />
-              </>
-            ) : null}
+            <div className="h-4 w-px bg-slate-200" />
             <span className="text-slate-400 font-black uppercase text-[9px] tracking-widest pl-0.5">Console v2.6 Ready</span>
           </div>
         </div>
@@ -579,6 +576,39 @@ export default function LoginPage() {
               {isRegister ? texts.registerSub : texts.welcomeSub}
             </p>
           </div>
+
+          {/* Showcase demo entry — one-click explore without credentials */}
+          {!isRegister && isDemoMode ? (
+            <div className="space-y-3">
+              <button
+                type="button"
+                onClick={handleDemoLogin}
+                disabled={loading}
+                className="w-full rounded-2xl border border-emerald-200/80 bg-gradient-to-br from-emerald-50 via-white to-teal-50/80 p-4 text-left shadow-sm shadow-emerald-500/5 transition-all hover:border-emerald-300 hover:shadow-md hover:shadow-emerald-500/10 disabled:opacity-60 disabled:pointer-events-none group"
+              >
+                <div className="flex items-start gap-3">
+                  <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-emerald-200 bg-white text-emerald-600 shadow-sm group-hover:scale-105 transition-transform">
+                    <Sparkles className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-extrabold text-slate-900">{texts.demoLoginBtn}</p>
+                    <p className="mt-0.5 text-[11px] font-semibold text-emerald-700">{texts.demoLoginSub}</p>
+                    <p className="mt-1 text-[10px] font-medium text-slate-500">{texts.demoLoginHint}</p>
+                  </div>
+                  <ArrowRight className="mt-2 h-4 w-4 shrink-0 text-emerald-500 transition-transform group-hover:translate-x-0.5" />
+                </div>
+              </button>
+
+              <div className="relative flex items-center justify-center py-1">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-100" />
+                </div>
+                <span className="relative bg-white px-3 text-[9px] font-extrabold uppercase tracking-widest text-slate-400">
+                  {texts.orSignInWithAccount}
+                </span>
+              </div>
+            </div>
+          ) : null}
 
           {/* Login Action Form */}
           <form onSubmit={handleEmailAuth} className="space-y-3.5">
