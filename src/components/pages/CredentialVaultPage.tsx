@@ -124,6 +124,8 @@ import { VaultSecuritySidebar } from '../vault/VaultSecuritySidebar';
 import { VaultViewModeSelector, type VaultAssetViewMode } from '../vault/VaultViewModeSelector';
 import { VaultAssetViews } from '../vault/VaultAssetViews';
 import { VaultFabMenu } from '../vault/VaultFabMenu';
+import { VaultPropertiesPane } from '../vault/VaultPropertiesPane';
+import { VaultExportDialog } from '../vault/VaultExportDialog';
 import {
   ACCESS_CATEGORIES,
   VAULT_DEFINITIONS,
@@ -325,6 +327,7 @@ export default function CredentialVaultPage() {
   const [newVaultName, setNewVaultName] = useState('');
   const [newVaultType, setNewVaultType] = useState<'personal' | 'shared'>('personal');
   const [newVaultSharedEmails, setNewVaultSharedEmails] = useState('');
+  const [showExportDialog, setShowExportDialog] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('layers');
 
@@ -1010,6 +1013,22 @@ export default function CredentialVaultPage() {
   const securityScore = Math.min(99, healthScore + 8);
   const strengthPercent = Math.round(((nonDeletedItems.length - weakCount) / Math.max(nonDeletedItems.length, 1)) * 100);
 
+  const activeVaultFolder = folderBySlug.get(activeVaultId);
+  const activeVaultDefinition = VAULT_DEFINITIONS.find((v) => v.id === activeVaultId);
+  const isPersonalVaultView =
+    activeVaultId === PERSONAL_VAULT_SLUG ||
+    activeVaultFolder?.type === 'personal' ||
+    activeVaultDefinition?.scope === 'personal';
+  const activeVaultDisplayName =
+    activeVaultFolder?.name ||
+    (activeVaultDefinition
+      ? t(activeVaultDefinition.nameKey, activeVaultDefinition.defaultName)
+      : t('vault.vaults.personal', 'Personal Vault'));
+  const personalExportCredentials = useMemo(
+    () => nonDeletedItems.filter((c) => resolveCredVaultId(c) === activeVaultId),
+    [nonDeletedItems, activeVaultId],
+  );
+
   const openNewAsset = (type: string) => {
     setNewEntry((prev) => ({ ...prev, type, vaultId: activeVaultId === PERSONAL_VAULT_SLUG ? PERSONAL_VAULT_SLUG : activeVaultId }));
     setShowAddModal(true);
@@ -1124,6 +1143,18 @@ export default function CredentialVaultPage() {
               />
 
               <VaultAiSecurityBanner rotateCount={weakCount} expiringKeys={expiringCount} />
+
+              <VaultPropertiesPane
+                vaultName={activeVaultDisplayName}
+                vaultEmoji={
+                  activeVaultFolder?.emoji ||
+                  activeVaultDefinition?.emoji ||
+                  '🔒'
+                }
+                itemCount={personalExportCredentials.length}
+                isPersonal={isPersonalVaultView}
+                onExportData={() => setShowExportDialog(true)}
+              />
 
               <VaultSearchSection
                 value={searchQuery}
@@ -2408,6 +2439,28 @@ export default function CredentialVaultPage() {
           </form>
         </DialogContent>
       </Dialog>
+
+      {user?.uid ? (
+        <VaultExportDialog
+          open={showExportDialog}
+          onOpenChange={setShowExportDialog}
+          userId={user.uid}
+          vaultName={activeVaultDisplayName}
+          credentials={personalExportCredentials}
+          decryptPassword={handleDecryptPassword}
+          verifyMasterPassword={async (password) => {
+            if (!derivedKey || !user?.uid) return false;
+            const candidate = await deriveMasterKey(password, buildVaultKeySalt(user.uid));
+            if (candidate.length !== derivedKey.length) return false;
+            let mismatch = 0;
+            for (let i = 0; i < candidate.length; i += 1) {
+              mismatch |= candidate[i] ^ derivedKey[i];
+            }
+            candidate.fill(0);
+            return mismatch === 0;
+          }}
+        />
+      ) : null}
 
       {/* Create Personal / Shared Vault Folder */}
       <Dialog open={showCreateVaultModal} onOpenChange={setShowCreateVaultModal}>
