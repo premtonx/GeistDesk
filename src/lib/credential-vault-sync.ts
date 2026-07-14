@@ -61,6 +61,8 @@ export interface VaultCategory {
   name: string;
   slug: string;
   icon: string;
+  /** Vault slug this category belongs to (personal or shared). */
+  vaultId?: string;
 }
 
 export const PERSONAL_VAULT_SLUG = 'local';
@@ -110,11 +112,16 @@ export function buildFolderPayload(
   folderSlug: string,
   includeCategories: boolean,
 ): VaultBlobPayload {
+  const categoriesForVault = allCategories.filter(
+    (cat) => (cat.vaultId || PERSONAL_VAULT_SLUG) === folderSlug,
+  );
   return {
     credentials: credentialsForFolder(allCredentials, folderSlug) as unknown as Array<
       Record<string, unknown>
     >,
-    categories: (includeCategories ? allCategories : []) as unknown as Array<Record<string, unknown>>,
+    categories: (includeCategories ? categoriesForVault : []) as unknown as Array<
+      Record<string, unknown>
+    >,
   };
 }
 
@@ -156,10 +163,11 @@ export async function fetchAndDecryptVaults(
           vaultId: folderSlugToVaultId(folder.slug),
         });
       }
-      if (folder.slug === PERSONAL_VAULT_SLUG || folder.type === 'personal') {
-        for (const cat of blob.categories) {
-          categories.push(cat as unknown as VaultCategory);
-        }
+      for (const cat of blob.categories) {
+        categories.push({
+          ...(cat as unknown as VaultCategory),
+          vaultId: folderSlugToVaultId(folder.slug),
+        });
       }
     } catch {
       throw new Error(
@@ -321,13 +329,11 @@ export async function migrateLegacyVaultToKek(params: {
     }
   }
 
-  const includeCategories =
-    params.folder.slug === PERSONAL_VAULT_SLUG || params.folder.type === 'personal';
   const payload = buildFolderPayload(
     reencrypted,
     params.categories,
     params.folder.slug,
-    includeCategories,
+    true,
   );
   const encryptedBlob = await encryptFolderBlob(payload, vaultKey);
   const folder = await credentialVaultApi.updateVault(params.folder.id, {
@@ -352,8 +358,7 @@ export function useVaultPersistence() {
         keyWrappers?: WrappedVaultKey[];
       },
     ) => {
-      const includeCategories =
-        folder.slug === PERSONAL_VAULT_SLUG || folder.type === 'personal';
+      const includeCategories = true;
       const payload = buildFolderPayload(
         allCredentials,
         allCategories,

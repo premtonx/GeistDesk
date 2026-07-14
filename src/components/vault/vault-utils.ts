@@ -63,6 +63,66 @@ export function resolveVaultScope(vaultId: string, vaultDefinitions: VaultDefini
   return match?.scope ?? 'personal';
 }
 
+/** True when the vault is personal (fully category-editable by the owner). */
+export function isPersonalVaultContext(params: {
+  vaultId: string;
+  folderType?: 'personal' | 'shared' | null;
+  scope?: VaultAuthorityScope;
+}): boolean {
+  if (params.vaultId === 'local') return true;
+  if (params.folderType === 'personal') return true;
+  if (params.scope === 'personal') return true;
+  return false;
+}
+
+/**
+ * Category write RBAC:
+ * - Personal vaults: owner can always create/edit/delete categories.
+ * - Shared / corporate vaults: only vault Owner/Admin (or platform admin / creator).
+ */
+export function canManageVaultCategories(params: {
+  vaultId: string;
+  folder?: {
+    type?: 'personal' | 'shared';
+    createdBy?: string;
+    layout?: { permission?: string };
+  } | null;
+  vaultDefinition?: VaultDefinition | null;
+  userId?: string | null;
+  isPlatformAdmin?: boolean;
+}): boolean {
+  const scope = params.vaultDefinition?.scope ?? resolveVaultScope(params.vaultId, VAULT_DEFINITIONS);
+  if (
+    isPersonalVaultContext({
+      vaultId: params.vaultId,
+      folderType: params.folder?.type,
+      scope,
+    })
+  ) {
+    return true;
+  }
+
+  if (params.isPlatformAdmin) return true;
+  if (params.userId && params.folder?.createdBy && params.folder.createdBy === params.userId) {
+    return true;
+  }
+
+  const permission = String(
+    params.folder?.layout?.permission ||
+      params.vaultDefinition?.defaultPermission ||
+      '',
+  )
+    .trim()
+    .toLowerCase();
+
+  return (
+    permission === 'owner' ||
+    permission === 'admin' ||
+    permission === 'besitzer' ||
+    permission === 'administrator'
+  );
+}
+
 export function isWeakCred(cred: { notes?: string; label: string; username: string }): boolean {
   return (
     cred.notes?.toLowerCase().includes('weak') ||

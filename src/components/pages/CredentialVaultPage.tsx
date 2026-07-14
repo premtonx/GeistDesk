@@ -132,6 +132,7 @@ import {
   resolveCredVaultId,
   isWeakCred,
   isExpiringCred,
+  canManageVaultCategories,
 } from '../vault/vault-utils';
 
 // --- Database Schema ---
@@ -173,6 +174,18 @@ export default function CredentialVaultPage() {
       schedulePersistFolder(folder, nextCredentials, nextCategories, vaultKey);
     },
     [folderBySlug, vaultKeysBySlug, schedulePersistFolder],
+  );
+
+  const canManageCategoriesForVault = useCallback(
+    (vaultId: string) =>
+      canManageVaultCategories({
+        vaultId,
+        folder: folderBySlug.get(vaultId) ?? null,
+        vaultDefinition: VAULT_DEFINITIONS.find((v) => v.id === vaultId) ?? null,
+        userId: user?.uid,
+        isPlatformAdmin: isAdmin,
+      }),
+    [folderBySlug, user?.uid, isAdmin],
   );
 
   useEffect(() => {
@@ -333,8 +346,8 @@ export default function CredentialVaultPage() {
 
   const seedDefaultCredentials = async (vaultKey: Uint8Array): Promise<{ credentials: Credential[]; categories: CustomCategory[] }> => {
     const defaultCats: CustomCategory[] = [
-      { name: 'Kubernetes Nodes', slug: 'k8s', icon: 'server' },
-      { name: 'Slack Workspaces', slug: 'slack', icon: 'layers' },
+      { name: 'Kubernetes Nodes', slug: 'k8s', icon: 'server', vaultId: PERSONAL_VAULT_SLUG },
+      { name: 'Slack Workspaces', slug: 'slack', icon: 'layers', vaultId: PERSONAL_VAULT_SLUG },
     ];
     const seeded: Credential[] = [];
     for (const item of SEEDED_CREDENTIALS) {
@@ -555,6 +568,15 @@ export default function CredentialVaultPage() {
 
   const handleCreateCategory = async (e: FormEvent) => {
     e.preventDefault();
+    if (!canManageCategoriesForVault(activeVaultId)) {
+      toast.error(
+        t(
+          'vault.categories.rbacDenied',
+          'Only vault administrators can manage categories in shared or corporate vaults.',
+        ),
+      );
+      return;
+    }
     if (!newCatName.trim()) {
       toast.error("Category name is required.");
       return;
@@ -565,8 +587,10 @@ export default function CredentialVaultPage() {
       return;
     }
 
-    const existingBuiltIn = slug === 'rdp' || slug === 'vpn' || slug === 'ssh' || slug === 'web' || slug === 'db' || slug === 'api' || slug === 'cloud' || slug === 'cert';
-    const existingCustom = customCategories.some((c) => c.slug === slug);
+    const existingBuiltIn = ACCESS_CATEGORIES.some((c) => c.id === slug);
+    const existingCustom = customCategories.some(
+      (c) => c.slug === slug && (c.vaultId || PERSONAL_VAULT_SLUG) === activeVaultId,
+    );
 
     if (existingBuiltIn || existingCustom) {
       toast.error("A category with this label or system slug already exists.");
@@ -575,23 +599,72 @@ export default function CredentialVaultPage() {
 
     if (!derivedKey) return;
 
+    const folder = folderBySlug.get(activeVaultId);
+    const vaultKey = vaultKeysBySlug.get(activeVaultId);
+    if (!folder || !vaultKey) {
+      toast.error(
+        t(
+          'vault.categories.storeMissing',
+          'Open or create this vault’s encrypted store before managing categories.',
+        ),
+      );
+      return;
+    }
+
     try {
       const nextCategory: CustomCategory = {
         name: newCatName.trim(),
         slug,
         icon: newCatIcon,
+        vaultId: activeVaultId,
       };
       const nextCategories = [...customCategories, nextCategory];
+      // Instant visibility: append to state and select the new category immediately.
       setCustomCategories(nextCategories);
-      syncVaultSlug(PERSONAL_VAULT_SLUG, credentials, nextCategories);
+      setAccessCategory(slug);
+      setSelectedType('all');
+      setSmartFilter(null);
+      syncVaultSlug(activeVaultId, credentials, nextCategories);
       toast.success(`Category "${newCatName.trim()}" created successfully!`);
-      logAudit({ module: 'credentials', action: 'category_created', details: { name: newCatName.trim(), slug, icon: newCatIcon } });
+      logAudit({
+        module: 'credentials',
+        action: 'category_created',
+        details: { name: newCatName.trim(), slug, icon: newCatIcon, vaultId: activeVaultId },
+      });
       setNewCatName('');
       setNewCatIcon('layers');
       setShowAddCategoryModal(false);
     } catch (err) {
       toast.error("Failed to write category to secure vault storage.");
     }
+  };
+
+  const handleDeleteCategory = (categoryId: string) => {
+    if (!canManageCategoriesForVault(activeVaultId)) {
+      toast.error(
+        t(
+          'vault.categories.rbacDenied',
+          'Only vault administrators can manage categories in shared or corporate vaults.',
+        ),
+      );
+      return;
+    }
+    const target = customCategories.find(
+      (c) => c.slug === categoryId && (c.vaultId || PERSONAL_VAULT_SLUG) === activeVaultId,
+    );
+    if (!target) return;
+    const nextCategories = customCategories.filter(
+      (c) => !(c.slug === categoryId && (c.vaultId || PERSONAL_VAULT_SLUG) === activeVaultId),
+    );
+    setCustomCategories(nextCategories);
+    if (accessCategory === categoryId) setAccessCategory('all');
+    syncVaultSlug(activeVaultId, credentials, nextCategories);
+    toast.success(t('vault.categories.deleted', 'Category removed from this vault.'));
+    logAudit({
+      module: 'credentials',
+      action: 'category_deleted',
+      details: { slug: categoryId, vaultId: activeVaultId },
+    });
   };
 
   const handleImportDummyData = async () => {
@@ -936,11 +1009,13 @@ export default function CredentialVaultPage() {
       // Vault scope
       list = list.filter((c) => resolveCredVaultId(c) === activeVaultId);
 
-      // Access category
+      // Access category (built-in type groups or custom slug == credential type)
       if (accessCategory !== 'all') {
         const cat = ACCESS_CATEGORIES.find((x) => x.id === accessCategory);
         if (cat) {
           list = list.filter((c) => cat.types.includes(c.type));
+        } else {
+          list = list.filter((c) => c.type === accessCategory);
         }
       } else if (selectedType !== 'all') {
         list = list.filter((c) => c.type === selectedType);
@@ -995,19 +1070,103 @@ export default function CredentialVaultPage() {
     [vaultFolders],
   );
 
-  const categoryCounts = ACCESS_CATEGORIES.reduce<Record<string, number>>((acc, cat) => {
-    acc[cat.id] = nonDeletedItems.filter((c) => cat.types.includes(c.type)).length;
-    return acc;
-  }, {});
+  const activeVaultItems = useMemo(
+    () => nonDeletedItems.filter((c) => resolveCredVaultId(c) === activeVaultId),
+    [nonDeletedItems, activeVaultId],
+  );
+  const activeVaultTrash = useMemo(
+    () => trashItems.filter((c) => resolveCredVaultId(c) === activeVaultId),
+    [trashItems, activeVaultId],
+  );
 
-  const smartCounts: Partial<Record<VaultSmartFilter, number>> = {
-    favorites: pinnedCount,
-    pinned: pinnedCount,
-    recently: recentCount,
-    expiring: expiringCount,
-    alerts: weakCount,
-    archived: trashItems.length,
+  const CATEGORY_ICON_EMOJI: Record<string, string> = {
+    layers: '🧩',
+    server: '🖥',
+    terminal: '💻',
+    monitor: '🖥',
+    globe: '🌐',
+    database: '🗄',
+    key: '🔑',
+    shield: '🛡',
+    cloud: '☁',
   };
+
+  const sidebarCategories = useMemo(() => {
+    const builtIn = ACCESS_CATEGORIES.map((cat) => ({
+      id: cat.id,
+      emoji: cat.emoji,
+      label: t(cat.nameKey, cat.defaultName),
+      count: activeVaultItems.filter((c) => cat.types.includes(c.type)).length,
+      isCustom: false,
+    })).filter((cat) => cat.count > 0 || cat.id === accessCategory);
+
+    const customs = customCategories
+      .filter((c) => (c.vaultId || PERSONAL_VAULT_SLUG) === activeVaultId)
+      .map((c) => ({
+        id: c.slug,
+        emoji: CATEGORY_ICON_EMOJI[c.icon] || '📁',
+        label: c.name,
+        count: activeVaultItems.filter((item) => item.type === c.slug).length,
+        isCustom: true,
+      }));
+
+    // Prefer custom labels when slug collides; otherwise concatenate unique ids.
+    const byId = new Map<string, (typeof builtIn)[number]>();
+    for (const cat of builtIn) byId.set(cat.id, cat);
+    for (const cat of customs) byId.set(cat.id, cat);
+    return Array.from(byId.values());
+  }, [activeVaultItems, customCategories, activeVaultId, accessCategory, t]);
+
+  const sidebarSmartFilters = useMemo(() => {
+    const vaultPinned = activeVaultItems.filter((c) => c.favorite).length;
+    const vaultExpiring = activeVaultItems.filter((c) => isExpiringCred(c)).length;
+    const vaultAlerts = activeVaultItems.filter((c) => isWeakCred(c)).length;
+    const vaultRecent = Math.min(12, activeVaultItems.length);
+    const vaultArchived = activeVaultTrash.length;
+
+    const all = [
+      {
+        id: 'favorites' as const,
+        emoji: '⭐',
+        label: t('vault.filters.favorites', 'Favorites'),
+        count: vaultPinned,
+      },
+      {
+        id: 'recently' as const,
+        emoji: '🕒',
+        label: t('vault.filters.recentlyUsed', 'Recently Used'),
+        count: vaultRecent,
+      },
+      {
+        id: 'pinned' as const,
+        emoji: '📌',
+        label: t('vault.filters.pinned', 'Pinned'),
+        count: vaultPinned,
+      },
+      {
+        id: 'expiring' as const,
+        emoji: '⚠',
+        label: t('vault.filters.expiringSoon', 'Expiring Soon'),
+        count: vaultExpiring,
+      },
+      {
+        id: 'alerts' as const,
+        emoji: '🚨',
+        label: t('vault.filters.securityAlerts', 'Security Alerts'),
+        count: vaultAlerts,
+      },
+      {
+        id: 'archived' as const,
+        emoji: '🗑',
+        label: t('vault.filters.archived', 'Archived'),
+        count: vaultArchived,
+      },
+    ];
+
+    return all.filter((f) => f.count > 0 || smartFilter === f.id);
+  }, [activeVaultItems, activeVaultTrash, smartFilter, t]);
+
+  const canManageActiveVaultCategories = canManageCategoriesForVault(activeVaultId);
 
   const healthScore = Math.max(0, 100 - Math.min(40, weakCount * 12) - Math.min(20, expiringCount * 8));
   const securityScore = Math.min(99, healthScore + 8);
@@ -1108,16 +1267,34 @@ export default function CredentialVaultPage() {
         <div className="flex flex-1 min-h-0 w-full overflow-y-auto">
           <VaultLeftSidebar
             activeVaultId={activeVaultId}
-            onVaultChange={(id) => { setActiveVaultId(id); setSmartFilter(null); }}
+            onVaultChange={(id) => {
+              setActiveVaultId(id);
+              setSmartFilter(null);
+              setAccessCategory('all');
+              setSelectedType('all');
+              setSelectedView('all');
+            }}
             vaultCounts={vaultCounts}
             dynamicVaults={dynamicSidebarVaults}
             onCreateVault={handleCreateFolder}
+            categories={sidebarCategories}
             selectedCategory={accessCategory}
-            onCategoryChange={(id) => { setAccessCategory(id); setSelectedType('all'); setSmartFilter(null); }}
-            categoryCounts={categoryCounts}
+            onCategoryChange={(id) => {
+              setAccessCategory(id);
+              setSelectedType('all');
+              setSmartFilter(null);
+            }}
+            canManageCategories={canManageActiveVaultCategories}
+            onCreateCategory={() => setShowAddCategoryModal(true)}
+            onDeleteCategory={handleDeleteCategory}
+            smartFilters={sidebarSmartFilters}
             smartFilter={smartFilter}
-            onSmartFilterChange={(f) => { setSmartFilter(f); if (f === 'archived') setSelectedView('trash'); else setSelectedView('all'); }}
-            smartCounts={smartCounts}
+            onSmartFilterChange={(f) => {
+              setSmartFilter(f);
+              setAccessCategory('all');
+              if (f === 'archived') setSelectedView('trash');
+              else setSelectedView('all');
+            }}
           />
 
           <main className="flex-1 min-w-0 w-full">
