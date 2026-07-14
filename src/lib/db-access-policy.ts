@@ -8,6 +8,7 @@ export const DB_BLOCKED_COLLECTIONS = new Set([
   'vault_items',
   'geist_vault_portfolios',
   'geist_vault_encrypted_stores',
+  'geist_vault_user_public_keys',
 ]);
 
 export const DB_ADMIN_ONLY_COLLECTIONS = new Set([

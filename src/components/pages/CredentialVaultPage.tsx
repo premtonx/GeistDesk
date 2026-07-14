@@ -56,19 +56,26 @@ import {
   buildVaultKeySalt,
   decryptData,
   deriveMasterKey,
+  deriveUserHybridKeyPair,
   encryptData,
+  isLegacyMkEncryptedVault,
   slugifyVaultName,
 } from '../../lib/credential-vault-crypto';
 import {
   createVaultFolderOnServer,
   ensureDefaultPersonalVault,
   fetchAndDecryptVaults,
+  migrateLegacyVaultToKek,
   PERSONAL_VAULT_SLUG,
   useVaultPersistence,
   type VaultCategory,
   type VaultCredential,
+  type VaultKeyMap,
 } from '../../lib/credential-vault-sync';
-import type { CredentialVaultFolder } from '../../services/credentialVaultApi';
+import {
+  credentialVaultApi,
+  type CredentialVaultFolder,
+} from '../../services/credentialVaultApi';
 
 import { 
   Dialog, 
@@ -143,6 +150,7 @@ export default function CredentialVaultPage() {
   const [credentials, setCredentials] = useState<Credential[]>([]);
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>([]);
   const [isHydratingVault, setIsHydratingVault] = useState(false);
+  const [vaultKeysBySlug, setVaultKeysBySlug] = useState<VaultKeyMap>(new Map());
   const { persistFolder, schedulePersistFolder } = useVaultPersistence();
 
   const folderBySlug = useMemo(() => {
@@ -156,13 +164,13 @@ export default function CredentialVaultPage() {
       slug: string,
       nextCredentials: Credential[],
       nextCategories: CustomCategory[],
-      key: Uint8Array,
     ) => {
       const folder = folderBySlug.get(slug);
-      if (!folder) return;
-      schedulePersistFolder(folder, nextCredentials, nextCategories, key);
+      const vaultKey = vaultKeysBySlug.get(slug);
+      if (!folder || !vaultKey) return;
+      schedulePersistFolder(folder, nextCredentials, nextCategories, vaultKey);
     },
-    [folderBySlug, schedulePersistFolder],
+    [folderBySlug, vaultKeysBySlug, schedulePersistFolder],
   );
 
   useEffect(() => {
@@ -320,14 +328,14 @@ export default function CredentialVaultPage() {
   const [newCatName, setNewCatName] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('layers');
 
-  const seedDefaultCredentials = async (key: Uint8Array): Promise<{ credentials: Credential[]; categories: CustomCategory[] }> => {
+  const seedDefaultCredentials = async (vaultKey: Uint8Array): Promise<{ credentials: Credential[]; categories: CustomCategory[] }> => {
     const defaultCats: CustomCategory[] = [
       { name: 'Kubernetes Nodes', slug: 'k8s', icon: 'server' },
       { name: 'Slack Workspaces', slug: 'slack', icon: 'layers' },
     ];
     const seeded: Credential[] = [];
     for (const item of SEEDED_CREDENTIALS) {
-      const encryptedPassword = await encryptData(item.plainPass, key);
+      const encryptedPassword = await encryptData(item.plainPass, vaultKey);
       seeded.push({
         id: crypto.randomUUID(),
         type: item.type,
@@ -347,13 +355,44 @@ export default function CredentialVaultPage() {
     return { credentials: seeded, categories: defaultCats };
   };
 
-  const hydrateVaultFromServer = async (key: Uint8Array) => {
+  const hydrateVaultFromServer = async (masterKey: Uint8Array) => {
+    if (!user?.uid || !user.email) {
+      throw new Error('Authenticated user identity is required to unlock the vault.');
+    }
+    const identity = { userId: user.uid, email: user.email };
     setIsHydratingVault(true);
     try {
-      let { folders, credentials: remoteCredentials, categories: remoteCategories } =
-        await fetchAndDecryptVaults(key);
+      // Publish hybrid public key so peers can wrap shared vault keys for this user.
+      const { publicKeyB64 } = deriveUserHybridKeyPair(masterKey);
+      await credentialVaultApi.publishPublicKey(publicKeyB64).catch((err) => {
+        console.warn('[GeistVault] failed to publish vault public key', err);
+      });
 
-      let personalFolder = await ensureDefaultPersonalVault(key, folders);
+      let { folders, credentials: remoteCredentials, categories: remoteCategories, vaultKeys } =
+        await fetchAndDecryptVaults(masterKey, identity);
+
+      // Migrate legacy MK-encrypted vaults onto per-vault KEK wrappers.
+      for (const folder of [...folders]) {
+        if (!isLegacyMkEncryptedVault(folder.keyWrappers)) continue;
+        const migrated = await migrateLegacyVaultToKek({
+          folder,
+          credentials: remoteCredentials,
+          categories: remoteCategories,
+          masterKey,
+          identity,
+        });
+        folders = folders.map((f) => (f.id === migrated.folder.id ? migrated.folder : f));
+        remoteCredentials = migrated.credentials;
+        vaultKeys.set(migrated.folder.slug, migrated.vaultKey);
+      }
+
+      let personalFolderResult = await ensureDefaultPersonalVault(
+        masterKey,
+        identity,
+        folders,
+        vaultKeys,
+      );
+      let personalFolder = personalFolderResult.folder;
       if (!folders.some((f) => f.id === personalFolder.id)) {
         folders = [personalFolder, ...folders];
       }
@@ -362,18 +401,29 @@ export default function CredentialVaultPage() {
       let mergedCategories = remoteCategories;
 
       if (mergedCredentials.length === 0) {
-        const seeded = await seedDefaultCredentials(key);
+        const seeded = await seedDefaultCredentials(personalFolderResult.vaultKey);
         mergedCredentials = seeded.credentials;
         mergedCategories = seeded.categories;
-        personalFolder = await persistFolder(personalFolder, mergedCredentials, mergedCategories, key);
+        personalFolder = await persistFolder(
+          personalFolder,
+          mergedCredentials,
+          mergedCategories,
+          personalFolderResult.vaultKey,
+        );
         folders = folders.map((f) => (f.id === personalFolder.id ? personalFolder : f));
+        vaultKeys.set(personalFolder.slug, personalFolderResult.vaultKey);
       }
 
       setVaultFolders(folders);
+      setVaultKeysBySlug(new Map(vaultKeys));
       setCredentials(mergedCredentials.sort((a, b) => b.updatedAt - a.updatedAt));
       setCustomCategories(mergedCategories);
       setIsLocked(false);
-      logAudit({ module: 'credentials', action: 'vault_unlocked', details: { vaultType: 'server_backed_zero_knowledge' } });
+      logAudit({
+        module: 'credentials',
+        action: 'vault_unlocked',
+        details: { vaultType: 'server_backed_zero_knowledge_kek' },
+      });
       toast.success('Sovereign vault unlocked — data loaded from secure PostgreSQL storage.');
     } finally {
       setIsHydratingVault(false);
@@ -392,6 +442,7 @@ export default function CredentialVaultPage() {
       console.error('[GeistVault] unlock failed', err);
       toast.error(err?.message || 'Failed to unlock. Verify your master password.');
       setDerivedKey(null);
+      setVaultKeysBySlug(new Map());
       setIsLocked(true);
     } finally {
       setIsUnlocking(false);
@@ -400,7 +451,7 @@ export default function CredentialVaultPage() {
 
   const handleCreateVault = async (e: FormEvent) => {
     e.preventDefault();
-    if (!derivedKey || !newVaultName.trim()) {
+    if (!derivedKey || !user?.uid || !user.email || !newVaultName.trim()) {
       toast.error('Vault name is required.');
       return;
     }
@@ -421,26 +472,42 @@ export default function CredentialVaultPage() {
               .filter(Boolean)
           : undefined;
 
-      const created = await createVaultFolderOnServer({
+      const { folder: created, vaultKey, missingEmails } = await createVaultFolderOnServer({
         name: newVaultName.trim(),
         type: newVaultType,
         emoji: newVaultType === 'shared' ? '👥' : '🔒',
         sharedWith,
-        derivedKey,
+        masterKey: derivedKey,
+        identity: { userId: user.uid, email: user.email },
         slug,
       });
 
       setVaultFolders((prev) => [...prev, created]);
+      setVaultKeysBySlug((prev) => {
+        const next = new Map(prev);
+        next.set(created.slug, vaultKey);
+        return next;
+      });
       setActiveVaultId(created.slug);
       setShowCreateVaultModal(false);
       setNewVaultName('');
       setNewVaultType('personal');
       setNewVaultSharedEmails('');
-      toast.success(`Vault "${created.name}" created and persisted securely.`);
+      toast.success(`Vault "${created.name}" created with per-vault encryption key.`);
+      if (missingEmails.length > 0) {
+        toast.info(
+          `Shared wrap pending for: ${missingEmails.join(', ')}. They must unlock GeistVault once to publish a public key.`,
+        );
+      }
       logAudit({
         module: 'credentials',
         action: 'vault_folder_created',
-        details: { name: created.name, type: created.type, slug: created.slug },
+        details: {
+          name: created.name,
+          type: created.type,
+          slug: created.slug,
+          wrappers: created.keyWrappers?.length ?? 0,
+        },
       });
     } catch (err: any) {
       toast.error(err?.message || 'Failed to create vault folder.');
@@ -451,11 +518,17 @@ export default function CredentialVaultPage() {
 
   const handleCreateFolder = () => setShowCreateVaultModal(true);
 
-  // Safe Decrypt helper passed to subcomponents using derivedKey
+  const resolveVaultKeyForCredential = (cred: Credential): Uint8Array | null => {
+    const slug = resolveCredVaultId(cred);
+    return vaultKeysBySlug.get(slug) || null;
+  };
+
+  // Safe Decrypt helper — uses the credential's vault VK (never MK for KEK vaults).
   const handleDecryptPassword = async (cred: Credential): Promise<string | null> => {
-    if (!derivedKey) return null;
+    const vaultKey = resolveVaultKeyForCredential(cred);
+    if (!vaultKey) return null;
     try {
-      const plain = await decryptData(cred.encryptedPassword, derivedKey);
+      const plain = await decryptData(cred.encryptedPassword, vaultKey);
       return plain;
     } catch (err) {
       return null;
@@ -470,7 +543,7 @@ export default function CredentialVaultPage() {
         item.id === cred.id ? { ...item, favorite: newFav } : item,
       );
       setCredentials(nextCredentials);
-      syncVaultSlug(resolveCredVaultId(cred), nextCredentials, customCategories, derivedKey);
+      syncVaultSlug(resolveCredVaultId(cred), nextCredentials, customCategories);
       toast.success(newFav ? 'Added to Pinned Favorites' : 'Removed from Favorites');
     } catch (err) {
       toast.error('Could not toggle favorite status');
@@ -507,7 +580,7 @@ export default function CredentialVaultPage() {
       };
       const nextCategories = [...customCategories, nextCategory];
       setCustomCategories(nextCategories);
-      syncVaultSlug(PERSONAL_VAULT_SLUG, credentials, nextCategories, derivedKey);
+      syncVaultSlug(PERSONAL_VAULT_SLUG, credentials, nextCategories);
       toast.success(`Category "${newCatName.trim()}" created successfully!`);
       logAudit({ module: 'credentials', action: 'category_created', details: { name: newCatName.trim(), slug, icon: newCatIcon } });
       setNewCatName('');
@@ -591,8 +664,13 @@ export default function CredentialVaultPage() {
       ];
 
       const imported: Credential[] = [];
+      const personalVaultKey = vaultKeysBySlug.get(PERSONAL_VAULT_SLUG);
+      if (!personalVaultKey) {
+        toast.error('Personal vault key is not available. Unlock again and retry.');
+        return;
+      }
       for (const item of extraItems) {
-        const encryptedPassword = await encryptData(item.plainPass, derivedKey);
+        const encryptedPassword = await encryptData(item.plainPass, personalVaultKey);
         imported.push({
           id: crypto.randomUUID(),
           type: item.type,
@@ -611,7 +689,7 @@ export default function CredentialVaultPage() {
 
       const nextCredentials = [...credentials, ...imported].sort((a, b) => b.updatedAt - a.updatedAt);
       setCredentials(nextCredentials);
-      syncVaultSlug(PERSONAL_VAULT_SLUG, nextCredentials, customCategories, derivedKey);
+      syncVaultSlug(PERSONAL_VAULT_SLUG, nextCredentials, customCategories);
 
       toast.success("Imported full high-fidelity dummy credentials dataset!");
       logAudit({ module: 'credentials', action: 'dummy_data_imported', details: { dataset: 'high_fidelity_infrastructure' } });
@@ -628,9 +706,17 @@ export default function CredentialVaultPage() {
       return;
     }
 
+    const targetVaultId =
+      activeVaultId === PERSONAL_VAULT_SLUG ? (newEntry.vaultId || PERSONAL_VAULT_SLUG) : activeVaultId;
+    const vaultKey = vaultKeysBySlug.get(targetVaultId);
+    if (!vaultKey) {
+      toast.error('Vault encryption key is not available for this folder.');
+      return;
+    }
+
     setIsSaving(true);
     try {
-      const encryptedPassword = await encryptData(rawPassword, derivedKey);
+      const encryptedPassword = await encryptData(rawPassword, vaultKey);
       const toAdd: Credential = {
         id: crypto.randomUUID(),
         type: newEntry.type as any,
@@ -643,7 +729,7 @@ export default function CredentialVaultPage() {
         lastModifiedBy: 'You',
         favorite: false,
         deleted: false,
-        vaultId: activeVaultId === PERSONAL_VAULT_SLUG ? (newEntry.vaultId || PERSONAL_VAULT_SLUG) : activeVaultId,
+        vaultId: targetVaultId,
 
         // Enterprise metadata
         owner: newEntry.owner || 'You',
@@ -672,7 +758,7 @@ export default function CredentialVaultPage() {
 
       const nextCredentials = [toAdd, ...credentials].sort((a, b) => b.updatedAt - a.updatedAt);
       setCredentials(nextCredentials);
-      syncVaultSlug(resolveCredVaultId(toAdd), nextCredentials, customCategories, derivedKey);
+      syncVaultSlug(resolveCredVaultId(toAdd), nextCredentials, customCategories);
       logAudit({ module: 'credentials', action: 'credential_created', details: { label: toAdd.label, type: toAdd.type } });
       toast.success("Secret encrypted and persisted to sovereign PostgreSQL vault!");
       
@@ -724,11 +810,16 @@ export default function CredentialVaultPage() {
   const handleSaveEdit = async (e: FormEvent) => {
     e.preventDefault();
     if (!editingCred || !editingCred.id || !derivedKey) return;
+    const vaultKey = resolveVaultKeyForCredential(editingCred);
+    if (!vaultKey) {
+      toast.error('Vault encryption key is not available for this credential.');
+      return;
+    }
     setIsSaving(true);
     try {
       let encryptedPassword = editingCred.encryptedPassword;
       if (rawPassword) {
-        encryptedPassword = await encryptData(rawPassword, derivedKey);
+        encryptedPassword = await encryptData(rawPassword, vaultKey);
       }
 
       const nextCredentials = credentials.map((item) =>
@@ -747,7 +838,7 @@ export default function CredentialVaultPage() {
           : item,
       );
       setCredentials(nextCredentials);
-      syncVaultSlug(resolveCredVaultId(editingCred), nextCredentials, customCategories, derivedKey);
+      syncVaultSlug(resolveCredVaultId(editingCred), nextCredentials, customCategories);
 
       toast.success("Credential updated successfully");
       setEditingCred(null);
@@ -778,7 +869,7 @@ export default function CredentialVaultPage() {
       setCredentials(nextCredentials);
       const changed = credentials.find((item) => item.id === id);
       if (changed) {
-        syncVaultSlug(resolveCredVaultId(changed), nextCredentials, customCategories, derivedKey);
+        syncVaultSlug(resolveCredVaultId(changed), nextCredentials, customCategories);
       }
     } catch (err) {
       toast.error("Operation failed");
@@ -794,7 +885,7 @@ export default function CredentialVaultPage() {
       setCredentials(nextCredentials);
       const changed = credentials.find((item) => item.id === id);
       if (changed) {
-        syncVaultSlug(resolveCredVaultId(changed), nextCredentials, customCategories, derivedKey);
+        syncVaultSlug(resolveCredVaultId(changed), nextCredentials, customCategories);
       }
       toast.success("Secret restored to storage center.");
     } catch (err) {

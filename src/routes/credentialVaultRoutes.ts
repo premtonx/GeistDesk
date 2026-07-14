@@ -23,6 +23,8 @@ const COLLECTION = 'geist_vault_portfolios';
 const FOLDER_COLLECTION = 'vault_folders';
 /** Zero-knowledge encrypted credential blobs (separate from UI folder tree). */
 const ENCRYPTED_VAULT_STORE = 'geist_vault_encrypted_stores';
+/** Published hybrid vault public keys for shared Vault Key wrapping (public material only). */
+const USER_PUBLIC_KEY_STORE = 'geist_vault_user_public_keys';
 
 const folderIconSchema = z.enum(['folder', 'lock', 'server', 'key', 'database', 'cloud']);
 
@@ -380,6 +382,14 @@ const encryptedVaultLayoutSchema = z
   })
   .optional();
 
+const wrappedVaultKeySchema = z.object({
+  recipientUserId: z.string().min(1).max(128).optional(),
+  recipientEmail: z.string().email(),
+  alg: z.enum(['aes-256-gcm-mk', 'hybrid-mlkem1024-x25519-aes-256-gcm']),
+  wrappedKey: z.string().min(1),
+  kemCiphertext: z.string().min(1).optional(),
+});
+
 const createEncryptedVaultSchema = z.object({
   name: z.string().min(1).max(120),
   slug: z
@@ -392,6 +402,8 @@ const createEncryptedVaultSchema = z.object({
   emoji: z.string().max(8).optional(),
   layout: encryptedVaultLayoutSchema,
   sharedWith: z.array(z.string().email()).optional(),
+  /** Client-side wrapped Vault Keys only — never accept raw VK material. */
+  keyWrappers: z.array(wrappedVaultKeySchema).min(1),
   encryptedBlob: z.string().min(1),
   blobVersion: z.number().int().positive().optional().default(1),
 });
@@ -401,8 +413,14 @@ const updateEncryptedVaultSchema = z.object({
   emoji: z.string().max(8).optional(),
   layout: encryptedVaultLayoutSchema,
   sharedWith: z.array(z.string().email()).optional(),
+  keyWrappers: z.array(wrappedVaultKeySchema).min(1).optional(),
   encryptedBlob: z.string().min(1).optional(),
   blobVersion: z.number().int().positive().optional(),
+});
+
+const publishPublicKeySchema = z.object({
+  publicKey: z.string().min(32).max(8192),
+  alg: z.enum(['HYBRID-MLKEM1024-X25519']).optional(),
 });
 
 function slugifyEncryptedVaultName(name: string): string {
@@ -425,6 +443,7 @@ function formatEncryptedVaultRow(row: any) {
     createdBy: row.createdBy,
     ownerEmail: row.ownerEmail ?? null,
     sharedWith: Array.isArray(row.sharedWith) ? row.sharedWith : [],
+    keyWrappers: Array.isArray(row.keyWrappers) ? row.keyWrappers : [],
     encryptedBlob: row.encryptedBlob,
     blobVersion: row.blobVersion ?? 1,
     createdAt: row.createdAt,
@@ -472,13 +491,90 @@ router.get('/vaults', authenticate, async (req: Request, res: Response): Promise
   }
 });
 
+/** PUT /api/credential-vault/public-key — publish hybrid vault public key (public material only). */
+router.put('/public-key', authenticate, async (req: Request, res: Response): Promise<any> => {
+  const parsed = publishPublicKeySchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: 'Invalid public key payload', details: parsed.error.flatten().fieldErrors });
+  }
+
+  const email = String(req.user!.email || '').trim().toLowerCase();
+  if (!email) {
+    return res.status(400).json({ error: 'Authenticated user must have an email to publish a vault public key.' });
+  }
+
+  const now = new Date().toISOString();
+  try {
+    await setDocDirect(USER_PUBLIC_KEY_STORE, req.user!.id, {
+      userId: req.user!.id,
+      email,
+      publicKey: parsed.data.publicKey,
+      alg: parsed.data.alg || 'HYBRID-MLKEM1024-X25519',
+      updatedAt: now,
+    });
+    return res.json({
+      key: {
+        userId: req.user!.id,
+        email,
+        publicKey: parsed.data.publicKey,
+        alg: parsed.data.alg || 'HYBRID-MLKEM1024-X25519',
+        updatedAt: now,
+      },
+    });
+  } catch (e: any) {
+    console.error('[credential-vault] publish public key', e?.message || e);
+    return res.status(500).json({ error: 'Failed to publish vault public key.' });
+  }
+});
+
+/** GET /api/credential-vault/public-keys?emails=a@b.com,c@d.com */
+router.get('/public-keys', authenticate, async (req: Request, res: Response): Promise<any> => {
+  try {
+    const raw = String(req.query.emails || '');
+    const emails = [
+      ...new Set(
+        raw
+          .split(',')
+          .map((e) => e.trim().toLowerCase())
+          .filter(Boolean),
+      ),
+    ].slice(0, 50);
+
+    if (emails.length === 0) {
+      return res.json({ keys: [] });
+    }
+
+    const rows = await getDocsDirect(USER_PUBLIC_KEY_STORE, []);
+    const keys = rows
+      .filter((row) => emails.includes(String(row.email || '').toLowerCase()))
+      .map((row) => ({
+        userId: row.userId || row.id,
+        email: String(row.email || '').toLowerCase(),
+        publicKey: row.publicKey,
+        alg: row.alg || 'HYBRID-MLKEM1024-X25519',
+        updatedAt: row.updatedAt || null,
+      }));
+
+    return res.json({ keys });
+  } catch (e: any) {
+    console.error('[credential-vault] lookup public keys', e?.message || e);
+    return res.status(500).json({ error: 'Failed to lookup vault public keys.' });
+  }
+});
+
 router.post('/vaults', authenticate, async (req: Request, res: Response): Promise<any> => {
   const parsed = createEncryptedVaultSchema.safeParse(req.body);
   if (!parsed.success) {
     return res.status(400).json({ error: 'Invalid vault payload', details: parsed.error.flatten().fieldErrors });
   }
 
-  const { name, type, emoji, layout, sharedWith, encryptedBlob, blobVersion } = parsed.data;
+  const { name, type, emoji, layout, sharedWith, encryptedBlob, blobVersion, keyWrappers } = parsed.data;
+  for (const wrapper of keyWrappers) {
+    if (wrapper.alg === 'hybrid-mlkem1024-x25519-aes-256-gcm' && !wrapper.kemCiphertext) {
+      return res.status(400).json({ error: 'Hybrid vault key wrappers require kemCiphertext.' });
+    }
+  }
+
   const slug = parsed.data.slug || slugifyEncryptedVaultName(name);
   const now = new Date().toISOString();
 
@@ -500,6 +596,7 @@ router.post('/vaults', authenticate, async (req: Request, res: Response): Promis
       createdBy: req.user!.id,
       ownerEmail: req.user!.email || null,
       sharedWith: type === 'shared' ? (sharedWith || []) : [],
+      keyWrappers,
       encryptedBlob,
       blobVersion,
       createdAt: now,
@@ -536,6 +633,14 @@ router.put('/vaults/:id', authenticate, async (req: Request, res: Response): Pro
     if (data.emoji !== undefined) patch.emoji = data.emoji;
     if (data.layout !== undefined) patch.layout = data.layout;
     if (data.sharedWith !== undefined && existing.type === 'shared') patch.sharedWith = data.sharedWith;
+    if (data.keyWrappers !== undefined) {
+      for (const wrapper of data.keyWrappers) {
+        if (wrapper.alg === 'hybrid-mlkem1024-x25519-aes-256-gcm' && !wrapper.kemCiphertext) {
+          return res.status(400).json({ error: 'Hybrid vault key wrappers require kemCiphertext.' });
+        }
+      }
+      patch.keyWrappers = data.keyWrappers;
+    }
     if (data.encryptedBlob !== undefined) patch.encryptedBlob = data.encryptedBlob;
     if (data.blobVersion !== undefined) patch.blobVersion = data.blobVersion;
 

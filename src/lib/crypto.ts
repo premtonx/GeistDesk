@@ -4,6 +4,8 @@
 // - Hybrid ML-KEM-1024 + X25519 envelope (HKDF-SHA-256) for post-quantum resilient vault/exchange payloads.
 //
 // IMPORTANT: This module is server-only. Do not import it into browser bundles.
+// GeistVault credential zero-knowledge KEK (per-vault VK wrapped by MK / member public keys)
+// lives in `credential-vault-crypto.ts` and must never send raw MK/VK/passwords to the server.
 
 import { randomBytes, createCipheriv, createDecipheriv, createHash } from "crypto";
 import { argon2id, argon2Verify } from "hash-wasm";
