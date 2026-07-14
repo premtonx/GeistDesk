@@ -205,6 +205,17 @@ export const ticketService = {
   },
 
   sendMessage: async (ticketId: string, message: Partial<Message>) => {
+    // Prefer database-first reply API (graceful when SMTP is unavailable).
+    if (message.senderType === 'agent' && message.content) {
+      return ticketService.sendReply(ticketId, {
+        content: message.content,
+        originalContent: message.originalContent,
+        senderId: message.senderId || auth.currentUser?.uid || 'agent',
+        senderName: message.senderName,
+        senderType: 'agent',
+      });
+    }
+
     const path = `${TICKETS_COLLECTION}/${ticketId}/messages`;
     try {
       const msgRef = await addDoc(collection(db, path), {
@@ -222,9 +233,58 @@ export const ticketService = {
         severity: 'low',
         details: { ticketId, messageId: msgRef.id, senderType: message.senderType }
       });
+      return {
+        success: true,
+        savedToDb: true,
+        delivered: true,
+        deliveryStatus: 'delivered' as const,
+        deliveryReason: null as string | null,
+        message: { id: msgRef.id, ...message },
+      };
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, path);
     }
+  },
+
+  /**
+   * Database-first agent reply via POST /api/tickets/:id/replies.
+   * Always persists; returns delivered=false when outbound mail is unavailable.
+   */
+  sendReply: async (
+    ticketId: string,
+    payload: {
+      content: string;
+      originalContent?: string;
+      senderId: string;
+      senderName?: string;
+      senderType?: 'agent' | 'customer' | 'ai';
+    },
+  ): Promise<{
+    success: boolean;
+    savedToDb: boolean;
+    delivered: boolean;
+    deliveryStatus: 'delivered' | 'saved_locally' | 'pending';
+    deliveryReason?: string | null;
+    message: Partial<Message> & { id: string };
+  }> => {
+    const res = await fetch(`/api/tickets/${encodeURIComponent(ticketId)}/replies`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error((data as { error?: string })?.error || `Reply failed (${res.status})`);
+    }
+    return data as {
+      success: boolean;
+      savedToDb: boolean;
+      delivered: boolean;
+      deliveryStatus: 'delivered' | 'saved_locally' | 'pending';
+      deliveryReason?: string | null;
+      message: Partial<Message> & { id: string };
+    };
   },
 
   setPresence: async (ticketId: string, isPresent: boolean) => {

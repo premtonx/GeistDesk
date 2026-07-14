@@ -249,6 +249,9 @@ export interface Message {
   citations?: string[];
   reasoningPath?: string;
   createdAt: any;
+  /** Outbound mail result — `saved_locally` when SMTP/dispatch is unavailable. */
+  deliveryStatus?: 'delivered' | 'saved_locally' | 'pending';
+  deliveryReason?: string | null;
 }
 
 export interface AgentComment {

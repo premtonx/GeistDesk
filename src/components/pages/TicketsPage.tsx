@@ -321,10 +321,12 @@ function stripHtml(html: string) {
   if (!html) return '';
   return html
     .replace(/<[^>]*>/g, '')
-    .replace(/&nbsp;/g, ' ')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>');
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/gi, '"');
 }
 
 export default function TicketsPage() {
@@ -1523,6 +1525,7 @@ export default function TicketsPage() {
       senderName: user.displayName || user.email || 'Agent',
       content: contentToSend,
       originalContent: originalContent,
+      deliveryStatus: 'pending',
       createdAt: { toDate: () => now } as any
     };
 
@@ -1539,7 +1542,7 @@ export default function TicketsPage() {
     setIsComposerExpanded(false);
 
     try {
-      await ticketService.sendMessage(selectedTicketId, {
+      const result = await ticketService.sendMessage(selectedTicketId, {
         ticketId: selectedTicketId,
         senderId: user.uid,
         senderType: 'agent',
@@ -1548,15 +1551,56 @@ export default function TicketsPage() {
         originalContent: originalContent
       });
       
-      logAudit({ module: 'tickets', action: 'message_sent', details: { ticketId: selectedTicketId, wasTranslated: !!originalContent } });
-      toast.success("Reply sent (translated for client).");
+      const persisted = result?.message;
+      const deliveryStatus =
+        result?.deliveryStatus ||
+        (result?.delivered === false ? 'saved_locally' : 'delivered');
+
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === tempId
+            ? {
+                ...m,
+                id: persisted?.id || m.id,
+                deliveryStatus,
+                deliveryReason: result?.deliveryReason ?? null,
+              }
+            : m,
+        ),
+      );
+
+      logAudit({
+        module: 'tickets',
+        action: 'message_sent',
+        details: {
+          ticketId: selectedTicketId,
+          wasTranslated: !!originalContent,
+          delivered: result?.delivered !== false,
+          deliveryStatus,
+        },
+      });
+
+      if (result?.delivered === false) {
+        toast.success(
+          t(
+            'tickets.replySavedLocally',
+            'Reply saved. Outbound email unavailable — stored in ticket history only.',
+          ),
+        );
+      } else {
+        toast.success(
+          originalContent
+            ? t('tickets.replySentTranslated', 'Reply sent (translated for client).')
+            : t('tickets.replySent', 'Reply sent.'),
+        );
+      }
     } catch (e) {
       // Rollback on write failure
       setReplyText(cachedReplyText);
       setLiveTranslation(cachedLiveTranslation);
       setIsComposerExpanded(true);
       setMessages(prev => prev.filter(m => m.id !== tempId));
-      toast.error("Failed to send reply.");
+      toast.error(t('tickets.replyFailed', 'Failed to send reply.'));
     }
   };
 

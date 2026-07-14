@@ -33,6 +33,7 @@ import moduleConfigRoutes from "./src/routes/moduleConfigRoutes.js";
 import vaultRoutes from "./src/routes/vaultRoutes.js";
 import credentialVaultRoutes from "./src/routes/credentialVaultRoutes.js";
 import exchangeRoutes from "./src/routes/exchangeRoutes.js";
+import ticketReplyRoutes from "./src/routes/ticketReplyRoutes.js";
 import kbArticleRoutes from "./src/routes/kbArticleRoutes.js";
 import kbCategoryRoutes from "./src/routes/kbCategoryRoutes.js";
 import kbDashboardRoutes from "./src/routes/kbDashboardRoutes.js";
@@ -502,6 +503,7 @@ async function startServer() {
   app.use("/api/vault", vaultRoutes);
   app.use("/api/credential-vault", credentialVaultRoutes);
   app.use("/api/exchange", exchangeRoutes);
+  app.use("/api/tickets", ticketReplyRoutes);
 
   // Authoritative, SQL-computed ticket metrics for dashboards.
   app.get("/api/stats/tickets", authenticate, async (req: any, res) => {

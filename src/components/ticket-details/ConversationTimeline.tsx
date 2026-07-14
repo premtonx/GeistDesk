@@ -36,7 +36,7 @@ interface ConversationTimelineProps {
   translatedTicket: { subject: string; description: string } | null;
 }
 
-import { sanitizeLinkifiedText } from '../../lib/sanitize-html';
+import { sanitizeTimelineHtml } from '../../lib/sanitize-html';
 
 export function ConversationTimeline({
   ticket,
@@ -62,6 +62,7 @@ export function ConversationTimeline({
       createdAt: any;
       content: string;
       channel: string;
+      deliveryStatus?: Message['deliveryStatus'];
     }> = [
       {
         id: 'opening-post',
@@ -87,7 +88,8 @@ export function ConversationTimeline({
         senderType: isBot ? 'bot' : (msg.senderType === 'customer' ? 'customer' : 'agent'),
         createdAt: msg.createdAt,
         content: msg.content,
-        channel: isBot ? 'via System' : (msg.senderType === 'customer' ? 'via Email' : 'via Web')
+        channel: isBot ? 'via System' : (msg.senderType === 'customer' ? 'via Email' : 'via Web'),
+        deliveryStatus: msg.deliveryStatus,
       });
     });
 
@@ -178,18 +180,36 @@ export function ConversationTimeline({
                       <span className="text-[11px] text-slate-400 font-semibold font-mono">
                         {timeDisplay}
                       </span>
+                      {item.deliveryStatus === 'saved_locally' ? (
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] font-bold uppercase tracking-wide border-amber-200 bg-amber-50 text-amber-800 gap-1 px-1.5 py-0"
+                          title={t(
+                            'tickets.conversation.savedLocallyHint',
+                            'Reply was stored in the database. Outbound email was not available.',
+                          )}
+                        >
+                          <AlertCircle className="w-3 h-3" />
+                          {t('tickets.conversation.savedLocally', '⚠️ Nur lokal gespeichert / Saved Locally')}
+                        </Badge>
+                      ) : null}
                       <span className="text-[11px] text-slate-400 font-medium">
                         — {item.channel}
                       </span>
                     </div>
                   </div>
 
-                  {/* Message body text */}
-                  <div className="text-[13px] leading-relaxed text-slate-800 dark:text-slate-200 whitespace-pre-wrap break-words font-sans">
+                  {/* Message body — sanitize & render real HTML (not escaped tags) */}
+                  <div className="text-[13px] leading-relaxed text-slate-800 dark:text-slate-200 break-words font-sans [&_p]:mb-2 [&_p:last-child]:mb-0 [&_a]:underline">
                     {isTranslating && item.id === 'opening-post' ? (
                       <p className="italic text-muted-foreground animate-pulse">Translating message content...</p>
                     ) : (
-                      <div className="select-text cursor-text" dangerouslySetInnerHTML={{ __html: sanitizeLinkifiedText(redactPII(item.content)) }} />
+                      <div
+                        className="select-text cursor-text prose prose-sm max-w-none dark:prose-invert"
+                        dangerouslySetInnerHTML={{
+                          __html: sanitizeTimelineHtml(redactPII(item.content || '')),
+                        }}
+                      />
                     )}
                   </div>
 
