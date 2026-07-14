@@ -1,5 +1,5 @@
-import { useRef, useState } from 'react';
-import { Upload, FileText, Database, Key } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
+import { Chrome, Database, FileText, Key, Upload } from 'lucide-react';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
 import {
@@ -10,31 +10,46 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
-import type { VaultImportFormat } from '../../lib/vault-import-processor';
+import {
+  VAULT_IMPORT_FORMATS,
+  type VaultImportFormatId,
+} from '../../lib/vault-import-processor';
 
-export type VaultImportFormatOption = VaultImportFormat;
+export type VaultImportFormatOption = Exclude<VaultImportFormatId, 'auto'>;
 
 interface VaultImportDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onImport: (file: File, format: VaultImportFormatOption) => Promise<void>;
   isImporting?: boolean;
+  vaultName?: string;
 }
 
-const FORMAT_OPTIONS: { id: VaultImportFormatOption; labelKey: string; defaultLabel: string; accept: string; icon: typeof Upload }[] = [
-  { id: 'keepass-xml', labelKey: 'vault.import.keepassXml', defaultLabel: 'KeePass XML (.xml)', accept: '.xml', icon: FileText },
-  { id: 'keepass-csv', labelKey: 'vault.import.keepassCsv', defaultLabel: 'KeePass CSV (.csv)', accept: '.csv', icon: Database },
-  { id: '1password-json', labelKey: 'vault.import.onePassword', defaultLabel: '1Password JSON (.json)', accept: '.json', icon: Key },
-  { id: 'vaultwarden-csv', labelKey: 'vault.import.vaultwarden', defaultLabel: 'Vaultwarden CSV (.csv)', accept: '.csv', icon: Upload },
-];
+const FORMAT_ICONS: Record<VaultImportFormatOption, typeof Upload> = {
+  'chrome-csv': Chrome,
+  'bitwarden-json': Key,
+  'keepass-csv': Database,
+  'keepass-xml': FileText,
+  'onepassword-json': Key,
+  'vaultwarden-csv': Upload,
+};
 
-export function VaultImportDialog({ open, onOpenChange, onImport, isImporting }: VaultImportDialogProps) {
+export function VaultImportDialog({
+  open,
+  onOpenChange,
+  onImport,
+  isImporting,
+  vaultName,
+}: VaultImportDialogProps) {
   const { t } = useTranslation();
   const fileRef = useRef<HTMLInputElement>(null);
-  const [selectedFormat, setSelectedFormat] = useState<VaultImportFormatOption>('keepass-xml');
+  const [selectedFormat, setSelectedFormat] = useState<VaultImportFormatOption>('chrome-csv');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  const activeOption = FORMAT_OPTIONS.find((f) => f.id === selectedFormat)!;
+  const activeOption = useMemo(
+    () => VAULT_IMPORT_FORMATS.find((f) => f.id === selectedFormat) ?? VAULT_IMPORT_FORMATS[0],
+    [selectedFormat],
+  );
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -62,7 +77,10 @@ export function VaultImportDialog({ open, onOpenChange, onImport, isImporting }:
         <DialogHeader>
           <DialogTitle>{t('vault.import.title', 'Import Credentials')}</DialogTitle>
           <DialogDescription>
-            {t('vault.import.description', 'Import from KeePass, 1Password, or Vaultwarden exports into the active vault.')}
+            {t(
+              'vault.import.description',
+              'Import from Chrome, Bitwarden, KeePass, 1Password, or Vaultwarden into {{vault}}. Parsing and encryption happen only in this browser.',
+            ).replace('{{vault}}', vaultName || t('vault.vaults.active', 'the active vault'))}
           </DialogDescription>
         </DialogHeader>
 
@@ -70,22 +88,34 @@ export function VaultImportDialog({ open, onOpenChange, onImport, isImporting }:
           <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
             {t('vault.import.selectFormat', 'Select format')}
           </p>
-          <div className="grid grid-cols-1 gap-1.5">
-            {FORMAT_OPTIONS.map((opt) => (
-              <button
-                key={opt.id}
-                type="button"
-                onClick={() => setSelectedFormat(opt.id)}
-                className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl border text-left text-xs font-medium transition-colors ${
-                  selectedFormat === opt.id
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-slate-200 hover:bg-slate-50 text-slate-700'
-                }`}
-              >
-                <opt.icon className="w-4 h-4 shrink-0" />
-                {t(opt.labelKey, opt.defaultLabel)}
-              </button>
-            ))}
+          <div className="grid grid-cols-1 gap-1.5 max-h-[280px] overflow-y-auto pr-0.5">
+            {VAULT_IMPORT_FORMATS.map((opt) => {
+              const Icon = FORMAT_ICONS[opt.id];
+              return (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => {
+                    setSelectedFormat(opt.id);
+                    setSelectedFile(null);
+                    if (fileRef.current) fileRef.current.value = '';
+                  }}
+                  className={`flex items-start gap-2.5 px-3 py-2.5 rounded-xl border text-left transition-colors ${
+                    selectedFormat === opt.id
+                      ? 'border-blue-500 bg-blue-50 text-blue-700'
+                      : 'border-slate-200 hover:bg-slate-50 text-slate-700'
+                  }`}
+                >
+                  <Icon className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span className="min-w-0">
+                    <span className="block text-xs font-semibold">{opt.label}</span>
+                    <span className="block text-[10px] text-slate-500 mt-0.5 leading-snug">
+                      {opt.description}
+                    </span>
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
           <div className="pt-2">
@@ -101,6 +131,12 @@ export function VaultImportDialog({ open, onOpenChange, onImport, isImporting }:
                 {selectedFile.name} ({Math.round(selectedFile.size / 1024)} KB)
               </p>
             ) : null}
+            <p className="text-[10px] text-slate-400 mt-2 leading-relaxed">
+              {t(
+                'vault.import.privacyHint',
+                'Plaintext never leaves this browser. Entries are encrypted with the active vault key before sync.',
+              )}
+            </p>
           </div>
         </div>
 
@@ -109,7 +145,9 @@ export function VaultImportDialog({ open, onOpenChange, onImport, isImporting }:
             {t('actions.cancel', 'Cancel')}
           </Button>
           <Button type="button" onClick={handleImport} disabled={!selectedFile || isImporting}>
-            {isImporting ? t('vault.import.processing', 'Processing...') : t('vault.import.importButton', 'Import')}
+            {isImporting
+              ? t('vault.import.processing', 'Processing...')
+              : t('vault.import.importButton', 'Import')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -126,6 +126,8 @@ import { VaultAssetViews } from '../vault/VaultAssetViews';
 import { VaultFabMenu } from '../vault/VaultFabMenu';
 import { VaultPropertiesPane } from '../vault/VaultPropertiesPane';
 import { VaultExportDialog } from '../vault/VaultExportDialog';
+import { VaultImportDialog, type VaultImportFormatOption } from '../vault/VaultImportDialog';
+import { processVaultImportFile } from '../../lib/vault-import-processor';
 import {
   ACCESS_CATEGORIES,
   VAULT_DEFINITIONS,
@@ -341,6 +343,8 @@ export default function CredentialVaultPage() {
   const [newVaultType, setNewVaultType] = useState<'personal' | 'shared'>('personal');
   const [newVaultSharedEmails, setNewVaultSharedEmails] = useState('');
   const [showExportDialog, setShowExportDialog] = useState(false);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [isImportingVault, setIsImportingVault] = useState(false);
   const [newCatName, setNewCatName] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('layers');
 
@@ -667,110 +671,132 @@ export default function CredentialVaultPage() {
     });
   };
 
-  const handleImportDummyData = async () => {
+  const openVaultImport = () => {
     if (!derivedKey) {
-      toast.error("Please unlock the vault first, then import dummy data.");
+      toast.error(t('vault.import.unlockFirst', 'Unlock the vault before importing.'));
       return;
     }
+    if (!canManageCategoriesForVault(activeVaultId)) {
+      toast.error(
+        t(
+          'vault.import.permissionDenied',
+          'Only personal vault owners or vault admins can import into this vault.',
+        ),
+      );
+      return;
+    }
+    if (!vaultKeysBySlug.get(activeVaultId)) {
+      toast.error(
+        t('vault.import.keyMissing', 'Vault encryption key is not available. Unlock again and retry.'),
+      );
+      return;
+    }
+    setShowImportDialog(true);
+  };
+
+  const handleVaultFileImport = async (file: File, format: VaultImportFormatOption) => {
+    const vaultKey = vaultKeysBySlug.get(activeVaultId);
+    if (!derivedKey || !vaultKey) {
+      toast.error(
+        t('vault.import.keyMissing', 'Vault encryption key is not available. Unlock again and retry.'),
+      );
+      return;
+    }
+
+    setIsImportingVault(true);
     try {
-      const extraItems = [
-        {
-          type: 'db',
-          label: 'Redshift Analytics DB',
-          host: 'redshift.aws.acme.com',
-          username: 'analytics_master',
-          plainPass: 'analyticsPassSuperSecure99!',
-          notes: 'Production statistics node for financial processing and CRM data sync. (Weak database credentials audit trigger)',
-          offsetHours: 3
-        },
-        {
-          type: 'ssh',
-          label: 'Staging Bastion Host',
-          host: 'bastion-stage.acme.com',
-          username: 'ec2-user',
-          plainPass: 'StageKeyB64_32155!',
-          notes: 'Secure tunnel jumpbox for staging servers within EU cluster staging-west-1.',
-          offsetHours: 5
-        },
-        {
-          type: 'vpn',
-          label: 'Backup OpenVPN Client',
-          host: 'openvpn-backup.acme.com',
-          username: 'premton',
-          plainPass: 'backupVPNPassWord123',
-          notes: 'Secondary tunnel point config details.',
-          offsetHours: 12
-        },
-        {
-          type: 'api',
-          label: 'OpenAI API Token',
-          host: 'api.openai.com',
-          username: 'sk-proj-geistdesk',
-          plainPass: 'sk-proj-A1B2C3D4E5F6G7H8I9J0K1L2M3N4O5P6',
-          notes: 'Primary dev team model integration keys for autocomplete and insight pipelines.',
-          offsetHours: 14
-        },
-        {
-          type: 'cloud',
-          label: 'Google Cloud Workspace',
-          host: 'console.cloud.google.com',
-          username: 'gcp-billing-admin',
-          plainPass: 'GcpBillingSuperAdminPass!',
-          notes: 'Master billing access console container keys for operations audits. Expires every 30 days.',
-          offsetHours: 20
-        },
-        {
-          type: 'k8s',
-          label: 'Staging K8s Clusters',
-          host: 'k8s.staging.acme.com',
-          username: 'kube-admin',
-          plainPass: 'kubeMasterSecurityPass99!',
-          notes: 'Dynamic custom category (Kubernetes Nodes) demo. Authenticates staging namespace.',
-          offsetHours: 1
-        },
-        {
-          type: 'slack',
-          label: 'Slack Support Hook',
-          host: 'hooks.slack.com',
-          username: 'slack-bot',
-          plainPass: 'xoxb-slack-bot-secret-token',
-          notes: 'Dynamic custom category (Slack Workspaces) webhook for escalation notifications.',
-          offsetHours: 8
+      const content = await file.text();
+      const parsed = processVaultImportFile(content, file.name, format);
+
+      const nextCategories = [...customCategories];
+      const ensureCategory = (name: string): string => {
+        const label = (name || 'Imported').trim() || 'Imported';
+        const slug = slugifyVaultName(label) || 'imported';
+        const exists = nextCategories.some(
+          (c) => c.slug === slug && (c.vaultId || PERSONAL_VAULT_SLUG) === activeVaultId,
+        );
+        if (!exists) {
+          nextCategories.push({
+            name: label,
+            slug,
+            icon: 'layers',
+            vaultId: activeVaultId,
+          });
         }
-      ];
+        return slug;
+      };
 
       const imported: Credential[] = [];
-      const personalVaultKey = vaultKeysBySlug.get(PERSONAL_VAULT_SLUG);
-      if (!personalVaultKey) {
-        toast.error('Personal vault key is not available. Unlock again and retry.');
-        return;
-      }
-      for (const item of extraItems) {
-        const encryptedPassword = await encryptData(item.plainPass, personalVaultKey);
+      const now = Date.now();
+      for (let i = 0; i < parsed.length; i += 1) {
+        const item = parsed[i];
+        const typeSlug = ensureCategory(item.category);
+        const encryptedPassword = await encryptData(item.password || '', vaultKey);
+        const host = item.url.split(/\r?\n/)[0]?.trim() || '';
         imported.push({
           id: crypto.randomUUID(),
-          type: item.type,
-          label: item.label,
+          type: typeSlug,
+          label: item.name,
           username: item.username,
           encryptedPassword,
-          host: item.host,
+          host,
           notes: item.notes,
-          updatedAt: Date.now() - item.offsetHours * 3600 * 1000,
-          lastModifiedBy: 'Operator',
+          updatedAt: now - i,
+          lastModifiedBy: user?.email || 'Import',
           favorite: false,
           deleted: false,
-          vaultId: PERSONAL_VAULT_SLUG,
+          vaultId: activeVaultId,
+          tags: item.tags?.length ? item.tags : ['imported'],
+          securitySettings: {
+            burnAfterRead: false,
+            requireApproval: false,
+            jitAccess: false,
+            requireMfa: false,
+            disableExport: false,
+            disableCopy: false,
+          },
         });
       }
 
-      const nextCredentials = [...credentials, ...imported].sort((a, b) => b.updatedAt - a.updatedAt);
+      const nextCredentials = [...imported, ...credentials].sort((a, b) => b.updatedAt - a.updatedAt);
       setCredentials(nextCredentials);
-      syncVaultSlug(PERSONAL_VAULT_SLUG, nextCredentials, customCategories);
+      setCustomCategories(nextCategories);
+      syncVaultSlug(activeVaultId, nextCredentials, nextCategories);
 
-      toast.success("Imported full high-fidelity dummy credentials dataset!");
-      logAudit({ module: 'credentials', action: 'dummy_data_imported', details: { dataset: 'high_fidelity_infrastructure' } });
-    } catch (err) {
-      toast.error("Failed to import dummy data");
+      logAudit({
+        module: 'credentials',
+        action: 'vault_import_local',
+        details: {
+          format,
+          itemCount: imported.length,
+          vaultId: activeVaultId,
+          fileName: file.name,
+          source: 'client_parse_encrypt_only',
+        },
+      });
+
+      const vaultDisplayName =
+        folderBySlug.get(activeVaultId)?.name ||
+        (() => {
+          const def = VAULT_DEFINITIONS.find((v) => v.id === activeVaultId);
+          return def
+            ? t(def.nameKey, def.defaultName)
+            : t('vault.vaults.personal', 'Personal Vault');
+        })();
+
+      toast.success(
+        t('vault.import.success', 'Imported {{count}} credentials into {{vault}}.')
+          .replace('{{count}}', String(imported.length))
+          .replace('{{vault}}', vaultDisplayName),
+      );
+      setShowImportDialog(false);
+    } catch (err: any) {
+      toast.error(
+        err?.message ||
+          t('vault.import.failed', 'Import failed. Check the file format and try again.'),
+      );
+    } finally {
+      setIsImportingVault(false);
     }
   };
 
@@ -1308,7 +1334,7 @@ export default function CredentialVaultPage() {
                   <Button type="button" variant="outline" size="sm" className="h-9 rounded-xl text-xs" onClick={() => setVaultViewMode('emergency')}>
                     {t('vault.breakGlass', 'Break Glass Emergency')}
                   </Button>
-                  <VaultFabMenu onNewAsset={openNewAsset} onImport={handleImportDummyData} />
+                  <VaultFabMenu onNewAsset={openNewAsset} onImport={openVaultImport} />
                 </div>
               </div>
 
@@ -1330,7 +1356,9 @@ export default function CredentialVaultPage() {
                 }
                 itemCount={personalExportCredentials.length}
                 isPersonal={isPersonalVaultView}
+                canImport={canManageActiveVaultCategories}
                 onExportData={() => setShowExportDialog(true)}
+                onImportData={openVaultImport}
               />
 
               <VaultSearchSection
@@ -2638,6 +2666,14 @@ export default function CredentialVaultPage() {
           }}
         />
       ) : null}
+
+      <VaultImportDialog
+        open={showImportDialog}
+        onOpenChange={setShowImportDialog}
+        onImport={handleVaultFileImport}
+        isImporting={isImportingVault}
+        vaultName={activeVaultDisplayName}
+      />
 
       {/* Create Personal / Shared Vault Folder */}
       <Dialog open={showCreateVaultModal} onOpenChange={setShowCreateVaultModal}>
