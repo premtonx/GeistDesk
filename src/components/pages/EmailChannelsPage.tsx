@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   CheckCircle2,
   Copy,
+  Globe2,
   Loader2,
   Mail,
   Plus,
@@ -73,6 +74,43 @@ function emptyDraft(): Partial<EmailChannelConfig> {
   };
 }
 
+function DnsRecordRow({
+  label,
+  host,
+  value,
+  onCopy,
+}: {
+  label: string;
+  host: string;
+  value: string;
+  onCopy: (value: string) => void;
+}) {
+  return (
+    <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2 space-y-1">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+        {value ? (
+          <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => onCopy(value)}>
+            <Copy className="w-3 h-3" />
+          </Button>
+        ) : null}
+      </div>
+      <p className="text-[11px] text-slate-600">
+        Host:{' '}
+        <code className="font-mono text-slate-900 bg-white border border-slate-200 rounded px-1 py-0.5">
+          {host}
+        </code>
+      </p>
+      <p className="text-[11px] text-slate-600 break-all">
+        Value:{' '}
+        <code className="font-mono text-[10px] text-slate-900 bg-white border border-slate-200 rounded px-1 py-0.5">
+          {value || '—'}
+        </code>
+      </p>
+    </div>
+  );
+}
+
 /** Build API payload — webhook channels omit IMAP/Graph server fields entirely. */
 function buildSavePayload(editing: Partial<EmailChannelConfig>): Partial<EmailChannelConfig> {
   const connectionType = (editing.connectionType || 'webhook') as EmailConnectionType;
@@ -129,7 +167,9 @@ export default function EmailChannelsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
+  const [verifyingDns, setVerifyingDns] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [dnsCheckMessage, setDnsCheckMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState<Partial<EmailChannelConfig> | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -172,11 +212,13 @@ export default function EmailChannelsPage() {
 
   const openCreate = () => {
     setTestResult(null);
+    setDnsCheckMessage(null);
     setEditing(emptyDraft());
   };
 
   const openEdit = (channel: EmailChannelConfig) => {
     setTestResult(null);
+    setDnsCheckMessage(null);
     setEditing({ ...channel });
   };
 
@@ -243,6 +285,53 @@ export default function EmailChannelsPage() {
       toast.error(message);
     } finally {
       setTesting(false);
+    }
+  };
+
+  const handleVerifyDns = async () => {
+    if (!editing) return;
+    setVerifyingDns(true);
+    setDnsCheckMessage(null);
+    try {
+      let channelId = editing.id;
+      if (!channelId) {
+        const created = await emailChannelApi.create(buildSavePayload(editing));
+        channelId = created.id;
+        setChannels((prev) => [created, ...prev]);
+        setEditing(created);
+      }
+      const result = await emailChannelApi.verifyDomain(channelId!);
+      setDnsCheckMessage(result.message || (result.success ? 'Domain verified' : 'Verification failed'));
+      if (result.success) {
+        toast.success(result.message || 'DNS verified');
+        setEditing((prev) =>
+          prev
+            ? {
+                ...prev,
+                dnsVerified: true,
+                dnsVerifiedAt: result.channel?.dnsVerifiedAt || new Date().toISOString(),
+                verificationToken: result.records?.verificationToken || prev.verificationToken,
+                dkimRecordName: result.records?.dkimRecordName || prev.dkimRecordName,
+                dkimRecordValue: result.records?.dkimRecordValue || prev.dkimRecordValue,
+                spfRecordValue: result.records?.spfRecordValue || prev.spfRecordValue,
+              }
+            : prev,
+        );
+      } else {
+        toast.error(result.message || result.error || 'DNS check failed');
+        setEditing((prev) => (prev ? { ...prev, dnsVerified: false, dnsVerifiedAt: null } : prev));
+      }
+      await load();
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message ||
+        'DNS verification failed';
+      setDnsCheckMessage(message);
+      toast.error(message);
+    } finally {
+      setVerifyingDns(false);
     }
   };
 
@@ -327,6 +416,11 @@ export default function EmailChannelsPage() {
                       </Badge>
                       {channel.enabled === false ? (
                         <span className="ml-2 text-[10px] text-slate-400 font-bold uppercase">Disabled</span>
+                      ) : null}
+                      {channel.dnsVerified ? (
+                        <Badge className="ml-2 text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border-emerald-100">
+                          Verifiziert
+                        </Badge>
                       ) : null}
                     </td>
                     <td className="px-4 py-3 text-right space-x-1">
@@ -518,6 +612,96 @@ export default function EmailChannelsPage() {
                       Postal / SendGrid / Mailgun to <code className="font-mono">/api/webhooks/inbound-mail</code>.
                     </p>
                   </div>
+
+                  <details open className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                    <summary className="cursor-pointer list-none px-3 py-2.5 flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                        <Globe2 className="w-3.5 h-3.5 text-emerald-600" />
+                        DNS Verification
+                      </div>
+                      {editing.dnsVerified ? (
+                        <Badge className="text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border-emerald-100">
+                          Verifiziert
+                        </Badge>
+                      ) : (
+                        <Badge className="text-[10px] font-bold uppercase bg-amber-50 text-amber-700 border-amber-100">
+                          Unverifiziert
+                        </Badge>
+                      )}
+                    </summary>
+                    <div className="border-t border-slate-100 px-3 py-3 space-y-3">
+                      <p className="text-[11px] text-slate-500 leading-relaxed">
+                        Publish these records on{' '}
+                        <span className="font-mono font-semibold text-slate-700">
+                          {(editing.email || '').split('@')[1] || 'your-domain.com'}
+                        </span>{' '}
+                        so agents can reply as{' '}
+                        <span className="font-mono font-semibold text-slate-700">
+                          {editing.email || 'support@domain.com'}
+                        </span>{' '}
+                        without spoofing / spam classification.
+                      </p>
+
+                      {!editing.id || !editing.verificationToken ? (
+                        <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
+                          Speichern Sie den Kanal zuerst, um den Verification-Token und die DKIM-Werte zu erzeugen.
+                        </p>
+                      ) : (
+                        <div className="space-y-2.5">
+                          <DnsRecordRow
+                            label="TXT Verification"
+                            host="@"
+                            value={`geist-verification=${editing.verificationToken}`}
+                            onCopy={(value) => void copyText(value, 'TXT record')}
+                          />
+                          <DnsRecordRow
+                            label="DKIM TXT"
+                            host={editing.dkimRecordName || 'geist._domainkey'}
+                            value={editing.dkimRecordValue || ''}
+                            onCopy={(value) => void copyText(value, 'DKIM record')}
+                          />
+                          <DnsRecordRow
+                            label="SPF TXT"
+                            host="@"
+                            value={
+                              editing.spfRecordValue ||
+                              'v=spf1 include:app.premtonx.cloud ~all'
+                            }
+                            onCopy={(value) => void copyText(value, 'SPF record')}
+                          />
+                        </div>
+                      )}
+
+                      {dnsCheckMessage ? (
+                        <p
+                          className={cn(
+                            'text-[11px] font-semibold rounded-lg px-2.5 py-2 border',
+                            editing.dnsVerified
+                              ? 'bg-emerald-50 border-emerald-100 text-emerald-800'
+                              : 'bg-rose-50 border-rose-100 text-rose-800',
+                          )}
+                        >
+                          {dnsCheckMessage}
+                        </p>
+                      ) : null}
+
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={verifyingDns || !editing.email}
+                        onClick={() => void handleVerifyDns()}
+                        className="gap-1.5"
+                      >
+                        {verifyingDns ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        ) : (
+                          <Globe2 className="w-3.5 h-3.5" />
+                        )}
+                        DNS-Einträge prüfen
+                      </Button>
+                    </div>
+                  </details>
                 </div>
               ) : null}
 

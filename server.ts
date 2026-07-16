@@ -36,6 +36,7 @@ import exchangeRoutes from "./src/routes/exchangeRoutes.js";
 import ticketReplyRoutes from "./src/routes/ticketReplyRoutes.js";
 import ticketSpamRoutes from "./src/routes/ticketSpamRoutes.js";
 import emailChannelRoutes from "./src/routes/emailChannelRoutes.js";
+import mailDomainRoutes from "./src/routes/mailDomainRoutes.js";
 import {
   extractEmailAddress,
 } from "./src/lib/global-blacklist.js";
@@ -523,6 +524,7 @@ async function startServer() {
   app.use("/api/tickets", ticketReplyRoutes);
   app.use("/api/tickets", ticketSpamRoutes);
   app.use("/api/email-channels", emailChannelRoutes);
+  app.use("/api/mail", mailDomainRoutes);
 
   // Authoritative, SQL-computed ticket metrics for dashboards.
   app.get("/api/stats/tickets", authenticate, async (req: any, res) => {
@@ -1243,11 +1245,8 @@ async function startServer() {
     }
   });
 
-  app.post("/api/mail/verify-forwarding", checkAdmin, async (req, res) => {
-    // Simulate verification delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    res.json({ success: true, message: "Forwarding address verified." });
-  });
+  // Domain ownership verification lives on mailDomainRoutes:
+  //   POST /api/mail/verify-domain/:channelId
 
   app.post("/api/mail/send-test", checkAdmin, async (req, res) => {
      // Simulate sending delay

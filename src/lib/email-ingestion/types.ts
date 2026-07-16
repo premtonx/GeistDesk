@@ -59,6 +59,17 @@ export interface EmailChannelConfig {
   webhookSecret?: string | null;
   forwardingAddress?: string | null;
 
+  /**
+   * Domain ownership verification (support alias From: header).
+   * When dnsVerified is true, agents may send as channel.email (e.g. support@domain.com).
+   */
+  dnsVerified?: boolean;
+  verificationToken?: string | null;
+  dkimRecordName?: string | null;
+  dkimRecordValue?: string | null;
+  spfRecordValue?: string | null;
+  dnsVerifiedAt?: string | null;
+
   // IMAP — nullable so webhook / passive channels can omit server credentials
   imapHost?: string | null;
   imapPort?: number | string | null;

@@ -3,6 +3,32 @@ import type { EmailChannelConfig, EmailConnectionType } from '../lib/email-inges
 
 export type { EmailChannelConfig, EmailConnectionType };
 
+export interface DomainVerifyResult {
+  success: boolean;
+  dnsVerified: boolean;
+  domain: string;
+  message: string;
+  checks?: {
+    verificationTxt: boolean;
+    dkim: boolean;
+    spf: boolean;
+  };
+  records?: {
+    verificationToken?: string | null;
+    verificationTxt?: string;
+    dkimRecordName?: string | null;
+    dkimRecordValue?: string | null;
+    spfRecordValue?: string | null;
+  };
+  channel?: {
+    id: string;
+    email: string;
+    dnsVerified: boolean;
+    dnsVerifiedAt: string | null;
+  };
+  error?: string;
+}
+
 export const emailChannelApi = {
   async list(): Promise<EmailChannelConfig[]> {
     const res = await axios.get('/api/email-channels', { withCredentials: true });
@@ -38,5 +64,14 @@ export const emailChannelApi = {
       ok: Boolean(res.data?.ok ?? res.data?.success),
       message: res.data?.message || res.data?.error || '',
     };
+  },
+
+  async verifyDomain(channelId: string): Promise<DomainVerifyResult> {
+    const res = await axios.post(
+      `/api/mail/verify-domain/${encodeURIComponent(channelId)}`,
+      {},
+      { withCredentials: true },
+    );
+    return res.data as DomainVerifyResult;
   },
 };

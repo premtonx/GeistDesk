@@ -16,6 +16,7 @@ import {
   type EmailChannelConfig,
   type EmailConnectionType,
 } from './types.js';
+import { ensureDomainVerificationFields } from './domain-verification.js';
 
 const SECRET_FIELDS = [
   'imapPassword',
@@ -148,10 +149,17 @@ export async function createEmailChannel(
   const id = created.id as string;
   const webhookSecret = input.webhookSecret || generateWebhookSecret();
   const forwardingAddress = input.forwardingAddress || buildForwardingAddress(id);
+  const domainFields = ensureDomainVerificationFields({
+    ...input,
+    dnsVerified: false,
+  });
 
   await updateDocDirect(EMAIL_CHANNELS_COLLECTION, id, {
     webhookSecret,
     forwardingAddress,
+    ...domainFields,
+    dnsVerified: false,
+    dnsVerifiedAt: null,
     updatedAt: now,
   });
 
@@ -160,6 +168,9 @@ export async function createEmailChannel(
     ...created.data,
     webhookSecret,
     forwardingAddress,
+    ...domainFields,
+    dnsVerified: false,
+    dnsVerifiedAt: null,
   });
 }
 
@@ -170,13 +181,25 @@ export async function updateEmailChannel(
   const existing = await getDocDirect(EMAIL_CHANNELS_COLLECTION, id);
   if (!existing) return null;
 
-  const merged = mergeSecrets(input, existing as EmailChannelConfig);
+  // Domain verification is server-authoritative — never trust client dnsVerified=true.
+  const safeInput: Partial<EmailChannelConfig> = { ...input };
+  delete (safeInput as any).dnsVerified;
+  delete (safeInput as any).dnsVerifiedAt;
+  // Preserve generated DNS material unless explicitly regenerating via verify flow.
+  if (!safeInput.verificationToken) delete (safeInput as any).verificationToken;
+  if (!safeInput.dkimRecordName) delete (safeInput as any).dkimRecordName;
+  if (!safeInput.dkimRecordValue) delete (safeInput as any).dkimRecordValue;
+  if (!safeInput.spfRecordValue) delete (safeInput as any).spfRecordValue;
+
+  const merged = mergeSecrets(safeInput, existing as EmailChannelConfig);
   const now = new Date().toISOString();
   const next: EmailChannelConfig = {
     ...(existing as EmailChannelConfig),
     ...merged,
     id,
     updatedAt: now,
+    dnsVerified: Boolean((existing as EmailChannelConfig).dnsVerified),
+    dnsVerifiedAt: (existing as EmailChannelConfig).dnsVerifiedAt ?? null,
   };
 
   if (next.connectionType === 'webhook') {
@@ -184,6 +207,22 @@ export async function updateEmailChannel(
     next.forwardingAddress = next.forwardingAddress || buildForwardingAddress(id);
     // Explicitly clear pull-driver fields so nulls persist (spread of undefined is a no-op).
     clearActivePullFields(next);
+  }
+
+  // Always ensure DNS verification material exists (backfill older channels).
+  const domainFields = ensureDomainVerificationFields(next);
+  next.verificationToken = domainFields.verificationToken;
+  next.dkimRecordName = domainFields.dkimRecordName;
+  next.dkimRecordValue = domainFields.dkimRecordValue;
+  next.spfRecordValue = domainFields.spfRecordValue;
+  next.dnsVerified = Boolean(next.dnsVerified);
+
+  // Changing the support email invalidates prior DNS verification.
+  const priorEmail = String((existing as EmailChannelConfig).email || '').toLowerCase();
+  const nextEmail = String(next.email || '').toLowerCase();
+  if (priorEmail && nextEmail && priorEmail !== nextEmail) {
+    next.dnsVerified = false;
+    next.dnsVerifiedAt = null;
   }
 
   await setDocDirect(EMAIL_CHANNELS_COLLECTION, id, next);
@@ -195,6 +234,42 @@ export async function deleteEmailChannel(id: string): Promise<boolean> {
   if (!existing) return false;
   await deleteDocDirect(EMAIL_CHANNELS_COLLECTION, id);
   return true;
+}
+
+/** Resolve a channel for outbound From: selection (mailbox / support email / forwarding). */
+export async function findChannelForOutbound(params: {
+  mailbox?: string | null;
+  supportEmail?: string | null;
+}): Promise<EmailChannelConfig | null> {
+  const docs = await getDocsDirect(EMAIL_CHANNELS_COLLECTION, []);
+  const mailbox = (params.mailbox || '').toLowerCase().trim();
+  const supportEmail = (params.supportEmail || '').toLowerCase().trim();
+
+  for (const doc of docs) {
+    const channel = { id: doc.id, ...doc } as EmailChannelConfig;
+    const email = (channel.email || '').toLowerCase();
+    const forwarding = (channel.forwardingAddress || '').toLowerCase();
+    if (mailbox && (mailbox === email || mailbox === forwarding || mailbox === (channel.mailbox || '').toLowerCase())) {
+      return channel;
+    }
+    if (supportEmail && supportEmail === email) {
+      return channel;
+    }
+  }
+
+  // Fallback: match by domain of mailbox against a verified channel email domain.
+  const domain = mailbox.includes('@') ? mailbox.split('@')[1] : '';
+  if (domain) {
+    for (const doc of docs) {
+      const channel = { id: doc.id, ...doc } as EmailChannelConfig;
+      const emailDomain = (channel.email || '').toLowerCase().split('@')[1];
+      if (channel.dnsVerified && emailDomain && emailDomain === domain) {
+        return channel;
+      }
+    }
+  }
+
+  return null;
 }
 
 /** Resolve channel by forwarding alias or webhook secret (for inbound push). */

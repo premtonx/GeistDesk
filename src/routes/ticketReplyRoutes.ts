@@ -4,6 +4,7 @@ import { authenticate } from '../middleware/authMiddleware.js';
 import { addDocDirect, getDocDirect, updateDocDirect } from '../lib/postgres-backend.js';
 import { routeParam } from '../lib/route-params.js';
 import { trySendTicketReplyEmail } from '../lib/outbound-mail.js';
+import { findChannelForOutbound } from '../lib/email-ingestion/channel-store.js';
 
 const router = Router();
 
@@ -60,16 +61,25 @@ router.post('/:id/replies', authenticate, async (req: Request, res: Response): P
 
     let delivered = false;
     let deliveryReason: string | undefined;
+    let mailFrom: string | undefined;
+    let domainVerified: boolean | undefined;
     try {
+      const channel = await findChannelForOutbound({
+        mailbox: ticket.mailbox || ticket.forwardingAddress || null,
+        supportEmail: ticket.supportEmail || ticket.channelEmail || null,
+      });
       const mailResult = await trySendTicketReplyEmail({
         ticketId,
         to: ticket.customerEmail || ticket.contactEmail || null,
         subject: ticket.subject ? `Re: ${ticket.subject}` : `Re: Ticket ${ticketId}`,
         body: data.content,
         agentName: data.senderName || req.user!.email || 'Agent',
+        channel,
       });
       delivered = mailResult.delivered;
       deliveryReason = mailResult.reason;
+      mailFrom = mailResult.from;
+      domainVerified = mailResult.domainVerified;
     } catch (mailErr: any) {
       delivered = false;
       deliveryReason = mailErr?.message || 'Outbound mail threw unexpectedly';
@@ -80,6 +90,8 @@ router.post('/:id/replies', authenticate, async (req: Request, res: Response): P
     await updateDocDirect(`tickets/${ticketId}/messages`, messageRecord.id, {
       deliveryStatus,
       deliveryReason: deliveryReason || null,
+      mailFrom: mailFrom || null,
+      domainVerified: typeof domainVerified === 'boolean' ? domainVerified : null,
       deliveredAt: delivered ? new Date().toISOString() : null,
     });
 
@@ -89,6 +101,8 @@ router.post('/:id/replies', authenticate, async (req: Request, res: Response): P
       delivered,
       deliveryStatus,
       deliveryReason: deliveryReason || null,
+      mailFrom: mailFrom || null,
+      domainVerified: typeof domainVerified === 'boolean' ? domainVerified : null,
       message: {
         id: messageRecord.id,
         ticketId,
