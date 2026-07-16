@@ -1,0 +1,90 @@
+/**
+ * Unified email ingestion types for Graph / IMAP / Webhook drivers.
+ */
+
+export type EmailConnectionType =
+  | 'webhook'
+  | 'imap_basic'
+  | 'imap_oauth2'
+  | 'microsoft_graph';
+
+export interface InboundAttachment {
+  filename: string;
+  contentType: string;
+  size: number;
+  /** Base64 payload when persisted (size-capped by ingest pipeline). */
+  contentBase64?: string;
+  contentId?: string;
+}
+
+/** Native internal layout produced by every driver before ticket creation. */
+export interface NormalizedInboundEmail {
+  sender: string;
+  from_email: string;
+  subject: string;
+  title: string;
+  html_content: string;
+  text_content?: string;
+  attachments: InboundAttachment[];
+  /** Optional provider message id for dedupe. */
+  externalMessageId?: string;
+  /** Channel / mailbox that received the mail. */
+  mailbox?: string;
+  /** Driver that produced this message. */
+  source: EmailConnectionType | 'webhook';
+  rawHeaders?: Record<string, string>;
+}
+
+export interface EmailIngestionDriver {
+  readonly id: string;
+  readonly connectionType: EmailConnectionType;
+  /** Active-pull drivers implement this. Webhook driver returns []. */
+  fetchUnreadEmails(): Promise<NormalizedInboundEmail[]>;
+  /** Optional credential handshake used by "Verbindung testen". */
+  testConnection?(): Promise<{ ok: boolean; message: string }>;
+}
+
+export interface EmailChannelConfig {
+  id: string;
+  name: string;
+  email: string;
+  group?: string;
+  status: 'verified' | 'pending' | 'failed' | 'active' | 'disabled';
+  connectionType: EmailConnectionType;
+  enabled: boolean;
+  isPrimary?: boolean;
+  provider?: 'gmail' | 'outlook' | 'custom' | 'microsoft' | 'google';
+
+  // Webhook / forwarding
+  webhookSecret?: string;
+  forwardingAddress?: string;
+
+  // IMAP
+  imapHost?: string;
+  imapPort?: number | string;
+  imapUser?: string;
+  imapPassword?: string;
+  imapTls?: boolean;
+  oauthClientId?: string;
+  oauthClientSecret?: string;
+  oauthTokenUrl?: string;
+  oauthRefreshToken?: string;
+  oauthScope?: string;
+
+  // Microsoft Graph
+  tenantId?: string;
+  clientId?: string;
+  clientSecret?: string;
+  mailbox?: string;
+
+  lastPolledAt?: string | null;
+  lastError?: string | null;
+  lastTestAt?: string | null;
+  lastTestOk?: boolean | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const EMAIL_CHANNELS_COLLECTION = 'email_channels';
+export const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024; // 5 MB per file persisted
+export const MAX_ATTACHMENTS_PER_MESSAGE = 10;

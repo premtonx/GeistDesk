@@ -1,20 +1,13 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { 
-  User, 
-  MessageSquare, 
-  Sparkles, 
   ShieldCheck, 
-  Scale, 
   AlertCircle, 
-  CheckCircle, 
   UserRound, 
-  Clock, 
   Mail,
-  Lock,
-  ArrowDownToLine,
-  ChevronDown,
-  Copy
+  Copy,
+  Paperclip,
+  FileText,
 } from 'lucide-react';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { Badge } from '../ui/badge';
@@ -61,8 +54,10 @@ export function ConversationTimeline({
       senderType: 'customer' | 'bot' | 'agent' | 'ai';
       createdAt: any;
       content: string;
+      html_content?: string;
       channel: string;
       deliveryStatus?: Message['deliveryStatus'];
+      attachments?: Message['attachments'];
     }> = [
       {
         id: 'opening-post',
@@ -70,7 +65,9 @@ export function ConversationTimeline({
         senderType: 'customer',
         createdAt: ticket.createdAt,
         content: translatedTicket?.description || ticket.description,
-        channel: 'via Email'
+        html_content: (ticket as any).html_content,
+        channel: 'via Email',
+        attachments: undefined,
       }
     ];
 
@@ -88,8 +85,10 @@ export function ConversationTimeline({
         senderType: isBot ? 'bot' : (msg.senderType === 'customer' ? 'customer' : 'agent'),
         createdAt: msg.createdAt,
         content: msg.content,
+        html_content: msg.html_content,
         channel: isBot ? 'via System' : (msg.senderType === 'customer' ? 'via Email' : 'via Web'),
         deliveryStatus: msg.deliveryStatus,
+        attachments: msg.attachments,
       });
     });
 
@@ -199,7 +198,7 @@ export function ConversationTimeline({
                     </div>
                   </div>
 
-                  {/* Message body — sanitize & render real HTML (not escaped tags) */}
+                  {/* Message body — prefer html_content, sanitize before dangerouslySetInnerHTML */}
                   <div className="text-[13px] leading-relaxed text-slate-800 dark:text-slate-200 break-words font-sans [&_p]:mb-2 [&_p:last-child]:mb-0 [&_a]:underline">
                     {isTranslating && item.id === 'opening-post' ? (
                       <p className="italic text-muted-foreground animate-pulse">Translating message content...</p>
@@ -207,11 +206,36 @@ export function ConversationTimeline({
                       <div
                         className="select-text cursor-text prose prose-sm max-w-none dark:prose-invert"
                         dangerouslySetInnerHTML={{
-                          __html: sanitizeTimelineHtml(redactPII(item.content || '')),
+                          __html: sanitizeTimelineHtml(
+                            redactPII(item.html_content || item.content || ''),
+                          ),
                         }}
                       />
                     )}
                   </div>
+
+                  {item.attachments && item.attachments.length > 0 ? (
+                    <div className="mt-3 space-y-1.5">
+                      <p className="text-[10px] font-black uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                        <Paperclip className="w-3 h-3" />
+                        {t('tickets.conversation.attachments', 'Attachments')}
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        {item.attachments.map((att, attIdx) => (
+                          <div
+                            key={`${item.id}-att-${attIdx}`}
+                            className="inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-[11px] font-semibold text-slate-700"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                            <span className="truncate max-w-[180px]">{att.filename}</span>
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              {att.size ? `${Math.max(1, Math.round(att.size / 1024))} KB` : ''}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
 
                   {/* MIT SafeLink badge check for Bot events */}
                   {isBot && (

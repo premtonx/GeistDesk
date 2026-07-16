@@ -241,6 +241,16 @@ export interface Ticket {
   agentComments?: AgentComment[];
 }
 
+export interface MessageAttachment {
+  filename: string;
+  contentType: string;
+  size: number;
+  contentBase64?: string;
+  contentId?: string;
+  omitted?: boolean;
+  reason?: string;
+}
+
 export interface Message {
   id: string;
   ticketId: string;
@@ -248,6 +258,10 @@ export interface Message {
   senderType: SenderType;
   senderName?: string;
   content: string;
+  /** Sanitized HTML body from inbound email when available. */
+  html_content?: string;
+  text_content?: string;
+  attachments?: MessageAttachment[];
   originalContent?: string;
   redactedContent?: string;
   citations?: string[];

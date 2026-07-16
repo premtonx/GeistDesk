@@ -35,11 +35,22 @@ import credentialVaultRoutes from "./src/routes/credentialVaultRoutes.js";
 import exchangeRoutes from "./src/routes/exchangeRoutes.js";
 import ticketReplyRoutes from "./src/routes/ticketReplyRoutes.js";
 import ticketSpamRoutes from "./src/routes/ticketSpamRoutes.js";
+import emailChannelRoutes from "./src/routes/emailChannelRoutes.js";
 import {
   extractEmailAddress,
-  isSenderBlacklisted,
-  logBlacklistDrop,
 } from "./src/lib/global-blacklist.js";
+import {
+  ingestNormalizedEmail,
+  registerAiTriageHook,
+} from "./src/lib/email-ingestion/ingest-pipeline.js";
+import {
+  extractRouterAlias,
+  parseInboundWebhookPayload,
+} from "./src/lib/email-ingestion/drivers/webhook-adapter.js";
+import { findChannelForWebhook } from "./src/lib/email-ingestion/channel-store.js";
+import { createEmailIngestionDriver } from "./src/lib/email-ingestion/factory.js";
+import { startEmailIngestionScheduler } from "./src/lib/email-ingestion/scheduler.js";
+import { getEmailChannel } from "./src/lib/email-ingestion/channel-store.js";
 import kbArticleRoutes from "./src/routes/kbArticleRoutes.js";
 import kbCategoryRoutes from "./src/routes/kbCategoryRoutes.js";
 import kbDashboardRoutes from "./src/routes/kbDashboardRoutes.js";
@@ -511,6 +522,7 @@ async function startServer() {
   app.use("/api/exchange", exchangeRoutes);
   app.use("/api/tickets", ticketReplyRoutes);
   app.use("/api/tickets", ticketSpamRoutes);
+  app.use("/api/email-channels", emailChannelRoutes);
 
   // Authoritative, SQL-computed ticket metrics for dashboards.
   app.get("/api/stats/tickets", authenticate, async (req: any, res) => {
@@ -1102,107 +1114,97 @@ async function startServer() {
     `);
   });
 
-  // Inbound Mail Webhook
-  app.post("/api/webhooks/inbound-mail", webhookRateLimiter, async (req, res) => {
-    if (!verifyInboundMailWebhook(req)) {
-      return res.status(401).json({ error: "Unauthorized webhook." });
-    }
-    const { sender, subject, body, attachments } = req.body;
-    
-    if (!sender || !subject || !body) {
-      return res.status(400).json({ error: "Missing required fields: sender, subject, or body" });
-    }
+  // Inbound Mail Webhook — accepts JSON or multipart (Mailgun / SendGrid / Postal / custom).
+  app.post(
+    "/api/webhooks/inbound-mail",
+    webhookRateLimiter,
+    (req: any, res, next) => {
+      const ct = String(req.headers["content-type"] || "");
+      if (ct.includes("multipart/form-data")) {
+        return upload.any()(req, res, next);
+      }
+      return next();
+    },
+    async (req: any, res) => {
+      const headerSecret = req.headers["x-geistdesk-webhook-secret"];
+      const bodySecret =
+        req.body?.webhookSecret ||
+        req.body?.secret ||
+        req.query?.secret;
+      const providedSecret =
+        typeof headerSecret === "string"
+          ? headerSecret
+          : typeof bodySecret === "string"
+            ? bodySecret
+            : "";
 
-    const normalizedSender = extractEmailAddress(String(sender));
+      const recipientAlias = extractRouterAlias(req.body || {});
+      const channel = await findChannelForWebhook({
+        recipient: extractEmailAddress(recipientAlias) || recipientAlias,
+        webhookSecret: providedSecret,
+      });
 
-    try {
-      // Pre-filter wheel: drop blacklisted senders before ticket creation / AI triage.
-      if (await isSenderBlacklisted(normalizedSender || String(sender))) {
-        await logBlacklistDrop({
-          sender: normalizedSender || String(sender),
-          subject: String(subject || ''),
-          reason: 'global_blacklist_hit',
+      const globalOk = verifyInboundMailWebhook(req);
+      const channelOk = Boolean(
+        channel?.webhookSecret &&
+          providedSecret &&
+          channel.webhookSecret === providedSecret,
+      );
+      if (!globalOk && !channelOk) {
+        return res.status(401).json({ error: "Unauthorized webhook." });
+      }
+
+      try {
+        const files = Array.isArray(req.files) ? req.files : [];
+        const normalized = parseInboundWebhookPayload({
+          body: req.body || {},
+          files,
+          defaultMailbox: channel?.email || channel?.forwardingAddress,
         });
-        // Instruct mail pollers to delete/archive the message; do not create a ticket.
+
+        if (!normalized) {
+          return res.status(400).json({
+            error:
+              "Unable to parse inbound mail. Provide sender/from + subject + html/text body (JSON or multipart).",
+          });
+        }
+
+        const result = await ingestNormalizedEmail({
+          ...normalized,
+          mailbox:
+            normalized.mailbox ||
+            channel?.forwardingAddress ||
+            channel?.email ||
+            undefined,
+          source: "webhook",
+        });
+
+        if (result.blocked) {
+          return res.json({
+            success: true,
+            blocked: true,
+            status: "ignored",
+            action: "drop",
+            sender: normalized.from_email,
+          });
+        }
+
+        if (!result.success) {
+          return res.status(500).json({ error: result.error || "Ingest failed" });
+        }
+
         return res.json({
           success: true,
-          blocked: true,
-          status: 'ignored',
-          action: 'drop',
-          sender: normalizedSender || String(sender),
+          ticketId: result.customId || result.ticketId,
+          status: result.status,
+          channelId: channel?.id || null,
         });
+      } catch (error) {
+        console.error("Webhook error:", error);
+        return res.status(500).json({ error: "Failed to process inbound mail" });
       }
-
-      const db = getDb();
-      
-      // 1. Threading Logic: Scan for [NEX-XXXX]
-      const ticketIdMatch = subject.match(/\[NEX-(\d{4})\]/) || body.match(/\[NEX-(\d{4})\]/);
-      let ticketId = ticketIdMatch ? ticketIdMatch[0].replace("[", "").replace("]", "") : null;
-      let ticketRef = null;
-
-      if (ticketId) {
-        // Try to find the ticket by its ID (using a query since ID is likely a property or we use custom document IDs)
-        // For simplicity here, we'll assume we search by a 'ticketId' field
-        const ticketQuery = await db.collection("tickets").where("customId", "==", ticketId).limit(1).get();
-        if (!ticketQuery.empty) {
-          ticketRef = ticketQuery.docs[0].ref;
-        }
-      }
-
-      // 2. User Mapping: Link to Customer
-      const customerQuery = await db.collection("customers").where("email", "==", sender).limit(1).get();
-      const customer = !customerQuery.empty ? customerQuery.docs[0].data() : null;
-      const customerId = !customerQuery.empty ? customerQuery.docs[0].id : "anonymous";
-      const customerName = customer ? customer.name : "Unknown Sender";
-
-      if (!ticketRef) {
-        // Create new ticket
-        const countSnap = await db.collection("tickets").orderBy("createdAt", "desc").limit(1).get();
-        const lastCount = !countSnap.empty ? parseInt(countSnap.docs[0].data()?.customId?.split("-")[1] || "0") : 0;
-        const newTicketId = `NEX-${String(lastCount + 1).padStart(4, "0")}`;
-        
-        const newTicket = {
-          subject,
-          description: body,
-          status: "open",
-          priority: "medium", // Default, AI will update later
-          customerId,
-          customerName,
-          customId: newTicketId,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          tags: ["inbound-email"],
-          customerEmail: normalizedSender || sender,
-          from_email: normalizedSender || sender,
-        };
-        
-        ticketRef = await db.collection("tickets").add(newTicket);
-        ticketId = newTicketId;
-      }
-
-      // 3. Add Message to Thread
-      const message = {
-        ticketId: ticketRef.id,
-        senderId: customerId,
-        senderType: "customer",
-        senderName: customerName,
-        content: body,
-        createdAt: admin.firestore.FieldValue.serverTimestamp()
-      };
-      
-      await ticketRef.collection("messages").add(message);
-      await ticketRef.update({ updatedAt: admin.firestore.FieldValue.serverTimestamp() });
-
-      // 4. AI Triage Trigger (Background Job Simulation)
-      // We don't await this to keep webhook fast, but in this demo, we'll do it for the result
-      processAiTriage(ticketRef.id, body, subject).catch(err => console.error("AI Triage Error:", err));
-
-      res.json({ success: true, ticketId, status: "processing" });
-    } catch (error) {
-      console.error("Webhook error:", error);
-      res.status(500).json({ error: "Failed to process inbound mail" });
-    }
-  });
+    },
+  );
 
   // Mock Mail Verification APIs
   // Personio Integration Points
@@ -1254,13 +1256,106 @@ async function startServer() {
   });
 
   app.post("/api/mail/test-imap", checkAdmin, async (req, res) => {
-    const { host, port, user, password, secure } = req.body;
-    // Simulate IMAP test
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    if (host.includes("error")) {
-      return res.status(400).json({ success: false, error: "Connection timed out. Check firewall settings." });
+    const {
+      host,
+      port,
+      user,
+      password,
+      secure,
+      connectionType,
+      oauthClientId,
+      oauthClientSecret,
+      oauthTokenUrl,
+      channelId,
+    } = req.body || {};
+
+    try {
+      // Prefer persisted channel secrets when testing from admin UI.
+      const persisted = channelId
+        ? await getEmailChannel(String(channelId), { includeSecrets: true })
+        : null;
+
+      const driver = createEmailIngestionDriver({
+        id: persisted?.id || "adhoc-test",
+        name: persisted?.name || "Adhoc IMAP Test",
+        email: user || persisted?.email || "",
+        connectionType:
+          connectionType === "imap_oauth2" ? "imap_oauth2" : "imap_basic",
+        enabled: true,
+        status: "pending",
+        imapHost: host || persisted?.imapHost,
+        imapPort: port || persisted?.imapPort || 993,
+        imapUser: user || persisted?.imapUser || persisted?.email,
+        imapPassword:
+          password && password !== "••••••••"
+            ? password
+            : persisted?.imapPassword,
+        imapTls: secure !== false && secure !== "false",
+        oauthClientId: oauthClientId || persisted?.oauthClientId,
+        oauthClientSecret:
+          oauthClientSecret && oauthClientSecret !== "••••••••"
+            ? oauthClientSecret
+            : persisted?.oauthClientSecret,
+        oauthTokenUrl: oauthTokenUrl || persisted?.oauthTokenUrl,
+      });
+
+      const result = driver.testConnection
+        ? await driver.testConnection()
+        : { ok: false, message: "Driver cannot test connection" };
+
+      if (!result.ok) {
+        return res.status(400).json({ success: false, error: result.message });
+      }
+      return res.json({ success: true, message: result.message });
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        error: err?.message || "IMAP connection test failed",
+      });
     }
-    res.json({ success: true, message: "IMAP Handshake Successful" });
+  });
+
+  app.post("/api/mail/test-graph", checkAdmin, async (req, res) => {
+    const {
+      tenantId,
+      clientId,
+      clientSecret,
+      mailbox,
+      email,
+      channelId,
+    } = req.body || {};
+    try {
+      const persisted = channelId
+        ? await getEmailChannel(String(channelId), { includeSecrets: true })
+        : null;
+      const driver = createEmailIngestionDriver({
+        id: persisted?.id || "adhoc-graph-test",
+        name: persisted?.name || "Adhoc Graph Test",
+        email: email || mailbox || persisted?.email || "",
+        connectionType: "microsoft_graph",
+        enabled: true,
+        status: "pending",
+        tenantId: tenantId || persisted?.tenantId,
+        clientId: clientId || persisted?.clientId,
+        clientSecret:
+          clientSecret && clientSecret !== "••••••••"
+            ? clientSecret
+            : persisted?.clientSecret,
+        mailbox: mailbox || email || persisted?.mailbox || persisted?.email,
+      });
+      const result = driver.testConnection
+        ? await driver.testConnection()
+        : { ok: false, message: "Driver cannot test connection" };
+      if (!result.ok) {
+        return res.status(400).json({ success: false, error: result.message });
+      }
+      return res.json({ success: true, message: result.message });
+    } catch (err: any) {
+      return res.status(400).json({
+        success: false,
+        error: err?.message || "Microsoft Graph connection test failed",
+      });
+    }
   });
 
   app.post("/api/mail/test-smtp", checkAdmin, async (req, res) => {
@@ -1811,6 +1906,10 @@ Example output format:
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
+
+  // Wire unified ingest pipeline → AI triage, then start 60s active-pull daemon.
+  registerAiTriageHook(processAiTriage);
+  startEmailIngestionScheduler(60_000);
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Ready: Server running on http://localhost:${PORT}`);
