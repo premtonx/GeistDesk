@@ -1,5 +1,6 @@
+# Keep dist/ IN the build context — the runtime Dockerfile COPY dist ./dist
+# expects the CI-prebuilt artifact on the deploy host.
 node_modules
-dist
 .git
 .github
 .env
@@ -12,3 +13,6 @@ tmp
 .cursor
 **/.DS_Store
 npm-debug.log*
+.vite
+**/node_modules
+Dockerfile.multistage

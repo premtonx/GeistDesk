@@ -6,8 +6,6 @@
 # Boot (scripts/docker-entrypoint.sh):
 #   wait for Postgres → db:deploy:prod → seed:prod → server
 
-version: '3.8'
-
 services:
   geistdesk-gateway:
     build:

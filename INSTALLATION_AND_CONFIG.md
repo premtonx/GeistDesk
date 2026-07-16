@@ -66,6 +66,8 @@ docker compose up -d geistdesk-gateway
 
 The default `Dockerfile` is **runtime-only** (copies `dist/`). For a full source build inside Docker, use `Dockerfile.multistage`.
 
+> **Important:** `.dockerignore` must **not** exclude `dist/` — the production image copies the CI-prebuilt artifact from the host build context.
+
 > **Compose defaults:** `POSTGRES_PASSWORD` defaults to `geist_password` so existing production `.env` files without that key keep working. Override only when creating a **new** empty DB volume. `DATABASE_URL` defaults to `postgresql://geist_user:geist_password@geistdesk-db:5432/geistdesk_prod?sslmode=disable`.
 
 On every container start, `scripts/docker-entrypoint.sh` runs:
