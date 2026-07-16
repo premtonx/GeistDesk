@@ -792,7 +792,8 @@ export const DEFAULT_ORCHESTRATOR_CONFIG: AiOrchestratorConfig = {
   providerPriority: DEFAULT_PROVIDER_PRIORITY,
   fallbackModels: ['claude', 'gpt-5', 'local-llama'],
   featureRouting: DEFAULT_FEATURE_ROUTING,
-  endpointUrl: 'http://localhost:11434/v1',
+  // Filled from OLLAMA_ENDPOINT / VITE_OLLAMA_ENDPOINT or Admin KI settings — never hardcode localhost in pilots.
+  endpointUrl: '',
   piiEnabled: true,
   autoEscalationEnabled: true,
   auditEnabled: true,

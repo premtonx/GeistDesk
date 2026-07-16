@@ -3,6 +3,9 @@
 interface ImportMetaEnv {
   readonly VITE_BETA_AUTO_ADMIN?: string;
   readonly VITE_DEMO_MODE?: string;
+  readonly VITE_OLLAMA_ENDPOINT?: string;
+  readonly VITE_MASTER_KEY_SALT?: string;
+  readonly VITE_PUBLIC_APP_URL?: string;
 }
 
 interface ImportMeta {

@@ -59,7 +59,16 @@ Return a JSON array of objects with:
       });
       suggestions = JSON.parse(result.output || '[]') as SuggestedLink[];
     } else {
-      const endpoint = config.ai.localEndpoint || "http://localhost:11434/v1";
+      const endpoint =
+        config.ai.localEndpoint ||
+        (typeof process !== 'undefined' && process.env.OLLAMA_ENDPOINT
+          ? process.env.OLLAMA_ENDPOINT.replace(/\/$/, '').endsWith('/v1')
+            ? process.env.OLLAMA_ENDPOINT.replace(/\/$/, '')
+            : `${process.env.OLLAMA_ENDPOINT.replace(/\/$/, '')}/v1`
+          : '');
+      if (!endpoint) {
+        throw new Error('Local AI endpoint is not configured (set OLLAMA_ENDPOINT or module AI localEndpoint).');
+      }
       const modelName = config.ai.sentimentModel === 'custom-local'
         ? (config.ai.customSentimentModelName || "gemma")
         : (config.ai.sentimentModel === 'local-gemma' ? "gemma" : "llama3");

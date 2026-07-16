@@ -149,7 +149,8 @@ const DEFAULT_CONFIG: ModuleConfig = {
     sentimentModel: 'gemini-flash',
     deepThinkingModel: 'gemini-pro',
     summaryModel: 'sentiment',
-    localEndpoint: 'http://localhost:11434/v1',
+    // Prefer OLLAMA_ENDPOINT / VITE_OLLAMA_ENDPOINT — empty means "not configured".
+    localEndpoint: '',
     apiKey: '',
     customSentimentModelName: 'gemma',
     customThinkingModelName: 'qwen:36b',

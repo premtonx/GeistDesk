@@ -85,7 +85,7 @@ export async function initDb() {
       triage_model VARCHAR(128) NOT NULL DEFAULT 'gemini-flash',
       fallback_models JSONB NOT NULL DEFAULT '["claude","gpt-5","local-llama"]',
       feature_routing_json JSONB NOT NULL DEFAULT '{}',
-      endpoint_url TEXT NOT NULL DEFAULT 'http://localhost:11434/v1',
+      endpoint_url TEXT NOT NULL DEFAULT '',
       pii_enabled BOOLEAN NOT NULL DEFAULT true,
       auto_escalation_enabled BOOLEAN NOT NULL DEFAULT true,
       audit_enabled BOOLEAN NOT NULL DEFAULT true,

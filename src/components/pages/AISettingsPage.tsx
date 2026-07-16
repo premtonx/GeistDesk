@@ -632,7 +632,7 @@ export default function AISettingsPage() {
                 disabled={readOnly}
                 value={config.endpointUrl}
                 onChange={(e) => patchConfig({ endpointUrl: e.target.value })}
-                placeholder="http://localhost:11434/v1"
+                placeholder="Set OLLAMA_ENDPOINT or https://llm.example.com/v1"
               />
               <Button
                 type="button"

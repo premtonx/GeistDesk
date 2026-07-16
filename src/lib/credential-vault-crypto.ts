@@ -60,7 +60,19 @@ export async function deriveMasterKey(password: string, salt: string): Promise<U
 }
 
 export function buildVaultKeySalt(userId: string): string {
-  return `user-salt-${userId}`;
+  // Optional pepper from MASTER_KEY_SALT / VITE_MASTER_KEY_SALT (fresh installs only).
+  let pepper = '';
+  try {
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_MASTER_KEY_SALT) {
+      pepper = String((import.meta as any).env.VITE_MASTER_KEY_SALT || '').trim();
+    }
+  } catch {
+    /* ignore */
+  }
+  if (!pepper && typeof process !== 'undefined' && process.env?.MASTER_KEY_SALT) {
+    pepper = String(process.env.MASTER_KEY_SALT || '').trim();
+  }
+  return pepper ? `user-salt-${userId}:${pepper}` : `user-salt-${userId}`;
 }
 
 /** Cryptographically secure 256-bit Data Encryption Key for a single vault. */

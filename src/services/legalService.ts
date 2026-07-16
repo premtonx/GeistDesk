@@ -40,7 +40,16 @@ Return JSON with keys isValid (boolean), violationDetail (string), forbiddenText
       });
       result = JSON.parse(lifecycle.output) as LegalValidationResult;
     } else {
-      const endpoint = aiConfig.localEndpoint || "http://localhost:11434/v1";
+      const endpoint =
+        aiConfig.localEndpoint ||
+        (typeof process !== 'undefined' && process.env.OLLAMA_ENDPOINT
+          ? process.env.OLLAMA_ENDPOINT.replace(/\/$/, '').endsWith('/v1')
+            ? process.env.OLLAMA_ENDPOINT.replace(/\/$/, '')
+            : `${process.env.OLLAMA_ENDPOINT.replace(/\/$/, '')}/v1`
+          : '');
+      if (!endpoint) {
+        throw new Error('Local AI endpoint is not configured (set OLLAMA_ENDPOINT or module AI localEndpoint).');
+      }
       const modelName = aiConfig.sentimentModel === 'custom-local'
         ? (aiConfig.customSentimentModelName || "gemma")
         : (aiConfig.sentimentModel === 'local-gemma' ? "gemma" : "llama3");

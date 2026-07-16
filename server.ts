@@ -1912,7 +1912,11 @@ Example output format:
   startEmailIngestionScheduler(60_000);
 
   app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Ready: Server running on http://localhost:${PORT}`);
+    const publicBase =
+      process.env.PUBLIC_APP_URL ||
+      process.env.VITE_PUBLIC_APP_URL ||
+      `http://0.0.0.0:${PORT}`;
+    console.log(`Ready: Server listening on 0.0.0.0:${PORT} (PUBLIC_APP_URL=${publicBase})`);
   });
 }
 
@@ -2010,7 +2014,11 @@ async function getServerAiConfig() {
       sentimentModel: "gemini-flash",
       deepThinkingModel: "gemini-pro",
       summaryModel: "sentiment",
-      localEndpoint: "http://localhost:11434/v1",
+      localEndpoint: process.env.OLLAMA_ENDPOINT
+        ? (process.env.OLLAMA_ENDPOINT.replace(/\/$/, '').endsWith('/v1')
+            ? process.env.OLLAMA_ENDPOINT.replace(/\/$/, '')
+            : `${process.env.OLLAMA_ENDPOINT.replace(/\/$/, '')}/v1`)
+        : "",
       apiKey: process.env.GEMINI_API_KEY || "",
       customSentimentModelName: "gemma",
       customThinkingModelName: "qwen:36b",
