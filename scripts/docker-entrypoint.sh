@@ -18,6 +18,15 @@ node <<'NODE'
 const { Pool } = require('pg');
 
 const connectionString = process.env.DATABASE_URL || process.env.PG_DATABASE_URL;
+try {
+  const u = new URL(connectionString.replace(/^postgres(ql)?:/i, 'http:'));
+  console.log(
+    `[entrypoint] DATABASE_URL target user=${u.username || '(none)'} host=${u.hostname}:${u.port || '5432'} db=${(u.pathname || '/').replace(/^\//, '') || '(default)'}`,
+  );
+} catch {
+  console.log('[entrypoint] DATABASE_URL present (unable to parse for diagnostics)');
+}
+
 const pool = new Pool({ connectionString });
 
 (async () => {
@@ -35,6 +44,7 @@ const pool = new Pool({ connectionString });
     }
   }
   console.error('[entrypoint] FATAL: PostgreSQL did not become ready in time.');
+  console.error('[entrypoint] Hint: bundled DB expects user geist_user. Host .env DATABASE_URL is ignored; use GEISTDESK_DATABASE_URL only for managed Postgres overrides.');
   process.exit(1);
 })();
 NODE

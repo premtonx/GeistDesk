@@ -159,10 +159,27 @@ jobs:
               --build-arg BUILD_ID="${BUILD_ID}" \
               geistdesk-gateway
 
+            docker compose up -d geistdesk-db
             docker compose up -d geistdesk-gateway
 
-            echo "Waiting for gateway health..."
-            sleep 30
+            echo "Waiting for gateway bootstrap (migrate/seed/server)..."
+            # Internal health first — Traefik 404s while the entrypoint is still waiting on DB.
+            INTERNAL_OK=0
+            for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+              if docker compose exec -T geistdesk-gateway node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+                echo "Internal health OK (container :3000/api/health) on attempt ${i}"
+                INTERNAL_OK=1
+                break
+              fi
+              echo "Internal health attempt ${i}/30 — waiting for entrypoint..."
+              sleep 5
+            done
+            if [ "${INTERNAL_OK}" != "1" ]; then
+              echo "FATAL: Gateway never became healthy inside the container"
+              docker compose logs --tail=200 geistdesk-gateway || true
+              docker compose logs --tail=80 geistdesk-db || true
+              exit 1
+            fi
 
             BUNDLE="$(docker compose exec -T geistdesk-gateway sh -c "grep -oE 'index-[^\"]+\.js' dist/index.html | head -1")"
             echo "Active bundle inside container: ${BUNDLE}"
@@ -177,21 +194,18 @@ jobs:
               exit 1
             fi
 
-            # Container bootstrap (scripts/docker-entrypoint.sh):
-            #   wait for Postgres → db:deploy:prod → seed:prod → server
-
-            echo "Verifying production health endpoint..."
+            echo "Verifying public health endpoint..."
             for i in 1 2 3 4 5 6 7 8 9 10; do
               if curl -fsS "https://app.premtonx.cloud/api/health" >/dev/null; then
                 echo "Health check OK (https://app.premtonx.cloud/api/health)"
                 break
               fi
               if [ "$i" -eq 10 ]; then
-                echo "FATAL: Health check did not return 200 after deploy"
+                echo "FATAL: Public health check did not return 200 after deploy"
                 docker compose logs --tail=120 geistdesk-gateway || true
                 exit 1
               fi
-              echo "Health check attempt ${i}/10 failed — retrying in 5s..."
+              echo "Public health check attempt ${i}/10 failed — retrying in 5s..."
               sleep 5
             done
 

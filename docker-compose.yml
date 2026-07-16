@@ -14,15 +14,19 @@ services:
         BUILD_ID: ${BUILD_ID:-local}
     container_name: geistdesk-sovereign-gate
     depends_on:
-      - geistdesk-db
+      geistdesk-db:
+        condition: service_healthy
     environment:
       - NODE_ENV=production
       - PORT=3000
       - PUBLIC_APP_URL=${PUBLIC_APP_URL:-https://app.premtonx.cloud}
 
-      # Database — default matches bundled geistdesk-db credentials below.
-      # Override DATABASE_URL in .env for managed Postgres.
-      - DATABASE_URL=${DATABASE_URL:-postgresql://geist_user:geist_password@geistdesk-db:5432/geistdesk_prod?sslmode=disable}
+      # Bundled Postgres URL — MUST match geistdesk-db credentials below.
+      # Intentionally NOT reading host .env DATABASE_URL: production .env often
+      # contains a leftover postgres://postgres@... value that overrides the
+      # default and causes "password authentication failed for user postgres".
+      # For managed Postgres, set GEISTDESK_DATABASE_URL explicitly.
+      - DATABASE_URL=${GEISTDESK_DATABASE_URL:-postgresql://geist_user:geist_password@geistdesk-db:5432/geistdesk_prod?sslmode=disable}
       - DATABASE_SSL_INSECURE=${DATABASE_SSL_INSECURE:-false}
 
       # Required security secrets (must exist in host .env — deploy script enforces JWT/VAULT)
@@ -78,9 +82,11 @@ services:
       - MicrosoftAppTenantId=${MicrosoftAppTenantId:-}
     restart: always
     networks:
+      - geistdesk-internal
       - traefik-public
     labels:
       - "traefik.enable=true"
+      - "traefik.docker.network=traefik-public"
       - "traefik.http.routers.geistdesk-sso.rule=Host(`app.premtonx.cloud`)"
       - "traefik.http.routers.geistdesk-sso.entrypoints=websecure"
       - "traefik.http.routers.geistdesk-sso.tls.certresolver=myresolver"
@@ -99,11 +105,20 @@ services:
       - geistdesk_db_data:/var/lib/postgresql/data
     restart: always
     networks:
-      - traefik-public
+      - geistdesk-internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
 
 volumes:
   geistdesk_db_data:
 
 networks:
+  geistdesk-internal:
+    driver: bridge
   traefik-public:
     external: true
+    # Local verification without Traefik:
+    #   docker network create traefik-public
