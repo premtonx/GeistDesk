@@ -223,6 +223,20 @@ export async function initDb() {
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS feature_personas_json JSONB NOT NULL DEFAULT '{"ticket_summarization":"support_agent","smart_reply":"support_agent","kb_generation":"knowledge_writer","root_cause_analysis":"security_analyst","translation":"knowledge_writer"}';
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS persona_skills_json JSONB NOT NULL DEFAULT '{}';
   `);
+
+  // Global email/domain blacklist for inbound spam rejection (pre-filter).
+  // blocked_value is always stored lowercase (email or domain).
+  await pgPool.query(`
+    CREATE TABLE IF NOT EXISTS global_blacklist (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      blocked_value TEXT NOT NULL UNIQUE,
+      blocked_by VARCHAR(255),
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_global_blacklist_created
+      ON global_blacklist ("createdAt" DESC);
+  `);
+
   console.log("[DB Engine] PostgreSQL Tables Verified.");
 }
 

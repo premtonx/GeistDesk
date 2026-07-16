@@ -34,6 +34,12 @@ import vaultRoutes from "./src/routes/vaultRoutes.js";
 import credentialVaultRoutes from "./src/routes/credentialVaultRoutes.js";
 import exchangeRoutes from "./src/routes/exchangeRoutes.js";
 import ticketReplyRoutes from "./src/routes/ticketReplyRoutes.js";
+import ticketSpamRoutes from "./src/routes/ticketSpamRoutes.js";
+import {
+  extractEmailAddress,
+  isSenderBlacklisted,
+  logBlacklistDrop,
+} from "./src/lib/global-blacklist.js";
 import kbArticleRoutes from "./src/routes/kbArticleRoutes.js";
 import kbCategoryRoutes from "./src/routes/kbCategoryRoutes.js";
 import kbDashboardRoutes from "./src/routes/kbDashboardRoutes.js";
@@ -504,6 +510,7 @@ async function startServer() {
   app.use("/api/credential-vault", credentialVaultRoutes);
   app.use("/api/exchange", exchangeRoutes);
   app.use("/api/tickets", ticketReplyRoutes);
+  app.use("/api/tickets", ticketSpamRoutes);
 
   // Authoritative, SQL-computed ticket metrics for dashboards.
   app.get("/api/stats/tickets", authenticate, async (req: any, res) => {
@@ -1106,7 +1113,26 @@ async function startServer() {
       return res.status(400).json({ error: "Missing required fields: sender, subject, or body" });
     }
 
+    const normalizedSender = extractEmailAddress(String(sender));
+
     try {
+      // Pre-filter wheel: drop blacklisted senders before ticket creation / AI triage.
+      if (await isSenderBlacklisted(normalizedSender || String(sender))) {
+        await logBlacklistDrop({
+          sender: normalizedSender || String(sender),
+          subject: String(subject || ''),
+          reason: 'global_blacklist_hit',
+        });
+        // Instruct mail pollers to delete/archive the message; do not create a ticket.
+        return res.json({
+          success: true,
+          blocked: true,
+          status: 'ignored',
+          action: 'drop',
+          sender: normalizedSender || String(sender),
+        });
+      }
+
       const db = getDb();
       
       // 1. Threading Logic: Scan for [NEX-XXXX]
@@ -1146,7 +1172,8 @@ async function startServer() {
           createdAt: admin.firestore.FieldValue.serverTimestamp(),
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           tags: ["inbound-email"],
-          customerEmail: sender
+          customerEmail: normalizedSender || sender,
+          from_email: normalizedSender || sender,
         };
         
         ticketRef = await db.collection("tickets").add(newTicket);

@@ -438,4 +438,43 @@ export const ticketService = {
     const next = checklist.filter((item) => item.id !== taskId);
     return ticketService.persistTicketChecklist(ticketId, next);
   },
+
+  /**
+   * Mark ticket as spam and blacklist the sender via POST /api/tickets/:id/spam.
+   */
+  markAsSpam: async (
+    ticketId: string,
+  ): Promise<{
+    success: boolean;
+    ticketId: string;
+    status: 'spam';
+    blocked_value: string;
+    blacklistId: string;
+  }> => {
+    const res = await fetch(`/api/tickets/${encodeURIComponent(ticketId)}/spam`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error((data as { error?: string })?.error || `Mark as spam failed (${res.status})`);
+    }
+    await logAudit({
+      module: 'tickets',
+      action: 'TICKET_MARKED_SPAM',
+      severity: 'high',
+      details: {
+        ticketId,
+        blocked_value: (data as { blocked_value?: string }).blocked_value,
+      },
+    });
+    return data as {
+      success: boolean;
+      ticketId: string;
+      status: 'spam';
+      blocked_value: string;
+      blacklistId: string;
+    };
+  },
 };

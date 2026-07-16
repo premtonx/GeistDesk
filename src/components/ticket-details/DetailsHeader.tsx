@@ -43,6 +43,9 @@ interface DetailsHeaderProps {
   onReplyClick: () => void;
   onInternalNoteClick: () => void;
   onSeekHelp?: () => void;
+  /** Opens mark-as-spam confirmation (wired by ticket detail host). */
+  onMarkAsSpam?: () => void;
+  isSpam?: boolean;
 }
 
 export function DetailsHeader({
@@ -59,7 +62,9 @@ export function DetailsHeader({
   isAiReady,
   onReplyClick,
   onInternalNoteClick,
-  onSeekHelp
+  onSeekHelp,
+  onMarkAsSpam,
+  isSpam,
 }: DetailsHeaderProps) {
   const { t } = useTranslation();
   const [timeLeftStr, setTimeLeftStr] = useState(() => t('tickets.detail.slaDuePending', 'Due in —'));
@@ -186,6 +191,18 @@ export function DetailsHeader({
 
         {/* Right Side: Command ribbon bar next to the ticket title */}
         <div className="flex items-center gap-2 shrink-0 self-start xl:self-center">
+          {onMarkAsSpam && !isSpam ? (
+            <Button
+              size="sm"
+              variant="outline"
+              className="rounded-xl h-9.5 text-xs font-bold border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 flex items-center gap-1.5 shadow-sm"
+              onClick={onMarkAsSpam}
+            >
+              <span aria-hidden>🚫</span>
+              <span>{t('tickets.spam.button', 'Als Spam markieren')}</span>
+            </Button>
+          ) : null}
+
           {/* Answer Action Button */}
           <Button 
             size="sm" 

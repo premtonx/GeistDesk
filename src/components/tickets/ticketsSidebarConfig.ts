@@ -25,6 +25,7 @@ import {
   Copy,
   BookOpen,
   Crown,
+  MailWarning,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -69,6 +70,7 @@ export const ALL_TICKETS_VIEW_ITEMS: SidebarItemConfig[] = [
   { id: 'status_waiting_vendor', label: 'Waiting on Vendor', icon: Building2 },
   { id: 'status_resolved', label: 'Resolved', icon: CheckCircle2 },
   { id: 'status_closed', label: 'Closed', icon: Archive },
+  { id: 'spam', label: 'Spam', icon: MailWarning },
   { id: 'vip_customers', label: 'VIP Customers', icon: GraduationCap },
   { id: 'escalations', label: 'Escalations', icon: AlertTriangle },
   { id: 'sla_risk', label: 'SLA Risk', icon: AlertCircle, indicator: { label: 'urgent', color: 'bg-amber-500 text-black font-extrabold animate-pulse' } },
@@ -131,6 +133,7 @@ export const TICKETS_SIDEBAR_GROUPS: SidebarGroupConfig[] = [
       { id: 'status_waiting_vendor', label: 'Waiting on Vendor', icon: Building2 },
       { id: 'status_resolved', label: 'Resolved', icon: CheckCircle2 },
       { id: 'status_closed', label: 'Closed', icon: Archive },
+      { id: 'spam', label: 'Spam', icon: MailWarning },
     ],
   },
   {

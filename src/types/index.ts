@@ -186,6 +186,10 @@ export interface Ticket {
   team: "support" | "engineering" | "legal";
   customerId?: string; // Kept for backward compatibility if needed, but we prefer contactId
   customerName?: string;
+  /** Raw inbound From address (email channel). */
+  from_email?: string;
+  /** Alias used by inbound-mail webhook for the requester address. */
+  customerEmail?: string;
   contactId: string;
   companyId: string;
   company?: string;

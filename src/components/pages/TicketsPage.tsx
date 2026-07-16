@@ -186,6 +186,7 @@ import { RichTextEditor } from '../RichTextEditor';
 import { CreateTicketDialog } from '../CreateTicketDialog';
 
 import { DetailsHeader } from '../ticket-details/DetailsHeader';
+import { TicketDetailsSpamAction } from './TicketDetailsPage';
 import { SmartContextPanel } from '../ticket-details/SmartContextPanel';
 import { AiSummaryCard } from '../ticket-details/AiSummaryCard';
 import { ConversationTimeline } from '../ticket-details/ConversationTimeline';
@@ -1804,6 +1805,20 @@ export default function TicketsPage() {
                       </span>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
+                      <TicketDetailsSpamAction
+                        ticket={selectedTicket}
+                        contactEmail={ticketContact?.email}
+                        onMarked={() => {
+                          setAllTickets((prev) =>
+                            prev.map((ticket) =>
+                              ticket.id === selectedTicket.id
+                                ? { ...ticket, status: 'spam' as const }
+                                : ticket,
+                            ),
+                          );
+                          setSelectedTicketId(null);
+                        }}
+                      />
                       <Button 
                         variant="outline" 
                         size="sm" 
