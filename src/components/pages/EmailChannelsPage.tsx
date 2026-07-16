@@ -76,37 +76,42 @@ function emptyDraft(): Partial<EmailChannelConfig> {
 
 function DnsRecordRow({
   label,
+  type,
   host,
   value,
   onCopy,
 }: {
   label: string;
+  type: string;
   host: string;
   value: string;
   onCopy: (value: string) => void;
 }) {
   return (
-    <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-2.5 py-2 space-y-1">
+    <div className="rounded-lg border border-slate-200 bg-slate-50/80 px-3 py-2.5 space-y-1.5">
       <div className="flex items-center justify-between gap-2">
-        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{label}</p>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
         {value ? (
           <Button type="button" variant="ghost" size="sm" className="h-7 px-2" onClick={() => onCopy(value)}>
-            <Copy className="w-3 h-3" />
+            <Copy className="w-3 h-3 mr-1" />
+            Copy value
           </Button>
         ) : null}
       </div>
-      <p className="text-[11px] text-slate-600">
-        Host:{' '}
-        <code className="font-mono text-slate-900 bg-white border border-slate-200 rounded px-1 py-0.5">
+      <div className="grid grid-cols-[72px_1fr] gap-x-2 gap-y-1 text-[11px] items-start">
+        <span className="text-slate-400 font-semibold uppercase">Type</span>
+        <code className="font-mono text-slate-900 bg-white border border-slate-200 rounded px-1.5 py-0.5 w-fit">
+          {type}
+        </code>
+        <span className="text-slate-400 font-semibold uppercase">Host</span>
+        <code className="font-mono text-slate-900 bg-white border border-slate-200 rounded px-1.5 py-0.5 w-fit break-all">
           {host}
         </code>
-      </p>
-      <p className="text-[11px] text-slate-600 break-all">
-        Value:{' '}
-        <code className="font-mono text-[10px] text-slate-900 bg-white border border-slate-200 rounded px-1 py-0.5">
+        <span className="text-slate-400 font-semibold uppercase">Value</span>
+        <code className="font-mono text-[10px] text-slate-900 bg-white border border-slate-200 rounded px-1.5 py-1 break-all leading-relaxed">
           {value || '—'}
         </code>
-      </p>
+      </div>
     </div>
   );
 }
@@ -302,26 +307,33 @@ export default function EmailChannelsPage() {
       }
       const result = await emailChannelApi.verifyDomain(channelId!);
       setDnsCheckMessage(result.message || (result.success ? 'Domain verified' : 'Verification failed'));
-      if (result.success) {
-        toast.success(result.message || 'DNS verified');
-        setEditing((prev) =>
-          prev
-            ? {
-                ...prev,
-                dnsVerified: true,
-                dnsVerifiedAt: result.channel?.dnsVerifiedAt || new Date().toISOString(),
-                verificationToken: result.records?.verificationToken || prev.verificationToken,
-                dkimRecordName: result.records?.dkimRecordName || prev.dkimRecordName,
-                dkimRecordValue: result.records?.dkimRecordValue || prev.dkimRecordValue,
-                spfRecordValue: result.records?.spfRecordValue || prev.spfRecordValue,
-              }
-            : prev,
-        );
-      } else {
-        toast.error(result.message || result.error || 'DNS check failed');
-        setEditing((prev) => (prev ? { ...prev, dnsVerified: false, dnsVerifiedAt: null } : prev));
+
+      // Always surface the records the API (back)filled — even when DNS check fails.
+      setEditing((prev) =>
+        prev
+          ? {
+              ...prev,
+              id: channelId,
+              dnsVerified: Boolean(result.dnsVerified || result.success),
+              dnsVerifiedAt: result.channel?.dnsVerifiedAt || prev.dnsVerifiedAt || null,
+              verificationToken:
+                result.records?.verificationToken || prev.verificationToken || null,
+              dkimRecordName: result.records?.dkimRecordName || prev.dkimRecordName || null,
+              dkimRecordValue: result.records?.dkimRecordValue || prev.dkimRecordValue || null,
+              spfRecordValue: result.records?.spfRecordValue || prev.spfRecordValue || null,
+            }
+          : prev,
+      );
+
+      if (result.success) toast.success(result.message || 'DNS verified');
+      else toast.error(result.message || result.error || 'DNS check failed');
+
+      const list = await emailChannelApi.list();
+      setChannels(list);
+      const refreshed = list.find((c) => c.id === channelId);
+      if (refreshed) {
+        setEditing((prev) => (prev ? { ...prev, ...refreshed } : refreshed));
       }
-      await load();
     } catch (err: any) {
       const message =
         err?.response?.data?.message ||
@@ -631,46 +643,60 @@ export default function EmailChannelsPage() {
                     </summary>
                     <div className="border-t border-slate-100 px-3 py-3 space-y-3">
                       <p className="text-[11px] text-slate-500 leading-relaxed">
-                        Publish these records on{' '}
+                        Add these <span className="font-semibold text-slate-700">TXT</span> records
+                        at your DNS host for{' '}
                         <span className="font-mono font-semibold text-slate-700">
                           {(editing.email || '').split('@')[1] || 'your-domain.com'}
-                        </span>{' '}
-                        so agents can reply as{' '}
+                        </span>
+                        . After DNS propagates, agents can reply as{' '}
                         <span className="font-mono font-semibold text-slate-700">
                           {editing.email || 'support@domain.com'}
-                        </span>{' '}
-                        without spoofing / spam classification.
+                        </span>
+                        .
                       </p>
 
-                      {!editing.id || !editing.verificationToken ? (
+                      <div className="space-y-2.5">
+                        <DnsRecordRow
+                          label="1. Domain ownership (TXT)"
+                          type="TXT"
+                          host="@"
+                          value={
+                            editing.verificationToken
+                              ? `geist-verification=${editing.verificationToken}`
+                              : 'geist-verification=<save channel to generate token>'
+                          }
+                          onCopy={(value) => void copyText(value, 'TXT verification record')}
+                        />
+                        <DnsRecordRow
+                          label="2. DKIM signing (TXT)"
+                          type="TXT"
+                          host={editing.dkimRecordName || 'geist._domainkey'}
+                          value={
+                            editing.dkimRecordValue ||
+                            'v=DKIM1; k=rsa; p=<save channel to generate key>'
+                          }
+                          onCopy={(value) => void copyText(value, 'DKIM record')}
+                        />
+                        <DnsRecordRow
+                          label="3. SPF authorization (TXT)"
+                          type="TXT"
+                          host="@"
+                          value={
+                            editing.spfRecordValue ||
+                            'v=spf1 include:app.premtonx.cloud ~all'
+                          }
+                          onCopy={(value) => void copyText(value, 'SPF record')}
+                        />
+                      </div>
+
+                      {!editing.verificationToken || !editing.dkimRecordValue ? (
                         <p className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-2">
-                          Speichern Sie den Kanal zuerst, um den Verification-Token und die DKIM-Werte zu erzeugen.
+                          Token/DKIM values are generated automatically — click{' '}
+                          <span className="font-bold">Speichern</span> or{' '}
+                          <span className="font-bold">DNS-Einträge prüfen</span> to load your unique
+                          values, then publish them at your DNS provider.
                         </p>
-                      ) : (
-                        <div className="space-y-2.5">
-                          <DnsRecordRow
-                            label="TXT Verification"
-                            host="@"
-                            value={`geist-verification=${editing.verificationToken}`}
-                            onCopy={(value) => void copyText(value, 'TXT record')}
-                          />
-                          <DnsRecordRow
-                            label="DKIM TXT"
-                            host={editing.dkimRecordName || 'geist._domainkey'}
-                            value={editing.dkimRecordValue || ''}
-                            onCopy={(value) => void copyText(value, 'DKIM record')}
-                          />
-                          <DnsRecordRow
-                            label="SPF TXT"
-                            host="@"
-                            value={
-                              editing.spfRecordValue ||
-                              'v=spf1 include:app.premtonx.cloud ~all'
-                            }
-                            onCopy={(value) => void copyText(value, 'SPF record')}
-                          />
-                        </div>
-                      )}
+                      ) : null}
 
                       {dnsCheckMessage ? (
                         <p

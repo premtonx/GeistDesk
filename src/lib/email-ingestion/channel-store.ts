@@ -75,9 +75,42 @@ function mergeSecrets(
   return next;
 }
 
+/** Persist DNS verification material for channels created before this feature. */
+async function backfillDomainVerificationIfNeeded(
+  channel: EmailChannelConfig,
+): Promise<EmailChannelConfig> {
+  if (
+    channel.verificationToken &&
+    channel.dkimRecordName &&
+    channel.dkimRecordValue &&
+    channel.spfRecordValue
+  ) {
+    return channel;
+  }
+
+  const fields = ensureDomainVerificationFields(channel);
+  const next: EmailChannelConfig = {
+    ...channel,
+    ...fields,
+    dnsVerified: Boolean(channel.dnsVerified),
+  };
+  await updateDocDirect(EMAIL_CHANNELS_COLLECTION, channel.id, {
+    ...fields,
+    dnsVerified: Boolean(channel.dnsVerified),
+    updatedAt: new Date().toISOString(),
+  });
+  return next;
+}
+
 export async function listEmailChannels(): Promise<EmailChannelConfig[]> {
   const docs = await getDocsDirect(EMAIL_CHANNELS_COLLECTION, []);
-  return docs.map((doc: any) => redactChannelSecrets({ id: doc.id, ...doc }));
+  const channels: EmailChannelConfig[] = [];
+  for (const doc of docs) {
+    const base = { id: doc.id, ...doc } as EmailChannelConfig;
+    const ensured = await backfillDomainVerificationIfNeeded(base);
+    channels.push(redactChannelSecrets(ensured));
+  }
+  return channels;
 }
 
 export async function getEmailChannel(
@@ -86,8 +119,11 @@ export async function getEmailChannel(
 ): Promise<EmailChannelConfig | null> {
   const doc = await getDocDirect(EMAIL_CHANNELS_COLLECTION, id);
   if (!doc) return null;
-  const channel = { id: doc.id, ...doc } as EmailChannelConfig;
-  return opts?.includeSecrets ? channel : redactChannelSecrets(channel);
+  const ensured = await backfillDomainVerificationIfNeeded({
+    id: doc.id,
+    ...doc,
+  } as EmailChannelConfig);
+  return opts?.includeSecrets ? ensured : redactChannelSecrets(ensured);
 }
 
 /** IMAP / Graph server fields are unused for webhook channels — persist as null. */
