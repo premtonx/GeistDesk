@@ -50,9 +50,23 @@ Optional but recommended for a fresh pilot:
 
 ### 1.3 Build and start
 
+**Local / greenfield** (Compose builds from prebuilt or host `dist/`):
+
 ```bash
+npm ci && npm run build   # if dist/ is not already present
 docker compose up --build -d
 ```
+
+**CI / production host model** (matches `premtonx` deploy): CI uploads `dist/`, host runs:
+
+```bash
+docker compose build --pull --build-arg BUILD_ID="$DEPLOY_COMMIT" geistdesk-gateway
+docker compose up -d geistdesk-gateway
+```
+
+The default `Dockerfile` is **runtime-only** (copies `dist/`). For a full source build inside Docker, use `Dockerfile.multistage`.
+
+> **Compose defaults:** `POSTGRES_PASSWORD` defaults to `geist_password` so existing production `.env` files without that key keep working. Override only when creating a **new** empty DB volume. `DATABASE_URL` defaults to `postgresql://geist_user:geist_password@geistdesk-db:5432/geistdesk_prod?sslmode=disable`.
 
 On every container start, `scripts/docker-entrypoint.sh` runs:
 

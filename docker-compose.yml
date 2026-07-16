@@ -1,113 +1,111 @@
-# GeistDesk enterprise pilot stack.
-# Usage:
-#   cp .env.example .env   # fill required secrets
-#   docker compose up --build -d
+# GeistDesk production / pilot compose.
+# Compatible with CI deploy that syncs prebuilt dist/ and runs:
+#   docker compose build --build-arg BUILD_ID=... geistdesk-gateway
+#   docker compose up -d geistdesk-gateway
 #
-# Container boot (scripts/docker-entrypoint.sh):
-#   1) wait for Postgres  2) db:deploy:prod (idempotent DDL)
-#   3) seed:prod          4) node dist/server.cjs
-#
-# Optional Traefik: set TRAEFIK_ENABLE=true and attach an external network
-# via docker-compose.override.yml (see INSTALLATION_AND_CONFIG.md).
+# Boot (scripts/docker-entrypoint.sh):
+#   wait for Postgres → db:deploy:prod → seed:prod → server
+
+version: '3.8'
 
 services:
-  geistdesk-db:
-    image: postgres:15-alpine
-    container_name: geistdesk-db
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-geist_user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
-      POSTGRES_DB: ${POSTGRES_DB:-geistdesk_prod}
-    volumes:
-      - geistdesk_db_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
-      interval: 5s
-      timeout: 5s
-      retries: 20
-    restart: unless-stopped
-    networks:
-      - geistdesk-net
-
   geistdesk-gateway:
     build:
       context: .
       args:
         BUILD_ID: ${BUILD_ID:-local}
-        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-false}
-        VITE_BETA_AUTO_ADMIN: ${VITE_BETA_AUTO_ADMIN:-false}
-        VITE_OLLAMA_ENDPOINT: ${VITE_OLLAMA_ENDPOINT:-}
-        VITE_MASTER_KEY_SALT: ${VITE_MASTER_KEY_SALT:-}
-        VITE_PUBLIC_APP_URL: ${PUBLIC_APP_URL:-}
-    container_name: geistdesk-gateway
+    container_name: geistdesk-sovereign-gate
     depends_on:
-      geistdesk-db:
-        condition: service_healthy
-    ports:
-      - "${HOST_PORT:-3000}:3000"
+      - geistdesk-db
     environment:
-      NODE_ENV: production
-      PORT: 3000
-      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
+      - NODE_ENV=production
+      - PORT=3000
+      - PUBLIC_APP_URL=${PUBLIC_APP_URL:-https://app.premtonx.cloud}
 
-      # Database — must match geistdesk-db credentials (see .env.example).
-      DATABASE_URL: ${DATABASE_URL:?Set DATABASE_URL in .env (point at geistdesk-db or managed Postgres)}
-      DATABASE_SSL_INSECURE: ${DATABASE_SSL_INSECURE:-false}
+      # Database — default matches bundled geistdesk-db credentials below.
+      # Override DATABASE_URL in .env for managed Postgres.
+      - DATABASE_URL=${DATABASE_URL:-postgresql://geist_user:geist_password@geistdesk-db:5432/geistdesk_prod?sslmode=disable}
+      - DATABASE_SSL_INSECURE=${DATABASE_SSL_INSECURE:-false}
 
-      # Core secrets (required)
-      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in .env}
-      VAULT_ENCRYPTION_KEY: ${VAULT_ENCRYPTION_KEY:?Set VAULT_ENCRYPTION_KEY in .env}
-      MASTER_KEY_SALT: ${MASTER_KEY_SALT:-}
-      AI_SECRETS_KEY: ${AI_SECRETS_KEY:-}
+      # Required security secrets (must exist in host .env — deploy script enforces JWT/VAULT)
+      - JWT_SECRET=${JWT_SECRET}
+      - VAULT_ENCRYPTION_KEY=${VAULT_ENCRYPTION_KEY}
+      - MASTER_KEY_SALT=${MASTER_KEY_SALT:-}
+      - AI_SECRETS_KEY=${AI_SECRETS_KEY:-}
+      - MICROSOFT_PROVIDER_CLIENT_ID=${MICROSOFT_PROVIDER_CLIENT_ID:-}
 
-      # Inbound mail / Postal webhook
-      INBOUND_MAIL_WEBHOOK_SECRET: ${INBOUND_MAIL_WEBHOOK_SECRET:?Set INBOUND_MAIL_WEBHOOK_SECRET in .env}
-      INBOUND_MAIL_FORWARD_DOMAIN: ${INBOUND_MAIL_FORWARD_DOMAIN:-app.premtonx.cloud}
-      EMAIL_INGESTION_INTERVAL_MS: ${EMAIL_INGESTION_INTERVAL_MS:-60000}
+      # Security hardening
+      - BETA_AUTO_ADMIN=${BETA_AUTO_ADMIN:-false}
+      - ALLOW_PUBLIC_REGISTRATION=${ALLOW_PUBLIC_REGISTRATION:-false}
+      - ENABLE_SANDBOX=${ENABLE_SANDBOX:-false}
+      - VITE_DEMO_MODE=${VITE_DEMO_MODE:-false}
+      - GRAPH_CLIENT_STATE_SECRET=${GRAPH_CLIENT_STATE_SECRET:-}
+      - INBOUND_MAIL_WEBHOOK_SECRET=${INBOUND_MAIL_WEBHOOK_SECRET:-}
+      - INBOUND_MAIL_FORWARD_DOMAIN=${INBOUND_MAIL_FORWARD_DOMAIN:-app.premtonx.cloud}
+      - EMAIL_INGESTION_INTERVAL_MS=${EMAIL_INGESTION_INTERVAL_MS:-60000}
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
 
-      # Outbound mail (optional — replies fall back to DB-only when unset)
-      SMTP_HOST: ${SMTP_HOST:-}
-      SMTP_USER: ${SMTP_USER:-}
-      MAIL_DISPATCH_URL: ${MAIL_DISPATCH_URL:-}
+      # Outbound mail (optional)
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_USER=${SMTP_USER:-}
+      - MAIL_DISPATCH_URL=${MAIL_DISPATCH_URL:-}
 
-      # Local / remote LLM
-      OLLAMA_ENDPOINT: ${OLLAMA_ENDPOINT:-}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
-      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
-      AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-}
-      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
+      # LLM
+      - OLLAMA_ENDPOINT=${OLLAMA_ENDPOINT:-}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
+      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
+      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
+      - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME:-}
+      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
 
-      # OIDC / Microsoft Entra SSO
-      MICROSOFT_PROVIDER_CLIENT_ID: ${MICROSOFT_PROVIDER_CLIENT_ID:-}
-      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
-      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
-      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
-      OIDC_ISSUER: ${OIDC_ISSUER:-}
-      OIDC_CLIENT_ID: ${OIDC_CLIENT_ID:-}
-      OIDC_CLIENT_SECRET: ${OIDC_CLIENT_SECRET:-}
-      OIDC_REDIRECT_URI: ${OIDC_REDIRECT_URI:-}
+      # OIDC / SSO
+      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
+      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
+      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
+      - OIDC_ISSUER=${OIDC_ISSUER:-}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
+      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
+      - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-}
 
-      # Graph / Teams
-      GRAPH_CLIENT_STATE_SECRET: ${GRAPH_CLIENT_STATE_SECRET:-}
-      MicrosoftAppId: ${MicrosoftAppId:-}
-      MicrosoftAppPassword: ${MicrosoftAppPassword:-}
-      MicrosoftAppType: ${MicrosoftAppType:-}
-      MicrosoftAppTenantId: ${MicrosoftAppTenantId:-}
+      # Firebase / client (legacy compose passthrough)
+      - VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY:-}
+      - VITE_FIREBASE_AUTH_DOMAIN=${VITE_FIREBASE_AUTH_DOMAIN:-}
+      - VITE_FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID:-}
+      - VITE_AI_PROVIDER=${VITE_AI_PROVIDER:-azure}
 
-      # Hardening flags
-      BETA_AUTO_ADMIN: ${BETA_AUTO_ADMIN:-false}
-      ALLOW_PUBLIC_REGISTRATION: ${ALLOW_PUBLIC_REGISTRATION:-false}
-      ENABLE_SANDBOX: ${ENABLE_SANDBOX:-false}
-      VITE_DEMO_MODE: ${VITE_DEMO_MODE:-false}
-    restart: unless-stopped
+      # Teams Bot
+      - MicrosoftAppId=${MicrosoftAppId:-}
+      - MicrosoftAppPassword=${MicrosoftAppPassword:-}
+      - MicrosoftAppType=${MicrosoftAppType:-}
+      - MicrosoftAppTenantId=${MicrosoftAppTenantId:-}
+    restart: always
     networks:
-      - geistdesk-net
+      - traefik-public
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.geistdesk-sso.rule=Host(`app.premtonx.cloud`)"
+      - "traefik.http.routers.geistdesk-sso.entrypoints=websecure"
+      - "traefik.http.routers.geistdesk-sso.tls.certresolver=myresolver"
+      - "traefik.http.services.geistdesk-sso.loadbalancer.server.port=3000"
+
+  geistdesk-db:
+    image: postgres:15-alpine
+    container_name: geistdesk-db-container
+    environment:
+      # Defaults preserve existing production volumes created with geist_user/geist_password.
+      # Override via .env only when provisioning a NEW empty volume.
+      - POSTGRES_USER=${POSTGRES_USER:-geist_user}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-geist_password}
+      - POSTGRES_DB=${POSTGRES_DB:-geistdesk_prod}
+    volumes:
+      - geistdesk_db_data:/var/lib/postgresql/data
+    restart: always
+    networks:
+      - traefik-public
 
 volumes:
   geistdesk_db_data:
 
 networks:
-  geistdesk-net:
-    driver: bridge
+  traefik-public:
+    external: true
