@@ -89,11 +89,31 @@ export async function getEmailChannel(
   return opts?.includeSecrets ? channel : redactChannelSecrets(channel);
 }
 
+/** IMAP / Graph server fields are unused for webhook channels — persist as null. */
+function clearActivePullFields(channel: EmailChannelConfig): void {
+  channel.imapHost = null;
+  channel.imapPort = null;
+  channel.imapUser = null;
+  channel.imapPassword = null;
+  channel.imapTls = null;
+  channel.oauthClientId = null;
+  channel.oauthClientSecret = null;
+  channel.oauthTokenUrl = null;
+  channel.oauthRefreshToken = null;
+  channel.oauthScope = null;
+  channel.tenantId = null;
+  channel.clientId = null;
+  channel.clientSecret = null;
+  channel.mailbox = null;
+}
+
 export async function createEmailChannel(
   input: Partial<EmailChannelConfig>,
 ): Promise<EmailChannelConfig> {
   const now = new Date().toISOString();
   const connectionType = (input.connectionType || 'webhook') as EmailConnectionType;
+  const isWebhook = connectionType === 'webhook';
+
   const created = await addDocDirect(EMAIL_CHANNELS_COLLECTION, {
     name: input.name || 'Support Channel',
     email: input.email || '',
@@ -103,20 +123,24 @@ export async function createEmailChannel(
     enabled: input.enabled !== false,
     isPrimary: Boolean(input.isPrimary),
     provider: input.provider || 'custom',
-    imapHost: input.imapHost,
-    imapPort: input.imapPort ?? 993,
-    imapUser: input.imapUser || input.email,
-    imapPassword: input.imapPassword,
-    imapTls: input.imapTls !== false,
-    oauthClientId: input.oauthClientId,
-    oauthClientSecret: input.oauthClientSecret,
-    oauthTokenUrl: input.oauthTokenUrl,
-    oauthRefreshToken: input.oauthRefreshToken,
-    oauthScope: input.oauthScope,
-    tenantId: input.tenantId,
-    clientId: input.clientId,
-    clientSecret: input.clientSecret,
-    mailbox: input.mailbox || input.email,
+    // Webhook / passive forwarding: leave IMAP server fields null (not required).
+    imapHost: isWebhook ? null : input.imapHost || null,
+    imapPort: isWebhook ? null : (input.imapPort ?? 993),
+    imapUser: isWebhook ? null : (input.imapUser || input.email || null),
+    imapPassword: isWebhook ? null : input.imapPassword || null,
+    imapTls: isWebhook ? null : input.imapTls !== false,
+    oauthClientId: isWebhook ? null : input.oauthClientId || null,
+    oauthClientSecret: isWebhook ? null : input.oauthClientSecret || null,
+    oauthTokenUrl: isWebhook ? null : input.oauthTokenUrl || null,
+    oauthRefreshToken: isWebhook ? null : input.oauthRefreshToken || null,
+    oauthScope: isWebhook ? null : input.oauthScope || null,
+    tenantId: connectionType === 'microsoft_graph' ? input.tenantId || null : null,
+    clientId: connectionType === 'microsoft_graph' ? input.clientId || null : null,
+    clientSecret: connectionType === 'microsoft_graph' ? input.clientSecret || null : null,
+    mailbox:
+      connectionType === 'microsoft_graph'
+        ? input.mailbox || input.email || null
+        : null,
     createdAt: now,
     updatedAt: now,
   });
@@ -158,6 +182,8 @@ export async function updateEmailChannel(
   if (next.connectionType === 'webhook') {
     next.webhookSecret = next.webhookSecret || generateWebhookSecret();
     next.forwardingAddress = next.forwardingAddress || buildForwardingAddress(id);
+    // Explicitly clear pull-driver fields so nulls persist (spread of undefined is a no-op).
+    clearActivePullFields(next);
   }
 
   await setDocDirect(EMAIL_CHANNELS_COLLECTION, id, next);

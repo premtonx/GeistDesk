@@ -23,32 +23,125 @@ const connectionTypes = z.enum([
   'microsoft_graph',
 ]);
 
-const channelSchema = z.object({
-  name: z.string().min(1).max(200).optional(),
-  email: z.string().max(320).optional(),
-  group: z.string().max(200).optional(),
-  status: z.enum(['verified', 'pending', 'failed', 'active', 'disabled']).optional(),
-  connectionType: connectionTypes.optional(),
-  enabled: z.boolean().optional(),
-  isPrimary: z.boolean().optional(),
-  provider: z.enum(['gmail', 'outlook', 'custom', 'microsoft', 'google']).optional(),
-  webhookSecret: z.string().max(256).optional(),
-  forwardingAddress: z.string().max(320).optional(),
-  imapHost: z.string().max(255).optional(),
-  imapPort: z.union([z.string(), z.number()]).optional(),
-  imapUser: z.string().max(320).optional(),
-  imapPassword: z.string().max(500).optional(),
-  imapTls: z.boolean().optional(),
-  oauthClientId: z.string().max(255).optional(),
-  oauthClientSecret: z.string().max(500).optional(),
-  oauthTokenUrl: z.string().max(500).optional(),
-  oauthRefreshToken: z.string().max(2000).optional(),
-  oauthScope: z.string().max(500).optional(),
-  tenantId: z.string().max(255).optional(),
-  clientId: z.string().max(255).optional(),
-  clientSecret: z.string().max(500).optional(),
-  mailbox: z.string().max(320).optional(),
-});
+/** Accept undefined / null / empty from UI + document-store round-trips. */
+const optionalText = (max: number) =>
+  z
+    .union([z.string().max(max), z.null()])
+    .optional()
+    .transform((value) => {
+      if (value == null) return undefined;
+      const trimmed = value.trim();
+      return trimmed.length > 0 ? trimmed : undefined;
+    });
+
+const optionalPort = z
+  .union([z.string(), z.number(), z.null()])
+  .optional()
+  .transform((value) => {
+    if (value == null || value === '') return undefined;
+    return value;
+  });
+
+const optionalBool = z
+  .union([z.boolean(), z.null()])
+  .optional()
+  .transform((value) => (value == null ? undefined : value));
+
+const channelSchema = z
+  .object({
+    name: optionalText(200),
+    email: optionalText(320),
+    group: optionalText(200),
+    status: z.enum(['verified', 'pending', 'failed', 'active', 'disabled']).optional(),
+    connectionType: connectionTypes.optional(),
+    enabled: optionalBool,
+    isPrimary: optionalBool,
+    provider: z.enum(['gmail', 'outlook', 'custom', 'microsoft', 'google']).nullish(),
+    webhookSecret: optionalText(256),
+    forwardingAddress: optionalText(320),
+    // IMAP fields are optional at the schema level — required only for IMAP types below.
+    imapHost: optionalText(255),
+    imapPort: optionalPort,
+    imapUser: optionalText(320),
+    imapPassword: optionalText(500),
+    imapTls: optionalBool,
+    oauthClientId: optionalText(255),
+    oauthClientSecret: optionalText(500),
+    oauthTokenUrl: optionalText(500),
+    oauthRefreshToken: optionalText(2000),
+    oauthScope: optionalText(500),
+    tenantId: optionalText(255),
+    clientId: optionalText(255),
+    clientSecret: optionalText(500),
+    mailbox: optionalText(320),
+  })
+  .superRefine((data, ctx) => {
+    const type = data.connectionType || 'webhook';
+
+    // Webhook / passive forwarding: never require IMAP / Graph server credentials.
+    if (type === 'webhook') {
+      return;
+    }
+
+    // Soft checks only — secrets may be omitted on update (masked •••••••• restored later).
+    if ((type === 'imap_basic' || type === 'imap_oauth2') && !data.imapHost) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ['imapHost'],
+        message: 'IMAP host is required for IMAP connection types',
+      });
+    }
+  });
+
+/** Drop driver-specific secrets that do not apply to the selected connection type. */
+function sanitizeByConnectionType<T extends Record<string, unknown>>(data: T): T {
+  const type = (data.connectionType as EmailConnectionType | undefined) || 'webhook';
+  const next: Record<string, unknown> = { ...data };
+
+  if (type === 'webhook') {
+    next.imapHost = undefined;
+    next.imapPort = undefined;
+    next.imapUser = undefined;
+    next.imapPassword = undefined;
+    next.imapTls = undefined;
+    next.oauthClientId = undefined;
+    next.oauthClientSecret = undefined;
+    next.oauthTokenUrl = undefined;
+    next.oauthRefreshToken = undefined;
+    next.oauthScope = undefined;
+    next.tenantId = undefined;
+    next.clientId = undefined;
+    next.clientSecret = undefined;
+    next.mailbox = undefined;
+  } else if (type === 'imap_basic') {
+    next.oauthClientId = undefined;
+    next.oauthClientSecret = undefined;
+    next.oauthTokenUrl = undefined;
+    next.oauthRefreshToken = undefined;
+    next.oauthScope = undefined;
+    next.tenantId = undefined;
+    next.clientId = undefined;
+    next.clientSecret = undefined;
+  } else if (type === 'imap_oauth2') {
+    next.imapPassword = undefined;
+    next.tenantId = undefined;
+    next.clientId = undefined;
+    next.clientSecret = undefined;
+  } else if (type === 'microsoft_graph') {
+    next.imapHost = undefined;
+    next.imapPort = undefined;
+    next.imapUser = undefined;
+    next.imapPassword = undefined;
+    next.imapTls = undefined;
+    next.oauthClientId = undefined;
+    next.oauthClientSecret = undefined;
+    next.oauthTokenUrl = undefined;
+    next.oauthRefreshToken = undefined;
+    next.oauthScope = undefined;
+  }
+
+  return next as T;
+}
 
 router.get('/', authenticate, requireRole(['SYSTEM_ADMIN']), async (_req, res: Response) => {
   try {
@@ -65,7 +158,7 @@ router.post('/', authenticate, requireRole(['SYSTEM_ADMIN']), async (req: Reques
     return res.status(400).json({ error: 'Invalid channel payload', details: parsed.error.flatten() });
   }
   try {
-    const channel = await createEmailChannel(parsed.data);
+    const channel = await createEmailChannel(sanitizeByConnectionType(parsed.data));
     res.status(201).json({ channel });
   } catch (err: any) {
     res.status(500).json({ error: err?.message || 'Failed to create channel' });
@@ -79,7 +172,7 @@ router.put('/:id', authenticate, requireRole(['SYSTEM_ADMIN']), async (req: Requ
     return res.status(400).json({ error: 'Invalid channel payload', details: parsed.error.flatten() });
   }
   try {
-    const channel = await updateEmailChannel(id, parsed.data);
+    const channel = await updateEmailChannel(id, sanitizeByConnectionType(parsed.data));
     if (!channel) return res.status(404).json({ error: 'Channel not found' });
     res.json({ channel });
   } catch (err: any) {
@@ -110,11 +203,14 @@ router.post('/:id/test', authenticate, requireRole(['SYSTEM_ADMIN']), async (req
 
     // Allow testing unsaved form overrides
     const overrides = channelSchema.safeParse(req.body || {});
+    const overrideData = overrides.success
+      ? sanitizeByConnectionType(overrides.data)
+      : {};
     const effective = {
       ...channel,
-      ...(overrides.success ? overrides.data : {}),
-      connectionType: (overrides.success && overrides.data.connectionType
-        ? overrides.data.connectionType
+      ...overrideData,
+      connectionType: (overrideData.connectionType
+        ? overrideData.connectionType
         : channel.connectionType) as EmailConnectionType,
     };
 

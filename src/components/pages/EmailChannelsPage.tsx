@@ -70,8 +70,57 @@ function emptyDraft(): Partial<EmailChannelConfig> {
     connectionType: 'webhook',
     enabled: true,
     status: 'pending',
-    imapPort: 993,
-    imapTls: true,
+  };
+}
+
+/** Build API payload — webhook channels omit IMAP/Graph server fields entirely. */
+function buildSavePayload(editing: Partial<EmailChannelConfig>): Partial<EmailChannelConfig> {
+  const connectionType = (editing.connectionType || 'webhook') as EmailConnectionType;
+  const base: Partial<EmailChannelConfig> = {
+    name: editing.name?.trim() || '',
+    email: editing.email?.trim() || '',
+    group: editing.group || '',
+    connectionType,
+    enabled: editing.enabled !== false,
+    status: editing.status || 'pending',
+  };
+
+  if (connectionType === 'webhook') {
+    return {
+      ...base,
+      forwardingAddress: editing.forwardingAddress || undefined,
+      webhookSecret:
+        editing.webhookSecret && editing.webhookSecret !== '••••••••'
+          ? editing.webhookSecret
+          : undefined,
+    };
+  }
+
+  if (connectionType === 'imap_basic' || connectionType === 'imap_oauth2') {
+    return {
+      ...base,
+      imapHost: editing.imapHost || '',
+      imapPort: editing.imapPort ?? 993,
+      imapUser: editing.imapUser || editing.email || '',
+      imapPassword: editing.imapPassword || undefined,
+      imapTls: editing.imapTls !== false,
+      oauthClientId: connectionType === 'imap_oauth2' ? editing.oauthClientId || '' : undefined,
+      oauthClientSecret:
+        connectionType === 'imap_oauth2' ? editing.oauthClientSecret || undefined : undefined,
+      oauthTokenUrl: connectionType === 'imap_oauth2' ? editing.oauthTokenUrl || '' : undefined,
+      oauthRefreshToken:
+        connectionType === 'imap_oauth2' ? editing.oauthRefreshToken || undefined : undefined,
+      oauthScope: connectionType === 'imap_oauth2' ? editing.oauthScope || undefined : undefined,
+    };
+  }
+
+  // microsoft_graph
+  return {
+    ...base,
+    mailbox: editing.mailbox || editing.email || '',
+    tenantId: editing.tenantId || '',
+    clientId: editing.clientId || '',
+    clientSecret: editing.clientSecret || undefined,
   };
 }
 
@@ -138,13 +187,14 @@ export default function EmailChannelsPage() {
     }
     setSaving(true);
     try {
+      const payload = buildSavePayload(editing);
       if (editing.id) {
-        const updated = await emailChannelApi.update(editing.id, editing);
+        const updated = await emailChannelApi.update(editing.id, payload);
         setChannels((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
         setEditing(updated);
         toast.success('Channel saved');
       } else {
-        const created = await emailChannelApi.create(editing);
+        const created = await emailChannelApi.create(payload);
         setChannels((prev) => [created, ...prev]);
         setEditing(created);
         toast.success('Channel created');
@@ -173,14 +223,15 @@ export default function EmailChannelsPage() {
     setTesting(true);
     setTestResult(null);
     try {
+      const payload = buildSavePayload(editing);
       let channelId = editing.id;
       if (!channelId) {
-        const created = await emailChannelApi.create(editing);
+        const created = await emailChannelApi.create(payload);
         channelId = created.id;
         setChannels((prev) => [created, ...prev]);
         setEditing(created);
       }
-      const result = await emailChannelApi.test(channelId!, editing);
+      const result = await emailChannelApi.test(channelId!, payload);
       setTestResult(result);
       if (result.ok) toast.success(result.message || 'Connection OK');
       else toast.error(result.message || 'Connection failed');
@@ -337,7 +388,45 @@ export default function EmailChannelsPage() {
                 </Label>
                 <Select
                   value={connectionType}
-                  onValueChange={(v) => setField('connectionType', v as EmailConnectionType)}
+                  onValueChange={(v) => {
+                    const next = v as EmailConnectionType;
+                    setEditing((prev) => {
+                      if (!prev) return prev;
+                      const base: Partial<EmailChannelConfig> = {
+                        ...prev,
+                        connectionType: next,
+                      };
+                      if (next === 'webhook') {
+                        return {
+                          ...base,
+                          imapHost: undefined,
+                          imapPort: undefined,
+                          imapUser: undefined,
+                          imapPassword: undefined,
+                          imapTls: undefined,
+                          oauthClientId: undefined,
+                          oauthClientSecret: undefined,
+                          oauthTokenUrl: undefined,
+                          tenantId: undefined,
+                          clientId: undefined,
+                          clientSecret: undefined,
+                          mailbox: undefined,
+                        };
+                      }
+                      if (next === 'imap_basic' || next === 'imap_oauth2') {
+                        return {
+                          ...base,
+                          imapPort: prev.imapPort ?? 993,
+                          imapTls: prev.imapTls !== false,
+                          imapUser: prev.imapUser || prev.email || '',
+                        };
+                      }
+                      return {
+                        ...base,
+                        mailbox: prev.mailbox || prev.email || '',
+                      };
+                    });
+                  }}
                 >
                   <SelectTrigger className="h-10">
                     <SelectValue />

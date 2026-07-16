@@ -56,26 +56,26 @@ export interface EmailChannelConfig {
   provider?: 'gmail' | 'outlook' | 'custom' | 'microsoft' | 'google';
 
   // Webhook / forwarding
-  webhookSecret?: string;
-  forwardingAddress?: string;
+  webhookSecret?: string | null;
+  forwardingAddress?: string | null;
 
-  // IMAP
-  imapHost?: string;
-  imapPort?: number | string;
-  imapUser?: string;
-  imapPassword?: string;
-  imapTls?: boolean;
-  oauthClientId?: string;
-  oauthClientSecret?: string;
-  oauthTokenUrl?: string;
-  oauthRefreshToken?: string;
-  oauthScope?: string;
+  // IMAP — nullable so webhook / passive channels can omit server credentials
+  imapHost?: string | null;
+  imapPort?: number | string | null;
+  imapUser?: string | null;
+  imapPassword?: string | null;
+  imapTls?: boolean | null;
+  oauthClientId?: string | null;
+  oauthClientSecret?: string | null;
+  oauthTokenUrl?: string | null;
+  oauthRefreshToken?: string | null;
+  oauthScope?: string | null;
 
   // Microsoft Graph
-  tenantId?: string;
-  clientId?: string;
-  clientSecret?: string;
-  mailbox?: string;
+  tenantId?: string | null;
+  clientId?: string | null;
+  clientSecret?: string | null;
+  mailbox?: string | null;
 
   lastPolledAt?: string | null;
   lastError?: string | null;
