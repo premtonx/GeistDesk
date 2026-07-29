@@ -37,6 +37,12 @@ import ticketReplyRoutes from "./src/routes/ticketReplyRoutes.js";
 import ticketSpamRoutes from "./src/routes/ticketSpamRoutes.js";
 import emailChannelRoutes from "./src/routes/emailChannelRoutes.js";
 import mailDomainRoutes from "./src/routes/mailDomainRoutes.js";
+import vectorRoutes from "./src/routes/vectorRoutes.js";
+import {
+  handleKnowledgeDocumentMutation,
+  startVectorQueueWorker,
+} from "./src/lib/ai/vector-queue.js";
+import { groundInboundTicketForTriage } from "./src/lib/ai/ki-orchestrator.js";
 import {
   extractEmailAddress,
 } from "./src/lib/global-blacklist.js";
@@ -378,18 +384,27 @@ async function startServer() {
       }
       if (action === "add_doc") {
         const resObj = await addDocDirect(collection, data);
+        handleKnowledgeDocumentMutation({
+          collection,
+          action,
+          id: resObj?.id,
+          data,
+        });
         return res.json({ result: resObj });
       }
       if (action === "update_doc") {
         await updateDocDirect(collection, id, data);
+        handleKnowledgeDocumentMutation({ collection, action, id, data });
         return res.json({ result: { success: true } });
       }
       if (action === "set_doc") {
         await setDocDirect(collection, id, data);
+        handleKnowledgeDocumentMutation({ collection, action, id, data });
         return res.json({ result: { success: true } });
       }
       if (action === "delete_doc") {
         await deleteDocDirect(collection, id);
+        handleKnowledgeDocumentMutation({ collection, action, id });
         return res.json({ result: { success: true } });
       }
       
@@ -525,6 +540,7 @@ async function startServer() {
   app.use("/api/tickets", ticketSpamRoutes);
   app.use("/api/email-channels", emailChannelRoutes);
   app.use("/api/mail", mailDomainRoutes);
+  app.use("/api/vectors", vectorRoutes);
 
   // Authoritative, SQL-computed ticket metrics for dashboards.
   app.get("/api/stats/tickets", authenticate, async (req: any, res) => {
@@ -1909,6 +1925,7 @@ Example output format:
   // Wire unified ingest pipeline → AI triage, then start 60s active-pull daemon.
   registerAiTriageHook(processAiTriage);
   startEmailIngestionScheduler(60_000);
+  startVectorQueueWorker();
 
   app.listen(PORT, "0.0.0.0", () => {
     const publicBase =
@@ -1937,13 +1954,33 @@ async function processAiTriage(ticketId: string, emailBody: string, subject: str
   const db = getDb();
 
   try {
-    // 1. Fetch relevant KB context (simplified: top 5 articles)
-    const kbSnap = await db.collection("kb_articles").limit(5).get();
-    const kbContext = kbSnap.docs.map(d => `${d.data().title}: ${d.data().content}`).join("\n---\n");
+    // Hybrid RAG (pgvector cosine + FTS) — tenant-scoped grounded context.
+    let kbContext = '';
+    let citations: string[] = [];
+    let linkedKb: Array<{ id: string; title: string }> = [];
+    let linkedTickets: Array<{ id: string; title: string }> = [];
+    try {
+      const grounded = await groundInboundTicketForTriage({
+        subject,
+        body: emailBody,
+        tenantId: 'default',
+      });
+      kbContext = grounded.promptBlock;
+      linkedKb = grounded.linkedKb;
+      linkedTickets = grounded.linkedTickets;
+      citations = [
+        ...linkedKb.map((k) => `KB: ${k.title}`),
+        ...linkedTickets.map((t) => `Ticket: ${t.title}`),
+      ].slice(0, 5);
+    } catch (ragErr: any) {
+      console.warn('[AI Triage] hybrid RAG unavailable, falling back to KB sample:', ragErr?.message || ragErr);
+      const kbSnap = await db.collection("kb_articles").limit(5).get();
+      kbContext = kbSnap.docs.map(d => `${d.data().title}: ${d.data().content}`).join("\n---\n");
+    }
 
     const prompt = `Based on this incoming email, categorize the priority (low, medium, high, urgent), detect sentiment (positive, neutral, negative), and draft a professional response based on our Knowledge Base.
     
-    KNOWLEDGE BASE:
+    KNOWLEDGE BASE / PAST RESOLUTIONS (hybrid RAG):
     ${kbContext || "No knowledge base articles found."}
     
     EMAIL SUBJECT: ${subject}
@@ -1968,8 +2005,10 @@ async function processAiTriage(ticketId: string, emailBody: string, subject: str
       priority: data.priority || "medium",
       aiSentiment: data.sentiment || "neutral",
       aiSuggestedDraft: data.suggestedDraft || "",
-      aiCitations: data.citations || [],
+      aiCitations: data.citations || citations,
       aiReasoningPath: data.reasoningPath || "",
+      aiLinkedKb: linkedKb,
+      aiLinkedTickets: linkedTickets,
       updatedAt: admin.firestore.FieldValue.serverTimestamp()
     });
     
@@ -1980,8 +2019,10 @@ async function processAiTriage(ticketId: string, emailBody: string, subject: str
       senderType: "ai",
       senderName: "GeistDesk AI Triage",
       content: `AI Analysis Complete:\n- Priority: ${data.priority?.toUpperCase()}\n- Sentiment: ${data.sentiment?.toUpperCase()}\n\nSuggested Draft:\n${data.suggestedDraft}`,
-      citations: data.citations || [],
+      citations: data.citations || citations,
       reasoningPath: data.reasoningPath || "",
+      linkedKb,
+      linkedTickets,
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 

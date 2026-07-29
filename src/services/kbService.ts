@@ -17,9 +17,26 @@ import {
 import { db } from '../lib/firebase';
 import { KBArticle, OperationType, KBTag } from '../types';
 import { handleFirestoreError } from './auditService';
+import axios from 'axios';
 
 const KB_COLLECTION = 'kb_articles';
 const TAGS_COLLECTION = 'tags';
+
+function enqueueKbIndex(sourceId: string, type: 'INDEX_KB_ARTICLE' | 'DELETE_EMBEDDINGS' = 'INDEX_KB_ARTICLE') {
+  void axios
+    .post(
+      '/api/vectors/enqueue',
+      {
+        type,
+        sourceId,
+        sourceType: 'KB_ARTICLE',
+      },
+      { withCredentials: true },
+    )
+    .catch(() => {
+      /* non-fatal — /api/db hook is the authoritative path */
+    });
+}
 
 export const kbService = {
   subscribeToArticles: (callback: (articles: KBArticle[]) => void, visibility?: 'Public' | 'Private') => {
@@ -72,6 +89,7 @@ export const kbService = {
           await setDoc(tagRef, { name: tagName, count: increment(1) }, { merge: true });
         }
       }
+      enqueueKbIndex(docRef.id, 'INDEX_KB_ARTICLE');
       return docRef.id;
     } catch (error) {
       handleFirestoreError(error, OperationType.CREATE, KB_COLLECTION);
@@ -103,6 +121,7 @@ export const kbService = {
           await setDoc(tagRef, { count: increment(-1) }, { merge: true });
         }
       }
+      enqueueKbIndex(id, 'INDEX_KB_ARTICLE');
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, KB_COLLECTION);
     }
@@ -117,6 +136,7 @@ export const kbService = {
         const tagRef = doc(db, TAGS_COLLECTION, tagId);
         await setDoc(tagRef, { count: increment(-1) }, { merge: true });
       }
+      enqueueKbIndex(id, 'DELETE_EMBEDDINGS');
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, KB_COLLECTION);
       throw error;
@@ -141,6 +161,9 @@ export const kbService = {
       for (const [tagId, delta] of tagDeltas) {
         const tagRef = doc(db, TAGS_COLLECTION, tagId);
         await setDoc(tagRef, { count: increment(delta) }, { merge: true });
+      }
+      for (const item of items) {
+        enqueueKbIndex(item.id, 'DELETE_EMBEDDINGS');
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.DELETE, KB_COLLECTION);

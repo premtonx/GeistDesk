@@ -1256,12 +1256,13 @@ export default function TicketsPage() {
 
     setIsGhostDrafting(true);
     try {
-      // Feature: RAG logic - Linking Tickets & Knowledge Base to AI
-      const relevantContext = ragService.findRelevantContext(
-        `${ticket.subject} ${ticket.description}`, 
-        kbArticles, 
-        allTickets
+      // Feature: Hybrid RAG (pgvector + FTS) — grounding drafts in KB + resolved tickets
+      const grounded = await ragService.findRelevantContextHybrid(
+        `${ticket.subject} ${ticket.description}`,
+        kbArticles,
+        allTickets,
       );
+      const relevantContext = grounded.results;
       
       const kbContent = relevantContext.map(c => `[Source: ${c.sourceTitle} (${c.source})]\n${c.text}`).join('\n\n');
 
@@ -1392,12 +1393,13 @@ export default function TicketsPage() {
     
     setIsAiDrafting(true);
     try {
-      // Feature: RAG logic - Linking Tickets & Knowledge Base to AI
-      const relevantContext = ragService.findRelevantContext(
-        `${selectedTicket.subject} ${selectedTicket.description}`, 
-        kbArticles, 
-        allTickets
+      // Feature: Hybrid RAG (pgvector + FTS)
+      const grounded = await ragService.findRelevantContextHybrid(
+        `${selectedTicket.subject} ${selectedTicket.description}`,
+        kbArticles,
+        allTickets,
       );
+      const relevantContext = grounded.results;
       
       const kbContent = relevantContext.map(c => `[Source: ${c.sourceTitle} (${c.source})]\n${c.text}`).join('\n\n');
 

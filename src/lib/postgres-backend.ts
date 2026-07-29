@@ -237,6 +237,58 @@ export async function initDb() {
       ON global_blacklist ("createdAt" DESC);
   `);
 
+  // pgvector RAG store (KnowledgeEmbedding) — mirrored from prisma/migrations.
+  try {
+    await pgPool.query(`CREATE EXTENSION IF NOT EXISTS vector`);
+    await pgPool.query(`
+      DO $$ BEGIN
+        CREATE TYPE "KnowledgeSourceType" AS ENUM ('KB_ARTICLE', 'RESOLVED_TICKET');
+      EXCEPTION
+        WHEN duplicate_object THEN NULL;
+      END $$;
+    `);
+    await pgPool.query(`
+      CREATE TABLE IF NOT EXISTS "KnowledgeEmbedding" (
+        "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        "tenant_id" VARCHAR(255) NOT NULL DEFAULT 'default',
+        "source_type" "KnowledgeSourceType" NOT NULL,
+        "source_id" VARCHAR(255) NOT NULL,
+        "chunk_index" INTEGER NOT NULL DEFAULT 0,
+        "chunk_content" TEXT NOT NULL,
+        "metadata" JSONB NOT NULL DEFAULT '{}'::jsonb,
+        "embedding" vector(1536),
+        "search_tsv" tsvector,
+        "created_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updated_at" TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE UNIQUE INDEX IF NOT EXISTS "knowledge_embedding_source_chunk_uq"
+        ON "KnowledgeEmbedding" ("tenant_id", "source_type", "source_id", "chunk_index");
+      CREATE INDEX IF NOT EXISTS "idx_knowledge_embedding_source"
+        ON "KnowledgeEmbedding" ("tenant_id", "source_type", "source_id");
+      CREATE INDEX IF NOT EXISTS "idx_knowledge_embedding_fts"
+        ON "KnowledgeEmbedding" USING gin ("search_tsv");
+    `);
+    // HNSW may fail on very old pgvector builds — non-fatal for boot.
+    try {
+      await pgPool.query(`
+        CREATE INDEX IF NOT EXISTS "idx_knowledge_embedding_hnsw"
+          ON "KnowledgeEmbedding"
+          USING hnsw ("embedding" vector_cosine_ops);
+      `);
+    } catch (hnswErr: any) {
+      console.warn(
+        '[DB Engine] HNSW index skipped (pgvector HNSW unavailable):',
+        hnswErr?.message || hnswErr,
+      );
+    }
+    console.log('[DB Engine] KnowledgeEmbedding (pgvector) verified.');
+  } catch (vectorErr: any) {
+    console.warn(
+      '[DB Engine] pgvector / KnowledgeEmbedding unavailable — RAG indexing disabled until extension is installed:',
+      vectorErr?.message || vectorErr,
+    );
+  }
+
   console.log("[DB Engine] PostgreSQL Tables Verified.");
 }
 

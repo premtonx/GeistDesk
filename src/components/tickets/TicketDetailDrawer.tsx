@@ -48,11 +48,31 @@ export function TicketDetailDrawer({
 
   const suggestedKb = useMemo(() => {
     if (!ticket) return [];
+    const linked = ((ticket as any).aiLinkedKb || []) as Array<{ id: string; title: string }>;
+    if (linked.length > 0) {
+      return linked.slice(0, 5).map((l) => ({ id: l.id, title: l.title } as KBArticle));
+    }
     const query = `${ticket.subject} ${ticket.description ?? ''}`.toLowerCase();
     return kbArticles
       .filter((a) => a.title.toLowerCase().split(' ').some((w) => query.includes(w)))
       .slice(0, 3);
   }, [ticket, kbArticles]);
+
+  const linkedTickets = useMemo(() => {
+    if (!ticket) return [];
+    const linked = ((ticket as any).aiLinkedTickets || []) as Array<{ id: string; title: string }>;
+    if (linked.length > 0) return linked.slice(0, 5);
+    return allTickets
+      .filter(
+        (o) =>
+          o.id !== ticket.id &&
+          (o.status === 'resolved' || o.status === 'closed') &&
+          (o.subject.toLowerCase() === ticket.subject.toLowerCase() ||
+            (ticket.tags && o.tags && ticket.tags.some((tag) => o.tags?.includes(tag)))),
+      )
+      .slice(0, 5)
+      .map((o) => ({ id: o.id, title: o.subject }));
+  }, [ticket, allTickets]);
 
   return (
     <AnimatePresence>
@@ -163,6 +183,25 @@ export function TicketDetailDrawer({
                         {suggestedKb.map((a) => (
                           <li key={a.id} className="text-indigo-700 font-medium truncate">
                             {a.title}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-semibold text-slate-700 mb-1">
+                      {t('tickets.drawer.relatedResolved', 'Related resolved tickets')}
+                    </p>
+                    {linkedTickets.length === 0 ? (
+                      <p className="text-slate-500">{t('tickets.drawer.noRelated', 'No related tickets yet')}</p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {linkedTickets.map((tkt) => (
+                          <li key={tkt.id} className="text-slate-700 font-medium truncate">
+                            <span className="font-mono text-[10px] text-slate-400 mr-1">
+                              #{tkt.id.slice(-6).toUpperCase()}
+                            </span>
+                            {tkt.title}
                           </li>
                         ))}
                       </ul>

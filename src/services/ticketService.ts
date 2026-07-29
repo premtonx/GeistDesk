@@ -19,8 +19,28 @@ import { handleFirestoreError, logAudit } from './auditService';
 import { groupService } from './groupService';
 import { notificationService } from './notificationService';
 import { autopilotService } from './autopilotService';
+import axios from 'axios';
 
 const TICKETS_COLLECTION = 'tickets';
+
+function enqueueTicketVector(
+  sourceId: string,
+  type: 'INDEX_RESOLVED_TICKET' | 'DELETE_EMBEDDINGS',
+) {
+  void axios
+    .post(
+      '/api/vectors/enqueue',
+      {
+        type,
+        sourceId,
+        sourceType: 'RESOLVED_TICKET',
+      },
+      { withCredentials: true },
+    )
+    .catch(() => {
+      /* non-fatal — /api/db hook is authoritative */
+    });
+}
 
 export const ticketService = {
   subscribeToTickets: (callback: (tickets: Ticket[]) => void, filters?: { agentId?: string; scope?: 'all' | 'assigned' }) => {
@@ -147,13 +167,18 @@ export const ticketService = {
         updatedAt: serverTimestamp()
       });
 
-      // Hook newly solved tickets into autopilot
-      if (updates.status === 'resolved') {
+      // Hook newly solved tickets into autopilot + vector RAG index
+      if (updates.status === 'resolved' || updates.status === 'closed') {
         try {
-          await autopilotService.processNewlySolvedTicket(id, ticketSubject, ticketData?.description || '');
+          if (updates.status === 'resolved') {
+            await autopilotService.processNewlySolvedTicket(id, ticketSubject, ticketData?.description || '');
+          }
         } catch (e) {
           console.warn("Autopilot processing failed silently:", e);
         }
+        enqueueTicketVector(id, 'INDEX_RESOLVED_TICKET');
+      } else if (updates.status === 'trash' || updates.status === 'deleted') {
+        enqueueTicketVector(id, 'DELETE_EMBEDDINGS');
       }
 
       await logAudit({
