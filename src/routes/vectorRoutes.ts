@@ -62,7 +62,24 @@ router.post('/search', authenticate, async (req: Request, res: Response) => {
 });
 
 router.get('/status', authenticate, requireRole(['SYSTEM_ADMIN']), async (_req, res) => {
-  res.json({ queueDepth: getVectorQueueDepth() });
+  try {
+    const { listEmbeddingProviderStatus, resolveEmbeddingProvider } = await import(
+      '../lib/ai/embeddings.js'
+    );
+    const [providers, active] = await Promise.all([
+      listEmbeddingProviderStatus('default'),
+      resolveEmbeddingProvider('default'),
+    ]);
+    res.json({
+      queueDepth: getVectorQueueDepth(),
+      activeEmbeddingProvider: active,
+      providers,
+      note:
+        'Claude/Anthropic has no embeddings API and is skipped. RAG uses OpenAI, Azure OpenAI, Gemini, Ollama, or OpenAI-compatible local gateways.',
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: err?.message || 'Failed to read embedding status' });
+  }
 });
 
 router.post('/hybrid', authenticate, async (req: Request, res: Response) => {
