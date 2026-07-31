@@ -312,7 +312,7 @@ export default function AISettingsPage() {
 
   return (
     <div className="flex-1 overflow-y-auto min-h-0 bg-[#f4f6f9] custom-scrollbar">
-      <div className="p-8 max-w-6xl mx-auto space-y-8 pb-24">
+      <div className="p-8 max-w-6xl mx-auto space-y-8 pb-12">
         <AdminBreadcrumbs />
 
         <div className="w-full min-w-0 sticky top-0 z-10 -mx-1 px-1 pt-1 pb-2 bg-[#f4f6f9]/95 backdrop-blur-sm">
@@ -353,7 +353,7 @@ export default function AISettingsPage() {
               {t('aiOrchestrator.commandCenter.pageSubtitle', 'Enterprise orchestrator — governance, routing, compliance, and quality intelligence.')}
             </p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 shrink-0">
             {lastSyncAt && (
               <span className="text-[10px] font-mono text-slate-400">
                 Synced {formatRelativeTime(lastSyncAt)}
@@ -375,6 +375,30 @@ export default function AISettingsPage() {
                 <span className="ml-1 opacity-60">v{config.configVersion}</span>
               )}
             </Badge>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="h-9 rounded-xl"
+                onClick={handleTest}
+                disabled={isTesting}
+              >
+                {isTesting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                {t('aiOrchestrator.actions.test', 'Test AI Configuration')}
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="h-9 rounded-xl bg-slate-900 hover:bg-black"
+                onClick={handleSave}
+                disabled={isSaving || readOnly}
+              >
+                {isSaving
+                  ? t('aiOrchestrator.actions.saving', 'Synchronizing…')
+                  : t('aiOrchestrator.actions.save', 'Save Workspace Configuration')}
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -1029,26 +1053,6 @@ export default function AISettingsPage() {
         </Card>
         </>
         )}
-
-        {/* Test + Save */}
-        <div className="flex flex-col sm:flex-row gap-3 sticky bottom-4 bg-[#f4f6f9]/95 backdrop-blur p-4 rounded-2xl border border-slate-200 shadow-lg">
-          <Button
-            variant="outline"
-            className="flex-1 h-12 rounded-xl"
-            onClick={handleTest}
-            disabled={isTesting}
-          >
-            {isTesting ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
-            Test AI Configuration
-          </Button>
-          <Button
-            className="flex-1 h-12 rounded-xl bg-slate-900 hover:bg-black"
-            onClick={handleSave}
-            disabled={isSaving || readOnly}
-          >
-            {isSaving ? 'Synchronizing…' : 'Save Workspace Configuration'}
-          </Button>
-        </div>
 
         {testResults && (
           <Card className="rounded-2xl border-blue-100">
