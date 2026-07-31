@@ -264,6 +264,17 @@ const categories = [
         borderColor: 'border-slate-105',
         badge: 'Global',
         module: 'rbac'
+      },
+      {
+        title: 'Data Import & Migration',
+        description: 'Bulk CSV/JSON import for tickets and GeistKB, plus single-entry quick-add with RAG indexing.',
+        icon: Database,
+        path: '/admin/import',
+        color: 'text-cyan-600',
+        bgColor: 'bg-cyan-50',
+        borderColor: 'border-cyan-105',
+        badge: 'Migration',
+        module: 'rbac'
       }
     ]
   }

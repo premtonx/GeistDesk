@@ -28,6 +28,7 @@ export function AdminBreadcrumbs() {
       schema: 'Company Schema',
       groups: 'Functional Teams',
       'vault-portfolio': 'Vault-Portfoliomanagement',
+      import: 'Data Import & Migration',
       settings: 'Settings'
     };
 
