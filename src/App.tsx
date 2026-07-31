@@ -29,6 +29,7 @@ import GroupsPage from './components/pages/GroupsPage';
 import WorkforcePage from './components/pages/WorkforcePage';
 import RolesPage from './components/pages/RolesPage';
 import VaultPortfolioManagementPage from './components/pages/VaultPortfolioManagementPage';
+import AdminImportPage from './components/pages/AdminImportPage';
 import LoginPage from './components/pages/LoginPage';
 import HelpCenterPage from './components/pages/HelpCenterPage';
 import SecretViewerPage from './components/pages/SecretViewerPage';
@@ -129,6 +130,7 @@ function AppRoutes() {
                     <Route path="admin/workforce" element={<AdminRoute><WorkforcePage /></AdminRoute>} />
                     <Route path="admin/roles" element={<AdminRoute><RolesPage /></AdminRoute>} />
                     <Route path="admin/vault-portfolio" element={<AdminRoute><VaultPortfolioManagementPage /></AdminRoute>} />
+                    <Route path="admin/import" element={<AdminRoute><AdminImportPage /></AdminRoute>} />
                     <Route path="email-channels" element={<EmailChannelsPage />} />
                     <Route path="*" element={<Navigate to="/tickets" replace />} />
                   </Route>

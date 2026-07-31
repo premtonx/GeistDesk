@@ -38,6 +38,7 @@ import ticketSpamRoutes from "./src/routes/ticketSpamRoutes.js";
 import emailChannelRoutes from "./src/routes/emailChannelRoutes.js";
 import mailDomainRoutes from "./src/routes/mailDomainRoutes.js";
 import vectorRoutes from "./src/routes/vectorRoutes.js";
+import importRoutes from "./src/routes/importRoutes.js";
 import {
   handleKnowledgeDocumentMutation,
   startVectorQueueWorker,
@@ -453,6 +454,7 @@ async function startServer() {
 
   // Mount Admin User Management Router
   app.use("/api/admin", adminRoutes);
+  app.use("/api/admin/import", importRoutes);
   app.use("/api/ai", aiRoutes);
   app.use("/api/kb/articles", kbArticleRoutes);
   app.use("/api/kb/categories", kbCategoryRoutes);
