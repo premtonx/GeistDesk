@@ -9,6 +9,8 @@ import {
   enqueueKbArticleIndex,
   enqueueResolvedTicketIndex,
 } from './ai/vector-queue.js';
+import { sanitizeInboundHtml } from './email-ingestion/sanitize-server.js';
+import { DEFAULT_TENANT_ID } from './tenant-context.js';
 
 export const IMPORT_BATCH_SIZE = 50;
 
@@ -320,8 +322,11 @@ export async function importTickets(
         throw new Error('Missing required field: subject');
       }
 
-      const htmlContent = String(mapped.html_content || '').trim();
-      const body = String(mapped.body || htmlContent || '').trim();
+      const rawHtml = String(mapped.html_content || '').trim();
+      const rawBody = String(mapped.body || rawHtml || '').trim();
+      // Sanitize before persist — imports bypass the inbound-mail pipeline.
+      const htmlContent = rawHtml ? sanitizeInboundHtml(rawHtml) : '';
+      const body = rawBody.includes('<') ? sanitizeInboundHtml(rawBody) : rawBody;
       const status = normalizeTicketStatus(mapped.status);
       const createdAt = parseCreatedAt(mapped.created_at);
       const senderEmail = String(mapped.sender_email || '').trim();
@@ -330,6 +335,7 @@ export async function importTickets(
         .trim()
         .toLowerCase();
       const customerName = String(mapped.customer_name || '').trim();
+      const scopedTenant = tenantId || DEFAULT_TENANT_ID;
 
       const doc = await addDocDirect('tickets', {
         subject,
@@ -345,7 +351,7 @@ export async function importTickets(
         companyId: '',
         channel: 'email',
         team: 'support',
-        tenantId,
+        tenantId: scopedTenant,
         source: 'admin_import',
         importedBy: opts.importedBy,
         createdAt,
@@ -359,7 +365,7 @@ export async function importTickets(
       result.createdIds.push(doc.id);
 
       if (status === 'resolved' || status === 'closed') {
-        enqueueResolvedTicketIndex(doc.id, tenantId);
+        enqueueResolvedTicketIndex(doc.id, scopedTenant);
         result.enqueuedVectors += 1;
       }
     } catch (err) {
@@ -399,10 +405,12 @@ export async function importKbArticles(
       const category = String(mapped.category || 'uncategorized').trim() || 'uncategorized';
       const tags = parseTags(mapped.tags);
       const now = new Date().toISOString();
+      const safeContent = sanitizeInboundHtml(content);
+      const scopedTenant = tenantId || DEFAULT_TENANT_ID;
 
       const doc = await addDocDirect('kb_articles', {
         title,
-        content,
+        content: safeContent,
         category,
         subCategory: 'Imported',
         visibility: 'Public',
@@ -413,7 +421,7 @@ export async function importKbArticles(
         unhelpfulCount: 0,
         language: 'English',
         source: 'admin_import',
-        tenantId,
+        tenantId: scopedTenant,
         authorId: opts.importedBy || '',
         createdAt: now,
         updatedAt: now,
@@ -423,7 +431,7 @@ export async function importKbArticles(
       result.createdIds.push(doc.id);
 
       if (status === 'Published') {
-        enqueueKbArticleIndex(doc.id, tenantId);
+        enqueueKbArticleIndex(doc.id, scopedTenant);
         result.enqueuedVectors += 1;
       }
     } catch (err) {

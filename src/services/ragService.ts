@@ -95,7 +95,7 @@ export const ragService = {
         '/api/vectors/search',
         {
           query,
-          tenantId: opts?.tenantId || 'default',
+          // tenantId is derived from the authenticated session on the server
           limit: opts?.limit ?? 5,
         },
         { withCredentials: true },

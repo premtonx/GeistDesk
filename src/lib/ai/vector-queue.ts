@@ -6,6 +6,8 @@
 import { getDocDirect, queryDb } from '../postgres-backend.js';
 import { chunkText, stripHtmlToPlainText } from './text-chunker.js';
 import { embedTexts, vectorToSqlLiteral } from './embeddings.js';
+import { documentBelongsToTenant, DEFAULT_TENANT_ID } from '../tenant-context.js';
+import { safeErrorMessage } from '../safe-log.js';
 
 export type VectorJobType = 'INDEX_KB_ARTICLE' | 'INDEX_RESOLVED_TICKET' | 'DELETE_EMBEDDINGS';
 export type KnowledgeSourceType = 'KB_ARTICLE' | 'RESOLVED_TICKET';
@@ -20,7 +22,7 @@ export interface VectorJob {
   attempts: number;
 }
 
-const DEFAULT_TENANT = 'default';
+const DEFAULT_TENANT = DEFAULT_TENANT_ID;
 const queue: VectorJob[] = [];
 let draining = false;
 let workerStarted = false;
@@ -143,6 +145,13 @@ async function indexKbArticle(tenantId: string, sourceId: string): Promise<void>
     return;
   }
 
+  if (!documentBelongsToTenant(doc, tenantId)) {
+    console.warn(
+      `[vector-queue] refusing to index KB ${sourceId}: tenant mismatch (job=${tenantId})`,
+    );
+    return;
+  }
+
   const status = String(doc.status || '').toLowerCase();
   const published =
     status === 'published' ||
@@ -176,6 +185,13 @@ async function indexResolvedTicket(tenantId: string, sourceId: string): Promise<
   const doc = await getDocDirect('tickets', sourceId);
   if (!doc) {
     await deleteEmbeddingsForSource(tenantId, 'RESOLVED_TICKET', sourceId);
+    return;
+  }
+
+  if (!documentBelongsToTenant(doc, tenantId)) {
+    console.warn(
+      `[vector-queue] refusing to index ticket ${sourceId}: tenant mismatch (job=${tenantId})`,
+    );
     return;
   }
 
@@ -240,7 +256,7 @@ export async function drainVectorQueue(): Promise<void> {
       } catch (err: any) {
         console.warn(
           `[vector-queue] job ${job.type} ${job.sourceId} failed (attempt ${job.attempts}):`,
-          err?.message || err,
+          safeErrorMessage(err),
         );
         if (job.attempts < 3) {
           queue.push(job);

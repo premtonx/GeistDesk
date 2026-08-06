@@ -25,9 +25,30 @@ if (!LOCAL_JWT_SECRET) {
 // Extend Express Request type locally for safety
 export type AuthenticatedRequest = any;
 
-/** Beta-stage auto-admin on the server — disabled by default; set BETA_AUTO_ADMIN=true to enable. */
+/**
+ * Beta-stage auto-admin — disabled by default.
+ * In production (NODE_ENV=production / IS_PROD) this is always refused so a
+ * mis-set env cannot elevate every authenticated user to SYSTEM_ADMIN.
+ */
 function isServerBetaAutoAdminEnabled(): boolean {
+  if (process.env.NODE_ENV === 'production' || process.env.IS_PROD === 'true') {
+    if (process.env.BETA_AUTO_ADMIN === 'true') {
+      console.error(
+        '[Auth] BETA_AUTO_ADMIN=true is forbidden in production and will be ignored.',
+      );
+    }
+    return false;
+  }
   return process.env.BETA_AUTO_ADMIN === 'true';
+}
+
+function resolveUserTenantId(userDoc: Record<string, unknown>): string {
+  const raw =
+    (typeof userDoc.tenantId === 'string' && userDoc.tenantId.trim()) ||
+    (typeof userDoc.tenant_id === 'string' && userDoc.tenant_id.trim()) ||
+    (typeof userDoc.workspaceId === 'string' && userDoc.workspaceId.trim()) ||
+    '';
+  return raw || 'default';
 }
 
 /**
@@ -199,6 +220,7 @@ export async function authenticate(req: AuthenticatedRequest, res: Response, nex
       email: userDoc.email || verifiedEmail || "",
       role: computedRole,
       is_admin: isAdminClaim,
+      tenantId: resolveUserTenantId(userDoc as Record<string, unknown>),
       dbRecord: userDoc
     };
 

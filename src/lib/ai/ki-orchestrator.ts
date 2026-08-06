@@ -28,20 +28,33 @@ export interface GroundedRagContext {
 }
 
 const DEFAULT_TENANT = 'default';
+const ALLOWED_SOURCE_TYPES = new Set<string>(['KB_ARTICLE', 'RESOLVED_TICKET']);
+
+function normalizeSourceTypes(
+  sourceTypes?: Array<'KB_ARTICLE' | 'RESOLVED_TICKET'>,
+): Array<'KB_ARTICLE' | 'RESOLVED_TICKET'> {
+  const filtered = (sourceTypes || []).filter(
+    (t): t is 'KB_ARTICLE' | 'RESOLVED_TICKET' => ALLOWED_SOURCE_TYPES.has(t),
+  );
+  return filtered.length
+    ? filtered
+    : (['KB_ARTICLE', 'RESOLVED_TICKET'] as Array<'KB_ARTICLE' | 'RESOLVED_TICKET'>);
+}
 
 /**
  * Hybrid retrieval via raw SQL:
  *   - vector cosine distance (`embedding <=> query_vector`)
  *   - full-text rank (`ts_rank(search_tsv, plainto_tsquery(...))`)
- * Candidate sets are always scoped by tenantId.
+ * Candidate sets are always scoped by tenantId (must be session-derived by callers).
  */
 export async function hybridSearchKnowledge(params: {
   query: string;
-  tenantId?: string;
+  /** Required for isolation — callers must pass session-derived tenantId. */
+  tenantId: string;
   limit?: number;
   sourceTypes?: Array<'KB_ARTICLE' | 'RESOLVED_TICKET'>;
 }): Promise<HybridSearchHit[]> {
-  const tenantId = params.tenantId || DEFAULT_TENANT;
+  const tenantId = String(params.tenantId || '').trim() || DEFAULT_TENANT;
   const limit = Math.min(Math.max(params.limit ?? 5, 1), 20);
   const queryText = stripHtmlToPlainText(params.query).slice(0, 4000);
   if (!queryText.trim()) return [];
@@ -54,15 +67,11 @@ export async function hybridSearchKnowledge(params: {
     console.warn('[ki-orchestrator] embedding unavailable — FTS-only hybrid fallback:', err?.message || err);
   }
 
-  const sourceFilter = params.sourceTypes?.length
-    ? params.sourceTypes
-    : (['KB_ARTICLE', 'RESOLVED_TICKET'] as const);
+  const sourceFilter = normalizeSourceTypes(params.sourceTypes);
 
   if (queryVector) {
     const literal = vectorToSqlLiteral(queryVector);
-    const typePlaceholders = sourceFilter
-      .map((_, i) => `$${i + 4}::"KnowledgeSourceType"`)
-      .join(', ');
+    // Parameterized IN-list via ANY($n::text[]) — no string interpolation of enums.
     const sql = `
       WITH candidates AS (
         SELECT
@@ -77,7 +86,7 @@ export async function hybridSearchKnowledge(params: {
           ts_rank(search_tsv, plainto_tsquery('english', $2)) AS fts_rank
         FROM "KnowledgeEmbedding"
         WHERE tenant_id = $3
-          AND source_type IN (${typePlaceholders})
+          AND source_type::text = ANY($4::text[])
           AND embedding IS NOT NULL
         ORDER BY embedding <=> $1::vector
         LIMIT 40
@@ -87,16 +96,13 @@ export async function hybridSearchKnowledge(params: {
       ORDER BY
         (COALESCE(1.0 - LEAST(vector_distance, 1.0), 0) * 0.7
           + COALESCE(fts_rank, 0) * 0.3) DESC
-      LIMIT $${sourceFilter.length + 4}
+      LIMIT $5
     `;
-    const res = await queryDb(sql, [literal, queryText, tenantId, ...sourceFilter, limit]);
+    const res = await queryDb(sql, [literal, queryText, tenantId, sourceFilter, limit]);
     return res.rows.map(mapRow);
   }
 
   // FTS-only fallback when embeddings are not configured
-  const typePlaceholders = sourceFilter
-    .map((_, i) => `$${i + 3}::"KnowledgeSourceType"`)
-    .join(', ');
   const sql = `
     SELECT
       id::text AS id,
@@ -110,12 +116,12 @@ export async function hybridSearchKnowledge(params: {
       ts_rank(search_tsv, plainto_tsquery('english', $1)) AS fts_rank
     FROM "KnowledgeEmbedding"
     WHERE tenant_id = $2
-      AND source_type IN (${typePlaceholders})
+      AND source_type::text = ANY($3::text[])
       AND search_tsv @@ plainto_tsquery('english', $1)
     ORDER BY fts_rank DESC NULLS LAST
-    LIMIT $${sourceFilter.length + 3}
+    LIMIT $4
   `;
-  const res = await queryDb(sql, [queryText, tenantId, ...sourceFilter, limit]);
+  const res = await queryDb(sql, [queryText, tenantId, sourceFilter, limit]);
   return res.rows.map(mapRow);
 }
 
@@ -149,12 +155,12 @@ function mapRow(row: any): HybridSearchHit {
 /** Build grounded prompt context + linked sources for agent UI / LLM. */
 export async function buildGroundedRagContext(params: {
   query: string;
-  tenantId?: string;
+  tenantId: string;
   limit?: number;
 }): Promise<GroundedRagContext> {
   const snippets = await hybridSearchKnowledge({
     query: params.query,
-    tenantId: params.tenantId,
+    tenantId: params.tenantId || DEFAULT_TENANT,
     limit: params.limit ?? 5,
   });
 
@@ -187,8 +193,12 @@ export async function buildGroundedRagContext(params: {
 export async function groundInboundTicketForTriage(params: {
   subject: string;
   body: string;
-  tenantId?: string;
+  tenantId: string;
 }): Promise<GroundedRagContext> {
   const query = `${params.subject}\n${params.body}`.slice(0, 6000);
-  return buildGroundedRagContext({ query, tenantId: params.tenantId, limit: 5 });
+  return buildGroundedRagContext({
+    query,
+    tenantId: params.tenantId || DEFAULT_TENANT,
+    limit: 5,
+  });
 }

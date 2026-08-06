@@ -17,6 +17,8 @@ import {
   type ImportResult,
 } from '../lib/import-service.js';
 import { getVectorQueueDepth } from '../lib/ai/vector-queue.js';
+import { resolveTenantFromRequest } from '../lib/tenant-context.js';
+import { safeErrorMessage } from '../lib/safe-log.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -45,21 +47,8 @@ const jsonBodySchema = z.object({
   records: z.array(z.record(z.string(), z.unknown())).optional(),
   data: z.array(z.record(z.string(), z.unknown())).optional(),
   fieldMapping: fieldMappingSchema,
-  tenantId: z.string().max(255).optional(),
+  // tenantId intentionally omitted from trusted schema — session only
 });
-
-function resolveTenantId(req: Request): string {
-  const bodyTenant =
-    typeof (req.body as { tenantId?: unknown })?.tenantId === 'string'
-      ? String((req.body as { tenantId: string }).tenantId).trim()
-      : '';
-  const queryTenant =
-    typeof req.query.tenantId === 'string' ? String(req.query.tenantId).trim() : '';
-  const user = (req as Request & { user?: { dbRecord?: { tenantId?: string }; tenantId?: string } })
-    .user;
-  const userTenant = String(user?.dbRecord?.tenantId || user?.tenantId || '').trim();
-  return bodyTenant || queryTenant || userTenant || 'default';
-}
 
 function resolveImporter(req: Request): string {
   const user = (req as Request & { user?: { id?: string; email?: string } }).user;
@@ -148,7 +137,7 @@ router.get('/fields', (_req, res: Response) => {
 
 router.post('/tickets', upload.single('file'), async (req: Request, res: Response) => {
   try {
-    const tenantId = resolveTenantId(req);
+    const tenantId = resolveTenantFromRequest(req);
     const fieldMapping = parseFieldMappingFromBody(req.body);
     const { records } = extractRecordsFromRequest(req);
 
@@ -168,7 +157,7 @@ router.post('/tickets', upload.single('file'), async (req: Request, res: Respons
       ...enrichResult(result),
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Ticket import failed';
+    const message = safeErrorMessage(err, 'Ticket import failed');
     console.error('[import/tickets]', message);
     return res.status(400).json({ error: message });
   }
@@ -176,7 +165,7 @@ router.post('/tickets', upload.single('file'), async (req: Request, res: Respons
 
 router.post('/kb', upload.single('file'), async (req: Request, res: Response) => {
   try {
-    const tenantId = resolveTenantId(req);
+    const tenantId = resolveTenantFromRequest(req);
     const fieldMapping = parseFieldMappingFromBody(req.body);
     const { records } = extractRecordsFromRequest(req);
 
@@ -196,7 +185,7 @@ router.post('/kb', upload.single('file'), async (req: Request, res: Response) =>
       ...enrichResult(result),
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'KB import failed';
+    const message = safeErrorMessage(err, 'KB import failed');
     console.error('[import/kb]', message);
     return res.status(400).json({ error: message });
   }
@@ -213,7 +202,7 @@ router.post('/preview', upload.single('file'), async (req: Request, res: Respons
       sample: records.slice(0, 5),
     });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : 'Preview failed';
+    const message = safeErrorMessage(err, 'Preview failed');
     return res.status(400).json({ error: message });
   }
 });

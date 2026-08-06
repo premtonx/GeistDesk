@@ -438,5 +438,16 @@ export async function embedTexts(
 }
 
 export function vectorToSqlLiteral(vector: number[]): string {
-  return `[${vector.map((n) => Number(n).toFixed(8)).join(',')}]`;
+  if (!Array.isArray(vector) || vector.length === 0) {
+    throw new Error('Embedding vector must be a non-empty number array');
+  }
+  const parts: string[] = [];
+  for (const n of vector) {
+    const num = Number(n);
+    if (!Number.isFinite(num)) {
+      throw new Error('Embedding vector contains non-finite values');
+    }
+    parts.push(num.toFixed(8));
+  }
+  return `[${parts.join(',')}]`;
 }

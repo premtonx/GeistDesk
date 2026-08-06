@@ -475,6 +475,7 @@ export async function getDocsDirect(collectionName: string, constraints: any[]):
     try {
       let queryStr = `SELECT id, data FROM geistdesk_documents WHERE collection = $1`;
       const queryParams: any[] = [collectionName];
+      const ALLOWED_OPS = new Set(['==', '===', '!=', '>', '>=', '<', '<=']);
 
       // Safe JSONB constraint compilation to guarantee alignment of unassigned accounts
       for (const c of constraints) {
@@ -483,6 +484,10 @@ export async function getDocsDirect(collectionName: string, constraints: any[]):
         const field = c.field;
         const op = c.op;
         const value = c.value;
+
+        if (typeof field !== 'string' || !field.trim()) {
+          throw new Error('Invalid query constraint: field must be a non-empty string');
+        }
 
         // 1. Unified Unassigned Check mapping both agentId / assignedTo / non-existent / empty keys
         if (field === 'agentId' || field === 'assignedTo') {
@@ -505,6 +510,8 @@ export async function getDocsDirect(collectionName: string, constraints: any[]):
                 AND data->>'assignedTo' != ''
                 AND data->>'assignedTo' != 'unassigned'
               )`;
+            } else {
+              throw new Error(`Unsupported query operator for ${field}: ${op}`);
             }
             continue;
           }
@@ -530,12 +537,17 @@ export async function getDocsDirect(collectionName: string, constraints: any[]):
                 AND LOWER(data->>'status') != 'nicht_zugewiesen'
                 AND data->>'status' IS NOT NULL
               )`;
+            } else {
+              throw new Error(`Unsupported query operator for status: ${op}`);
             }
             continue;
           }
         }
 
-        // 3. Generic constraint fallback with direct values
+        // 3. Generic constraint fallback with direct values — fail closed on unknown ops
+        if (!ALLOWED_OPS.has(op)) {
+          throw new Error(`Unsupported query operator: ${String(op)}`);
+        }
         const paramIndex = queryParams.length + 1;
         if (op === '==' || op === '===') {
           queryStr += ` AND data->>$${paramIndex} = $${paramIndex + 1}`;
@@ -570,7 +582,7 @@ export async function getDocsDirect(collectionName: string, constraints: any[]):
       // Post-process with sorting/limits using existing in-memory constraints
       return applyQueryConstraints(docs, constraints.filter(c => c && c.type !== 'where'));
     } catch (error) {
-      console.error(`[DB Error] Native SQL constraint query failed for ${collectionName}:`, error);
+      console.error(`[DB Error] Native SQL constraint query failed for ${collectionName}:`, error instanceof Error ? error.message : 'unknown');
       throw error;
     }
   }

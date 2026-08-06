@@ -45,6 +45,13 @@ import {
 } from "./src/lib/ai/vector-queue.js";
 import { groundInboundTicketForTriage } from "./src/lib/ai/ki-orchestrator.js";
 import {
+  documentBelongsToTenant,
+  resolveTenantFromRequest,
+  stampTenantId,
+  TENANT_SCOPED_COLLECTIONS,
+} from "./src/lib/tenant-context.js";
+import { safeErrorMessage } from "./src/lib/safe-log.js";
+import {
   extractEmailAddress,
 } from "./src/lib/global-blacklist.js";
 import {
@@ -127,10 +134,12 @@ function isPrivateNetworkUrl(urlString: string): boolean {
 function verifyInboundMailWebhook(req: any): boolean {
   const expected = process.env.INBOUND_MAIL_WEBHOOK_SECRET;
   if (!expected) {
-    return !IS_PROD;
+    // Fail closed in production — unauthenticated inbound mail is not allowed.
+    if (IS_PROD) return false;
+    return true;
   }
   const provided = req.headers["x-geistdesk-webhook-secret"];
-  return typeof provided === "string" && provided === expected;
+  return typeof provided === "string" && provided.length > 0 && provided === expected;
 }
 
 // Fields that must never be returned to clients for the users collection.
@@ -329,6 +338,8 @@ async function startServer() {
     const userCanCreateTickets = req.user?.dbRecord?.can_create_tickets !== false;
     const userCanViewKnowledgeBase = req.user?.dbRecord?.can_view_knowledgebase !== false;
     const uid = req.user?.id;
+    const tenantId = resolveTenantFromRequest(req);
+    const tenantScoped = TENANT_SCOPED_COLLECTIONS.has(collection);
 
     // 2. Enforce Administrative Access Controls (legacy guard; policy module is authoritative)
     const adminCollections = ['roles', 'module_config', 'audits', 'admins', 'groups', 'audit_logs', 'compliance_logs'];
@@ -373,46 +384,93 @@ async function startServer() {
       }
     }
 
+    // Reject client attempts to write a foreign tenantId on scoped collections.
+    if (tenantScoped && data && typeof data === "object") {
+      const claimed =
+        (typeof data.tenantId === "string" && data.tenantId.trim()) ||
+        (typeof data.tenant_id === "string" && data.tenant_id.trim()) ||
+        "";
+      if (claimed && claimed !== tenantId) {
+        return res.status(403).json({
+          error: "Forbidden: tenantId in payload does not match authenticated session tenant.",
+        });
+      }
+    }
+
     try {
       if (action === "get_doc") {
         const doc = await getDocDirect(collection, id);
+        if (tenantScoped && doc && !documentBelongsToTenant(doc, tenantId)) {
+          return res.status(404).json({ error: "Document not found" });
+        }
         return res.json({ result: collection === "users" ? sanitizeUserDoc(doc) : doc });
       }
       if (action === "get_docs") {
-        const docs = await getDocsDirect(collection, constraints || []);
+        const scopedConstraints = Array.isArray(constraints) ? [...constraints] : [];
+        // Fetch then enforce tenant in-process so legacy docs without tenantId
+        // remain visible to the default tenant, while non-default tenants stay isolated.
+        let docs = await getDocsDirect(collection, scopedConstraints);
+        if (tenantScoped) {
+          docs = (docs || []).filter((d: any) => documentBelongsToTenant(d, tenantId));
+        }
         const safe = collection === "users" ? (docs || []).map(sanitizeUserDoc) : docs;
         return res.json({ result: safe });
       }
       if (action === "add_doc") {
-        const resObj = await addDocDirect(collection, data);
+        const payload = tenantScoped ? stampTenantId(data || {}, tenantId) : data;
+        const resObj = await addDocDirect(collection, payload);
         handleKnowledgeDocumentMutation({
           collection,
           action,
           id: resObj?.id,
-          data,
+          data: payload,
+          tenantId,
         });
         return res.json({ result: resObj });
       }
       if (action === "update_doc") {
-        await updateDocDirect(collection, id, data);
-        handleKnowledgeDocumentMutation({ collection, action, id, data });
+        if (tenantScoped) {
+          const existing = await getDocDirect(collection, id);
+          if (!existing || !documentBelongsToTenant(existing, tenantId)) {
+            return res.status(404).json({ error: "Document not found" });
+          }
+        }
+        const payload = tenantScoped ? stampTenantId(data || {}, tenantId) : data;
+        await updateDocDirect(collection, id, payload);
+        handleKnowledgeDocumentMutation({ collection, action, id, data: payload, tenantId });
         return res.json({ result: { success: true } });
       }
       if (action === "set_doc") {
-        await setDocDirect(collection, id, data);
-        handleKnowledgeDocumentMutation({ collection, action, id, data });
+        if (tenantScoped) {
+          const existing = await getDocDirect(collection, id);
+          if (existing && !documentBelongsToTenant(existing, tenantId)) {
+            return res.status(404).json({ error: "Document not found" });
+          }
+        }
+        const payload = tenantScoped ? stampTenantId(data || {}, tenantId) : data;
+        await setDocDirect(collection, id, payload);
+        handleKnowledgeDocumentMutation({ collection, action, id, data: payload, tenantId });
         return res.json({ result: { success: true } });
       }
       if (action === "delete_doc") {
+        if (tenantScoped) {
+          const existing = await getDocDirect(collection, id);
+          if (!existing || !documentBelongsToTenant(existing, tenantId)) {
+            return res.status(404).json({ error: "Document not found" });
+          }
+        }
         await deleteDocDirect(collection, id);
-        handleKnowledgeDocumentMutation({ collection, action, id });
+        handleKnowledgeDocumentMutation({ collection, action, id, tenantId });
         return res.json({ result: { success: true } });
       }
       
       return res.status(400).json({ error: `Unknown database action: ${action}` });
     } catch (e: any) {
-      console.error(`[DB Router Error] Failed on ${action} for ${collection}:`, e);
-      return res.status(500).json({ error: e.message || String(e) });
+      console.error(
+        `[DB Router Error] Failed on ${action} for ${collection}:`,
+        safeErrorMessage(e),
+      );
+      return res.status(500).json({ error: safeErrorMessage(e, "Database operation failed") });
     }
   });
 
@@ -584,9 +642,10 @@ async function startServer() {
     // Microsoft Graph sends a POST with a validationToken query param to verify the endpoint is active.
     const validationToken = req.query.validationToken;
     if (validationToken) {
-      console.log(`[Graph Webhook] Verification request received. Token: ${validationToken}`);
+      console.log("[Graph Webhook] Verification handshake received (token redacted).");
       res.setHeader("Content-Type", "text/plain");
-      return res.status(200).send(validationToken);
+      // Microsoft requires echoing the validationToken; do not log it.
+      return res.status(200).send(String(validationToken));
     }
 
     // 2. Process Change Notification
@@ -1147,16 +1206,21 @@ async function startServer() {
     },
     async (req: any, res) => {
       const headerSecret = req.headers["x-geistdesk-webhook-secret"];
-      const bodySecret =
-        req.body?.webhookSecret ||
-        req.body?.secret ||
-        req.query?.secret;
+      // Prefer header secrets. Body secrets are allowed for provider compatibility;
+      // query-string secrets are rejected in production (they leak via access logs).
+      const bodySecret = req.body?.webhookSecret || req.body?.secret;
+      const querySecret = req.query?.secret;
+      if (IS_PROD && typeof querySecret === "string" && querySecret && !headerSecret && !bodySecret) {
+        return res.status(401).json({ error: "Unauthorized webhook. Provide secret via header." });
+      }
       const providedSecret =
         typeof headerSecret === "string"
           ? headerSecret
           : typeof bodySecret === "string"
             ? bodySecret
-            : "";
+            : !IS_PROD && typeof querySecret === "string"
+              ? querySecret
+              : "";
 
       const recipientAlias = extractRouterAlias(req.body || {});
       const channel = await findChannelForWebhook({
@@ -1975,7 +2039,7 @@ async function processAiTriage(ticketId: string, emailBody: string, subject: str
         ...linkedTickets.map((t) => `Ticket: ${t.title}`),
       ].slice(0, 5);
     } catch (ragErr: any) {
-      console.warn('[AI Triage] hybrid RAG unavailable, falling back to KB sample:', ragErr?.message || ragErr);
+      console.warn('[AI Triage] hybrid RAG unavailable, falling back to KB sample:', safeErrorMessage(ragErr));
       const kbSnap = await db.collection("kb_articles").limit(5).get();
       kbContext = kbSnap.docs.map(d => `${d.data().title}: ${d.data().content}`).join("\n---\n");
     }

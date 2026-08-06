@@ -113,7 +113,7 @@ export function sanitizeTimelineHtml(raw: string): string {
   if (looksLikeHtml(content)) {
     return DOMPurify.sanitize(content, {
       ALLOWED_TAGS: TIMELINE_ALLOWED_TAGS,
-      ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'src', 'alt', 'title'],
+      ALLOWED_ATTR: ['href', 'target', 'rel', 'class', 'alt', 'title'],
       ALLOW_DATA_ATTR: false,
     });
   }

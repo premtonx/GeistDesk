@@ -129,7 +129,10 @@ export const graphTranscriptService = {
       );
       return response.data;
     } catch (error: any) {
-      console.error('[Graph Sub ERROR] Registration with Microsoft Graph failed:', error.response?.data || error.message);
+      console.error(
+        '[Graph Sub ERROR] Registration with Microsoft Graph failed:',
+        error?.response?.status || error?.message || 'unknown error',
+      );
       throw new Error(`Failed to create Graph meeting subscription: ${error.message}`);
     }
   },
@@ -186,11 +189,10 @@ export const graphTranscriptService = {
 
         // Channel meeting chunks into the streaming buffer manager
         await transcriptBuffer.addChunk(meetingId, segment, async (mId, cleanScrubbed, orig) => {
-          // Store/Log the verified scrubbed context safely
-          console.log(`\n=================== SAFE TRANSLATION PIPELINE FLUSH ===================`);
-          console.log(`[Meeting ID]: ${mId}`);
-          console.log(`[Aggregated & Scrubbed Live Session]:\n${cleanScrubbed}`);
-          console.log(`========================================================================\n`);
+          // Never log full transcript content — only metadata lengths.
+          console.log(
+            `[TranscriptBuffer] Flushed meeting ${mId}: scrubbedLen=${cleanScrubbed?.length || 0} originalLen=${orig?.length || 0}`,
+          );
 
           // Persist the clean transcript context in firestore under meeting_transcripts for retrieval by LLM bots or compliance agents
           try {
@@ -205,8 +207,8 @@ export const graphTranscriptService = {
               });
               console.log(`[Meeting Transcripts] Registered vetted transcript entry in Sovereign Firestore database.`);
             }
-          } catch (dbErr) {
-            console.error('[Meeting Transcripts] Database logging bypass/error:', dbErr);
+          } catch (dbErr: any) {
+            console.error('[Meeting Transcripts] Database logging bypass/error:', dbErr?.message || 'unknown');
           }
         });
       }
