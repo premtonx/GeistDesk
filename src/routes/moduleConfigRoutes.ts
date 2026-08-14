@@ -17,6 +17,8 @@ function sanitizeModuleConfigForOperators(doc: Record<string, unknown> | null) {
   const polyglot = (doc.polyglot as Record<string, unknown> | undefined) ?? {};
 
   return {
+    is_initialized: doc.is_initialized === true,
+    platformModules: doc.platformModules ?? undefined,
     polyglotEnabled: doc.polyglotEnabled ?? true,
     languages: doc.languages ?? [],
     polyglot: {

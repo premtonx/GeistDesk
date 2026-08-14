@@ -30,12 +30,15 @@ import WorkforcePage from './components/pages/WorkforcePage';
 import RolesPage from './components/pages/RolesPage';
 import VaultPortfolioManagementPage from './components/pages/VaultPortfolioManagementPage';
 import AdminImportPage from './components/pages/AdminImportPage';
+import OnboardingWizardPage from './components/pages/OnboardingWizardPage';
 import LoginPage from './components/pages/LoginPage';
 import HelpCenterPage from './components/pages/HelpCenterPage';
 import SecretViewerPage from './components/pages/SecretViewerPage';
 import { useAuth, useAdmin } from './lib/hooks';
 import { usePermissions } from './hooks/usePermissions';
 import { isSystemAdminSession } from './lib/beta-admin-bypass';
+import { useOnboardingStatus } from './hooks/useOnboardingStatus';
+import { getModuleConfig, type PlatformModules } from './lib/module-config';
 import { AuthProvider } from './lib/context/AuthContext';
 import { SidebarProvider } from './lib/context/SidebarContext';
 import { WorkspaceProvider } from './lib/context/WorkspaceContext';
@@ -59,6 +62,44 @@ function AdminRoute({ children }: { children: ReactNode }) {
     return <Navigate to="/dashboard" replace />;
   }
 
+  return <>{children}</>;
+}
+
+function OnboardingGate({ children }: { children: ReactNode }) {
+  const { isAdmin, checking } = useAdmin();
+  const { role, userProfile, loading } = usePermissions();
+  const { status, loading: onboardingLoading } = useOnboardingStatus();
+  const isSystemAdmin = isSystemAdminSession(isAdmin, userProfile, role);
+
+  if (checking || loading || onboardingLoading) {
+    return (
+      <div className="h-full w-full flex items-center justify-center p-20 bg-background">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
+  if (isSystemAdmin && status && !status.isInitialized) {
+    return <Navigate to="/onboarding" replace />;
+  }
+
+  return <>{children}</>;
+}
+
+function ModuleRoute({
+  module,
+  children,
+}: {
+  module: keyof Omit<PlatformModules, 'tickets'>;
+  children: ReactNode;
+}) {
+  const { isAdmin } = useAdmin();
+  const { role, userProfile } = usePermissions();
+  const isSystemAdmin = isSystemAdminSession(isAdmin, userProfile, role);
+  const flags = getModuleConfig().platformModules;
+  if (!flags[module] && !isSystemAdmin) {
+    return <Navigate to="/dashboard" replace />;
+  }
   return <>{children}</>;
 }
 
@@ -102,16 +143,25 @@ function AppRoutes() {
                 {!user ? (
                   <Route path="*" element={<LoginPage />} />
                 ) : (
-                  <Route path="/" element={<MainLayout />}>
+                  <>
+                    <Route path="/onboarding" element={<AdminRoute><OnboardingWizardPage /></AdminRoute>} />
+                    <Route
+                      path="/"
+                      element={
+                        <OnboardingGate>
+                          <MainLayout />
+                        </OnboardingGate>
+                      }
+                    >
                     <Route index element={<Navigate to="/dashboard" replace />} />
                     <Route path="dashboard" element={<DashboardPage />} />
                     <Route path="tickets" element={<TicketsPage />} />
                     <Route path="tickets/:ticketId" element={<TicketsPage />} />
                     <Route path="customers" element={<CustomersPage />} />
-                    <Route path="kb" element={<KBPage />} />
+                    <Route path="kb" element={<ModuleRoute module="geistKB"><KBPage /></ModuleRoute>} />
                     <Route path="migrator" element={<GeistDeskMigratorPage />} />
-                    <Route path="vault" element={<VaultPage />} />
-                    <Route path="credentials" element={<CredentialVaultPage />} />
+                    <Route path="vault" element={<ModuleRoute module="geistExchange"><VaultPage /></ModuleRoute>} />
+                    <Route path="credentials" element={<ModuleRoute module="geistVault"><CredentialVaultPage /></ModuleRoute>} />
                     <Route path="insights" element={<InsightsPage />} />
                     <Route path="audit" element={<AdminRoute><AuditLogPage /></AdminRoute>} />
                     <Route path="settings" element={<SettingsPage />} />
@@ -133,7 +183,8 @@ function AppRoutes() {
                     <Route path="admin/import" element={<AdminRoute><AdminImportPage /></AdminRoute>} />
                     <Route path="email-channels" element={<EmailChannelsPage />} />
                     <Route path="*" element={<Navigate to="/tickets" replace />} />
-                  </Route>
+                    </Route>
+                  </>
                 )}
               </Routes>
             <Toaster />

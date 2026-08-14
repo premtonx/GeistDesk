@@ -112,7 +112,40 @@ export interface ExchangeWorkspaceSettings {
   storageQuotaGb: number;
 }
 
+/** First-run / Day-0 platform module feature flags (sidebar + route guards). */
+export interface PlatformModules {
+  /** Core helpdesk — always on. */
+  tickets: true;
+  geistKB: boolean;
+  geistVault: boolean;
+  geistExchange: boolean;
+}
+
+export const DEFAULT_PLATFORM_MODULES: PlatformModules = {
+  tickets: true,
+  geistKB: true,
+  geistVault: true,
+  geistExchange: true,
+};
+
+export function normalizePlatformModules(
+  raw: Partial<PlatformModules> | Record<string, unknown> | undefined,
+): PlatformModules {
+  const source = (raw ?? {}) as Partial<PlatformModules>;
+  return {
+    tickets: true,
+    geistKB: source.geistKB !== false,
+    geistVault: source.geistVault !== false,
+    geistExchange: source.geistExchange !== false,
+  };
+}
+
 export interface ModuleConfig {
+  /** Day-0 wizard completed. Missing on legacy deploys is treated as true at boot. */
+  is_initialized: boolean;
+  initializedAt?: string;
+  initializedBy?: string;
+  platformModules: PlatformModules;
   polyglotEnabled: boolean;
   languages: PolyglotLanguage[];
   polyglot: PolyglotBridgeSettings;
@@ -136,7 +169,9 @@ export interface ModuleConfig {
   exchangeSettings: ExchangeWorkspaceSettings;
 }
 
-const DEFAULT_CONFIG: ModuleConfig = {
+export const DEFAULT_MODULE_CONFIG: ModuleConfig = {
+  is_initialized: false,
+  platformModules: { ...DEFAULT_PLATFORM_MODULES },
   polyglotEnabled: true,
   languages: DEFAULT_SUPPORTED_LANGUAGES.map((entry) => ({ ...entry })),
   polyglot: { ...DEFAULT_POLYGLOT_BRIDGE_SETTINGS, customDictionary: {} },
@@ -199,28 +234,33 @@ function inferIsoCodeFromLanguage(lang: string): string {
 export function normalizeModuleConfig(parsed: Partial<ModuleConfig> | Record<string, unknown>): ModuleConfig {
   const source = parsed as Partial<ModuleConfig>;
   const polyglotRaw = (source.polyglot ?? {}) as Partial<PolyglotBridgeSettings>;
+  const initializedRaw = (source as { is_initialized?: unknown }).is_initialized;
 
   return {
-    ...DEFAULT_CONFIG,
+    ...DEFAULT_MODULE_CONFIG,
     ...source,
-    ai: DEFAULT_CONFIG.ai,
+    is_initialized: initializedRaw === true,
+    platformModules: normalizePlatformModules(
+      source.platformModules ?? (source as { modules?: PlatformModules }).modules,
+    ),
+    ai: DEFAULT_MODULE_CONFIG.ai,
     email: {
-      ...DEFAULT_CONFIG.email,
+      ...DEFAULT_MODULE_CONFIG.email,
       ...(source.email || {})
     },
-    languages: (source.languages || DEFAULT_CONFIG.languages).map((lang: PolyglotLanguage & { isoCode?: string }) => ({
+    languages: (source.languages || DEFAULT_MODULE_CONFIG.languages).map((lang: PolyglotLanguage & { isoCode?: string }) => ({
       lang: lang.lang,
       isoCode: lang.isoCode || inferIsoCodeFromLanguage(lang.lang),
       enabled: lang.enabled ?? true,
       flagCode: lang.flagCode || inferIsoCodeFromLanguage(lang.lang),
     })),
     polyglot: normalizePolyglotBridgeSettings(polyglotRaw),
-    ssoDomains: Array.isArray(source.ssoDomains) ? source.ssoDomains : DEFAULT_CONFIG.ssoDomains,
+    ssoDomains: Array.isArray(source.ssoDomains) ? source.ssoDomains : DEFAULT_MODULE_CONFIG.ssoDomains,
     exchangeCustomTemplates: Array.isArray(source.exchangeCustomTemplates)
       ? source.exchangeCustomTemplates
-      : DEFAULT_CONFIG.exchangeCustomTemplates,
+      : DEFAULT_MODULE_CONFIG.exchangeCustomTemplates,
     exchangeSettings: {
-      ...DEFAULT_CONFIG.exchangeSettings,
+      ...DEFAULT_MODULE_CONFIG.exchangeSettings,
       ...(source.exchangeSettings ?? {}),
     },
   };
@@ -276,15 +316,15 @@ export function applyModuleConfigToStorage(config: ModuleConfig): void {
 
 export const getModuleConfig = (): ModuleConfig => {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-    return DEFAULT_CONFIG;
+    return DEFAULT_MODULE_CONFIG;
   }
   const saved = localStorage.getItem('geistdesk_module_config');
-  if (!saved) return DEFAULT_CONFIG;
+  if (!saved) return DEFAULT_MODULE_CONFIG;
   try {
     const parsed = JSON.parse(saved);
     return normalizeModuleConfig(parsed);
   } catch {
-    return DEFAULT_CONFIG;
+    return DEFAULT_MODULE_CONFIG;
   }
 };
 
@@ -293,7 +333,7 @@ export const getModuleConfig = (): ModuleConfig => {
  * Called on login so every admin/operator session receives the latest workspace settings.
  */
 export async function syncModuleConfigFromServer(isAdmin = false): Promise<ModuleConfig> {
-  if (typeof window === 'undefined') return DEFAULT_CONFIG;
+  if (typeof window === 'undefined') return DEFAULT_MODULE_CONFIG;
 
   try {
     const res = await fetch('/api/module-config', {
@@ -314,7 +354,7 @@ export async function syncModuleConfigFromServer(isAdmin = false): Promise<Modul
 
     const merged = normalizeModuleConfig(
       isAdmin
-        ? { ...DEFAULT_CONFIG, ...remote, ...migratedLocal }
+        ? { ...DEFAULT_MODULE_CONFIG, ...remote, ...migratedLocal }
         : {
             ...migratedLocal,
             ...remote,

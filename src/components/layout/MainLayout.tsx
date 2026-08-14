@@ -67,7 +67,7 @@ import { Ticket as TicketType, Customer } from '../../types';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { GeistDeskLogo } from '../ui/GeistDeskLogo';
 import { FlagIcon } from '../ui/FlagIcon';
-import { syncModuleConfigFromServer } from '../../lib/module-config';
+import { syncModuleConfigFromServer, getModuleConfig } from '../../lib/module-config';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', key: 'dashboard' },
@@ -89,8 +89,20 @@ export default function MainLayout() {
 
   const isSystemAdmin = isSystemAdminSession(isAdmin, userProfile, role);
 
+  const [moduleFlags, setModuleFlags] = useState(() => getModuleConfig().platformModules);
+
+  useEffect(() => {
+    const sync = () => setModuleFlags(getModuleConfig().platformModules);
+    window.addEventListener('module-config-changed', sync);
+    return () => window.removeEventListener('module-config-changed', sync);
+  }, []);
+
   const visibleNavItems = useMemo(() => {
     return navItems.filter((item) => {
+      if (item.key === 'geistKB' && !moduleFlags.geistKB && !isSystemAdmin) return false;
+      if (item.key === 'geistVault' && !moduleFlags.geistVault && !isSystemAdmin) return false;
+      if (item.key === 'geistExchange' && !moduleFlags.geistExchange && !isSystemAdmin) return false;
+
       // Admin elements require system admin status
       if (item.path.startsWith('/admin') || item.path === '/audit') {
         return isSystemAdmin;
@@ -113,7 +125,7 @@ export default function MainLayout() {
       
       return true;
     });
-  }, [isSystemAdmin, hasPermission, userProfile]);
+  }, [isSystemAdmin, hasPermission, userProfile, moduleFlags]);
 
   const location = useLocation();
   const hasLocalLeftCreateButton = location.pathname.startsWith('/tickets') || 

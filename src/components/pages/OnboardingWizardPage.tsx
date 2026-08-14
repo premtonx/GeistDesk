@@ -1,0 +1,660 @@
+/**
+ * First-run configuration wizard — Day-0 setup at /onboarding.
+ */
+
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import axios from 'axios';
+import {
+  ArrowLeft,
+  ArrowRight,
+  BookOpen,
+  CheckCircle2,
+  Cloud,
+  KeyRound,
+  Loader2,
+  Lock,
+  Mail,
+  Radio,
+  Server,
+  ShieldCheck,
+  Sparkles,
+  Ticket,
+  UploadCloud,
+  XCircle,
+} from 'lucide-react';
+import { toast } from 'sonner';
+import { GeistDeskLogo } from '../ui/GeistDeskLogo';
+import { Button } from '../ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { Input } from '../ui/input';
+import { Label } from '../ui/label';
+import { Badge } from '../ui/badge';
+import { Progress } from '../ui/progress';
+import { cn } from '../../lib/utils';
+import { useAuth } from '../../lib/hooks';
+import { useOnboardingStatus } from '../../hooks/useOnboardingStatus';
+import { applyModuleConfigToStorage, getModuleConfig } from '../../lib/module-config';
+import { deriveMasterKey, buildVaultKeySalt } from '../../lib/credential-vault-crypto';
+
+type AiMode = 'sovereign' | 'cloud' | 'disabled';
+type CloudProvider = 'openai' | 'azure' | 'anthropic' | 'groq';
+type IngestChannel = 'webhook' | 'microsoft_graph' | 'imap';
+
+const STEPS = [
+  { id: 1, title: 'Admin Security', subtitle: 'Password & Vault key' },
+  { id: 2, title: 'AI Engine', subtitle: 'LLM & embeddings' },
+  { id: 3, title: 'Modules', subtitle: 'Feature flags' },
+  { id: 4, title: 'Ingestion', subtitle: 'Inbound mail' },
+];
+
+function passwordIssues(value: string): string[] {
+  const issues: string[] = [];
+  if (value.length < 12) issues.push('at least 12 characters');
+  if (!/[A-Z]/.test(value)) issues.push('an uppercase letter');
+  if (!/[a-z]/.test(value)) issues.push('a lowercase letter');
+  if (!/[0-9]/.test(value)) issues.push('a number');
+  return issues;
+}
+
+export default function OnboardingWizardPage() {
+  const navigate = useNavigate();
+  const { user } = useAuth();
+  const { status, loading, refresh } = useOnboardingStatus();
+
+  const [step, setStep] = useState(1);
+  const [submitting, setSubmitting] = useState(false);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [vaultPassphrase, setVaultPassphrase] = useState('');
+  const [confirmVault, setConfirmVault] = useState('');
+
+  const [aiMode, setAiMode] = useState<AiMode>('sovereign');
+  const [cloudProvider, setCloudProvider] = useState<CloudProvider>('openai');
+  const [endpointUrl, setEndpointUrl] = useState('http://ollama:11434');
+  const [apiKey, setApiKey] = useState('');
+  const [chatModel, setChatModel] = useState('llama3.1');
+  const [embeddingModel, setEmbeddingModel] = useState('nomic-embed-text');
+
+  const [geistKB, setGeistKB] = useState(true);
+  const [geistVault, setGeistVault] = useState(true);
+  const [geistExchange, setGeistExchange] = useState(true);
+
+  const [ingestChannel, setIngestChannel] = useState<IngestChannel>('webhook');
+  const [supportEmail, setSupportEmail] = useState('support@premtonx.cloud');
+  const [imapHost, setImapHost] = useState('');
+  const [imapUser, setImapUser] = useState('');
+  const [imapPassword, setImapPassword] = useState('');
+  const [graphTenantId, setGraphTenantId] = useState('');
+  const [graphClientId, setGraphClientId] = useState('');
+  const [graphClientSecret, setGraphClientSecret] = useState('');
+
+  useEffect(() => {
+    if (!status) return;
+    if (status.isInitialized) {
+      navigate('/dashboard', { replace: true });
+      return;
+    }
+    if (status.defaults?.ollamaEndpoint) setEndpointUrl(status.defaults.ollamaEndpoint);
+    if (status.defaults?.chatModel) setChatModel(status.defaults.chatModel);
+    if (status.defaults?.embeddingModel) setEmbeddingModel(status.defaults.embeddingModel);
+  }, [status, navigate]);
+
+  const pwdIssues = useMemo(() => passwordIssues(newPassword), [newPassword]);
+  const vaultIssues = useMemo(() => passwordIssues(vaultPassphrase), [vaultPassphrase]);
+
+  const canStep1 =
+    pwdIssues.length === 0 &&
+    newPassword === confirmPassword &&
+    vaultIssues.length === 0 &&
+    vaultPassphrase === confirmVault;
+
+  const canStep2 =
+    aiMode === 'disabled' ||
+    (aiMode === 'sovereign' && endpointUrl.trim().length > 0) ||
+    (aiMode === 'cloud' && apiKey.trim().length > 0 && (cloudProvider !== 'azure' || endpointUrl.trim().length > 0));
+
+  const progress = (step / STEPS.length) * 100;
+
+  const handleTestAi = async () => {
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const res = await axios.post(
+        '/api/admin/onboarding/test-ai',
+        {
+          mode: aiMode,
+          endpointUrl,
+          apiKey,
+          provider: cloudProvider,
+          chatModel,
+          embeddingModel,
+        },
+        { withCredentials: true, validateStatus: () => true },
+      );
+      const payload = res.data as { success?: boolean; message?: string };
+      setTestResult({
+        success: Boolean(payload.success),
+        message: payload.message || (payload.success ? 'Connected' : 'Connection failed'),
+      });
+    } catch (err) {
+      setTestResult({
+        success: false,
+        message: err instanceof Error ? err.message : 'Connection failed',
+      });
+    } finally {
+      setTesting(false);
+    }
+  };
+
+  const finish = async (skipIngest: boolean) => {
+    if (!canStep1) {
+      toast.error('Complete the admin password and vault passphrase first.');
+      setStep(1);
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await axios.post(
+        '/api/admin/onboarding/complete',
+        {
+          newPassword,
+          vaultPassphraseSet: geistVault && vaultPassphrase.length >= 12,
+          ai: {
+            mode: aiMode,
+            endpointUrl,
+            apiKey,
+            provider: cloudProvider,
+            chatModel,
+            embeddingModel,
+          },
+          modules: { geistKB, geistVault, geistExchange },
+          ingestion: skipIngest
+            ? { skip: true, channel: ingestChannel }
+            : {
+                skip: false,
+                channel: ingestChannel,
+                supportEmail,
+                imapHost,
+                imapUser,
+                imapPassword,
+                graphTenantId,
+                graphClientId,
+                graphClientSecret,
+              },
+        },
+        { withCredentials: true },
+      );
+
+      if (geistVault && vaultPassphrase && user?.uid) {
+        try {
+          await deriveMasterKey(vaultPassphrase, buildVaultKeySalt(user.uid));
+          await axios.post('/api/credential-vault/initialize', {}, { withCredentials: true });
+        } catch (vaultErr) {
+          console.warn('[Onboarding] Vault client init skipped:', vaultErr);
+        }
+      }
+
+      const next = getModuleConfig();
+      applyModuleConfigToStorage({
+        ...next,
+        is_initialized: true,
+        platformModules: {
+          tickets: true,
+          geistKB,
+          geistVault,
+          geistExchange,
+        },
+      });
+      window.dispatchEvent(new Event('module-config-changed'));
+
+      toast.success(
+        res.data?.channelId
+          ? 'GeistDesk is initialized. Primary inbound channel created.'
+          : 'GeistDesk is initialized. Welcome aboard.',
+      );
+      await refresh();
+      navigate('/dashboard', { replace: true });
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error ||
+        err?.response?.data?.details?.formErrors?.[0] ||
+        err?.message ||
+        'Failed to complete onboarding';
+      toast.error(String(message));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-muted">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-50 via-background to-muted">
+      <div className="mx-auto max-w-3xl px-4 py-10">
+        <div className="mb-8 flex items-center gap-3">
+            <GeistDeskLogo size="xs" showText={true} />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">Day-0 setup</p>
+            <h1 className="text-2xl font-semibold tracking-tight">First-Run Configuration</h1>
+          </div>
+        </div>
+
+        <div className="mb-6 space-y-2">
+          <div className="flex justify-between text-xs font-medium text-muted-foreground">
+            {STEPS.map((s) => (
+              <span key={s.id} className={cn(step === s.id && 'text-foreground')}>
+                {s.id}. {s.title}
+              </span>
+            ))}
+          </div>
+          <Progress value={progress} className="h-2" />
+        </div>
+
+        {step === 1 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                Admin Security & Master Vault Key
+              </CardTitle>
+              <CardDescription>
+                Rotate the initial administrator password and set the zero-knowledge GeistVault master passphrase.
+                The vault passphrase never leaves this browser.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New administrator password</Label>
+                <Input
+                  id="new-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+                {newPassword && pwdIssues.length > 0 && (
+                  <p className="text-xs text-destructive">Needs {pwdIssues.join(', ')}.</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="confirm-password">Confirm password</Label>
+                <Input
+                  id="confirm-password"
+                  type="password"
+                  autoComplete="new-password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                />
+                {confirmPassword && confirmPassword !== newPassword && (
+                  <p className="text-xs text-destructive">Passwords do not match.</p>
+                )}
+              </div>
+              <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
+                <div className="flex items-center gap-2 text-sm font-medium">
+                  <KeyRound className="h-4 w-4" />
+                  GeistVault master passphrase
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Used only in-browser (Argon2id → AES-256-GCM). If you lose it, vault ciphertext cannot be recovered.
+                </p>
+                <div className="space-y-2">
+                  <Label htmlFor="vault-pass">Master passphrase</Label>
+                  <Input
+                    id="vault-pass"
+                    type="password"
+                    value={vaultPassphrase}
+                    onChange={(e) => setVaultPassphrase(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="vault-pass-2">Confirm passphrase</Label>
+                  <Input
+                    id="vault-pass-2"
+                    type="password"
+                    value={confirmVault}
+                    onChange={(e) => setConfirmVault(e.target.value)}
+                  />
+                </div>
+                {vaultPassphrase && vaultIssues.length > 0 && (
+                  <p className="text-xs text-destructive">Passphrase needs {vaultIssues.join(', ')}.</p>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {step === 2 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Sparkles className="h-5 w-5 text-blue-600" />
+                AI & LLM Engine
+              </CardTitle>
+              <CardDescription>
+                Choose a sovereign local engine, a cloud API, or rules-only mode without an LLM.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 sm:grid-cols-3">
+                {(
+                  [
+                    { id: 'sovereign' as const, icon: Server, title: '100% Sovereign', body: 'Local Ollama' },
+                    { id: 'cloud' as const, icon: Cloud, title: 'Cloud API', body: 'OpenAI / Azure / Anthropic / Groq' },
+                    { id: 'disabled' as const, icon: Radio, title: 'Disable AI', body: 'Rules only' },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => {
+                      setAiMode(opt.id);
+                      setTestResult(null);
+                    }}
+                    className={cn(
+                      'rounded-xl border p-4 text-left transition hover:border-primary/50',
+                      aiMode === opt.id && 'border-primary bg-primary/5 ring-1 ring-primary/30',
+                    )}
+                  >
+                    <opt.icon className="mb-2 h-5 w-5" />
+                    <div className="font-medium">{opt.title}</div>
+                    <div className="text-xs text-muted-foreground">{opt.body}</div>
+                  </button>
+                ))}
+              </div>
+
+              {aiMode === 'sovereign' && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>Ollama host</Label>
+                    <Input
+                      value={endpointUrl}
+                      onChange={(e) => setEndpointUrl(e.target.value)}
+                      placeholder="http://ollama:11434"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Chat model</Label>
+                    <Input value={chatModel} onChange={(e) => setChatModel(e.target.value)} placeholder="llama3.1" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Embedding model (pgvector RAG)</Label>
+                    <Input
+                      value={embeddingModel}
+                      onChange={(e) => setEmbeddingModel(e.target.value)}
+                      placeholder="nomic-embed-text"
+                    />
+                  </div>
+                </div>
+              )}
+
+              {aiMode === 'cloud' && (
+                <div className="space-y-3">
+                  <div className="flex flex-wrap gap-2">
+                    {(['openai', 'azure', 'anthropic', 'groq'] as const).map((p) => (
+                      <Button
+                        key={p}
+                        type="button"
+                        size="sm"
+                        variant={cloudProvider === p ? 'default' : 'outline'}
+                        onClick={() => setCloudProvider(p)}
+                      >
+                        {p === 'openai' ? 'OpenAI' : p === 'azure' ? 'Azure' : p === 'anthropic' ? 'Anthropic' : 'Groq'}
+                      </Button>
+                    ))}
+                  </div>
+                  <div className="space-y-2">
+                    <Label>API key</Label>
+                    <Input
+                      type="password"
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                      placeholder="sk-… or azure/anthropic key"
+                    />
+                  </div>
+                  {cloudProvider === 'azure' && (
+                    <div className="space-y-2">
+                      <Label>Azure resource endpoint</Label>
+                      <Input
+                        value={endpointUrl}
+                        onChange={(e) => setEndpointUrl(e.target.value)}
+                        placeholder="https://YOUR-RESOURCE.openai.azure.com"
+                      />
+                    </div>
+                  )}
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label>Chat model</Label>
+                      <Input
+                        value={chatModel}
+                        onChange={(e) => setChatModel(e.target.value)}
+                        placeholder={cloudProvider === 'anthropic' ? 'claude-sonnet-4-5' : 'gpt-4o-mini'}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Embedding model</Label>
+                      <Input
+                        value={embeddingModel}
+                        onChange={(e) => setEmbeddingModel(e.target.value)}
+                        placeholder="text-embedding-3-small"
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {aiMode !== 'disabled' && (
+                <div className="flex items-center gap-3">
+                  <Button type="button" variant="outline" onClick={() => void handleTestAi()} disabled={testing}>
+                    {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Test Connection'}
+                  </Button>
+                  {testResult && (
+                    <Badge
+                      variant={testResult.success ? 'default' : 'destructive'}
+                      className={cn(testResult.success && 'bg-emerald-600 text-white')}
+                    >
+                      {testResult.success ? (
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      ) : (
+                        <XCircle className="h-3.5 w-3.5" />
+                      )}
+                      {testResult.message}
+                    </Badge>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        {step === 3 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Modular Activation</CardTitle>
+              <CardDescription>
+                GeistDesk Tickets stays on. Disable other products to hide them from the sidebar for operators.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="grid gap-3 sm:grid-cols-2">
+              <ModuleToggle
+                locked
+                active
+                icon={Ticket}
+                title="GeistDesk Tickets"
+                body="Core helpdesk — permanently active."
+              />
+              <ModuleToggle
+                active={geistKB}
+                onToggle={() => setGeistKB((v) => !v)}
+                icon={BookOpen}
+                title="GeistKB"
+                body="Knowledge base & RAG indexing."
+              />
+              <ModuleToggle
+                active={geistVault}
+                onToggle={() => setGeistVault((v) => !v)}
+                icon={Lock}
+                title="GeistVault"
+                body="Zero-knowledge team credential vault."
+              />
+              <ModuleToggle
+                active={geistExchange}
+                onToggle={() => setGeistExchange((v) => !v)}
+                icon={UploadCloud}
+                title="GeistExchange"
+                body="Secure file exchange & webhooks."
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {step === 4 && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Mail className="h-5 w-5" />
+                Ingestion Setup
+              </CardTitle>
+              <CardDescription>
+                Pick a default inbound channel, or skip and configure later in Admin Hub → Email Channels.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3">
+                {(
+                  [
+                    { id: 'webhook' as const, title: 'E-Mail-Weiterleitung (Webhook)', body: 'Forward mail to a unique GeistDesk address.' },
+                    { id: 'microsoft_graph' as const, title: 'Microsoft Graph API', body: 'Connect Microsoft 365 mailbox via Graph.' },
+                    { id: 'imap' as const, title: 'IMAP (OAuth2 / Basic)', body: 'Poll a mailbox over IMAP.' },
+                  ] as const
+                ).map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => setIngestChannel(opt.id)}
+                    className={cn(
+                      'rounded-xl border p-4 text-left transition hover:border-primary/50',
+                      ingestChannel === opt.id && 'border-primary bg-primary/5 ring-1 ring-primary/30',
+                    )}
+                  >
+                    <div className="font-medium">{opt.title}</div>
+                    <div className="text-xs text-muted-foreground">{opt.body}</div>
+                  </button>
+                ))}
+              </div>
+              <div className="space-y-2">
+                <Label>Support email</Label>
+                <Input value={supportEmail} onChange={(e) => setSupportEmail(e.target.value)} />
+              </div>
+              {ingestChannel === 'imap' && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-2 sm:col-span-2">
+                    <Label>IMAP host</Label>
+                    <Input value={imapHost} onChange={(e) => setImapHost(e.target.value)} placeholder="imap.example.com" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>IMAP user</Label>
+                    <Input value={imapUser} onChange={(e) => setImapUser(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>IMAP password</Label>
+                    <Input type="password" value={imapPassword} onChange={(e) => setImapPassword(e.target.value)} />
+                  </div>
+                </div>
+              )}
+              {ingestChannel === 'microsoft_graph' && (
+                <div className="grid gap-3">
+                  <div className="space-y-2">
+                    <Label>Directory (tenant) ID</Label>
+                    <Input value={graphTenantId} onChange={(e) => setGraphTenantId(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Application (client) ID</Label>
+                    <Input value={graphClientId} onChange={(e) => setGraphClientId(e.target.value)} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Client secret</Label>
+                    <Input
+                      type="password"
+                      value={graphClientSecret}
+                      onChange={(e) => setGraphClientSecret(e.target.value)}
+                    />
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
+
+        <div className="mt-6 flex items-center justify-between">
+          <Button type="button" variant="ghost" disabled={step === 1 || submitting} onClick={() => setStep((s) => s - 1)}>
+            <ArrowLeft className="h-4 w-4" />
+            Back
+          </Button>
+          {step < 4 ? (
+            <Button
+              type="button"
+              disabled={(step === 1 && !canStep1) || (step === 2 && !canStep2)}
+              onClick={() => setStep((s) => s + 1)}
+            >
+              Continue
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          ) : (
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" disabled={submitting} onClick={() => void finish(true)}>
+                Skip for now, configure later in Admin-Hub
+              </Button>
+              <Button type="button" disabled={submitting} onClick={() => void finish(false)}>
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Finish setup'}
+              </Button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ModuleToggle(props: {
+  active: boolean;
+  locked?: boolean;
+  icon: typeof Ticket;
+  title: string;
+  body: string;
+  onToggle?: () => void;
+}) {
+  const Icon = props.icon;
+  return (
+    <button
+      type="button"
+      disabled={props.locked}
+      onClick={props.onToggle}
+      className={cn(
+        'rounded-xl border p-4 text-left transition',
+        props.active ? 'border-primary bg-primary/5 ring-1 ring-primary/20' : 'opacity-70',
+        props.locked && 'cursor-default',
+      )}
+    >
+      <div className="mb-2 flex items-center justify-between">
+        <Icon className="h-5 w-5" />
+        {props.locked ? (
+          <Badge variant="secondary">Core</Badge>
+        ) : (
+          <Badge variant={props.active ? 'default' : 'outline'}>{props.active ? 'On' : 'Off'}</Badge>
+        )}
+      </div>
+      <div className="font-medium">{props.title}</div>
+      <p className="text-xs text-muted-foreground">{props.body}</p>
+    </button>
+  );
+}

@@ -39,6 +39,8 @@ import emailChannelRoutes from "./src/routes/emailChannelRoutes.js";
 import mailDomainRoutes from "./src/routes/mailDomainRoutes.js";
 import vectorRoutes from "./src/routes/vectorRoutes.js";
 import importRoutes from "./src/routes/importRoutes.js";
+import onboardingRoutes from "./src/routes/onboardingRoutes.js";
+import { ensureOnboardingState } from "./src/lib/onboarding-service.js";
 import {
   handleKnowledgeDocumentMutation,
   startVectorQueueWorker,
@@ -183,6 +185,14 @@ console.log("Server process starting...");
 async function startServer() {
   console.log("Initializing Express app...");
   await initDb();
+  try {
+    const boot = await ensureOnboardingState();
+    console.log(
+      `[Onboarding] is_initialized=${boot.isInitialized} pgvector_probe_pending modules=${JSON.stringify(boot.modules)}`,
+    );
+  } catch (onboardingErr: any) {
+    console.warn('[Onboarding] Failed to ensure initialization flag:', onboardingErr?.message || onboardingErr);
+  }
   if (IS_PROD) {
     try {
       assertVaultEncryptionConfigured();
@@ -511,6 +521,7 @@ async function startServer() {
   });
 
   // Mount Admin User Management Router
+  app.use("/api/admin/onboarding", onboardingRoutes);
   app.use("/api/admin", adminRoutes);
   app.use("/api/admin/import", importRoutes);
   app.use("/api/ai", aiRoutes);
