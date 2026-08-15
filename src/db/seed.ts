@@ -163,7 +163,7 @@ async function main() {
       console.log("[seed] Seeded module_config/global with is_initialized=false (First-Run Wizard required).");
     }
     if (platform.vaultFolders > 0) {
-      console.log(`[seed] Upserted ${platform.vaultFolders} default vault_folders.`);
+      console.log(`[seed] Upserted ${platform.vaultFolders} empty default vault_folders (no secrets).`);
     }
     if (platform.promptTemplates > 0) {
       console.log(`[seed] Inserted ${platform.promptTemplates} German ai_prompt_templates.`);

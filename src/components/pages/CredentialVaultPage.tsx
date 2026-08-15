@@ -114,7 +114,7 @@ import { GeistVaultEmergency } from './geistvault/GeistVaultEmergency';
 import { GeistVaultAccessRequests } from './geistvault/GeistVaultAccessRequests';
 
 // Redesigned high-fidelity subcomponents
-import { SEEDED_CREDENTIALS, MOCK_CHROME_EXTENSION } from './geistvault/DefaultData';
+import { MOCK_CHROME_EXTENSION, SHOWCASE_SEED_CATEGORY_NAMES, SHOWCASE_SEED_LABELS } from './geistvault/DefaultData';
 import { CredentialDrawer } from './geistvault/CredentialDrawer';
 import { VaultPageHeader } from '../vault/VaultPageHeader';
 import { VaultKpiCards } from '../vault/VaultKpiCards';
@@ -352,33 +352,6 @@ export default function CredentialVaultPage() {
   const [newCatName, setNewCatName] = useState('');
   const [newCatIcon, setNewCatIcon] = useState('layers');
 
-  const seedDefaultCredentials = async (vaultKey: Uint8Array): Promise<{ credentials: Credential[]; categories: CustomCategory[] }> => {
-    const defaultCats: CustomCategory[] = [
-      { name: 'Kubernetes Nodes', slug: 'k8s', icon: 'server', vaultId: PERSONAL_VAULT_SLUG },
-      { name: 'Slack Workspaces', slug: 'slack', icon: 'layers', vaultId: PERSONAL_VAULT_SLUG },
-    ];
-    const seeded: Credential[] = [];
-    for (const item of SEEDED_CREDENTIALS) {
-      const encryptedPassword = await encryptData(item.plainPass, vaultKey);
-      seeded.push({
-        id: crypto.randomUUID(),
-        type: item.type,
-        label: item.label,
-        username: item.username,
-        encryptedPassword,
-        host: item.host,
-        notes: item.notes,
-        updatedAt: Date.now() - item.offsetHours * 3600 * 1000,
-        lastModifiedBy: item.lastModifiedBy,
-        favorite: item.favorite,
-        deleted: false,
-        vaultId: item.vaultId || PERSONAL_VAULT_SLUG,
-      });
-    }
-    logAudit({ module: 'credentials', action: 'vault_seeded', details: { source: 'high_fidelity_screenshot_data' } });
-    return { credentials: seeded, categories: defaultCats };
-  };
-
   const hydrateVaultFromServer = async (masterKey: Uint8Array) => {
     if (!user?.uid || !user.email) {
       throw new Error('Authenticated user identity is required to unlock the vault.');
@@ -424,18 +397,28 @@ export default function CredentialVaultPage() {
       let mergedCredentials = remoteCredentials;
       let mergedCategories = remoteCategories;
 
-      if (mergedCredentials.length === 0) {
-        const seeded = await seedDefaultCredentials(personalFolderResult.vaultKey);
-        mergedCredentials = seeded.credentials;
-        mergedCategories = seeded.categories;
-        personalFolder = await persistFolder(
-          personalFolder,
-          mergedCredentials,
-          mergedCategories,
-          personalFolderResult.vaultKey,
-        );
-        folders = folders.map((f) => (f.id === personalFolder.id ? personalFolder : f));
-        vaultKeys.set(personalFolder.slug, personalFolderResult.vaultKey);
+      // Never invent demo secrets. Strip leftover showcase rows from older builds
+      // unless showcase login is explicitly enabled.
+      if (!isDemoLoginEnabled()) {
+        const showcaseLabels = new Set(SHOWCASE_SEED_LABELS);
+        const showcaseCats = new Set(SHOWCASE_SEED_CATEGORY_NAMES);
+        const cleanedCredentials = mergedCredentials.filter((item) => !showcaseLabels.has(item.label));
+        const cleanedCategories = mergedCategories.filter((cat) => !showcaseCats.has(cat.name));
+        if (
+          cleanedCredentials.length !== mergedCredentials.length ||
+          cleanedCategories.length !== mergedCategories.length
+        ) {
+          mergedCredentials = cleanedCredentials;
+          mergedCategories = cleanedCategories;
+          personalFolder = await persistFolder(
+            personalFolder,
+            mergedCredentials,
+            mergedCategories,
+            personalFolderResult.vaultKey,
+          );
+          folders = folders.map((f) => (f.id === personalFolder.id ? personalFolder : f));
+          vaultKeys.set(personalFolder.slug, personalFolderResult.vaultKey);
+        }
       }
 
       setVaultFolders(folders);

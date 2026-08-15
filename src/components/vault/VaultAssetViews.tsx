@@ -141,8 +141,12 @@ export function VaultAssetViews({
   if (assets.length === 0) {
     return (
       <div className="rounded-2xl border border-slate-200/80 bg-white p-12 text-center">
-        <p className="text-sm font-semibold text-slate-700">{t('vault.noSecretsFound', 'No secrets found')}</p>
-        <p className="text-xs text-slate-400 mt-1">{t('vault.noSecretsHint', 'Create an entry or adjust filters to view assets.')}</p>
+        <p className="text-sm font-semibold text-slate-700">
+          {t('vault.noSecretsFound', 'Keine Tresor-Einträge vorhanden')}
+        </p>
+        <p className="text-xs text-slate-400 mt-1">
+          {t('vault.noSecretsHint', 'Erstellen Sie Ihren ersten Eintrag — es werden keine Beispieldaten angezeigt.')}
+        </p>
       </div>
     );
   }

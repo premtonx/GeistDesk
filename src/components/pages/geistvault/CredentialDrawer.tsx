@@ -25,7 +25,6 @@ import { motion } from 'motion/react';
 import { Button } from '../../ui/button';
 import { Badge } from '../../ui/badge';
 import { toast } from 'sonner';
-import { MOCK_AUDIT_LOGS } from './DefaultData';
 
 interface Credential {
   id?: number | string;
@@ -435,20 +434,9 @@ export function CredentialDrawer({
             </div>
             
             <div className="space-y-2 max-h-56 overflow-y-auto pr-1">
-              {MOCK_AUDIT_LOGS.map((log, index) => (
-                <div key={index} className="flex items-center justify-between p-2 rounded-lg bg-[#F8F9FA] border border-[#F1F3F4] text-[10px] shadow-3xs">
-                  <div>
-                    <div className="flex items-center gap-1 bg-white border border-[#E8F0FE] text-slate-700 font-bold px-1.5 py-0.5 rounded-md inline-block">
-                      {log.action}
-                    </div>
-                    <span className="ml-2 font-semibold text-slate-700">{log.user}</span>
-                  </div>
-                  <div className="text-right">
-                    <p className="text-[9px] font-mono text-slate-500">{log.date}</p>
-                    <p className="text-[8px] text-[#1A73E8]">IP: {log.ip} ({log.loc})</p>
-                  </div>
-                </div>
-              ))}
+              <p className="text-[11px] text-slate-400 font-medium px-1 py-3">
+                Noch keine Audit-Einträge für dieses Geheimnis.
+              </p>
             </div>
           </div>
         </div>
