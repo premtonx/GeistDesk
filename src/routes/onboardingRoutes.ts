@@ -1,23 +1,25 @@
 /**
  * Admin first-run onboarding API.
  *   GET  /api/admin/onboarding/status          — public (no secrets)
- *   POST /api/admin/onboarding/register-admin  — public only while uninitialized
- *   POST /api/admin/onboarding/test-ai         — public only while uninitialized
- *   POST /api/admin/onboarding/complete        — public only while uninitialized
+ *   POST /api/admin/onboarding/register-admin  — public only when no admin exists
+ *   POST /api/admin/onboarding/test-ai         — authenticated admin session
+ *   POST /api/admin/onboarding/complete        — authenticated admin session
  *
- * After is_initialized=true, mutations require an authenticated SYSTEM_ADMIN
- * and complete is rejected so the wizard cannot be replayed.
+ * After the first admin is written, register-admin is locked (409).
+ * After is_initialized=true, complete is rejected so the wizard cannot be replayed.
  */
 
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { authenticate, requireRole } from '../middleware/authMiddleware.js';
 import { authRateLimiter } from '../middleware/rate-limiters.js';
 import {
+  OnboardingAdminExistsError,
   OnboardingAlreadyCompleteError,
   completeOnboarding,
   completeOnboardingSchema,
   getOnboardingStatus,
-  needsFirstRun,
+  hasPrimaryAdmin,
+  loadModuleConfigDoc,
   registerAdminSchema,
   registerPrimaryAdmin,
   testAiConnection,
@@ -29,10 +31,36 @@ import { setSessionCookie } from '../lib/session-cookie.js';
 
 const router = Router();
 
-async function allowFirstRunOrAdmin(req: Request, res: Response, next: NextFunction) {
+/** Public only while no administrator row exists. */
+async function allowRegisterAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    if (await needsFirstRun()) {
-      return next();
+    if (await hasPrimaryAdmin()) {
+      return res.status(409).json({
+        error: 'An administrator already exists. Sign in at /login.',
+      });
+    }
+    const config = await loadModuleConfigDoc();
+    if (config?.is_initialized === true) {
+      return res.status(403).json({
+        error: 'GeistDesk is already initialized. Sign in at /login.',
+      });
+    }
+    return next();
+  } catch (err) {
+    return res.status(500).json({ error: safeErrorMessage(err, 'Failed to verify onboarding state') });
+  }
+}
+
+/**
+ * Steps 2–4 and complete require the session cookie issued by register-admin.
+ * If no admin exists yet, force the client through Step 1 first.
+ */
+async function requireWizardAdminSession(req: Request, res: Response, next: NextFunction) {
+  try {
+    if (!(await hasPrimaryAdmin())) {
+      return res.status(401).json({
+        error: 'Create the administrator account first.',
+      });
     }
     return authenticate(req, res, () => requireRole(['SYSTEM_ADMIN'])(req, res, next));
   } catch (err) {
@@ -52,7 +80,7 @@ router.get('/status', async (req: Request, res: Response) => {
 router.post(
   '/test-ai',
   authRateLimiter,
-  allowFirstRunOrAdmin,
+  requireWizardAdminSession,
   async (req: Request, res: Response) => {
     const parsed = testAiSchema.safeParse(req.body || {});
     if (!parsed.success) {
@@ -76,7 +104,7 @@ router.post(
 router.post(
   '/register-admin',
   authRateLimiter,
-  allowFirstRunOrAdmin,
+  allowRegisterAdmin,
   async (req: Request, res: Response) => {
     const parsed = registerAdminSchema.safeParse(req.body || {});
     if (!parsed.success) {
@@ -91,6 +119,9 @@ router.post(
       setSessionCookie(res, token);
       return res.status(201).json(result);
     } catch (err) {
+      if (err instanceof OnboardingAdminExistsError) {
+        return res.status(409).json({ error: err.message });
+      }
       if (err instanceof OnboardingAlreadyCompleteError) {
         return res.status(403).json({ error: err.message });
       }
@@ -103,7 +134,7 @@ router.post(
 router.post(
   '/complete',
   authRateLimiter,
-  allowFirstRunOrAdmin,
+  requireWizardAdminSession,
   async (req: Request, res: Response) => {
     const parsed = completeOnboardingSchema.safeParse(req.body || {});
     if (!parsed.success) {

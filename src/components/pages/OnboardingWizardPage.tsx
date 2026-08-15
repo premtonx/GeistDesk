@@ -131,6 +131,10 @@ export default function OnboardingWizardPage() {
       toast.error('Bitte Admin-Name, E-Mail, Passwort und Vault Master Key ausfüllen.');
       return;
     }
+    if (adminRegistered) {
+      setStep(2);
+      return;
+    }
     setSubmitting(true);
     try {
       const res = await axios.post(
@@ -687,7 +691,7 @@ export default function OnboardingWizardPage() {
               {submitting && step === 1 ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : step === 1 ? (
-                adminRegistered ? 'Aktualisieren & weiter' : 'Konto erstellen & weiter'
+                adminRegistered ? 'Weiter' : 'Konto erstellen & weiter'
               ) : (
                 'Continue'
               )}

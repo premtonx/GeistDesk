@@ -473,6 +473,13 @@ export class OnboardingAlreadyCompleteError extends Error {
   }
 }
 
+export class OnboardingAdminExistsError extends Error {
+  constructor() {
+    super('An administrator already exists. Sign in at /login.');
+    this.name = 'OnboardingAdminExistsError';
+  }
+}
+
 export interface OnboardingAdminUser {
   id: string;
   email: string;
@@ -482,9 +489,16 @@ export interface OnboardingAdminUser {
   tenantId: string;
 }
 
-async function assertFirstRunWritable(): Promise<void> {
+/** Reject as soon as any admin row exists — blocks mid-wizard takeovers. */
+async function assertNoAdminExists(): Promise<void> {
+  if (await hasPrimaryAdmin()) {
+    throw new OnboardingAdminExistsError();
+  }
+}
+
+async function assertNotInitialized(): Promise<void> {
   const config = await loadModuleConfigDoc();
-  if (config?.is_initialized === true && (await hasPrimaryAdmin())) {
+  if (config?.is_initialized === true) {
     throw new OnboardingAlreadyCompleteError();
   }
 }
@@ -549,7 +563,8 @@ export async function registerPrimaryAdmin(
   req: Request,
   input: RegisterAdminInput,
 ): Promise<{ success: true; user: OnboardingAdminUser; isInitialized: false }> {
-  await assertFirstRunWritable();
+  await assertNotInitialized();
+  await assertNoAdminExists();
   const { adminUser, userId } = await upsertPrimaryAdminUser({
     adminEmail: input.adminEmail,
     adminName: input.adminName,
@@ -597,12 +612,17 @@ export async function completeOnboarding(
   tenantId: string;
   user: OnboardingAdminUser;
 }> {
-  await assertFirstRunWritable();
+  await assertNotInitialized();
   const existing = (await loadModuleConfigDoc()) || emptyModuleConfig();
+
+  const userId = String(req.user?.id || '');
+  if (!userId) {
+    throw new Error('Authenticated administrator is required.');
+  }
 
   const cleanEmail = input.adminEmail.toLowerCase().trim();
   const adminName = input.adminName.trim();
-  const { id: userId, existing: existingUser } = await resolvePrimaryAdminId(cleanEmail);
+  const existingUser = ((await getDocDirect('users', userId)) || {}) as Record<string, unknown>;
 
   const tenantId =
     (typeof existingUser.tenantId === 'string' && existingUser.tenantId.trim()) ||
