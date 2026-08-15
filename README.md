@@ -98,9 +98,10 @@ Here is exactly how the database and demo data are prepared:
     *   **In Production**: Connect your live production database by setting the `DATABASE_URL` environment variables. The server will detect it instantly on startup, automatically execute the DDL table creation scripts, and connect smoothly.
 2.  **Zero-Configuration Table Generation**: On connection with Postgres, the system runs raw query commands creating the robust `geistdesk_documents` table and optimized `idx_geistdesk_documents_collection` indexes if they do not yet exist, removing manual SQL installation steps.
 
-### 💾 Demo Data & Admins Migration
-*   The system pre-packages default login identities and seed properties directly inside the DB schema.
-*   When moving to production, the root user and local assets saved in `/geistdesk_local_db.json` can be mirrored or directly seeded, ensuring no work is lost.
+### 💾 First-run wizard (no default password)
+*   Production boots stay uninitialized (`module_config.is_initialized=false`) with no fixture admin accounts.
+*   Opening `/` or `/login` routes to `/onboarding`, where the operator creates the primary administrator.
+*   Showcase demo users are seeded only when `ENABLE_DEMO_LOGIN=true` on a non-production runtime.
 
 ---
 

@@ -1,9 +1,9 @@
 // GeistDesk database seeding utility.
 //
-// Populates the `geistdesk_documents` PostgreSQL table with structural sample
-// data (users, tickets) using parameterized batch INSERTs. Passwords from the
-// dataset are hashed with Argon2id before insertion — plaintext is NEVER
-// written to the database.
+// Always stamps platform defaults (module_config.is_initialized=false on fresh
+// boots, vault folders, prompts). Fixture users/tickets from seed-data.json are
+// inserted only when ENABLE_DEMO_LOGIN=true on a non-production runtime.
+// Passwords are hashed with Argon2id — plaintext is NEVER written to the database.
 //
 // Usage:
 //   DATABASE_URL=postgres://... VAULT_ENCRYPTION_KEY=... npm run seed
@@ -18,6 +18,7 @@ import { initDb } from "../lib/postgres-backend.js";
 // (which ships no source files) can still run the seeder.
 import seedDatasetJson from "./seed-data.json";
 import { seedAllPlatformDefaults } from "./seed-platform-defaults.js";
+import { isDemoLoginEnabled } from "../lib/runtime-env.js";
 
 const { Pool } = pg;
 
@@ -114,27 +115,37 @@ async function main() {
     await initDb();
     await client.query(DDL);
 
-    // Hash passwords for user rows; never persist plaintext.
+    const seedDemoFixtures = isDemoLoginEnabled();
     const users = [];
-    for (const u of dataset.users) {
-      const { password, ...rest } = u;
-      const passwordHash = password ? await hashPassword(password) : undefined;
-      users.push({
-        ...rest,
-        ...(passwordHash ? { passwordHash } : {}),
-        createdAt: rest.createdAt || new Date().toISOString(),
-        updatedAt: new Date().toISOString()
-      });
+    const tickets = [];
+
+    if (seedDemoFixtures) {
+      // Hash passwords for showcase users; never persist plaintext.
+      for (const u of dataset.users) {
+        const { password, ...rest } = u;
+        const passwordHash = password ? await hashPassword(password) : undefined;
+        users.push({
+          ...rest,
+          ...(passwordHash ? { passwordHash } : {}),
+          createdAt: rest.createdAt || new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        });
+      }
+      for (const t of dataset.tickets) {
+        tickets.push({
+          ...t,
+          createdAt: t.createdAt || new Date().toISOString(),
+          updatedAt: t.updatedAt || new Date().toISOString()
+        });
+      }
+    } else {
+      console.log(
+        "[seed] Skipping demo users/tickets — ENABLE_DEMO_LOGIN is unset or this is a production runtime.",
+      );
     }
 
-    const tickets = dataset.tickets.map(t => ({
-      ...t,
-      createdAt: t.createdAt || new Date().toISOString(),
-      updatedAt: t.updatedAt || new Date().toISOString()
-    }));
-
     await client.query("BEGIN");
-    const purged = await purgeStaleDuplicateUsers(client, users);
+    const purged = seedDemoFixtures ? await purgeStaleDuplicateUsers(client, users) : 0;
     const u = await batchUpsert(client, "users", users);
     const k = await batchUpsert(client, "tickets", tickets);
     const platform = await seedAllPlatformDefaults(client);
@@ -143,7 +154,11 @@ async function main() {
     if (purged > 0) {
       console.log(`[seed] Purged ${purged} stale duplicate user row(s) sharing a seeded email.`);
     }
-    console.log(`[seed] Upserted ${u} users and ${k} tickets into geistdesk_documents.`);
+    if (seedDemoFixtures) {
+      console.log(`[seed] Upserted ${u} users and ${k} tickets into geistdesk_documents.`);
+    } else {
+      console.log("[seed] Fresh boot: no fixture users. Complete /onboarding to create the primary admin.");
+    }
     if (platform.moduleConfig) {
       console.log("[seed] Seeded module_config/global with is_initialized=false (First-Run Wizard required).");
     }
@@ -164,7 +179,7 @@ async function main() {
     console.log(
       `[seed] module_config.is_initialized=${initFlag.rows[0]?.is_initialized ?? '(missing)'}`,
     );
-    console.log("[seed] Done. Default seeded credentials are dev-only — rotate them immediately.");
+    console.log("[seed] Done. Production boots stay uninitialized until the first-run wizard completes.");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});
     console.error("[seed] Failed:", err);

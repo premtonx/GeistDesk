@@ -108,6 +108,12 @@ export class OAuthProvider {
   setCustomParameters(params: any) {}
 }
 
+/** Apply a server-issued session (cookie already set) to the client auth store. */
+export function applyAuthenticatedSession(payload: any) {
+  onSessionEstablished();
+  auth.updateUser(userFromServer(payload));
+}
+
 function userFromServer(payload: any): User {
   return {
     uid: payload.id || payload.uid,

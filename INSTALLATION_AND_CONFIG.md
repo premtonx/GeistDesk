@@ -100,11 +100,11 @@ docker compose down -v       # DESTROYS database volume — irreversible
 
 ### 2.1 Initial admin authentication
 
-1. Open `/login`.
-2. Sign in with a seeded admin account from `npm run seed:prod` (see seed output / `src/db/seed-data.json` for the pilot identity your image ships with), **or** create the first admin via your identity provider once SSO is wired.
-3. Immediately rotate the password under **User settings → Security** (or Admin Hub → Users → Set password).
+1. Open the root URL (`/`) or `/login`. A fresh instance (`module_config.is_initialized === false`) redirects to `/onboarding`.
+2. In Step 1 of the wizard, set the primary **Administrator email**, **full name**, and **password**. Completing the wizard creates that account and sets `is_initialized=true`.
+3. After initialization, `/onboarding` is locked and normal authentication via `/login` is enforced.
 
-> Production hardening: keep `BETA_AUTO_ADMIN=false`, `ALLOW_PUBLIC_REGISTRATION=false`, `VITE_DEMO_MODE=false`, `ENABLE_SANDBOX=false`.
+> Production hardening: keep `BETA_AUTO_ADMIN=false`, `ALLOW_PUBLIC_REGISTRATION=false`, `ENABLE_DEMO_LOGIN=false`, `VITE_ENABLE_DEMO_LOGIN=false`, `VITE_DEMO_MODE=false`, `ENABLE_SANDBOX=false`. Showcase demo login is refused in production even if those flags are set.
 
 ### 2.2 Navigate Admin Hub
 
@@ -228,7 +228,7 @@ OIDC_REDIRECT_URI=https://helpdesk.example.com/login
 - Server stores ciphertext + key wrappers only (`/api/credential-vault`).  
 - **Import:** Vault actions → Import (Chrome / Bitwarden / KeePass / 1Password / Vaultwarden).  
 - **Export:** Personal vault → Export (Chrome CSV, Bitwarden JSON, KeePass CSV) — local download only after master-password re-verify.  
-- Production tip: leave demo password autofill off (`VITE_DEMO_MODE=false`).
+- Production tip: leave showcase demo login off (`ENABLE_DEMO_LOGIN=false`). It is refused in production regardless.
 
 ### 4.4 GeistExchange
 

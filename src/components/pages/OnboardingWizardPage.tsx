@@ -36,13 +36,14 @@ import { useAuth } from '../../lib/hooks';
 import { useOnboardingStatus } from '../../hooks/useOnboardingStatus';
 import { applyModuleConfigToStorage, getModuleConfig } from '../../lib/module-config';
 import { deriveMasterKey, buildVaultKeySalt } from '../../lib/credential-vault-crypto';
+import { applyAuthenticatedSession } from '../../lib/firebase-custom-client';
 
 type AiMode = 'sovereign' | 'cloud' | 'disabled';
 type CloudProvider = 'openai' | 'azure' | 'anthropic' | 'groq';
 type IngestChannel = 'webhook' | 'microsoft_graph' | 'imap';
 
 const STEPS = [
-  { id: 1, title: 'Admin Security', subtitle: 'Password & Vault key' },
+  { id: 1, title: 'Administrator', subtitle: 'Account & Vault key' },
   { id: 2, title: 'AI Engine', subtitle: 'LLM & embeddings' },
   { id: 3, title: 'Modules', subtitle: 'Feature flags' },
   { id: 4, title: 'Ingestion', subtitle: 'Inbound mail' },
@@ -67,6 +68,8 @@ export default function OnboardingWizardPage() {
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
 
+  const [adminEmail, setAdminEmail] = useState('');
+  const [adminName, setAdminName] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [vaultPassphrase, setVaultPassphrase] = useState('');
@@ -84,7 +87,7 @@ export default function OnboardingWizardPage() {
   const [geistExchange, setGeistExchange] = useState(true);
 
   const [ingestChannel, setIngestChannel] = useState<IngestChannel>('webhook');
-  const [supportEmail, setSupportEmail] = useState('support@premtonx.cloud');
+  const [supportEmail, setSupportEmail] = useState('');
   const [imapHost, setImapHost] = useState('');
   const [imapUser, setImapUser] = useState('');
   const [imapPassword, setImapPassword] = useState('');
@@ -95,7 +98,7 @@ export default function OnboardingWizardPage() {
   useEffect(() => {
     if (!status) return;
     if (status.isInitialized) {
-      navigate('/dashboard', { replace: true });
+      navigate(user ? '/dashboard' : '/login', { replace: true });
       return;
     }
     if (status.defaults?.ollamaEndpoint) setEndpointUrl(status.defaults.ollamaEndpoint);
@@ -106,7 +109,10 @@ export default function OnboardingWizardPage() {
   const pwdIssues = useMemo(() => passwordIssues(newPassword), [newPassword]);
   const vaultIssues = useMemo(() => passwordIssues(vaultPassphrase), [vaultPassphrase]);
 
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail.trim());
   const canStep1 =
+    emailOk &&
+    adminName.trim().length > 0 &&
     pwdIssues.length === 0 &&
     newPassword === confirmPassword &&
     vaultIssues.length === 0 &&
@@ -152,7 +158,7 @@ export default function OnboardingWizardPage() {
 
   const finish = async (skipIngest: boolean) => {
     if (!canStep1) {
-      toast.error('Complete the admin password and vault passphrase first.');
+      toast.error('Complete the administrator account and vault passphrase first.');
       setStep(1);
       return;
     }
@@ -161,6 +167,8 @@ export default function OnboardingWizardPage() {
       const res = await axios.post(
         '/api/admin/onboarding/complete',
         {
+          adminEmail: adminEmail.trim(),
+          adminName: adminName.trim(),
           newPassword,
           vaultPassphraseSet: geistVault && vaultPassphrase.length >= 12,
           ai: {
@@ -177,7 +185,7 @@ export default function OnboardingWizardPage() {
             : {
                 skip: false,
                 channel: ingestChannel,
-                supportEmail,
+                supportEmail: supportEmail.trim() || adminEmail.trim(),
                 imapHost,
                 imapUser,
                 imapPassword,
@@ -189,9 +197,14 @@ export default function OnboardingWizardPage() {
         { withCredentials: true },
       );
 
-      if (geistVault && vaultPassphrase && user?.uid) {
+      const createdUser = res.data?.user;
+      if (createdUser) {
+        applyAuthenticatedSession(createdUser);
+      }
+      const uid = createdUser?.id || user?.uid;
+      if (geistVault && vaultPassphrase && uid) {
         try {
-          await deriveMasterKey(vaultPassphrase, buildVaultKeySalt(user.uid));
+          await deriveMasterKey(vaultPassphrase, buildVaultKeySalt(uid));
           await axios.post('/api/credential-vault/initialize', {}, { withCredentials: true });
         } catch (vaultErr) {
           console.warn('[Onboarding] Vault client init skipped:', vaultErr);
@@ -217,7 +230,7 @@ export default function OnboardingWizardPage() {
           : 'GeistDesk is initialized. Welcome aboard.',
       );
       await refresh();
-      navigate('/dashboard', { replace: true });
+      window.location.assign('/dashboard');
     } catch (err: any) {
       const message =
         err?.response?.data?.error ||
@@ -265,16 +278,43 @@ export default function OnboardingWizardPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-emerald-600" />
-                Admin Security & Master Vault Key
+                Primary Administrator
               </CardTitle>
               <CardDescription>
-                Rotate the initial administrator password and set the zero-knowledge GeistVault master passphrase.
-                The vault passphrase never leaves this browser.
+                Create the first administrator account for this instance, then set the zero-knowledge GeistVault
+                master passphrase. The vault passphrase never leaves this browser.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="admin-email">Administrator email</Label>
+                  <Input
+                    id="admin-email"
+                    type="email"
+                    autoComplete="username"
+                    value={adminEmail}
+                    onChange={(e) => setAdminEmail(e.target.value)}
+                    placeholder="admin@your-domain.eu"
+                  />
+                  {adminEmail && !emailOk && (
+                    <p className="text-xs text-destructive">Enter a valid email address.</p>
+                  )}
+                </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor="admin-name">Full name</Label>
+                  <Input
+                    id="admin-name"
+                    type="text"
+                    autoComplete="name"
+                    value={adminName}
+                    onChange={(e) => setAdminName(e.target.value)}
+                    placeholder="Ada Lovelace"
+                  />
+                </div>
+              </div>
               <div className="space-y-2">
-                <Label htmlFor="new-password">New administrator password</Label>
+                <Label htmlFor="new-password">Administrator password</Label>
                 <Input
                   id="new-password"
                   type="password"

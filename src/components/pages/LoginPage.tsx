@@ -46,6 +46,7 @@ import { GeistDeskLogo } from '../ui/GeistDeskLogo';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { cn } from '../../lib/utils';
 import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
+import { isDemoLoginEnabled } from '../../lib/runtime-env';
 
 const LOCAL_TEXTS = {
   de: {
@@ -285,8 +286,8 @@ export default function LoginPage() {
     });
   };
 
-  // One-click demo access — only available in development or when VITE_DEMO_MODE=true.
-  const isDemoMode = import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === 'true';
+  // Showcase demo login is an explicit non-production opt-in (ENABLE_DEMO_LOGIN).
+  const isDemoMode = isDemoLoginEnabled();
   const DEMO_EMAIL = 'demo@geistdesk.com';
   const DEMO_PASSWORD = 'GeistDeskDemo2026';
 

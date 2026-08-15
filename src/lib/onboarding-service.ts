@@ -5,7 +5,6 @@
 import { z } from 'zod';
 import {
   getDocDirect,
-  getDocsDirect,
   queryDb,
   setDocDirect,
   updateDocDirect,
@@ -65,6 +64,8 @@ export const testAiSchema = z.object({
 });
 
 export const completeOnboardingSchema = z.object({
+  adminEmail: z.string().email().max(320),
+  adminName: z.string().trim().min(1, 'Administrator name is required').max(200),
   newPassword: passwordSchema,
   vaultPassphraseSet: z.boolean().optional().default(false),
   ai: testAiSchema,
@@ -141,7 +142,7 @@ export async function ensureOnboardingState(): Promise<OnboardingStatus> {
       updatedAt: new Date().toISOString(),
     });
     console.log('[Onboarding] Fresh install detected — is_initialized=false');
-    return toStatus(fresh, false);
+    return toStatus(fresh);
   }
 
   // Undo the former boot heuristic that stamped true with initializedBy=legacy-migration
@@ -163,10 +164,10 @@ export async function ensureOnboardingState(): Promise<OnboardingStatus> {
           : '[Onboarding] module_config.is_initialized missing — defaulted to false',
       );
     }
-    return toStatus(normalizeModuleConfig({ ...existing, is_initialized: false }), false);
+    return toStatus(normalizeModuleConfig({ ...existing, is_initialized: false }));
   }
 
-  return toStatus(normalizeModuleConfig(existing), false);
+  return toStatus(normalizeModuleConfig(existing));
 }
 
 async function probePgvector(): Promise<boolean> {
@@ -178,13 +179,13 @@ async function probePgvector(): Promise<boolean> {
   }
 }
 
-function toStatus(config: ModuleConfig, isAdmin: boolean): OnboardingStatus {
+function toStatus(config: ModuleConfig): OnboardingStatus {
   const ollama = getOllamaEndpoint() || 'http://ollama:11434';
   return {
     isInitialized: config.is_initialized === true,
     initializedAt: config.initializedAt,
     initializedBy: config.initializedBy,
-    requiresOnboarding: isAdmin && config.is_initialized !== true,
+    requiresOnboarding: config.is_initialized !== true,
     modules: config.platformModules || DEFAULT_PLATFORM_MODULES,
     defaults: {
       ollamaEndpoint: ollama.replace(/\/v1\/?$/, ''),
@@ -198,10 +199,9 @@ function toStatus(config: ModuleConfig, isAdmin: boolean): OnboardingStatus {
   };
 }
 
-export async function getOnboardingStatus(req: Request): Promise<OnboardingStatus> {
-  const isAdmin = req.user?.role === 'SYSTEM_ADMIN';
+export async function getOnboardingStatus(_req?: Request): Promise<OnboardingStatus> {
   const config = (await loadModuleConfigDoc()) || emptyModuleConfig();
-  const status = toStatus(config, isAdmin);
+  const status = toStatus(config);
   status.health.pgvector = await probePgvector();
   return status;
 }
@@ -435,25 +435,70 @@ function mapIngestChannel(channel: OnboardingIngestChannel): EmailConnectionType
   return 'webhook';
 }
 
+export class OnboardingAlreadyCompleteError extends Error {
+  constructor() {
+    super('GeistDesk is already initialized. Sign in at /login.');
+    this.name = 'OnboardingAlreadyCompleteError';
+  }
+}
+
+export interface OnboardingAdminUser {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  is_admin: boolean;
+  tenantId: string;
+}
+
+async function resolvePrimaryAdminId(email: string): Promise<{ id: string; existing: Record<string, unknown> }> {
+  const found = await queryDb(
+    `SELECT id, data FROM geistdesk_documents
+      WHERE collection = 'users' AND lower(trim(data->>'email')) = $1
+      LIMIT 1`,
+    [email],
+  );
+  if (found.rows[0]?.id) {
+    const raw = found.rows[0].data;
+    const parsed =
+      raw == null
+        ? {}
+        : typeof raw === 'string'
+          ? (JSON.parse(raw) as Record<string, unknown>)
+          : (raw as Record<string, unknown>);
+    return { id: String(found.rows[0].id), existing: parsed };
+  }
+
+  const reserved = await getDocDirect('users', 'user-primary-admin');
+  if (!reserved) {
+    return { id: 'user-primary-admin', existing: {} };
+  }
+  return { id: `user-admin-${Date.now()}`, existing: {} };
+}
+
 export async function completeOnboarding(
   req: Request,
   input: CompleteOnboardingInput,
-): Promise<{ success: true; isInitialized: true; channelId?: string; tenantId: string }> {
-  const userId = String(req.user?.id || '');
-  if (!userId) {
-    throw new Error('Authenticated administrator is required.');
-  }
-
+): Promise<{
+  success: true;
+  isInitialized: true;
+  channelId?: string;
+  tenantId: string;
+  user: OnboardingAdminUser;
+}> {
   const existing = (await loadModuleConfigDoc()) || emptyModuleConfig();
   if (existing.is_initialized) {
-    return {
-      success: true,
-      isInitialized: true,
-      tenantId: resolveTenantFromRequest(req),
-    };
+    throw new OnboardingAlreadyCompleteError();
   }
 
-  const tenantId = resolveTenantFromRequest(req) || DEFAULT_TENANT_ID;
+  const cleanEmail = input.adminEmail.toLowerCase().trim();
+  const adminName = input.adminName.trim();
+  const { id: userId, existing: existingUser } = await resolvePrimaryAdminId(cleanEmail);
+
+  const tenantId =
+    (typeof existingUser.tenantId === 'string' && existingUser.tenantId.trim()) ||
+    resolveTenantFromRequest(req) ||
+    DEFAULT_TENANT_ID;
   const passwordHash = await hashPassword(input.newPassword);
   const now = new Date().toISOString();
   const platformModules = normalizePlatformModules({
@@ -463,11 +508,29 @@ export async function completeOnboarding(
     geistExchange: input.modules.geistExchange,
   });
 
+  const adminUser: OnboardingAdminUser = {
+    id: userId,
+    email: cleanEmail,
+    name: adminName,
+    role: 'admin',
+    is_admin: true,
+    tenantId,
+  };
+
+  req.user = {
+    id: userId,
+    email: cleanEmail,
+    name: adminName,
+    role: 'SYSTEM_ADMIN',
+    is_admin: true,
+    tenantId,
+  };
+
   const nextConfig: ModuleConfig = normalizeModuleConfig({
     ...existing,
     is_initialized: true,
     initializedAt: now,
-    initializedBy: req.user?.email || userId,
+    initializedBy: cleanEmail,
     platformModules,
     email: {
       ...existing.email,
@@ -505,19 +568,29 @@ export async function completeOnboarding(
   const shouldCreateChannel = ingest && ingest.skip !== true;
   let channelId: string | undefined;
 
+  const userDoc = {
+    ...existingUser,
+    name: adminName,
+    email: cleanEmail,
+    passwordHash,
+    authMethod: 'password',
+    role: 'admin',
+    is_admin: true,
+    isDeactivated: false,
+    can_create_tickets: true,
+    can_view_knowledgebase: true,
+    tenantId,
+    createdAt: existingUser.createdAt || now,
+    updatedAt: now,
+  };
+  delete (userDoc as { password?: unknown }).password;
+
   await withPgTransaction(async (client) => {
     await client.query(
-      `UPDATE geistdesk_documents
-       SET data = jsonb_set(
-             jsonb_set(
-               jsonb_set(COALESCE(data, '{}'::jsonb), '{passwordHash}', to_jsonb($2::text), true),
-               '{authMethod}', to_jsonb('password'::text), true
-             ),
-             '{updatedAt}', to_jsonb($3::text), true
-           ),
-           updated_at = NOW()
-       WHERE collection = 'users' AND id = $1`,
-      [userId, passwordHash, now],
+      `INSERT INTO geistdesk_documents (collection, id, data)
+       VALUES ('users', $1, $2::jsonb)
+       ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
+      [userId, JSON.stringify(userDoc)],
     );
 
     await client.query(
@@ -563,5 +636,5 @@ export async function completeOnboarding(
     await setPersonalVaultInitialized(userId, true);
   }
 
-  return { success: true, isInitialized: true, channelId, tenantId };
+  return { success: true, isInitialized: true, channelId, tenantId, user: adminUser };
 }

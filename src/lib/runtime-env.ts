@@ -41,14 +41,34 @@ export function getMasterKeySaltPepper(): string {
   );
 }
 
-export function isDemoModeClient(): boolean {
+/** True for production Node runtimes and production Vite client bundles. */
+export function isProductionRuntime(): boolean {
   try {
-    if (typeof import.meta !== 'undefined' && (import.meta as any).env) {
-      const env = (import.meta as any).env;
-      return Boolean(env.DEV) || env.VITE_DEMO_MODE === 'true';
+    if (typeof import.meta !== 'undefined' && (import.meta as any).env?.PROD === true) {
+      return true;
     }
   } catch {
-    /* ignore */
+    /* ignore — not in Vite context */
   }
-  return readEnv('VITE_DEMO_MODE') === 'true';
+  if (typeof process !== 'undefined' && process.env) {
+    return process.env.NODE_ENV === 'production' || process.env.IS_PROD === 'true';
+  }
+  return false;
 }
+
+/**
+ * Showcase / demo login is an explicit non-production opt-in.
+ * Honored only when ENABLE_DEMO_LOGIN or VITE_ENABLE_DEMO_LOGIN is "true"
+ * AND the runtime is not production. Production instances never enable it.
+ */
+export function isDemoLoginEnabled(): boolean {
+  if (isProductionRuntime()) return false;
+  return readEnv('ENABLE_DEMO_LOGIN') === 'true' || readEnv('VITE_ENABLE_DEMO_LOGIN') === 'true';
+}
+
+/** @deprecated Use isDemoLoginEnabled — demo mode is never implicit from Vite DEV. */
+export function isDemoModeClient(): boolean {
+  return isDemoLoginEnabled();
+}
+
+export const DEMO_LOGIN_EMAIL = 'demo@geistdesk.com';

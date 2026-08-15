@@ -117,8 +117,10 @@ export default function App() {
 
 function AppRoutes() {
   const { user, loading } = useAuth();
+  const { status, loading: onboardingLoading } = useOnboardingStatus();
+  const uninitialized = status?.isInitialized === false;
 
-  if (loading) {
+  if (loading || onboardingLoading) {
     return (
       <div className="h-screen w-screen flex flex-col items-center justify-center gap-4 bg-muted">
         <div className="flex -space-x-2 animate-pulse">
@@ -140,11 +142,20 @@ function AppRoutes() {
             <Routes>
                 <Route path="/help" element={<HelpCenterPage />} />
                 <Route path="/v/:id" element={<SecretViewerPage />} />
-                {!user ? (
-                  <Route path="*" element={<LoginPage />} />
+                {uninitialized ? (
+                  <>
+                    <Route path="/onboarding" element={<OnboardingWizardPage />} />
+                    <Route path="*" element={<Navigate to="/onboarding" replace />} />
+                  </>
+                ) : !user ? (
+                  <>
+                    <Route path="/onboarding" element={<Navigate to="/login" replace />} />
+                    <Route path="/login" element={<LoginPage />} />
+                    <Route path="*" element={<LoginPage />} />
+                  </>
                 ) : (
                   <>
-                    <Route path="/onboarding" element={<AdminRoute><OnboardingWizardPage /></AdminRoute>} />
+                    <Route path="/onboarding" element={<Navigate to="/dashboard" replace />} />
                     <Route
                       path="/"
                       element={

@@ -19,7 +19,7 @@ On every container start the entrypoint (`scripts/docker-entrypoint.sh`) runs:
 |------|---------|----------------|
 | 1 | Wait for PostgreSQL | Up to 30 retries (2s apart) until `DATABASE_URL` accepts connections |
 | 2 | `npm run db:deploy:prod` | Applies idempotent PostgreSQL DDL (`dist/migrate.cjs` → `initDb()`) |
-| 3 | `npm run seed:prod` | Seeds users, tickets, German defaults, vault folders, prompts, agent skills |
+| 3 | `npm run seed:prod` | Seeds German defaults, vault folders, prompts, agent skills. Fixture users/tickets only when `ENABLE_DEMO_LOGIN=true` **and** not production. |
 | 4 | `exec node dist/server.cjs` | Starts the Express gateway on port 3000 |
 
 > **Note:** GeistDesk does not use Prisma. Schema deployment is handled by `src/db/migrate.ts`, which wraps the same `initDb()` routine used at runtime in `src/lib/postgres-backend.ts`.
@@ -91,9 +91,9 @@ After first boot (German localization defaults):
 - **Credential vault folders** — `Produktion`, `VPN & Netzwerk`, `EU-West` (PostgreSQL `vault_folders`)
 - **AI prompt templates** — German baselines for summarization, KB generation, RCA, translation
 - **Agent persona skills** — Support-Agent, Sicherheitsanalyst, Wissensautor JSON manifests
-- **Sample users & tickets** — from `src/db/seed-data.json` (rotate passwords immediately in production)
+- **Sample users & tickets** — from `src/db/seed-data.json` only when `ENABLE_DEMO_LOGIN=true` on a non-production runtime. Production boots stay userless until `/onboarding` creates the primary admin.
 
-Demo vault credentials are **not** seeded in production (`VITE_DEMO_MODE=false`).
+Demo login and vault password autofill are **disabled** in production (`ENABLE_DEMO_LOGIN` / `VITE_ENABLE_DEMO_LOGIN` are ignored when `NODE_ENV=production`).
 
 ---
 

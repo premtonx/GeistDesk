@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type KeyboardEvent } from 'react';
 import { startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
+import { isDemoLoginEnabled } from '../../lib/runtime-env';
 import { 
   Lock, 
   Unlock, 
@@ -195,9 +196,9 @@ export default function CredentialVaultPage() {
   }, []);
   
   const [isLocked, setIsLocked] = useState(true);
-  // Demo preset only when VITE_DEMO_MODE / Vite DEV — never in production pilots.
+  // Demo preset only when showcase login is explicitly enabled — never in production.
   const [masterPassword, setMasterPassword] = useState(
-    import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === 'true' ? 'password123' : '',
+    isDemoLoginEnabled() ? 'password123' : '',
   );
   const [derivedKey, setDerivedKey] = useState<Uint8Array | null>(null);
   const [isUnlocking, setIsUnlocking] = useState(false);
@@ -1258,7 +1259,7 @@ export default function CredentialVaultPage() {
                 className="bg-white border-[#DADCE0] focus:ring-1 focus:ring-[#1A73E8] rounded-xl text-sm h-11 px-4 text-center placeholder-gray-300"
                 autoFocus
               />
-              {(import.meta.env.DEV || import.meta.env.VITE_DEMO_MODE === 'true') ? (
+              {isDemoLoginEnabled() ? (
                 <p className="text-[10px] text-center text-slate-400 mt-1 select-none font-semibold">
                   {t('vault.passwordTip', 'Tip: Default password is set to password123')}
                 </p>

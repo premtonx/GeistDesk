@@ -9,7 +9,6 @@ import * as cheerio from "cheerio";
 import mammoth from "mammoth";
 import multer from "multer";
 import { createRequire } from "module";
-import jwt from "jsonwebtoken";
 import {
   initDb, 
   getDb, 
@@ -78,6 +77,8 @@ import { hashPassword, verifyPassword, assertVaultEncryptionConfigured } from ".
 import { calculateCoverage, getDashboardData } from "./src/services/coverageEngine.js";
 import { assertDbCollectionAccess } from "./src/lib/db-access-policy.js";
 import { setSessionCookie, clearSessionCookie } from "./src/lib/session-cookie.js";
+import { issueSessionToken } from "./src/lib/session-token.js";
+import { DEMO_LOGIN_EMAIL, isDemoLoginEnabled } from "./src/lib/runtime-env.js";
 import {
   authRateLimiter,
   vaultRevealRateLimiter,
@@ -85,9 +86,6 @@ import {
   sandboxRateLimiter,
 } from "./src/middleware/rate-limiters.js";
 
-// Local session signing secret (required; authMiddleware enforces presence).
-const JWT_SECRET = process.env.JWT_SECRET as string;
-const SESSION_TTL = "12h";
 const IS_PROD = process.env.NODE_ENV === "production";
 
 function isPublicRegistrationAllowed(): boolean {
@@ -156,12 +154,6 @@ function sanitizeUserDoc(doc: any): any {
   return clone;
 }
 
-function issueSessionToken(user: { id: string; email: string }): string {
-  return jwt.sign({ uid: user.id, id: user.id, email: user.email }, JWT_SECRET, {
-    algorithm: "HS256",
-    expiresIn: SESSION_TTL
-  });
-}
 
 const require = createRequire(
   typeof import.meta !== "undefined" && import.meta.url
@@ -284,6 +276,9 @@ async function startServer() {
       return res.status(400).json({ error: "email and password are required" });
     }
     const cleanEmail = String(email).toLowerCase().trim();
+    if (cleanEmail === DEMO_LOGIN_EMAIL && !isDemoLoginEnabled()) {
+      return res.status(401).json({ error: "Invalid credentials." });
+    }
     try {
       const matches = await getDocsDirect("users", [{ type: "where", field: "email", op: "==", value: cleanEmail }]);
 
