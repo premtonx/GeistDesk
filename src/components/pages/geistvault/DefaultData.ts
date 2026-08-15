@@ -16,7 +16,27 @@ export interface SeedItem {
   strengthPercent?: number;
 }
 
-/** Branded enterprise showcase rows — one anchor asset per primary vault tab. */
+/** Labels of former client-side showcase rows. Used only to strip leftover demo items. */
+export const SHOWCASE_SEED_LABELS: readonly string[] = [
+  'AWS Production Master Root',
+  'Docker Swarm Orchestration Hub',
+  'Personal Amazon Business Portal',
+  'GitHub Registry Production Token',
+  'Acme Production Server',
+  'Bastion Host — EU-West',
+  'Stripe Live Secret Key',
+  'Okta Admin Console',
+  'Corporate VPN Pre-Shared Key',
+  'PostgreSQL Database',
+  'Support SMTP Relay',
+];
+
+export const SHOWCASE_SEED_CATEGORY_NAMES: readonly string[] = [
+  'Kubernetes Nodes',
+  'Slack Workspaces',
+];
+
+/** Branded enterprise showcase rows — never auto-inserted in production. */
 export const BRANDED_SHOWCASE_CREDENTIALS: SeedItem[] = [
   {
     type: 'cloud',

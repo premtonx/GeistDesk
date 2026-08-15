@@ -90,6 +90,7 @@ export async function seedVaultFolders(client: pg.PoolClient): Promise<number> {
     createdAt: now,
     updatedAt: now,
   }));
+  // Empty folder tree only — never insert vault_items or demo secrets.
   return batchUpsert(client, 'vault_folders', rows);
 }
 
