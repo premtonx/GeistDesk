@@ -43,7 +43,7 @@ type CloudProvider = 'openai' | 'azure' | 'anthropic' | 'groq';
 type IngestChannel = 'webhook' | 'microsoft_graph' | 'imap';
 
 const STEPS = [
-  { id: 1, title: 'Administrator', subtitle: 'Account & Vault key' },
+  { id: 1, title: 'Administrator-Konto erstellen', subtitle: 'Name, E-Mail, Passwort' },
   { id: 2, title: 'AI Engine', subtitle: 'LLM & embeddings' },
   { id: 3, title: 'Modules', subtitle: 'Feature flags' },
   { id: 4, title: 'Ingestion', subtitle: 'Inbound mail' },
@@ -64,6 +64,7 @@ export default function OnboardingWizardPage() {
   const { status, loading, refresh } = useOnboardingStatus();
 
   const [step, setStep] = useState(1);
+  const [adminRegistered, setAdminRegistered] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
@@ -124,6 +125,39 @@ export default function OnboardingWizardPage() {
     (aiMode === 'cloud' && apiKey.trim().length > 0 && (cloudProvider !== 'azure' || endpointUrl.trim().length > 0));
 
   const progress = (step / STEPS.length) * 100;
+
+  const registerAdminAndContinue = async () => {
+    if (!canStep1) {
+      toast.error('Bitte Admin-Name, E-Mail, Passwort und Vault Master Key ausfüllen.');
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const res = await axios.post(
+        '/api/admin/onboarding/register-admin',
+        {
+          adminEmail: adminEmail.trim(),
+          adminName: adminName.trim(),
+          newPassword,
+          vaultPassphraseSet: vaultPassphrase.length >= 12,
+        },
+        { withCredentials: true },
+      );
+      if (res.data?.user) {
+        applyAuthenticatedSession(res.data.user);
+      }
+      setAdminRegistered(true);
+      setStep(2);
+    } catch (err: any) {
+      const message =
+        err?.response?.data?.error ||
+        err?.message ||
+        'Administrator-Konto konnte nicht erstellt werden.';
+      toast.error(String(message));
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleTestAi = async () => {
     setTesting(true);
@@ -278,43 +312,41 @@ export default function OnboardingWizardPage() {
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <ShieldCheck className="h-5 w-5 text-emerald-600" />
-                Primary Administrator
+                Administrator-Konto erstellen
               </CardTitle>
               <CardDescription>
-                Create the first administrator account for this instance, then set the zero-knowledge GeistVault
-                master passphrase. The vault passphrase never leaves this browser.
+                Legen Sie das erste Administratorkonto für diese Instanz an und setzen Sie den zero-knowledge
+                Vault Master Key. Der Schlüssel verlässt diesen Browser nicht.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="admin-email">Administrator email</Label>
-                  <Input
-                    id="admin-email"
-                    type="email"
-                    autoComplete="username"
-                    value={adminEmail}
-                    onChange={(e) => setAdminEmail(e.target.value)}
-                    placeholder="admin@your-domain.eu"
-                  />
-                  {adminEmail && !emailOk && (
-                    <p className="text-xs text-destructive">Enter a valid email address.</p>
-                  )}
-                </div>
-                <div className="space-y-2 sm:col-span-2">
-                  <Label htmlFor="admin-name">Full name</Label>
-                  <Input
-                    id="admin-name"
-                    type="text"
-                    autoComplete="name"
-                    value={adminName}
-                    onChange={(e) => setAdminName(e.target.value)}
-                    placeholder="Ada Lovelace"
-                  />
-                </div>
+              <div className="space-y-2">
+                <Label htmlFor="admin-name">Admin-Name</Label>
+                <Input
+                  id="admin-name"
+                  type="text"
+                  autoComplete="name"
+                  value={adminName}
+                  onChange={(e) => setAdminName(e.target.value)}
+                  placeholder="Ada Lovelace"
+                />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="new-password">Administrator password</Label>
+                <Label htmlFor="admin-email">Admin-E-Mail</Label>
+                <Input
+                  id="admin-email"
+                  type="email"
+                  autoComplete="username"
+                  value={adminEmail}
+                  onChange={(e) => setAdminEmail(e.target.value)}
+                  placeholder="admin@ihre-domain.eu"
+                />
+                {adminEmail && !emailOk && (
+                  <p className="text-xs text-destructive">Bitte eine gültige E-Mail-Adresse eingeben.</p>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="new-password">Passwort</Label>
                 <Input
                   id="new-password"
                   type="password"
@@ -327,7 +359,7 @@ export default function OnboardingWizardPage() {
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="confirm-password">Confirm password</Label>
+                <Label htmlFor="confirm-password">Passwort bestätigen</Label>
                 <Input
                   id="confirm-password"
                   type="password"
@@ -342,13 +374,13 @@ export default function OnboardingWizardPage() {
               <div className="rounded-lg border bg-muted/40 p-4 space-y-3">
                 <div className="flex items-center gap-2 text-sm font-medium">
                   <KeyRound className="h-4 w-4" />
-                  GeistVault master passphrase
+                  Vault Master Key
                 </div>
                 <p className="text-xs text-muted-foreground">
-                  Used only in-browser (Argon2id → AES-256-GCM). If you lose it, vault ciphertext cannot be recovered.
+                  Wird nur im Browser verwendet (Argon2id → AES-256-GCM). Bei Verlust ist Vault-Ciphertext nicht wiederherstellbar.
                 </p>
                 <div className="space-y-2">
-                  <Label htmlFor="vault-pass">Master passphrase</Label>
+                  <Label htmlFor="vault-pass">Vault Master Key</Label>
                   <Input
                     id="vault-pass"
                     type="password"
@@ -357,7 +389,7 @@ export default function OnboardingWizardPage() {
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="vault-pass-2">Confirm passphrase</Label>
+                  <Label htmlFor="vault-pass-2">Vault Master Key bestätigen</Label>
                   <Input
                     id="vault-pass-2"
                     type="password"
@@ -643,10 +675,22 @@ export default function OnboardingWizardPage() {
           {step < 4 ? (
             <Button
               type="button"
-              disabled={(step === 1 && !canStep1) || (step === 2 && !canStep2)}
-              onClick={() => setStep((s) => s + 1)}
+              disabled={submitting || (step === 1 && !canStep1) || (step === 2 && !canStep2)}
+              onClick={() => {
+                if (step === 1) {
+                  void registerAdminAndContinue();
+                  return;
+                }
+                setStep((s) => s + 1);
+              }}
             >
-              Continue
+              {submitting && step === 1 ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : step === 1 ? (
+                adminRegistered ? 'Aktualisieren & weiter' : 'Konto erstellen & weiter'
+              ) : (
+                'Continue'
+              )}
               <ArrowRight className="h-4 w-4" />
             </Button>
           ) : (

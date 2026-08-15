@@ -1,8 +1,9 @@
 /**
  * Admin first-run onboarding API.
- *   GET  /api/admin/onboarding/status     — public (no secrets)
- *   POST /api/admin/onboarding/test-ai    — public only while uninitialized
- *   POST /api/admin/onboarding/complete   — public only while uninitialized
+ *   GET  /api/admin/onboarding/status          — public (no secrets)
+ *   POST /api/admin/onboarding/register-admin  — public only while uninitialized
+ *   POST /api/admin/onboarding/test-ai         — public only while uninitialized
+ *   POST /api/admin/onboarding/complete        — public only while uninitialized
  *
  * After is_initialized=true, mutations require an authenticated SYSTEM_ADMIN
  * and complete is rejected so the wizard cannot be replayed.
@@ -16,7 +17,9 @@ import {
   completeOnboarding,
   completeOnboardingSchema,
   getOnboardingStatus,
-  loadModuleConfigDoc,
+  needsFirstRun,
+  registerAdminSchema,
+  registerPrimaryAdmin,
   testAiConnection,
   testAiSchema,
 } from '../lib/onboarding-service.js';
@@ -28,8 +31,7 @@ const router = Router();
 
 async function allowFirstRunOrAdmin(req: Request, res: Response, next: NextFunction) {
   try {
-    const config = await loadModuleConfigDoc();
-    if (config?.is_initialized !== true) {
+    if (await needsFirstRun()) {
       return next();
     }
     return authenticate(req, res, () => requireRole(['SYSTEM_ADMIN'])(req, res, next));
@@ -67,6 +69,33 @@ router.post(
         success: false,
         message: safeErrorMessage(err, 'AI connection test failed'),
       });
+    }
+  },
+);
+
+router.post(
+  '/register-admin',
+  authRateLimiter,
+  allowFirstRunOrAdmin,
+  async (req: Request, res: Response) => {
+    const parsed = registerAdminSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({
+        error: parsed.error.issues[0]?.message || 'Invalid administrator payload',
+        details: parsed.error.flatten(),
+      });
+    }
+    try {
+      const result = await registerPrimaryAdmin(req, parsed.data);
+      const token = issueSessionToken({ id: result.user.id, email: result.user.email });
+      setSessionCookie(res, token);
+      return res.status(201).json(result);
+    } catch (err) {
+      if (err instanceof OnboardingAlreadyCompleteError) {
+        return res.status(403).json({ error: err.message });
+      }
+      console.error('[onboarding/register-admin]', safeErrorMessage(err));
+      return res.status(500).json({ error: safeErrorMessage(err, 'Failed to create administrator') });
     }
   },
 );

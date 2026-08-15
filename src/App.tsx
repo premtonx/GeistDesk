@@ -118,7 +118,7 @@ export default function App() {
 function AppRoutes() {
   const { user, loading } = useAuth();
   const { status, loading: onboardingLoading } = useOnboardingStatus();
-  const uninitialized = status?.isInitialized === false;
+  const uninitialized = status?.requiresOnboarding === true || status?.isInitialized === false;
 
   if (loading || onboardingLoading) {
     return (

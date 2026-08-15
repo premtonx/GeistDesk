@@ -4,6 +4,7 @@ import type { PlatformModules } from '../lib/module-config';
 
 export interface OnboardingStatus {
   isInitialized: boolean;
+  hasAdminUser?: boolean;
   initializedAt?: string;
   initializedBy?: string;
   requiresOnboarding: boolean;

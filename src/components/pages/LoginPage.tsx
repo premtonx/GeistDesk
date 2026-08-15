@@ -47,6 +47,8 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import { cn } from '../../lib/utils';
 import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
 import { isDemoLoginEnabled } from '../../lib/runtime-env';
+import { useOnboardingStatus } from '../../hooks/useOnboardingStatus';
+import { Link } from 'react-router-dom';
 
 const LOCAL_TEXTS = {
   de: {
@@ -73,6 +75,8 @@ const LOCAL_TEXTS = {
     demoLoginSub: "Voller Admin-Zugang · Keine Registrierung nötig",
     demoLoginHint: "Ideal zum Erkunden der Showcase-Umgebung",
     orSignInWithAccount: "oder mit eigenem Konto anmelden",
+    firstRunCta: "Administrator-Konto erstellen & Einrichtung starten",
+    firstRunCtaSub: "Diese Instanz ist noch nicht eingerichtet. Legen Sie das erste Administratorkonto an.",
     welcomeTitle: "Willkommen zurück",
     welcomeSub: "Sicherer Zugriff auf Ihre GeistDesk-Arbeitsumgebung",
     registerTitle: "Souveräne Zugangsdaten erstellen",
@@ -145,6 +149,8 @@ const LOCAL_TEXTS = {
     demoLoginSub: "Full admin access · No signup required",
     demoLoginHint: "Perfect for exploring the showcase environment",
     orSignInWithAccount: "or sign in with your account",
+    firstRunCta: "Create administrator account & start setup",
+    firstRunCtaSub: "This instance is not initialized yet. Create the first administrator to continue.",
     welcomeTitle: "Welcome Back",
     welcomeSub: "Secure access to your GeistDesk workspace",
     registerTitle: "Create Sovereign Credentials",
@@ -208,6 +214,9 @@ export default function LoginPage() {
   
   const config = getModuleConfig();
   const { language, i18n } = useTranslation();
+  const { status: onboardingStatus } = useOnboardingStatus();
+  const showFirstRunCta =
+    onboardingStatus?.requiresOnboarding === true || onboardingStatus?.isInitialized === false;
   
   // Safeguard language selection to 'de' or 'en'
   const activeLang = (language === 'de' || language === 'en') ? language : 'de';
@@ -577,6 +586,32 @@ export default function LoginPage() {
               {isRegister ? texts.registerSub : texts.welcomeSub}
             </p>
           </div>
+
+          {showFirstRunCta ? (
+            <div className="space-y-3">
+              <Link
+                to="/onboarding"
+                className="flex w-full items-start gap-3 rounded-2xl border border-blue-200/80 bg-gradient-to-br from-blue-50 via-white to-indigo-50/80 p-4 text-left shadow-sm shadow-blue-500/5 transition-all hover:border-blue-300 hover:shadow-md hover:shadow-blue-500/10 group"
+              >
+                <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border border-blue-200 bg-white text-blue-600 shadow-sm group-hover:scale-105 transition-transform">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-extrabold text-slate-900">{texts.firstRunCta}</p>
+                  <p className="mt-0.5 text-[11px] font-semibold text-blue-700">{texts.firstRunCtaSub}</p>
+                </div>
+                <ArrowRight className="mt-2 h-4 w-4 shrink-0 text-blue-500 transition-transform group-hover:translate-x-0.5" />
+              </Link>
+              <div className="relative flex items-center justify-center py-1">
+                <div className="absolute inset-0 flex items-center">
+                  <div className="w-full border-t border-slate-100" />
+                </div>
+                <span className="relative bg-white px-3 text-[9px] font-extrabold uppercase tracking-widest text-slate-400">
+                  {texts.orSignInWithAccount}
+                </span>
+              </div>
+            </div>
+          ) : null}
 
           {/* Showcase demo entry — one-click explore without credentials */}
           {!isRegister && isDemoMode ? (

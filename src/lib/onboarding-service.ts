@@ -92,11 +92,20 @@ export const completeOnboardingSchema = z.object({
     .default({ skip: true, channel: 'webhook' }),
 });
 
+export const registerAdminSchema = z.object({
+  adminEmail: z.string().email().max(320),
+  adminName: z.string().trim().min(1, 'Administrator name is required').max(200),
+  newPassword: passwordSchema,
+  vaultPassphraseSet: z.boolean().optional().default(false),
+});
+
 export type CompleteOnboardingInput = z.infer<typeof completeOnboardingSchema>;
+export type RegisterAdminInput = z.infer<typeof registerAdminSchema>;
 export type TestAiInput = z.infer<typeof testAiSchema>;
 
 export interface OnboardingStatus {
   isInitialized: boolean;
+  hasAdminUser: boolean;
   initializedAt?: string;
   initializedBy?: string;
   requiresOnboarding: boolean;
@@ -142,7 +151,7 @@ export async function ensureOnboardingState(): Promise<OnboardingStatus> {
       updatedAt: new Date().toISOString(),
     });
     console.log('[Onboarding] Fresh install detected — is_initialized=false');
-    return toStatus(fresh);
+    return toStatus(fresh, false);
   }
 
   // Undo the former boot heuristic that stamped true with initializedBy=legacy-migration
@@ -164,10 +173,10 @@ export async function ensureOnboardingState(): Promise<OnboardingStatus> {
           : '[Onboarding] module_config.is_initialized missing — defaulted to false',
       );
     }
-    return toStatus(normalizeModuleConfig({ ...existing, is_initialized: false }));
+    return toStatus(normalizeModuleConfig({ ...existing, is_initialized: false }), await hasPrimaryAdmin());
   }
 
-  return toStatus(normalizeModuleConfig(existing));
+  return toStatus(normalizeModuleConfig(existing), await hasPrimaryAdmin());
 }
 
 async function probePgvector(): Promise<boolean> {
@@ -179,13 +188,35 @@ async function probePgvector(): Promise<boolean> {
   }
 }
 
-function toStatus(config: ModuleConfig): OnboardingStatus {
+export async function hasPrimaryAdmin(): Promise<boolean> {
+  const found = await queryDb(
+    `SELECT 1 FROM geistdesk_documents
+      WHERE collection = 'users'
+        AND COALESCE(data->>'isDeactivated', 'false') NOT IN ('true', '1')
+        AND (
+          data->>'is_admin' IN ('true', '1')
+          OR lower(coalesce(data->>'role', '')) IN ('admin', 'system_admin')
+        )
+      LIMIT 1`,
+  );
+  return (found.rowCount || 0) > 0;
+}
+
+/** First-run when the wizard never completed, or no admin row exists yet. */
+export async function needsFirstRun(): Promise<boolean> {
+  const config = await loadModuleConfigDoc();
+  if (config?.is_initialized !== true) return true;
+  return !(await hasPrimaryAdmin());
+}
+
+function toStatus(config: ModuleConfig, hasAdmin: boolean): OnboardingStatus {
   const ollama = getOllamaEndpoint() || 'http://ollama:11434';
   return {
     isInitialized: config.is_initialized === true,
+    hasAdminUser: hasAdmin,
     initializedAt: config.initializedAt,
     initializedBy: config.initializedBy,
-    requiresOnboarding: config.is_initialized !== true,
+    requiresOnboarding: config.is_initialized !== true || !hasAdmin,
     modules: config.platformModules || DEFAULT_PLATFORM_MODULES,
     defaults: {
       ollamaEndpoint: ollama.replace(/\/v1\/?$/, ''),
@@ -201,7 +232,7 @@ function toStatus(config: ModuleConfig): OnboardingStatus {
 
 export async function getOnboardingStatus(_req?: Request): Promise<OnboardingStatus> {
   const config = (await loadModuleConfigDoc()) || emptyModuleConfig();
-  const status = toStatus(config);
+  const status = toStatus(config, await hasPrimaryAdmin());
   status.health.pgvector = await probePgvector();
   return status;
 }
@@ -451,6 +482,86 @@ export interface OnboardingAdminUser {
   tenantId: string;
 }
 
+async function assertFirstRunWritable(): Promise<void> {
+  const config = await loadModuleConfigDoc();
+  if (config?.is_initialized === true && (await hasPrimaryAdmin())) {
+    throw new OnboardingAlreadyCompleteError();
+  }
+}
+
+async function upsertPrimaryAdminUser(input: {
+  adminEmail: string;
+  adminName: string;
+  newPassword: string;
+  req: Request;
+}): Promise<{ adminUser: OnboardingAdminUser; userId: string }> {
+  const cleanEmail = input.adminEmail.toLowerCase().trim();
+  const adminName = input.adminName.trim();
+  const { id: userId, existing: existingUser } = await resolvePrimaryAdminId(cleanEmail);
+  const tenantId =
+    (typeof existingUser.tenantId === 'string' && existingUser.tenantId.trim()) ||
+    resolveTenantFromRequest(input.req) ||
+    DEFAULT_TENANT_ID;
+  const passwordHash = await hashPassword(input.newPassword);
+  const now = new Date().toISOString();
+
+  const userDoc = {
+    ...existingUser,
+    name: adminName,
+    email: cleanEmail,
+    passwordHash,
+    authMethod: 'password',
+    role: 'admin',
+    is_admin: true,
+    isDeactivated: false,
+    can_create_tickets: true,
+    can_view_knowledgebase: true,
+    tenantId,
+    createdAt: existingUser.createdAt || now,
+    updatedAt: now,
+  };
+  delete (userDoc as { password?: unknown }).password;
+
+  await setDocDirect('users', userId, userDoc);
+
+  const adminUser: OnboardingAdminUser = {
+    id: userId,
+    email: cleanEmail,
+    name: adminName,
+    role: 'admin',
+    is_admin: true,
+    tenantId,
+  };
+
+  input.req.user = {
+    id: userId,
+    email: cleanEmail,
+    name: adminName,
+    role: 'SYSTEM_ADMIN',
+    is_admin: true,
+    tenantId,
+  };
+
+  return { adminUser, userId };
+}
+
+export async function registerPrimaryAdmin(
+  req: Request,
+  input: RegisterAdminInput,
+): Promise<{ success: true; user: OnboardingAdminUser; isInitialized: false }> {
+  await assertFirstRunWritable();
+  const { adminUser, userId } = await upsertPrimaryAdminUser({
+    adminEmail: input.adminEmail,
+    adminName: input.adminName,
+    newPassword: input.newPassword,
+    req,
+  });
+  if (input.vaultPassphraseSet) {
+    await setPersonalVaultInitialized(userId, true);
+  }
+  return { success: true, user: adminUser, isInitialized: false };
+}
+
 async function resolvePrimaryAdminId(email: string): Promise<{ id: string; existing: Record<string, unknown> }> {
   const found = await queryDb(
     `SELECT id, data FROM geistdesk_documents
@@ -486,10 +597,8 @@ export async function completeOnboarding(
   tenantId: string;
   user: OnboardingAdminUser;
 }> {
+  await assertFirstRunWritable();
   const existing = (await loadModuleConfigDoc()) || emptyModuleConfig();
-  if (existing.is_initialized) {
-    throw new OnboardingAlreadyCompleteError();
-  }
 
   const cleanEmail = input.adminEmail.toLowerCase().trim();
   const adminName = input.adminName.trim();
