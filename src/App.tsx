@@ -79,7 +79,7 @@ function OnboardingGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (isSystemAdmin && status && !status.isInitialized) {
+  if (isSystemAdmin && !status?.isInitialized) {
     return <Navigate to="/onboarding" replace />;
   }
 

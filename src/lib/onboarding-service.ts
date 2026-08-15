@@ -126,9 +126,9 @@ export async function loadModuleConfigDoc(): Promise<ModuleConfig | null> {
 }
 
 /**
- * Boot-time initialization state:
- *  - Missing document → create with is_initialized=false (fresh install).
- *  - Existing document without the flag → treat as already initialized (legacy deploys).
+ * Boot-time initialization state.
+ * Never writes is_initialized=true — that happens only in completeOnboarding().
+ * Missing documents (or a missing flag) stay uninitialized so the wizard runs.
  */
 export async function ensureOnboardingState(): Promise<OnboardingStatus> {
   const existing = await getDocDirect(MODULE_COLLECTION, MODULE_DOC_ID);
@@ -144,28 +144,29 @@ export async function ensureOnboardingState(): Promise<OnboardingStatus> {
     return toStatus(fresh, false);
   }
 
-  if (typeof existing.is_initialized === 'boolean') {
-    const normalized = normalizeModuleConfig(existing);
-    return toStatus(normalized, false);
+  // Undo the former boot heuristic that stamped true with initializedBy=legacy-migration
+  // without the wizard ever completing.
+  const autoMigrated =
+    existing.is_initialized === true && existing.initializedBy === 'legacy-migration';
+
+  if (existing.is_initialized !== true || autoMigrated) {
+    if (existing.is_initialized !== false || autoMigrated) {
+      await updateDocDirect(MODULE_COLLECTION, MODULE_DOC_ID, {
+        is_initialized: false,
+        initializedAt: null,
+        initializedBy: null,
+        updatedAt: new Date().toISOString(),
+      });
+      console.log(
+        autoMigrated
+          ? '[Onboarding] Reverted legacy-migration auto-init — is_initialized=false'
+          : '[Onboarding] module_config.is_initialized missing — defaulted to false',
+      );
+    }
+    return toStatus(normalizeModuleConfig({ ...existing, is_initialized: false }), false);
   }
 
-  // Legacy production: module_config exists but predates the wizard.
-  const migrated = normalizeModuleConfig({
-    ...existing,
-    is_initialized: true,
-    initializedAt: existing.initializedAt || new Date().toISOString(),
-    initializedBy: existing.initializedBy || 'legacy-migration',
-    platformModules: existing.platformModules || DEFAULT_PLATFORM_MODULES,
-  });
-  await updateDocDirect(MODULE_COLLECTION, MODULE_DOC_ID, {
-    is_initialized: true,
-    initializedAt: migrated.initializedAt,
-    initializedBy: migrated.initializedBy,
-    platformModules: migrated.platformModules,
-    updatedAt: new Date().toISOString(),
-  });
-  console.log('[Onboarding] Legacy module_config migrated — is_initialized=true');
-  return toStatus(migrated, false);
+  return toStatus(normalizeModuleConfig(existing), false);
 }
 
 async function probePgvector(): Promise<boolean> {

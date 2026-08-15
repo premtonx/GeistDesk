@@ -145,7 +145,7 @@ async function main() {
     }
     console.log(`[seed] Upserted ${u} users and ${k} tickets into geistdesk_documents.`);
     if (platform.moduleConfig) {
-      console.log("[seed] Seeded module_config/global with German Polyglot Bridge defaults.");
+      console.log("[seed] Seeded module_config/global with is_initialized=false (First-Run Wizard required).");
     }
     if (platform.vaultFolders > 0) {
       console.log(`[seed] Upserted ${platform.vaultFolders} default vault_folders.`);
@@ -156,6 +156,14 @@ async function main() {
     if (platform.personaSkills) {
       console.log("[seed] Seeded default German persona_skills_json on orchestrator config.");
     }
+    const initFlag = await client.query(
+      `SELECT data->>'is_initialized' AS is_initialized
+         FROM geistdesk_documents
+        WHERE collection = 'module_config' AND id = 'global'`,
+    );
+    console.log(
+      `[seed] module_config.is_initialized=${initFlag.rows[0]?.is_initialized ?? '(missing)'}`,
+    );
     console.log("[seed] Done. Default seeded credentials are dev-only — rotate them immediately.");
   } catch (err) {
     await client.query("ROLLBACK").catch(() => {});

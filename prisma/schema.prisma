@@ -38,3 +38,8 @@ enum KnowledgeSourceType {
   KB_ARTICLE
   RESOLVED_TICKET
 }
+
+// module_config lives in geistdesk_documents (collection='module_config', id='global').
+// JSONB field `is_initialized` defaults to false. See
+// prisma/migrations/20260815120000_module_config_is_initialized/migration.sql
+// Only POST /api/admin/onboarding/complete may set is_initialized = true.

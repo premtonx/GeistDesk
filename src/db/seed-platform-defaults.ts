@@ -40,11 +40,33 @@ async function batchUpsert(
 
 export async function seedModuleConfig(client: pg.PoolClient): Promise<boolean> {
   const existing = await client.query(
-    `SELECT id FROM geistdesk_documents WHERE collection = 'module_config' AND id = 'global' LIMIT 1`,
+    `SELECT data FROM geistdesk_documents WHERE collection = 'module_config' AND id = 'global' LIMIT 1`,
   );
-  if (existing.rowCount && existing.rowCount > 0) return false;
-
   const now = new Date().toISOString();
+
+  if (existing.rowCount && existing.rowCount > 0) {
+    const data = existing.rows[0]?.data;
+    const parsed =
+      data == null
+        ? {}
+        : typeof data === 'string'
+          ? (JSON.parse(data) as Record<string, unknown>)
+          : (data as Record<string, unknown>);
+    // Never flip a completed wizard back to false. Only stamp the default
+    // when the flag is missing so fresh/legacy seed rows stay uninitialized.
+    if (parsed.is_initialized === true && parsed.initializedBy !== 'legacy-migration') {
+      return false;
+    }
+    if (parsed.is_initialized === false) return false;
+    await client.query(
+      `UPDATE geistdesk_documents
+          SET data = jsonb_set(COALESCE(data, '{}'::jsonb), '{is_initialized}', 'false'::jsonb, true),
+              updated_at = NOW()
+        WHERE collection = 'module_config' AND id = 'global'`,
+    );
+    return true;
+  }
+
   await batchUpsert(client, 'module_config', [
     {
       id: 'global',

@@ -91,6 +91,13 @@ export function buildDefaultPromptTemplates(): PromptTemplateSeedRow[] {
 /** Partial module_config/global document for seeding (admin merges on first save). */
 export function buildDefaultModuleConfigSeed(): Record<string, unknown> {
   return {
+    is_initialized: false,
+    platformModules: {
+      tickets: true,
+      geistKB: true,
+      geistVault: true,
+      geistExchange: true,
+    },
     polyglotEnabled: true,
     languages: PLATFORM_DEFAULT_LANGUAGES.map((entry) => ({ ...entry })),
     polyglot: {

@@ -289,6 +289,37 @@ export async function initDb() {
     );
   }
 
+  // First-run wizard: stamp is_initialized=false when the key is absent.
+  // Never overwrite an explicit true (completed onboarding).
+  try {
+    await pgPool.query(`
+      UPDATE geistdesk_documents
+         SET data = jsonb_set(
+               jsonb_set(
+                 jsonb_set(COALESCE(data, '{}'::jsonb), '{is_initialized}', 'false'::jsonb, true),
+                 '{initializedBy}',
+                 'null'::jsonb,
+                 true
+               ),
+               '{initializedAt}',
+               'null'::jsonb,
+               true
+             ),
+             updated_at = NOW()
+       WHERE collection = 'module_config'
+         AND id = 'global'
+         AND (
+           COALESCE(data->>'is_initialized', '') NOT IN ('true', 'false')
+           OR data->>'initializedBy' = 'legacy-migration'
+         )
+    `);
+  } catch (initFlagErr: any) {
+    console.warn(
+      '[DB Engine] module_config.is_initialized default skipped:',
+      initFlagErr?.message || initFlagErr,
+    );
+  }
+
   console.log("[DB Engine] PostgreSQL Tables Verified.");
 }
 
