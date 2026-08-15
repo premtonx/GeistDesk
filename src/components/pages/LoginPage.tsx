@@ -216,7 +216,7 @@ export default function LoginPage() {
   const { language, i18n } = useTranslation();
   const { status: onboardingStatus } = useOnboardingStatus();
   const showFirstRunCta =
-    onboardingStatus?.requiresOnboarding === true || onboardingStatus?.isInitialized === false;
+    onboardingStatus?.hasAdminUser !== true && onboardingStatus?.isInitialized !== true;
   
   // Safeguard language selection to 'de' or 'en'
   const activeLang = (language === 'de' || language === 'en') ? language : 'de';

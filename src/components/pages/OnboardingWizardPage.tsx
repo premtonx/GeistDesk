@@ -100,14 +100,14 @@ export default function OnboardingWizardPage() {
 
   useEffect(() => {
     if (!status) return;
-    if (status.isInitialized) {
+    if (status.isInitialized || status.hasAdminUser) {
       navigate(user ? '/dashboard' : '/login', { replace: true });
       return;
     }
     if (status.defaults?.ollamaEndpoint) setEndpointUrl(status.defaults.ollamaEndpoint);
     if (status.defaults?.chatModel) setChatModel(status.defaults.chatModel);
     if (status.defaults?.embeddingModel) setEmbeddingModel(status.defaults.embeddingModel);
-  }, [status, navigate]);
+  }, [status, navigate, user]);
 
   const pwdIssues = useMemo(() => passwordIssues(newPassword), [newPassword]);
   const vaultIssues = useMemo(() => passwordIssues(vaultPassphrase), [vaultPassphrase]);

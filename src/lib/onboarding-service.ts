@@ -203,11 +203,11 @@ export async function hasPrimaryAdmin(): Promise<boolean> {
   return (found.rowCount || 0) > 0;
 }
 
-/** First-run when the wizard never completed, or no admin row exists yet. */
+/** True first-run only: no admin yet and the wizard has not completed. */
 export async function needsFirstRun(): Promise<boolean> {
+  if (await hasPrimaryAdmin()) return false;
   const config = await loadModuleConfigDoc();
-  if (config?.is_initialized !== true) return true;
-  return !(await hasPrimaryAdmin());
+  return config?.is_initialized !== true;
 }
 
 function toStatus(config: ModuleConfig, hasAdmin: boolean): OnboardingStatus {
@@ -217,7 +217,7 @@ function toStatus(config: ModuleConfig, hasAdmin: boolean): OnboardingStatus {
     hasAdminUser: hasAdmin,
     initializedAt: config.initializedAt,
     initializedBy: config.initializedBy,
-    requiresOnboarding: config.is_initialized !== true || !hasAdmin,
+    requiresOnboarding: config.is_initialized !== true && !hasAdmin,
     modules: config.platformModules || DEFAULT_PLATFORM_MODULES,
     defaults: {
       ollamaEndpoint: ollama.replace(/\/v1\/?$/, ''),

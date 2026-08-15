@@ -80,7 +80,7 @@ function OnboardingGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (isSystemAdmin && !status?.isInitialized) {
+  if (isSystemAdmin && !status?.isInitialized && status?.hasAdminUser !== true) {
     return <Navigate to="/onboarding" replace />;
   }
 
@@ -125,7 +125,7 @@ export default function App() {
 function AppRoutes() {
   const { user, loading } = useAuth();
   const { status, loading: onboardingLoading } = useOnboardingStatus();
-  const uninitialized = status?.requiresOnboarding === true || status?.isInitialized === false;
+  const firstRun = status?.hasAdminUser !== true && status?.isInitialized !== true;
 
   if (loading || onboardingLoading) {
     return (
@@ -149,7 +149,7 @@ function AppRoutes() {
             <Routes>
                 <Route path="/help" element={<HelpCenterPage />} />
                 <Route path="/v/:id" element={<SecretViewerPage />} />
-                {uninitialized ? (
+                {firstRun ? (
                   <>
                     <Route path="/onboarding" element={<OnboardingWizardPage />} />
                     <Route path="*" element={<Navigate to="/onboarding" replace />} />
