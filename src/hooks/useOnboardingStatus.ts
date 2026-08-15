@@ -44,5 +44,38 @@ export function useOnboardingStatus() {
     void refresh();
   }, [refresh]);
 
+  useEffect(() => {
+    const onChanged = (event: Event) => {
+      const detail = (event as CustomEvent<Partial<OnboardingStatus>>).detail;
+      if (detail && typeof detail === 'object') {
+        setStatus((prev) => ({
+          isInitialized: detail.isInitialized ?? prev?.isInitialized ?? false,
+          hasAdminUser: detail.hasAdminUser ?? prev?.hasAdminUser,
+          initializedAt: detail.initializedAt ?? prev?.initializedAt,
+          initializedBy: detail.initializedBy ?? prev?.initializedBy,
+          requiresOnboarding: detail.requiresOnboarding ?? false,
+          modules: detail.modules ?? prev?.modules ?? {
+            tickets: true,
+            geistKB: true,
+            geistVault: true,
+            geistExchange: true,
+          },
+          defaults: detail.defaults ?? prev?.defaults ?? {
+            ollamaEndpoint: '',
+            chatModel: 'llama3.1',
+            embeddingModel: 'nomic-embed-text',
+          },
+          health: detail.health ?? prev?.health ?? { database: 'ok', pgvector: false },
+        }));
+        setLoading(false);
+        setError(null);
+        return;
+      }
+      void refresh();
+    };
+    window.addEventListener('onboarding-status-changed', onChanged);
+    return () => window.removeEventListener('onboarding-status-changed', onChanged);
+  }, [refresh]);
+
   return { status, loading, error, refresh };
 }

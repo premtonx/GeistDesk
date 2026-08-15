@@ -99,9 +99,9 @@ export default function MainLayout() {
 
   const visibleNavItems = useMemo(() => {
     return navItems.filter((item) => {
-      if (item.key === 'geistKB' && !moduleFlags.geistKB && !isSystemAdmin) return false;
-      if (item.key === 'geistVault' && !moduleFlags.geistVault && !isSystemAdmin) return false;
-      if (item.key === 'geistExchange' && !moduleFlags.geistExchange && !isSystemAdmin) return false;
+      if (item.key === 'geistKB' && !moduleFlags.geistKB) return false;
+      if (item.key === 'geistVault' && !moduleFlags.geistVault) return false;
+      if (item.key === 'geistExchange' && !moduleFlags.geistExchange) return false;
 
       // Admin elements require system admin status
       if (item.path.startsWith('/admin') || item.path === '/audit') {
@@ -647,14 +647,18 @@ export default function MainLayout() {
                   <Ticket className="w-4 h-4 text-[#1A73E8]" />
                   <span>{t('actions.createTicket', 'Create Ticket')}</span>
                 </DropdownMenuItem>
+                {moduleFlags.geistKB ? (
                 <DropdownMenuItem onClick={() => navigate('/kb?action=create')} className="flex items-center gap-2.5 text-xs font-bold text-slate-700 p-2.5 hover:bg-slate-50 rounded-lg cursor-pointer">
                   <BookOpen className="w-4 h-4 text-[#1A73E8]" />
                   <span>{t('actions.createKBArticle', 'Create GeistKB Article')}</span>
                 </DropdownMenuItem>
+                ) : null}
+                {moduleFlags.geistVault ? (
                 <DropdownMenuItem onClick={() => navigate('/credentials?action=create')} className="flex items-center gap-2.5 text-xs font-bold text-slate-700 p-2.5 hover:bg-slate-50 rounded-lg cursor-pointer">
                   <Lock className="w-4 h-4 text-[#1A73E8]" />
                   <span>{t('actions.createVaultEntry', 'Create GeistVault Entry')}</span>
                 </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem onClick={() => navigate('/customers?action=create')} className="flex items-center gap-2.5 text-xs font-bold text-slate-700 p-2.5 hover:bg-slate-50 rounded-lg cursor-pointer">
                   <Building2 className="w-4 h-4 text-[#1A73E8]" />
                   <span>{t('actions.createCompany', 'Create Company')}</span>

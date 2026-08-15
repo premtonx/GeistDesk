@@ -1,5 +1,5 @@
-import { type ReactNode } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { useEffect, useState, type ReactNode } from 'react';
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from './components/ui/sonner';
 import { TooltipProvider } from './components/ui/tooltip';
 import MainLayout from './components/layout/MainLayout';
@@ -39,6 +39,7 @@ import { usePermissions } from './hooks/usePermissions';
 import { isSystemAdminSession } from './lib/beta-admin-bypass';
 import { useOnboardingStatus } from './hooks/useOnboardingStatus';
 import { getModuleConfig, type PlatformModules } from './lib/module-config';
+import { toast } from 'sonner';
 import { AuthProvider } from './lib/context/AuthContext';
 import { SidebarProvider } from './lib/context/SidebarContext';
 import { WorkspaceProvider } from './lib/context/WorkspaceContext';
@@ -93,12 +94,18 @@ function ModuleRoute({
   module: keyof Omit<PlatformModules, 'tickets'>;
   children: ReactNode;
 }) {
-  const { isAdmin } = useAdmin();
-  const { role, userProfile } = usePermissions();
-  const isSystemAdmin = isSystemAdminSession(isAdmin, userProfile, role);
-  const flags = getModuleConfig().platformModules;
-  if (!flags[module] && !isSystemAdmin) {
-    return <Navigate to="/dashboard" replace />;
+  const location = useLocation();
+  const [flags, setFlags] = useState(() => getModuleConfig().platformModules);
+
+  useEffect(() => {
+    const sync = () => setFlags(getModuleConfig().platformModules);
+    window.addEventListener('module-config-changed', sync);
+    return () => window.removeEventListener('module-config-changed', sync);
+  }, []);
+
+  if (!flags[module]) {
+    toast.info('This module is disabled for this workspace.', { id: `module-disabled-${module}` });
+    return <Navigate to="/dashboard" replace state={{ from: location.pathname, moduleDisabled: module }} />;
   }
   return <>{children}</>;
 }

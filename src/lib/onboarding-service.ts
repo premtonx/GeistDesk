@@ -90,6 +90,7 @@ export const completeOnboardingSchema = z.object({
     })
     .optional()
     .default({ skip: true, channel: 'webhook' }),
+  importSampleData: z.boolean().optional().default(false),
 });
 
 export const registerAdminSchema = z.object({
@@ -602,6 +603,120 @@ async function resolvePrimaryAdminId(email: string): Promise<{ id: string; exist
   return { id: `user-admin-${Date.now()}`, existing: {} };
 }
 
+async function importOnboardingSampleData(opts: {
+  tenantId: string;
+  userId: string;
+  includeKb: boolean;
+}): Promise<{ tickets: number; articles: number; tags: number }> {
+  const now = new Date().toISOString();
+  const tickets = [
+    {
+      id: 'tkt-sample-0001',
+      customId: 'GD-0001',
+      subject: 'VPN-Verbindung bricht regelmäßig ab',
+      description: 'Beispielticket: Der VPN-Tunnel trennt sich alle wenigen Minuten im Engineering-Subnetz.',
+      status: 'open',
+      priority: 'high',
+      team: 'engineering',
+      channel: 'email',
+      customerName: 'Beispielkunde',
+      company: 'Beispiel GmbH',
+      agentId: null,
+      tags: ['network', 'vpn'],
+      tenantId: opts.tenantId,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'tkt-sample-0002',
+      customId: 'GD-0002',
+      subject: 'E-Mail synchronisiert nicht auf dem Mobilgerät',
+      description: 'Beispielticket: Outlook Mobile synchronisiert nach einer Passwortänderung nicht mehr.',
+      status: 'pending',
+      priority: 'medium',
+      team: 'support',
+      channel: 'chat',
+      customerName: 'Beispielkunde',
+      company: 'Beispiel GmbH',
+      agentId: null,
+      tags: ['email', 'mobile'],
+      tenantId: opts.tenantId,
+      createdAt: now,
+      updatedAt: now,
+    },
+    {
+      id: 'tkt-sample-0003',
+      customId: 'GD-0003',
+      subject: 'Passwort-Reset kommt nicht an',
+      description: 'Beispielticket: Self-Service-Reset-Mails erreichen mehrere Benutzer nicht.',
+      status: 'open',
+      priority: 'urgent',
+      team: 'support',
+      channel: 'email',
+      customerName: 'Beispielkunde',
+      company: 'Beispiel GmbH',
+      agentId: null,
+      tags: ['account', 'auth'],
+      tenantId: opts.tenantId,
+      createdAt: now,
+      updatedAt: now,
+    },
+  ];
+
+  const tags = [
+    { id: 'tag-sample-network', name: 'network', color: '#2563eb', tenantId: opts.tenantId, createdAt: now },
+    { id: 'tag-sample-email', name: 'email', color: '#059669', tenantId: opts.tenantId, createdAt: now },
+    { id: 'tag-sample-auth', name: 'auth', color: '#d97706', tenantId: opts.tenantId, createdAt: now },
+  ];
+
+  const articles = opts.includeKb
+    ? [
+        {
+          id: 'kb-sample-welcome',
+          title: 'Willkommen bei GeistDesk',
+          category: 'Onboarding',
+          subCategory: 'Erste Schritte',
+          content:
+            '<h2>Willkommen</h2><p>Dieser Einführungsartikel erklärt die wichtigsten Bereiche: Tickets, Wissen und Vault.</p><p>Sie können ihn jederzeit bearbeiten oder löschen.</p>',
+          tags: ['onboarding', 'intro'],
+          authorId: opts.userId,
+          status: 'Published',
+          visibility: 'Internal',
+          tenantId: opts.tenantId,
+          createdAt: now,
+          updatedAt: now,
+        },
+        {
+          id: 'kb-sample-ticket-triage',
+          title: 'Tickets priorisieren',
+          category: 'Support',
+          subCategory: 'Workflow',
+          content:
+            '<h2>Triage</h2><p>Beispielartikel: Priorisieren Sie eingehende Tickets nach Dringlichkeit und Kundenwirkung.</p>',
+          tags: ['tickets', 'triage'],
+          authorId: opts.userId,
+          status: 'Published',
+          visibility: 'Internal',
+          tenantId: opts.tenantId,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]
+    : [];
+
+  for (const ticket of tickets) {
+    await setDocDirect('tickets', ticket.id, ticket);
+  }
+  for (const tag of tags) {
+    await setDocDirect('tags', tag.id, tag);
+  }
+  for (const article of articles) {
+    await setDocDirect('kb_articles', article.id, article);
+  }
+
+  return { tickets: tickets.length, articles: articles.length, tags: tags.length };
+}
+
 export async function completeOnboarding(
   req: Request,
   input: CompleteOnboardingInput,
@@ -611,6 +726,8 @@ export async function completeOnboarding(
   channelId?: string;
   tenantId: string;
   user: OnboardingAdminUser;
+  modules: PlatformModules;
+  importSampleData: boolean;
 }> {
   await assertNotInitialized();
   const existing = (await loadModuleConfigDoc()) || emptyModuleConfig();
@@ -661,6 +778,7 @@ export async function completeOnboarding(
     initializedAt: now,
     initializedBy: cleanEmail,
     platformModules,
+    modules: platformModules,
     email: {
       ...existing.email,
       supportEmail: input.ingestion?.supportEmail || existing.email.supportEmail,
@@ -726,7 +844,7 @@ export async function completeOnboarding(
       `INSERT INTO geistdesk_documents (collection, id, data)
        VALUES ('module_config', 'global', $1::jsonb)
        ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-      [JSON.stringify({ ...nextConfig, tenantId, updatedAt: now })],
+      [JSON.stringify({ ...nextConfig, tenantId, modules: platformModules, platformModules, updatedAt: now })],
     );
   });
 
@@ -765,5 +883,21 @@ export async function completeOnboarding(
     await setPersonalVaultInitialized(userId, true);
   }
 
-  return { success: true, isInitialized: true, channelId, tenantId, user: adminUser };
+  if (input.importSampleData === true) {
+    await importOnboardingSampleData({
+      tenantId,
+      userId,
+      includeKb: platformModules.geistKB,
+    });
+  }
+
+  return {
+    success: true,
+    isInitialized: true,
+    channelId,
+    tenantId,
+    user: adminUser,
+    modules: platformModules,
+    importSampleData: input.importSampleData === true,
+  };
 }

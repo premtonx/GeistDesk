@@ -42,6 +42,7 @@ import {
   type DashboardStatsPayload,
 } from '../../services/executiveDashboardApi';
 import { formatRelativeTime, formatTrendBadge } from '../../lib/dashboard-format-utils';
+import { getModuleConfig } from '../../lib/module-config';
 
 export default function DashboardPage() {
   const { t } = useTranslation();
@@ -50,6 +51,13 @@ export default function DashboardPage() {
   const [isNewTicketOpen, setIsNewTicketOpen] = useState(false);
   const [dashboardStats, setDashboardStats] = useState<DashboardStatsPayload | null>(null);
   const [loading, setLoading] = useState(true);
+  const [moduleFlags, setModuleFlags] = useState(() => getModuleConfig().platformModules);
+
+  useEffect(() => {
+    const sync = () => setModuleFlags(getModuleConfig().platformModules);
+    window.addEventListener('module-config-changed', sync);
+    return () => window.removeEventListener('module-config-changed', sync);
+  }, []);
 
   useEffect(() => {
     if (!userProfile) return;
@@ -475,6 +483,7 @@ export default function DashboardPage() {
                   description={t('dashboard.createTicketDesc', 'Submit a new request')} 
                 />
 
+                {moduleFlags.geistKB ? (
                 <QuickCard 
                   onClick={() => navigate('/kb')}
                   icon={BookOpen} 
@@ -482,7 +491,9 @@ export default function DashboardPage() {
                   title={t('dashboard.searchKb', 'Search Knowledge Base')} 
                   description={t('dashboard.searchKbDesc', 'Find solutions')} 
                 />
+                ) : null}
 
+                {moduleFlags.geistVault ? (
                 <QuickCard 
                   onClick={() => navigate('/credentials')}
                   icon={Lock} 
@@ -490,6 +501,7 @@ export default function DashboardPage() {
                   title={t('dashboard.geistVault', 'GeistVault')} 
                   description={t('dashboard.geistVaultDesc', 'Store and retrieve system secrets')} 
                 />
+                ) : null}
 
                 <QuickCard 
                   onClick={() => navigate('/insights')}
@@ -566,6 +578,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Knowledge Base Health Card */}
+            {moduleFlags.geistKB ? (
             <div className="bg-white border border-gray-150 rounded-2xl shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-gray-100">
                 <div className="flex items-center gap-2">
@@ -631,6 +644,7 @@ export default function DashboardPage() {
                 </Button>
               </div>
             </div>
+            ) : null}
 
           </div>
 

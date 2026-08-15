@@ -29,6 +29,7 @@ import { Button } from '../ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { Input } from '../ui/input';
 import { Label } from '../ui/label';
+import { Checkbox } from '../ui/checkbox';
 import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
 import { cn } from '../../lib/utils';
@@ -86,6 +87,7 @@ export default function OnboardingWizardPage() {
   const [geistKB, setGeistKB] = useState(true);
   const [geistVault, setGeistVault] = useState(true);
   const [geistExchange, setGeistExchange] = useState(true);
+  const [importSampleData, setImportSampleData] = useState(false);
 
   const [ingestChannel, setIngestChannel] = useState<IngestChannel>('webhook');
   const [supportEmail, setSupportEmail] = useState('');
@@ -218,6 +220,7 @@ export default function OnboardingWizardPage() {
             embeddingModel,
           },
           modules: { geistKB, geistVault, geistExchange },
+          importSampleData,
           ingestion: skipIngest
             ? { skip: true, channel: ingestChannel }
             : {
@@ -249,18 +252,29 @@ export default function OnboardingWizardPage() {
         }
       }
 
+      const enabledModules = res.data?.modules || {
+        tickets: true,
+        geistKB,
+        geistVault,
+        geistExchange,
+      };
       const next = getModuleConfig();
       applyModuleConfigToStorage({
         ...next,
         is_initialized: true,
-        platformModules: {
-          tickets: true,
-          geistKB,
-          geistVault,
-          geistExchange,
-        },
+        platformModules: enabledModules,
       });
-      window.dispatchEvent(new Event('module-config-changed'));
+
+      window.dispatchEvent(
+        new CustomEvent('onboarding-status-changed', {
+          detail: {
+            isInitialized: true,
+            requiresOnboarding: false,
+            hasAdminUser: true,
+            modules: enabledModules,
+          },
+        }),
+      );
 
       toast.success(
         res.data?.channelId
@@ -268,7 +282,7 @@ export default function OnboardingWizardPage() {
           : 'GeistDesk is initialized. Welcome aboard.',
       );
       await refresh();
-      window.location.assign('/dashboard');
+      navigate('/dashboard', { replace: true });
     } catch (err: any) {
       const message =
         err?.response?.data?.error ||
@@ -589,6 +603,24 @@ export default function OnboardingWizardPage() {
                 title="GeistExchange"
                 body="Secure file exchange & webhooks."
               />
+              <label
+                htmlFor="import-sample-data"
+                className="sm:col-span-2 flex items-start gap-3 rounded-xl border p-4 cursor-pointer hover:border-primary/40"
+              >
+                <Checkbox
+                  id="import-sample-data"
+                  checked={importSampleData}
+                  onCheckedChange={(checked) => setImportSampleData(checked === true)}
+                  className="mt-0.5"
+                />
+                <span className="space-y-1">
+                  <span className="block text-sm font-medium">Beispieldaten importieren</span>
+                  <span className="block text-xs text-muted-foreground">
+                    Import sample tickets &amp; demo data. Erstellt Beispieltickets und Einführungsartikel, um die
+                    Plattform kennenzulernen.
+                  </span>
+                </span>
+              </label>
             </CardContent>
           </Card>
         )}
@@ -703,7 +735,7 @@ export default function OnboardingWizardPage() {
                 Skip for now, configure later in Admin-Hub
               </Button>
               <Button type="button" disabled={submitting} onClick={() => void finish(false)}>
-                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Finish setup'}
+                {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Einrichtung abschließen'}
               </Button>
             </div>
           )}

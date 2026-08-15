@@ -718,29 +718,23 @@ export default function KBPage() {
     return () => unsub();
   }, []);
 
-  // Merge Seed data with active Firestore loaded items! Allows live CRUD while remaining densely populated.
+  // Live articles only — placeholder seed articles are never mixed in.
   useEffect(() => {
-    // Collect all articles
-    const merged: any[] = [...ENTERPRISE_SEED_ARTICLES];
-    firestoreArticles.forEach((fa) => {
-      // Avoid duplicate matching keys with seed
-      if (!merged.some(m => m.id === fa.id || m.title.toLowerCase() === fa.title.toLowerCase())) {
-        merged.push({
-          ...fa,
-          owner: fa.owner || 'Sarah James',
-          reviewer: fa.reviewer || 'Mike Chen',
-          lastEditor: fa.lastEditor || 'Sarah James',
-          status: fa.status || (fa.visibility === 'Public' ? 'Published' : 'Draft'),
-          views: fa.views || Math.floor(Math.random() * 250) + 12,
-          helpfulCount: fa.helpfulCount || Math.floor(Math.random() * 45) + 3,
-          unhelpfulCount: fa.unhelpfulCount || 0,
-          avgReadTime: fa.avgReadTime || '3m 15s',
-          language: fa.language || 'English',
-          subCategory: fa.subCategory || 'Workspace Setup'
-        });
-      }
-    });
-    setArticles(merged);
+    setArticles(
+      firestoreArticles.map((fa) => ({
+        ...fa,
+        owner: fa.owner || '',
+        reviewer: fa.reviewer || '',
+        lastEditor: fa.lastEditor || '',
+        status: fa.status || (fa.visibility === 'Public' ? 'Published' : 'Draft'),
+        views: fa.views || 0,
+        helpfulCount: fa.helpfulCount || 0,
+        unhelpfulCount: fa.unhelpfulCount || 0,
+        avgReadTime: fa.avgReadTime || '',
+        language: fa.language || 'English',
+        subCategory: fa.subCategory || '',
+      })),
+    );
   }, [firestoreArticles]);
 
   useEffect(() => {

@@ -555,65 +555,6 @@ export default function TicketsPage() {
     toast.success(watchedTicketIds.includes(id) ? "Removed from watched" : "Added to watched");
   };
 
-  useEffect(() => {
-    // Auto-seed sample tickets if empty
-    if (!loading && allTickets.length === 0 && user) {
-      const sampleTickets = [
-        {
-          subject: "Login not working #3",
-          description: "I cannot log in with my new email address. It shows that the credentials are invalid, even though I just reset them.",
-          status: 'open',
-          priority: 'high',
-          team: 'support',
-          customerId: 'CUST-001',
-          customerName: "Sarah James",
-          company: "Advanced Machinery",
-          channel: 'email',
-          sentiment: 'angry',
-          tags: ['auth', 'login'],
-          creatorId: user.uid,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        {
-          subject: "Feature Request: Export to PDF",
-          description: "We would like to be able to export our weekly reports directly to PDF format for our management team.",
-          status: 'pending',
-          priority: 'medium',
-          team: 'engineering',
-          customerId: 'CUST-002',
-          customerName: "Mike Chen",
-          company: "Global Tech Solutions",
-          channel: 'chat',
-          sentiment: 'positive',
-          tags: ['feature', 'export'],
-          creatorId: user.uid,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        },
-        {
-          subject: "System delay in production",
-          description: "We are noticing significant latency in the production environment since the last update. Please investigate.",
-          status: 'open',
-          priority: 'urgent',
-          team: 'engineering',
-          customerId: 'CUST-003',
-          customerName: "Alex Rivera",
-          company: "FinStream",
-          channel: 'phone',
-          sentiment: 'negative',
-          tags: ['performance', 'incident'],
-          creatorId: user.uid,
-          createdAt: new Date(),
-          updatedAt: new Date()
-        }
-      ];
-
-      sampleTickets.forEach(t => ticketService.createTicket(t as any));
-      toast.info("Sample tickets seeded for your workspace.");
-    }
-  }, [loading, allTickets.length, user]);
-
   const [isAiDrafting, setIsAiDrafting] = useState(false);
   const [ghostDraft, setGhostDraft] = useState('');
   const [isGhostDrafting, setIsGhostDrafting] = useState(false);

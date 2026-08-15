@@ -352,18 +352,21 @@ export async function syncModuleConfigFromServer(isAdmin = false): Promise<Modul
     const local = getModuleConfig();
     const { config: migratedLocal, migrated } = migrateLegacyBrowserOnlySettings(local);
 
-    const merged = normalizeModuleConfig(
-      isAdmin
-        ? { ...DEFAULT_MODULE_CONFIG, ...remote, ...migratedLocal }
-        : {
-            ...migratedLocal,
-            ...remote,
-            polyglot: {
-              ...migratedLocal.polyglot,
-              ...(remote.polyglot || {}),
-            },
-          },
-    );
+    // Remote (Postgres) is the source of truth for module flags. Local
+    // defaults must never re-enable a module the wizard turned off.
+    const remoteModules =
+      (remote as { platformModules?: PlatformModules; modules?: PlatformModules }).platformModules ??
+      (remote as { modules?: PlatformModules }).modules;
+    const merged = normalizeModuleConfig({
+      ...DEFAULT_MODULE_CONFIG,
+      ...migratedLocal,
+      ...remote,
+      platformModules: remoteModules ?? migratedLocal.platformModules,
+      polyglot: {
+        ...migratedLocal.polyglot,
+        ...((remote as { polyglot?: Record<string, unknown> }).polyglot || {}),
+      },
+    });
 
     applyModuleConfigToStorage(merged);
 
