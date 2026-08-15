@@ -18,6 +18,7 @@ interface VaultSecuritySidebarProps {
   recentViewed: ActivityCred[];
   recentModified: ActivityCred[];
   sharedItems: ActivityCred[];
+  auditEventCount?: number;
 }
 
 export function VaultSecuritySidebar({
@@ -27,6 +28,7 @@ export function VaultSecuritySidebar({
   recentViewed,
   recentModified,
   sharedItems,
+  auditEventCount = 0,
 }: VaultSecuritySidebarProps) {
   const { t } = useTranslation();
 
@@ -62,7 +64,9 @@ export function VaultSecuritySidebar({
                 <History className="w-3.5 h-3.5 text-slate-400" />
                 {t('vault.accessAuditLog', 'Access Audit Log')}
               </div>
-              <p className="text-[10px] text-slate-400 mt-1">{t('vault.auditRecent', '12 events in the last 24h')}</p>
+              <p className="text-[10px] text-slate-400 mt-1">
+                {t('vault.auditRecent', '{{count}} events in the last 24h').replace('{{count}}', String(auditEventCount))}
+              </p>
             </div>
           </div>
         </div>

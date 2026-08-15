@@ -20,16 +20,8 @@ export function CommandPalette({
   onClose, 
   tickets, 
   onSelectTicket,
-  customers = [
-    { id: 'c1', name: 'Sarah James', company: 'Advanced Machinery' },
-    { id: 'c2', name: 'Mike Chen', company: 'Global Tech Solutions' },
-    { id: 'c3', name: 'Alex Rivera', company: 'FinStream' },
-  ],
-  vaultItems = [
-    { id: 'v1', label: 'Production RDP', type: 'rdp' },
-    { id: 'v2', label: 'AWS Console', type: 'web' },
-    { id: 'v3', label: 'VPN Gateway', type: 'vpn' },
-  ]
+  customers = [],
+  vaultItems = [],
 }: CommandPaletteProps) {
   const [query, setQuery] = useState('');
   const [selectedIndex, setSelectedIndex] = useState(0);

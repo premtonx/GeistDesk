@@ -36,6 +36,39 @@ export const SHOWCASE_SEED_CATEGORY_NAMES: readonly string[] = [
   'Slack Workspaces',
 ];
 
+/** Host + username pairs from the retired client seeder. Generic names like "administrator" are excluded. */
+const SHOWCASE_SEED_FINGERPRINTS: ReadonlyArray<{ host: string; username: string }> = [
+  { host: 'console.aws.amazon.com', username: 'root-admin@company.internal' },
+  { host: 'swarm.it-dept.company.internal', username: 'docker-deploy@company.internal' },
+  { host: 'business.amazon.com', username: 'admin-personal@company.com' },
+  { host: 'ghcr.io', username: 'git-automation' },
+  { host: '192.168.1.10', username: 'administrator' },
+  { host: 'bastion.eu-west.acme.internal', username: 'ops-jump' },
+  { host: 'api.stripe.com', username: 'sk_live_demo' },
+  { host: 'acme.okta.com', username: 'sso-admin@acme.com' },
+  { host: 'vpn.acme.com', username: '' },
+  { host: 'db-prod.acme.com:5432', username: 'db_admin' },
+  { host: 'smtp.acme.com:587', username: 'support-relay@acme.com' },
+];
+
+export function isShowcaseVaultCredential(item: {
+  label?: string;
+  host?: string;
+  username?: string;
+}): boolean {
+  const label = String(item.label || '').trim();
+  if ((SHOWCASE_SEED_LABELS as readonly string[]).includes(label)) return true;
+  const host = String(item.host || '').trim().toLowerCase();
+  const username = String(item.username || '').trim().toLowerCase();
+  return SHOWCASE_SEED_FINGERPRINTS.some(
+    (fp) => fp.host === host && fp.username === username,
+  );
+}
+
+export function isShowcaseVaultCategory(name: string): boolean {
+  return (SHOWCASE_SEED_CATEGORY_NAMES as readonly string[]).includes(name);
+}
+
 /** Branded enterprise showcase rows — never auto-inserted in production. */
 export const BRANDED_SHOWCASE_CREDENTIALS: SeedItem[] = [
   {

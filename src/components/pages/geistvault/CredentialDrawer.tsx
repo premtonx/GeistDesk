@@ -373,17 +373,23 @@ export function CredentialDrawer({
               <div className="bg-[#F8F9FA] rounded-xl border border-[#DADCE0] p-3 text-center flex flex-col items-center justify-center gap-1 shadow-2xs">
                 <Ticket className="w-4 h-4 text-[#1A73E8]" />
                 <span className="text-[9px] font-bold text-slate-400 uppercase">Linked Ticket</span>
-                <span className="text-[10px] font-bold text-slate-700 bg-white px-1.5 py-0.5 rounded-md border mt-1">#4392</span>
+                <span className="text-[10px] font-bold text-slate-700 bg-white px-1.5 py-0.5 rounded-md border mt-1">
+                  {credential.linkedTicket || '—'}
+                </span>
               </div>
               <div className="bg-[#F8F9FA] rounded-xl border border-[#DADCE0] p-3 text-center flex flex-col items-center justify-center gap-1 shadow-2xs">
                 <Building2 className="w-4 h-4 text-green-600" />
                 <span className="text-[9px] font-bold text-slate-400 uppercase">Linked Company</span>
-                <span className="text-[10px] font-bold text-slate-700 bg-white px-1.5 py-0.5 rounded-md border mt-1 select-none">Acme Global</span>
+                <span className="text-[10px] font-bold text-slate-700 bg-white px-1.5 py-0.5 rounded-md border mt-1 select-none">
+                  {credential.linkedCompany || '—'}
+                </span>
               </div>
               <div className="bg-[#F8F9FA] rounded-xl border border-[#DADCE0] p-3 text-center flex flex-col items-center justify-center gap-1 shadow-2xs">
                 <Cpu className="w-4 h-4 text-purple-600" />
                 <span className="text-[9px] font-bold text-slate-400 uppercase">Linked Asset</span>
-                <span className="text-[10px] font-bold text-slate-700 bg-white px-1.5 py-0.5 rounded-md border mt-1 select-none">Web_ORIG_99</span>
+                <span className="text-[10px] font-bold text-slate-700 bg-white px-1.5 py-0.5 rounded-md border mt-1 select-none">
+                  {credential.linkedAsset || '—'}
+                </span>
               </div>
             </div>
           </div>

@@ -26,33 +26,11 @@ export interface PlatformVaultFolderSeed {
   sortOrder?: number;
 }
 
-/** Default credential vault folder tree for the personal (`local`) vault. */
-export const PLATFORM_DEFAULT_VAULT_FOLDERS: PlatformVaultFolderSeed[] = [
-  {
-    id: 'folder-seed-prod',
-    name: 'Produktion',
-    icon: 'folder',
-    parentId: null,
-    vaultId: 'local',
-    sortOrder: 0,
-  },
-  {
-    id: 'folder-seed-vpn',
-    name: 'VPN & Netzwerk',
-    icon: 'lock',
-    parentId: null,
-    vaultId: 'local',
-    sortOrder: 1,
-  },
-  {
-    id: 'folder-seed-eu',
-    name: 'EU-West',
-    icon: 'server',
-    parentId: 'folder-seed-prod',
-    vaultId: 'local',
-    sortOrder: 0,
-  },
-];
+/**
+ * Retired demo folder tree. Kept only so audits can name the IDs that
+ * `purgeSeededVaultFolders` deletes. Never insert these on seed or onboarding.
+ */
+export const PLATFORM_DEFAULT_VAULT_FOLDERS: PlatformVaultFolderSeed[] = [];
 
 const PERSONA_BLUEPRINT_MAP: Record<AiPersonaId, { blueprintId: string; fileName: string }> = {
   support_agent: { blueprintId: 'support_empathy_translation', fileName: 'support_empathy_translation.sample.json' },

@@ -40,14 +40,10 @@ export function GeistVaultAIAssistant({ onClose, credentialsList }: AIProps) {
       const cmd = userMsg.toLowerCase();
 
       if (cmd.includes('scan') || cmd.includes('audit') || cmd.includes('weak')) {
-        const weakCount = credentialsList.filter(c => c.username === 'admin' || c.username === 'root' || (c.notes && c.notes.toLowerCase().includes('weak'))).length + 3;
-        aiText = `Based on my deep vault cryptanalysis, I have identified **${weakCount} security findings**:
-        
-        1. **Default Administrator User IDs** are used in 2 RDP assets. Standard targets are highly vulnerable to credential stuffing.
-        2. **Standard HTTP endpoints detected**: One database asset (192.168.1.10) transmits credentials without active SSL/TLS certificates.
-        3. **Rotation Compliance Alert**: 4 assets have not been rotated in the last 180 days.
-        
-        *Recommendation: Set a custom 30-day rotation policy directly from the Access tab and generate strong 32-character tokens.*`;
+        const weakCount = credentialsList.filter(c => c.username === 'admin' || c.username === 'root' || (c.notes && c.notes.toLowerCase().includes('weak'))).length;
+        aiText = credentialsList.length === 0
+          ? 'Der Tresor ist leer. Es gibt keine Beispieldaten und keine Sicherheitsfunde.'
+          : `Based on the current vault I have identified **${weakCount} security findings** among ${credentialsList.length} entries.`;
       } else if (cmd.includes('rotation') || cmd.includes('schedule') || cmd.includes('rotate')) {
         aiText = `Here is your customized **Rotation compliance schedule**:
         
@@ -57,13 +53,9 @@ export function GeistVaultAIAssistant({ onClose, credentialsList }: AIProps) {
         
         Would you like me to draft a secure rotation rule or generate replacement credentials?`;
       } else if (cmd.includes('stale') || cmd.includes('inactive') || cmd.includes('cleanup')) {
-        aiText = `I analyzed active access logs over the last 90 days:
-        
-        - Found **2 credentials** that have had zero active requests since creation.
-          1. *test.api.digitalocean (DigitalOcean Personal Token)*
-          2. *acme-staging-mysql (RDP Session)*
-          
-        Recommend archiving these items to reduce the attack exposure.`;
+        aiText = credentialsList.length === 0
+          ? 'Der Tresor ist leer. Es gibt keine ungenutzten Beispieleinträge.'
+          : `I analyzed the current vault (${credentialsList.length} items). Archive unused credentials to reduce exposure.`;
       } else {
         aiText = `I have logged that security query. GeistVault AI is active in auditing your current credentials list (${credentialsList.length} items parsed). 
 
