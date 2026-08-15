@@ -14,12 +14,7 @@ export function GeistVaultEmergency() {
   const [reason, setReason] = useState('');
   const [selectedRecoveryKey, setSelectedRecoveryKey] = useState<string | null>(null);
 
-  const emergencySecrets = [
-    { name: "SaaS Database Secondary Root Key", type: "Postgres Root", ref: "DR-001" },
-    { name: "Cloudflare Domain Admin Backup Master Key", type: "Security Config Key", ref: "DR-002" },
-    { name: "Primary Kubernetes Cluster ClusterAdmin Key", type: "K8S Config YAML", ref: "DR-003" },
-    { name: "Workspace Root Enterprise Credential", type: "SuperAdmin Master", ref: "DR-004" }
-  ];
+  const emergencySecrets: Array<{ name: string; type: string; ref: string }> = [];
 
   const handleStartBreakGlass = () => {
     if (!reason.trim()) {
@@ -224,7 +219,13 @@ export function GeistVaultEmergency() {
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {emergencySecrets.map((sec, i) => (
+                {emergencySecrets.length === 0 ? (
+                  <div className="md:col-span-2 p-6 border border-dashed border-[#DADCE0] rounded-2xl text-center">
+                    <p className="text-sm font-bold text-slate-700">Keine Notfall-Geheimnisse hinterlegt</p>
+                    <p className="text-xs text-slate-400 mt-1">Break-Glass zeigt nur Einträge, die Sie selbst anlegen.</p>
+                  </div>
+                ) : (
+                  emergencySecrets.map((sec, i) => (
                   <div key={i} className="p-4 border border-[#DADCE0] hover:border-red-500 rounded-2xl bg-white shadow-xs space-y-4 flex flex-col justify-between">
                     <div>
                       <div className="flex justify-between items-start">
@@ -242,7 +243,8 @@ export function GeistVaultEmergency() {
                       Audit Reveal Primary Key
                     </Button>
                   </div>
-                ))}
+                  ))
+                )}
               </div>
 
               {selectedRecoveryKey && (

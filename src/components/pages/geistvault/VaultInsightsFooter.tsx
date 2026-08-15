@@ -36,9 +36,9 @@ export function VaultInsightsFooter({
 
   const strongCount = Math.max(0, totalCount - weakCount - expiringCount);
   const mediumCount = expiringCount;
-  const strongPct = totalCount > 0 ? Math.round((strongCount / totalCount) * 100) : 75;
-  const mediumPct = totalCount > 0 ? Math.round((mediumCount / totalCount) * 100) : 17;
-  const weakPct = totalCount > 0 ? Math.round((weakCount / totalCount) * 100) : 8;
+  const strongPct = totalCount > 0 ? Math.round((strongCount / totalCount) * 100) : 0;
+  const mediumPct = totalCount > 0 ? Math.round((mediumCount / totalCount) * 100) : 0;
+  const weakPct = totalCount > 0 ? Math.round((weakCount / totalCount) * 100) : 0;
 
   const expiringItems = credentials.filter(isExpiring).slice(0, 3);
   const expiryDays = [18, 11, 7];

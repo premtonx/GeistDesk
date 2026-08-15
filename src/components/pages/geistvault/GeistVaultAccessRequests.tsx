@@ -12,47 +12,25 @@ export function GeistVaultAccessRequests() {
   const [shareLinkExpiry, setShareLinkExpiry] = useState('24h');
   const [generatedShareLink, setGeneratedShareLink] = useState('');
   
-  const [pendingRequests, setPendingRequests] = useState([
-    {
-      id: "REQ-302",
-      requester: "sarah.james@acme.com",
-      credentialName: "Billing Postgres Main DB Admin",
-      role: "Support Agent",
-      reason: "Debugging broken payment callback log on ticket #8294",
-      duration: "2 Hours",
-      status: "pending",
-      requestedAt: "10 minutes ago"
-    },
-    {
-      id: "REQ-304",
-      requester: "alex.sanders@acme.com",
-      credentialName: "AWS Billing Prod Credentials",
-      role: "Finance Admin",
-      reason: "SOCI compliance expense audit reports check",
-      duration: "8 Hours",
-      status: "pending",
-      requestedAt: "25 minutes ago"
-    }
-  ]);
+  const [pendingRequests, setPendingRequests] = useState<Array<{
+    id: string;
+    requester: string;
+    credentialName: string;
+    role: string;
+    reason: string;
+    duration: string;
+    status: string;
+    requestedAt: string;
+  }>>([]);
 
-  const [activeJITs, setActiveJITs] = useState([
-    {
-      id: "JIT-104",
-      user: "lead_agent@acme.com",
-      credentialName: "DigitalOcean API Root Token",
-      timeLeft: "1h 42m",
-      grantedBy: "security_director@acme.com",
-      scope: "DigitalOcean Personal Token"
-    },
-    {
-      id: "JIT-105",
-      user: "sarah.james@acme.com",
-      credentialName: "Cisco Core Gateway Access",
-      timeLeft: "24m 10s",
-      grantedBy: "system_admin@acme.com",
-      scope: "VPN Access"
-    }
-  ]);
+  const [activeJITs, setActiveJITs] = useState<Array<{
+    id: string;
+    user: string;
+    credentialName: string;
+    timeLeft: string;
+    grantedBy: string;
+    scope: string;
+  }>>([]);
 
   const handleApprove = (reqId: string, name: string, requester: string) => {
     setPendingRequests(prev => prev.filter(r => r.id !== reqId));

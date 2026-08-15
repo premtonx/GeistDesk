@@ -1,7 +1,8 @@
 // GeistDesk database seeding utility.
 //
 // Always stamps platform defaults (module_config.is_initialized=false on fresh
-// boots, vault folders, prompts). Fixture users/tickets from seed-data.json are
+// boots, prompt templates). Demo vault folders are purged, never inserted.
+// Fixture users/tickets from seed-data.json are
 // inserted only when ENABLE_DEMO_LOGIN=true on a non-production runtime.
 // Passwords are hashed with Argon2id — plaintext is NEVER written to the database.
 //
@@ -163,7 +164,7 @@ async function main() {
       console.log("[seed] Seeded module_config/global with is_initialized=false (First-Run Wizard required).");
     }
     if (platform.vaultFolders > 0) {
-      console.log(`[seed] Upserted ${platform.vaultFolders} empty default vault_folders (no secrets).`);
+      console.log(`[seed] Purged ${platform.vaultFolders} leftover demo vault_folders (folder-seed-*).`);
     }
     if (platform.promptTemplates > 0) {
       console.log(`[seed] Inserted ${platform.promptTemplates} German ai_prompt_templates.`);

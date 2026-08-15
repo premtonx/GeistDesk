@@ -19,6 +19,8 @@ export interface VaultSidebarCategory {
 
 interface VaultLeftSidebarProps {
   activeVaultId: string;
+  /** When set, hide hardcoded demo partitions that do not exist as real vaults. */
+  visibleVaultIds?: string[];
   onVaultChange: (id: string) => void;
   vaultCounts: Record<string, number>;
   dynamicVaults?: Array<{
@@ -97,6 +99,7 @@ function PermissionBadge({ vault, active }: { vault: VaultDefinition; active?: b
 
 export function VaultLeftSidebar({
   activeVaultId,
+  visibleVaultIds,
   onVaultChange,
   vaultCounts,
   dynamicVaults = [],
@@ -113,6 +116,8 @@ export function VaultLeftSidebar({
 }: VaultLeftSidebarProps) {
   const { t } = useTranslation();
 
+  const allowedStaticIds = new Set(visibleVaultIds ?? ['local']);
+  const staticVaults = VAULT_DEFINITIONS.filter((vault) => allowedStaticIds.has(vault.id));
   const staticIds = new Set(VAULT_DEFINITIONS.map((v) => v.id));
   const extraVaults = dynamicVaults.filter((v) => !staticIds.has(v.id));
 
@@ -121,7 +126,7 @@ export function VaultLeftSidebar({
       <div className="p-3 flex-1 overflow-y-auto">
         <SectionTitle>{t('vault.sections.vaults', 'Vaults')}</SectionTitle>
         <div className="space-y-0.5">
-          {VAULT_DEFINITIONS.map((vault) => {
+          {staticVaults.map((vault) => {
             const active = activeVaultId === vault.id;
             const count = vaultCounts[vault.id] ?? 0;
             return (

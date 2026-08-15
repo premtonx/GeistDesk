@@ -52,28 +52,24 @@ export function VaultKpiCards({ totalAssets, healthScore, sharedSecrets, securit
         icon={<Key className="w-4 h-4" />}
         label={t('vault.kpi.totalAssets', 'Total Assets')}
         value={totalAssets}
-        trend="+5"
         accent="from-blue-500/10 to-sky-500/5"
       />
       <KpiCard
         icon={<HeartPulse className="w-4 h-4" />}
         label={t('vault.kpi.vaultHealth', 'Vault Health')}
         value={`${healthScore}/100`}
-        trend="+4%"
         accent="from-emerald-500/10 to-teal-500/5"
       />
       <KpiCard
         icon={<Users className="w-4 h-4" />}
         label={t('vault.kpi.sharedSecrets', 'Shared Secrets')}
         value={sharedSecrets}
-        trend="+2"
         accent="from-violet-500/10 to-purple-500/5"
       />
       <KpiCard
         icon={<Shield className="w-4 h-4" />}
         label={t('vault.kpi.securityScore', 'Security Score')}
         value={`${securityScore}%`}
-        trend="+12%"
         accent="from-indigo-500/10 to-blue-500/5"
       />
     </div>

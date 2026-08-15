@@ -5,11 +5,11 @@
 
 import type pg from 'pg';
 import {
-  PLATFORM_DEFAULT_VAULT_FOLDERS,
   buildDefaultModuleConfigSeed,
   buildDefaultPersonaSkills,
   buildDefaultPromptTemplates,
 } from '../data/platform-defaults.js';
+import { purgeSeededVaultFolders } from '../lib/vault-demo-purge.js';
 
 async function batchUpsert(
   client: pg.PoolClient,
@@ -78,20 +78,9 @@ export async function seedModuleConfig(client: pg.PoolClient): Promise<boolean> 
   return true;
 }
 
+/** Production boots must not invent vault folders. Delete leftover seed rows. */
 export async function seedVaultFolders(client: pg.PoolClient): Promise<number> {
-  const now = new Date().toISOString();
-  const rows = PLATFORM_DEFAULT_VAULT_FOLDERS.map((folder) => ({
-    id: folder.id,
-    name: folder.name,
-    icon: folder.icon,
-    parentId: folder.parentId,
-    vaultId: folder.vaultId,
-    sortOrder: folder.sortOrder ?? 0,
-    createdAt: now,
-    updatedAt: now,
-  }));
-  // Empty folder tree only — never insert vault_items or demo secrets.
-  return batchUpsert(client, 'vault_folders', rows);
+  return purgeSeededVaultFolders((sql, params) => client.query(sql, params ?? []));
 }
 
 export async function seedPromptTemplates(client: pg.PoolClient): Promise<number> {

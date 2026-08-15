@@ -114,7 +114,7 @@ import { GeistVaultEmergency } from './geistvault/GeistVaultEmergency';
 import { GeistVaultAccessRequests } from './geistvault/GeistVaultAccessRequests';
 
 // Redesigned high-fidelity subcomponents
-import { MOCK_CHROME_EXTENSION, SHOWCASE_SEED_CATEGORY_NAMES, SHOWCASE_SEED_LABELS } from './geistvault/DefaultData';
+import { isShowcaseVaultCategory, isShowcaseVaultCredential } from './geistvault/DefaultData';
 import { CredentialDrawer } from './geistvault/CredentialDrawer';
 import { VaultPageHeader } from '../vault/VaultPageHeader';
 import { VaultKpiCards } from '../vault/VaultKpiCards';
@@ -234,14 +234,14 @@ export default function CredentialVaultPage() {
     icon: 'Globe',
     iconType: 'preset',
     vaultId: 'local',
-    owner: 'You',
-    team: 'Platform Ops',
-    department: 'Infrastructure',
+    owner: '',
+    team: '',
+    department: '',
     visibility: 'private',
-    linkedCompany: 'Acme Global',
-    linkedAsset: 'Server Cluster',
-    linkedTicket: 'Ticket #442',
-    tags: ['Production'],
+    linkedCompany: '',
+    linkedAsset: '',
+    linkedTicket: '',
+    tags: [],
     expirationPolicy: 'Never',
     rotationPolicy: 'Manual',
     totpSecret: '',
@@ -397,27 +397,25 @@ export default function CredentialVaultPage() {
       let mergedCredentials = remoteCredentials;
       let mergedCategories = remoteCategories;
 
-      // Never invent demo secrets. Strip leftover showcase rows from older builds
-      // unless showcase login is explicitly enabled.
+      // Never invent demo secrets. Strip leftover showcase rows from every
+      // decrypted folder — not only the personal vault — unless showcase login
+      // is explicitly enabled.
       if (!isDemoLoginEnabled()) {
-        const showcaseLabels = new Set(SHOWCASE_SEED_LABELS);
-        const showcaseCats = new Set(SHOWCASE_SEED_CATEGORY_NAMES);
-        const cleanedCredentials = mergedCredentials.filter((item) => !showcaseLabels.has(item.label));
-        const cleanedCategories = mergedCategories.filter((cat) => !showcaseCats.has(cat.name));
+        const cleanedCredentials = mergedCredentials.filter((item) => !isShowcaseVaultCredential(item));
+        const cleanedCategories = mergedCategories.filter((cat) => !isShowcaseVaultCategory(cat.name));
         if (
           cleanedCredentials.length !== mergedCredentials.length ||
           cleanedCategories.length !== mergedCategories.length
         ) {
           mergedCredentials = cleanedCredentials;
           mergedCategories = cleanedCategories;
-          personalFolder = await persistFolder(
-            personalFolder,
-            mergedCredentials,
-            mergedCategories,
-            personalFolderResult.vaultKey,
-          );
-          folders = folders.map((f) => (f.id === personalFolder.id ? personalFolder : f));
-          vaultKeys.set(personalFolder.slug, personalFolderResult.vaultKey);
+          for (const folder of folders) {
+            const vaultKey = vaultKeys.get(folder.slug);
+            if (!vaultKey) continue;
+            const updated = await persistFolder(folder, mergedCredentials, mergedCategories, vaultKey);
+            folders = folders.map((f) => (f.id === updated.id ? updated : f));
+            if (updated.id === personalFolder.id) personalFolder = updated;
+          }
         }
       }
 
@@ -821,13 +819,13 @@ export default function CredentialVaultPage() {
         vaultId: targetVaultId,
 
         // Enterprise metadata
-        owner: newEntry.owner || 'You',
-        team: newEntry.team || 'Platform Ops',
-        department: newEntry.department || 'Infrastructure',
-        linkedCompany: newEntry.linkedCompany || 'Acme Global',
-        linkedAsset: newEntry.linkedAsset || 'Server Cluster',
-        linkedTicket: newEntry.linkedTicket || 'Ticket #442',
-        tags: newEntry.tags || ['Production'],
+        owner: newEntry.owner || '',
+        team: newEntry.team || '',
+        department: newEntry.department || '',
+        linkedCompany: newEntry.linkedCompany || '',
+        linkedAsset: newEntry.linkedAsset || '',
+        linkedTicket: newEntry.linkedTicket || '',
+        tags: newEntry.tags || [],
         expirationPolicy: newEntry.expirationPolicy || 'Never',
         rotationPolicy: newEntry.rotationPolicy || 'Manual',
         totpSecret: newEntry.totpSecret || '',
@@ -861,14 +859,14 @@ export default function CredentialVaultPage() {
         icon: 'Globe',
         iconType: 'preset',
         vaultId: 'local',
-        owner: 'You',
-        team: 'Platform Ops',
-        department: 'Infrastructure',
+        owner: '',
+        team: '',
+        department: '',
         visibility: 'private',
-        linkedCompany: 'Acme Global',
-        linkedAsset: 'Server Cluster',
-        linkedTicket: 'Ticket #442',
-        tags: ['Production'],
+        linkedCompany: '',
+        linkedAsset: '',
+        linkedTicket: '',
+        tags: [],
         expirationPolicy: 'Never',
         rotationPolicy: 'Manual',
         totpSecret: '',
@@ -1282,6 +1280,7 @@ export default function CredentialVaultPage() {
         <div className="flex flex-1 min-h-0 w-full overflow-y-auto">
           <VaultLeftSidebar
             activeVaultId={activeVaultId}
+            visibleVaultIds={['local', ...vaultFolders.map((folder) => folder.slug)]}
             onVaultChange={(id) => {
               setActiveVaultId(id);
               setSmartFilter(null);
@@ -1334,7 +1333,12 @@ export default function CredentialVaultPage() {
                 securityScore={securityScore}
               />
 
-              <VaultAiSecurityBanner rotateCount={weakCount} expiringKeys={expiringCount} />
+              <VaultAiSecurityBanner
+                rotateCount={weakCount}
+                expiringKeys={expiringCount}
+                mfaCoverage={0}
+                isEmpty={nonDeletedItems.length === 0}
+              />
 
               <VaultPropertiesPane
                 vaultName={activeVaultDisplayName}
@@ -1388,12 +1392,13 @@ export default function CredentialVaultPage() {
           </main>
 
           <VaultSecuritySidebar
-            strengthPercent={strengthPercent}
-            mfaCoverage={98}
+            strengthPercent={nonDeletedItems.length === 0 ? 0 : strengthPercent}
+            mfaCoverage={0}
             rotationDue={weakCount + expiringCount}
             recentViewed={nonDeletedItems.slice(0, 4)}
             recentModified={[...nonDeletedItems].sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 4)}
             sharedItems={nonDeletedItems.filter((c) => c.vaultId === 'shared').slice(0, 4)}
+            auditEventCount={0}
           />
         </div>
       )}
@@ -1851,10 +1856,14 @@ export default function CredentialVaultPage() {
                               <SelectValue placeholder="Personal Local Vault" />
                             </SelectTrigger>
                             <SelectContent>
-                              <SelectItem value="local">Personal Local Vault (Standard)</SelectItem>
-                              <SelectItem value="team">Team Shared Vault (Joint Ops)</SelectItem>
-                              <SelectItem value="department">Department Vault (Scoped)</SelectItem>
-                              <SelectItem value="emergency">Emergency Vault (Breakglass)</SelectItem>
+                              <SelectItem value="local">Personal Vault</SelectItem>
+                              {vaultFolders
+                                .filter((folder) => folder.slug !== 'local')
+                                .map((folder) => (
+                                  <SelectItem key={folder.id} value={folder.slug}>
+                                    {folder.name}
+                                  </SelectItem>
+                                ))}
                             </SelectContent>
                           </Select>
                         </div>

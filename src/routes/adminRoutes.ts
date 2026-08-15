@@ -71,11 +71,11 @@ const router = Router();
  */
 router.get("/hub-stats", authenticate, requireRole(["SYSTEM_ADMIN"]), async (_req: Request, res: Response): Promise<any> => {
   try {
-    const [tickets, users, kbArticles, vaultFolders, aiUsageRes, healthRes] = await Promise.all([
+    const [tickets, users, kbArticles, vaultStores, aiUsageRes, healthRes] = await Promise.all([
       getDocsDirect("tickets", []),
       getDocsDirect("users", []),
       getDocsDirect("kb_articles", []),
-      getDocsDirect("vault_folders", []),
+      getDocsDirect("geist_vault_encrypted_stores", []),
       queryDb(
         `SELECT COUNT(*)::int AS total,
                 COALESCE(AVG(latency_ms), 0)::int AS avg_latency
@@ -95,8 +95,8 @@ router.get("/hub-stats", authenticate, requireRole(["SYSTEM_ADMIN"]), async (_re
     return res.status(200).json({
       activeAgents,
       ticketsProcessed: tickets.length,
-      assetsManaged: tickets.length + vaultFolders.length + kbArticles.length,
-      vaultSecrets: vaultFolders.length,
+      assetsManaged: tickets.length + vaultStores.length + kbArticles.length,
+      vaultSecrets: vaultStores.length,
       knowledgeArticles: kbArticles.length,
       aiRequests: Number(aiRow?.total) || 0,
       systemHealth: healthRes?.status === 'offline' ? 95 : healthRes?.status === 'degraded' ? 98.5 : 99.98,
