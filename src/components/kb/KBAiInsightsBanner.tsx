@@ -14,10 +14,10 @@ interface KBAiInsightsBannerProps {
 }
 
 export function KBAiInsightsBanner({
-  engagementGrowth = 18,
-  reviewCount = 3,
-  missingTagsCount = 5,
-  outdatedCount = 2,
+  engagementGrowth = 0,
+  reviewCount = 0,
+  missingTagsCount = 0,
+  outdatedCount = 0,
   className,
 }: KBAiInsightsBannerProps) {
   const { t } = useTranslation();

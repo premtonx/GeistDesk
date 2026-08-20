@@ -23,7 +23,7 @@ export interface KBCategoryItem {
 interface KBCategoryGridProps {
   categories: KBCategoryItem[];
   categoryRecords?: KBCategoryRecord[];
-  articles: { category?: string; updatedAt?: { toDate?: () => Date }; helpfulCount?: number; views?: number }[];
+  articles: { category?: string; status?: string; updatedAt?: { toDate?: () => Date }; helpfulCount?: number; unhelpfulCount?: number; views?: number }[];
   selectedCategory: string;
   onSelect: (name: string) => void;
   onRename?: (categoryId: string) => void;
@@ -46,6 +46,24 @@ export function KBCategoryGrid({
   const resolveId = (cat: KBCategoryItem) =>
     cat.id ?? categoryRecords.find((c) => c.name === cat.name)?.id ?? cat.name;
 
+  if (categories.length === 0) {
+    return (
+      <section className={className}>
+        <h2 className="text-sm font-semibold text-slate-900 mb-4">
+          {t('kb.categoryExplorer', 'Category Explorer')}
+        </h2>
+        <div className="rounded-xl border border-dashed border-slate-200 bg-white p-8 text-center">
+          <p className="text-sm font-semibold text-slate-700">
+            {t('kb.categories.emptyTitle', 'Noch keine Kategorien')}
+          </p>
+          <p className="text-xs text-slate-400 mt-1">
+            {t('kb.categories.emptyHint', 'Legen Sie eine Kategorie an, um Artikel zu strukturieren.')}
+          </p>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className={className}>
       <h2 className="text-sm font-semibold text-slate-900 mb-4">
@@ -58,18 +76,19 @@ export function KBCategoryGrid({
             (a) => a.category === catId || a.category === cat.name,
           );
           const count = catArticles.length;
+          const publishedCount = catArticles.filter((a) => {
+            const status = String((a as { status?: string }).status || '').toLowerCase();
+            return status === 'published' || status === 'public';
+          }).length;
+          const coverage = count === 0 ? 0 : Math.round((publishedCount / count) * 100);
+          const voteHelpful = catArticles.reduce((s, a) => s + (a.helpfulCount ?? 0), 0);
+          const voteTotal = catArticles.reduce(
+            (s, a) => s + (a.helpfulCount ?? 0) + ((a as { unhelpfulCount?: number }).unhelpfulCount ?? 0),
+            0,
+          );
+          const helpfulness = count === 0 ? null : voteTotal === 0 ? 0 : Math.round((voteHelpful / voteTotal) * 100);
           const active = selectedCategory === cat.name || selectedCategory === catId;
           const Icon = cat.icon;
-          const coverage = Math.min(100, Math.round(72 + (count % 5) * 5));
-          const helpfulness =
-            count > 0
-              ? Math.round(
-                  catArticles.reduce((s, a) => s + (a.helpfulCount ?? 0), 0) /
-                    Math.max(catArticles.reduce((s, a) => s + (a.views ?? 1), 0), 1) *
-                    100,
-                )
-              : 0;
-          const displayHelpfulness = Math.min(99, Math.max(helpfulness, 78 + (count % 8)));
           const canManage = catId !== UNCATEGORIZED_CATEGORY_ID && (onRename || onDelete);
 
           return (
@@ -140,7 +159,9 @@ export function KBCategoryGrid({
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-[11px]">
                     <span className="text-slate-500">{t('kb.coverage', 'Coverage')}</span>
-                    <span className="font-semibold text-slate-700 tabular-nums">{coverage}%</span>
+                    <span className="font-semibold text-slate-700 tabular-nums">
+                      {count === 0 ? '—' : `${coverage}%`}
+                    </span>
                   </div>
                   <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
                     <div
@@ -149,7 +170,7 @@ export function KBCategoryGrid({
                     />
                   </div>
                   <p className="text-[10px] text-slate-400">
-                    {t('kb.helpfulness', 'Helpfulness')}: {displayHelpfulness}%
+                    {t('kb.helpfulness', 'Helpfulness')}: {helpfulness === null ? '—' : `${helpfulness}%`}
                   </p>
                 </div>
               </button>

@@ -41,7 +41,7 @@ export function KBFeaturedArticles({ articles, onSelect, onViewAll, className }:
 
   const helpfulPercent = (art: KBArticleItem) => {
     const total = (art.helpfulCount ?? 0) + (art.unhelpfulCount ?? 0);
-    if (total === 0) return art.trustScore ?? 92;
+    if (total === 0) return art.trustScore ?? 0;
     return Math.round(((art.helpfulCount ?? 0) / total) * 100);
   };
 

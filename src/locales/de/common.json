@@ -841,14 +841,17 @@
       "recentlyUpdated": "Kürzlich aktualisiert",
       "mostViewed": "Meist aufgerufen",
       "missingArticles": "Fehlende Artikel",
-      "outdatedContent": "Veraltete Inhalte"
+      "outdatedContent": "Veraltete Inhalte",
+      "noCategories": "Noch keine Kategorien",
+      "healthScore": "KB-Gesundheit",
+      "healthHint": "Aggregiertes Vertrauen über veröffentlichte Artikel"
     },
     "popularLabel": "Beliebt",
-    "popular": {
-      "ssoSetup": "SSO-Einrichtung",
-      "apiAuth": "API-Authentifizierung",
-      "billing": "Abrechnungs-FAQ",
-      "vpn": "VPN-Fehlerbehebung"
+    "emptyWorkspace": {
+      "title": "Wissensdatenbank ist noch leer",
+      "subtitle": "Erstellen Sie Ihre ersten Kategorien und Artikel oder nutzen Sie den Dokumenten-Import.",
+      "createArticle": "+ Ersten Artikel erstellen",
+      "importDocs": "Dokumente importieren"
     },
     "askGeistAi": "Geist AI fragen",
     "askGeistAiHint": "Enter drücken oder klicken für eine KI-Zusammenfassung",
@@ -1003,12 +1006,14 @@
       "reviewNeeded": "{{count}} Artikel benötigen Prüfung",
       "missingTags": "{{count}} Artikel ohne Tags",
       "outdatedSops": "{{count}} veraltete SOPs",
-      "aiRecommendations": "{{count}} KI-Empfehlungen"
+      "aiRecommendations": "{{count}} KI-Empfehlungen",
+      "empty": "Keine KI-Empfehlungen — Verfassen Sie Artikel, um Analysen zu generieren"
     },
     "activity": {
       "title": "Kürzliche Aktivität",
       "published": "Veröffentlicht · {{date}}",
-      "edited": "Bearbeitet von {{owner}} · {{date}}"
+      "edited": "Bearbeitet von {{owner}} · {{date}}",
+      "empty": "Noch keine Aktivität"
     },
     "health": {
       "title": "Wissens-Gesundheit",
@@ -1103,6 +1108,8 @@
     "tagsAndMetadataWeights": "Tags & Metadaten-Gewichtung",
     "newArticle": "Neuer Artikel",
     "categories": {
+      "emptyTitle": "Noch keine Kategorien",
+      "emptyHint": "Legen Sie eine Kategorie an, um Artikel zu strukturieren.",
       "getting_started": {
         "name": "Erste Schritte",
         "subCategory": "Workspace-Einrichtung",

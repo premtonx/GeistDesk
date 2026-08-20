@@ -841,14 +841,17 @@
       "recentlyUpdated": "Recently Updated",
       "mostViewed": "Most Viewed",
       "missingArticles": "Missing Articles",
-      "outdatedContent": "Outdated Content"
+      "outdatedContent": "Outdated Content",
+      "noCategories": "No categories yet",
+      "healthScore": "KB Health Score",
+      "healthHint": "Aggregate trust across published articles"
     },
     "popularLabel": "Popular",
-    "popular": {
-      "ssoSetup": "SSO Setup",
-      "apiAuth": "API Authentication",
-      "billing": "Billing FAQ",
-      "vpn": "VPN Troubleshooting"
+    "emptyWorkspace": {
+      "title": "Knowledge base is still empty",
+      "subtitle": "Create your first categories and articles, or use document import.",
+      "createArticle": "+ Create first article",
+      "importDocs": "Import documents"
     },
     "askGeistAi": "Ask Geist AI",
     "askGeistAiHint": "Press Enter or click to get an AI summary",
@@ -1003,12 +1006,14 @@
       "reviewNeeded": "{{count}} articles need review",
       "missingTags": "{{count}} articles missing tags",
       "outdatedSops": "{{count}} outdated SOPs",
-      "aiRecommendations": "{{count}} AI recommendations"
+      "aiRecommendations": "{{count}} AI recommendations",
+      "empty": "No AI recommendations — write articles to generate insights"
     },
     "activity": {
       "title": "Recent Activity",
       "published": "Published · {{date}}",
-      "edited": "Edited by {{owner}} · {{date}}"
+      "edited": "Edited by {{owner}} · {{date}}",
+      "empty": "No activity yet"
     },
     "health": {
       "title": "Knowledge Health",
@@ -1103,6 +1108,8 @@
     "tagsAndMetadataWeights": "Tags and metadata weights",
     "newArticle": "New Article",
     "categories": {
+      "emptyTitle": "No categories yet",
+      "emptyHint": "Create a category to structure articles.",
       "getting_started": {
         "name": "Getting Started",
         "subCategory": "Workspace Setup",

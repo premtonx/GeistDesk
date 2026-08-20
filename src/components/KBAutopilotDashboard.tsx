@@ -39,9 +39,9 @@ interface KBAutopilotDashboardProps {
 export function KBAutopilotDashboard({ onBackToKB, onArticlePublished, embedded }: KBAutopilotDashboardProps) {
   const [suggestions, setSuggestions] = useState<AutopilotSuggestion[]>([]);
   const [metrics, setMetrics] = useState<AutopilotMetrics>({
-    ticketsPrevented: 142,
-    articleUsefulness: 94,
-    deflectionRate: 42.5
+    ticketsPrevented: 0,
+    articleUsefulness: 0,
+    deflectionRate: 0
   });
   const [isLoading, setIsLoading] = useState(false);
   const [selectedSuggestion, setSelectedSuggestion] = useState<AutopilotSuggestion | null>(null);
