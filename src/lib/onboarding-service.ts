@@ -28,6 +28,12 @@ import { detectLocalModels } from './ai-orchestrator-service.js';
 import { createEmailChannel, listEmailChannels } from './email-ingestion/channel-store.js';
 import { setPersonalVaultInitialized } from './personal-vault-store.js';
 import { purgeSeededVaultFolders } from './vault-demo-purge.js';
+import {
+  purgeDemoAutopilotFixtures,
+  purgeFrontendSeedKbArticles,
+  purgeKbCoverageCache,
+  purgePlaceholderKbCategories,
+} from './kb-demo-purge.js';
 import { getOllamaEndpoint } from './runtime-env.js';
 import { resolveTenantFromRequest, DEFAULT_TENANT_ID } from './tenant-context.js';
 import { safeErrorMessage } from './safe-log.js';
@@ -887,6 +893,13 @@ export async function completeOnboarding(
   // Sample import never writes vault secrets. Always remove leftover seed folders
   // so GeistVault stays empty unless the operator creates entries.
   await purgeSeededVaultFolders((sql, params) => queryDb(sql, params ?? []));
+  if (input.importSampleData !== true) {
+    const exec = (sql: string, params?: unknown[]) => queryDb(sql, params ?? []);
+    await purgePlaceholderKbCategories(exec);
+    await purgeFrontendSeedKbArticles(exec);
+    await purgeKbCoverageCache(exec);
+    await purgeDemoAutopilotFixtures(exec);
+  }
 
   if (input.importSampleData === true) {
     await importOnboardingSampleData({

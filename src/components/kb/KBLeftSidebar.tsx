@@ -159,7 +159,12 @@ export function KBLeftSidebar({
 
         <SectionLabel>{t('kb.sidebar.categories', 'Categories')}</SectionLabel>
         <nav className="space-y-0.5">
-          {sortedCategories.map((item) => (
+          {categories.length === 0 ? (
+            <p className="px-3 py-2 text-[11px] text-slate-400">
+              {t('kb.sidebar.noCategories', 'Noch keine Kategorien')}
+            </p>
+          ) : (
+          sortedCategories.map((item) => (
             <NavButton
               key={item.id}
               active={isActive('category', item.id)}
@@ -168,7 +173,8 @@ export function KBLeftSidebar({
               label={t(categoryI18nKey(item.name), item.name)}
               count={counts.categories[item.id] ?? 0}
             />
-          ))}
+          ))
+          )}
         </nav>
 
         <SectionLabel>{t('kb.sidebar.smartViews', 'Smart Views')}</SectionLabel>

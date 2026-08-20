@@ -99,13 +99,14 @@ import { ModuleToolbarSelect } from '../ui/module-page';
 import { KBPageHeader } from '../kb/KBPageHeader';
 import { KBKpiCards } from '../kb/KBKpiCards';
 import { KBSearchSection } from '../kb/KBSearchSection';
+import { KBCategoryGrid } from '../kb/KBCategoryGrid';
 import { KBSearchAiOverlay } from '../kb/KBSearchAiOverlay';
 import { KBArticleEditorWorkspace, type KBArticleDraft } from '../kb/KBArticleEditorWorkspace';
 import { KBBulkActionBar } from '../kb/KBBulkActionBar';
 import { truncateRagSnippet } from '../kb/kbSearchUtils';
 import { ragService, type RAGResult } from '../../services/ragService';
 import { AIAdapter } from '../../lib/ai/provider-adapter';
-import { KBCategoryGrid } from '../kb/KBCategoryGrid';
+import { KBEmptyWorkspace } from '../kb/KBEmptyWorkspace';
 import { KBActivitySidebar, buildRecentActivity, buildTopContributors } from '../kb/KBActivitySidebar';
 import { KBViewModeSelector, type KBArticleViewMode } from '../kb/KBViewModeSelector';
 import { KBArticleViews } from '../kb/KBArticleViews';
@@ -148,218 +149,6 @@ const ENTERPRISE_USERS = [
   { uid: 'agent-4', name: 'Will Coyote', role: 'Tier 3 Support Lead', email: 'will.c@geistdesk.io', avatar: 'WC' }
 ];
 
-// Seed sample articles loaded dynamically or fallback merged with Firestore
-const ENTERPRISE_SEED_ARTICLES: any[] = [
-  {
-    id: "seed-1",
-    title: "Getting Started with Azure AD SSO",
-    category: "Security",
-    subCategory: "Identity & SSO SOP",
-    content: "<h2>Overview</h2><p>Configure federated single sign-on between Azure Active Directory and GeistDesk to centralize identity governance, enforce MFA, and map security groups to operational roles.</p><h2>Prerequisites</h2><p>Before enabling the connector, confirm you hold Global Administrator or Identity Administrator privileges in your Azure AD tenant and that conditional access policies are active.</p><h3>Client Secret Rotation</h3><p>Rotate application client secrets every 90 days and document each rotation in the linked compliance ticket.</p><h2>Configuration Steps</h2><p>Register a new enterprise application in Azure AD, configure SAML or OIDC endpoints, and paste the metadata URL into GeistDesk Settings &gt; Identity Providers.</p><pre><code>sso.metadata_url = https://login.microsoftonline.com/{tenant}/federationmetadata/2007-06/federationmetadata.xml</code></pre><h3>Role Mapping</h3><p>Map Azure AD security groups to GeistDesk RBAC roles before enabling automated provisioning for production users.</p>",
-    tags: ["onboarding", "security", "sso", "azure-ad"],
-    authorId: "admin",
-    owner: "Sarah James",
-    reviewer: "Mike Chen",
-    lastEditor: "Sarah James",
-    approvalStatus: "Approved",
-    reviewDueDate: "2026-09-01",
-    status: "Published",
-    visibility: "Internal",
-    linkedTicket: "TKT-184",
-    trustScore: 92,
-    views: 14280,
-    helpfulCount: 224,
-    unhelpfulCount: 4,
-    avgReadTime: "6m 40s",
-    language: "English",
-    alerts: [
-      {
-        type: 'warning',
-        title: 'Warning',
-        body: 'Rotating Azure AD client secrets requires a maintenance window and coordinated SSO re-authentication across all integrated nodes.',
-      },
-      {
-        type: 'info',
-        title: 'Information',
-        body: 'Enterprise tenants should map GeistDesk roles to Azure AD security groups before enabling automated provisioning.',
-      },
-      {
-        type: 'success',
-        title: 'Success',
-        body: 'SSO validation passed for all production identity providers in the last compliance sweep.',
-      },
-      {
-        type: 'critical',
-        title: 'Critical',
-        body: 'Disabling MFA enforcement on federated accounts will immediately downgrade the article trust score and trigger a security review.',
-      },
-    ],
-    createdAt: { toDate: () => new Date("2026-05-15") },
-    updatedAt: { toDate: () => new Date("2026-06-01") }
-  },
-  {
-    id: "seed-2",
-    title: "Inviting and Managing Team Members",
-    category: "Getting Started",
-    subCategory: "User Provisioning",
-    content: "<h2>User Onboarding Guide</h2><p>Ensure that all incoming support representatives are registered under your Azure Active Directory or custom SSO identity provider cluster.</p><h3>Admin & Agent Role Assignments</h3><p>Never grant master permissions. Restrict vault operations and decryption scopes strictly behind multi-party authorization thresholds.</p>",
-    tags: ["team", "rbac", "permissions"],
-    authorId: "admin",
-    owner: "Sarah James",
-    reviewer: "John Doe",
-    lastEditor: "Mike Chen",
-    approvalStatus: "Approved",
-    reviewDueDate: "2026-10-15",
-    status: "Published",
-    visibility: "Public",
-    views: 840,
-    helpfulCount: 130,
-    unhelpfulCount: 2,
-    avgReadTime: "2m 45s",
-    language: "English",
-    createdAt: { toDate: () => new Date("2026-05-18") },
-    updatedAt: { toDate: () => new Date("2026-06-02") }
-  },
-  {
-    id: "seed-3",
-    title: "Billing Plans and Invoices FAQ",
-    category: "Billing",
-    subCategory: "Invoicing Methods",
-    content: "<h2>Common Billing Structure questions</h2><p>We compile active policies regarding automated usage metering across our LLM pipelines and secure dropzones retention schemas.</p><h3>How do I download monthly clear invoices?</h3><p>Enterprise subscription invoices are dispatched automatically on the first day of every epoch month to primary finance email addresses specified in your account profile settings.</p>",
-    tags: ["invoice", "pricing", "plans"],
-    authorId: "admin",
-    owner: "John Doe",
-    reviewer: "Sarah James",
-    lastEditor: "John Doe",
-    approvalStatus: "Approved",
-    reviewDueDate: "2026-12-01",
-    status: "Published",
-    visibility: "Public",
-    views: 512,
-    helpfulCount: 92,
-    unhelpfulCount: 18,
-    avgReadTime: "1m 30s",
-    language: "English",
-    createdAt: { toDate: () => new Date("2026-05-01") },
-    updatedAt: { toDate: () => new Date("2026-05-20") }
-  },
-  {
-    id: "seed-4",
-    title: "API Authentication & Secret Management Guide",
-    category: "API Documentation",
-    subCategory: "Authentication",
-    content: "<h2>Bearer Token Authorization Protocols</h2><p>To communicate with our sovereign data gateway cluster, instantiate standard Bearer auth tags inside API headers.</p><pre><code>Authorization: Bearer gd_live_sec_prod_xxxxxx</code></pre><h3>Quantum Safety Keys Rotate Schedule</h3><p>Our agent network routinely tracks vulnerability risks. We recommend rotated tokens every 30 days automatically via administrative webhooks.</p>",
-    tags: ["api", "auth", "token", "developer"],
-    authorId: "admin",
-    owner: "Anna Bell",
-    reviewer: "Mike Chen",
-    lastEditor: "Anna Bell",
-    approvalStatus: "Approved",
-    reviewDueDate: "2026-07-20",
-    status: "Published",
-    visibility: "Private",
-    views: 1850,
-    helpfulCount: 390,
-    unhelpfulCount: 5,
-    avgReadTime: "5m 20s",
-    language: "English",
-    createdAt: { toDate: () => new Date("2026-04-10") },
-    updatedAt: { toDate: () => new Date("2026-05-28") }
-  },
-  {
-    id: "seed-5",
-    title: "Slack and MS Teams Live Webhook Integration",
-    category: "Integrations",
-    subCategory: "Slack Integrations",
-    content: "<h2>Realtech Real-time Chat Orchestrator</h2><p>Instaniate automated notifications within your organization chats whenever core system health metrics decay beneath 95% SLA ratios.</p><h3>Mapping Dynamic Webhook Payloads</h3><p>Inject customized payloads carrying active ticket link records, assignment cues, and priority markers into outbound JSON bindings.</p>",
-    tags: ["slack", "teams", "webhooks"],
-    authorId: "admin",
-    owner: "Anna Bell",
-    reviewer: "John Doe",
-    lastEditor: "Sarah James",
-    approvalStatus: "Approved",
-    reviewDueDate: "2026-11-15",
-    status: "Published",
-    visibility: "Public",
-    views: 742,
-    helpfulCount: 120,
-    unhelpfulCount: 1,
-    avgReadTime: "4m 10s",
-    language: "English",
-    createdAt: { toDate: () => new Date("2026-05-05") },
-    updatedAt: { toDate: () => new Date("2026-05-15") }
-  },
-  {
-    id: "seed-6",
-    title: "Enterprise VPN and DNS Routing Debug Protocols",
-    category: "Troubleshooting",
-    subCategory: "VPN Configuration Issues",
-    content: "<h2>DNS Routing Leak Mitigations for Hybrid Workforces</h2><p>We resolved 43 related ticket complaints regarding local resolver DNS drops while establishing secure IPSec or Wireguard bridges.</p><h3>Diagnostic Actions</h3><ol><li>Flush local service directories via administrative prompt.</li><li>Bind fallback servers explicitly to primary non-public standard nodes.</li></ol>",
-    tags: ["vpn", "dns", "network", "debug"],
-    authorId: "admin",
-    owner: "Will Coyote",
-    reviewer: "Mike Chen",
-    lastEditor: "Will Coyote",
-    approvalStatus: "Needs Review",
-    reviewDueDate: "2026-06-20",
-    status: "Needs Review",
-    visibility: "Public",
-    views: 1290,
-    helpfulCount: 284,
-    unhelpfulCount: 8,
-    avgReadTime: "6m 45s",
-    language: "English",
-    createdAt: { toDate: () => new Date("2026-05-22") },
-    updatedAt: { toDate: () => new Date("2026-06-01") }
-  },
-  {
-    id: "seed-7",
-    title: "SOC2 Compliance and Server Sanitization Guidelines",
-    category: "Internal SOPs",
-    subCategory: "SOC2 Incident Playbooks",
-    content: "<h2>Standard Operating Procedure for Production Telemetry Erasure</h2><p>To adhere with auditing benchmarks, verify all private client key mappings are shredded immediately after support ticket closure status is verified.</p><h3>Compliance Checklists</h3><ul><li>Log output scrubbing validations.</li><li>Weekly credential audits.</li><li>Multi-tenant context isolation logs.</li></ul>",
-    tags: ["soc2", "sop", "compliance", "security"],
-    authorId: "admin",
-    owner: "Mike Chen",
-    reviewer: "Sarah James",
-    lastEditor: "Mike Chen",
-    approvalStatus: "Approved",
-    reviewDueDate: "2026-07-01",
-    status: "Published",
-    visibility: "Private",
-    views: 310,
-    helpfulCount: 85,
-    unhelpfulCount: 0,
-    avgReadTime: "8m 10s",
-    language: "English",
-    createdAt: { toDate: () => new Date("2026-05-10") },
-    updatedAt: { toDate: () => new Date("2026-05-25") }
-  },
-  {
-    id: "seed-8",
-    title: "MFA Token De-synchronization Playbook",
-    category: "Troubleshooting",
-    subCategory: "MFA Token De-synchronization",
-    content: "<h2>MFA Desynchronization issues remediation</h2><p>When software tokens lose synchronization with authorization servers, agents must initiate manual validation hashes check to align time offset variables.</p>",
-    tags: ["mfa", "auth", "security", "troubleshoot"],
-    authorId: "admin",
-    owner: "Will Coyote",
-    reviewer: "Mike Chen",
-    lastEditor: "Anna Bell",
-    approvalStatus: "Draft",
-    reviewDueDate: "2026-08-10",
-    status: "Draft",
-    visibility: "Private",
-    views: 45,
-    helpfulCount: 12,
-    unhelpfulCount: 1,
-    avgReadTime: "3m 00s",
-    language: "English",
-    createdAt: { toDate: () => new Date("2026-06-01") },
-    updatedAt: { toDate: () => new Date("2026-06-01") }
-  }
-];
-
 export default function KBPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -372,7 +161,7 @@ export default function KBPage() {
   
   // States
   const [firestoreArticles, setFirestoreArticles] = useState<KBArticle[]>([]);
-  const [articles, setArticles] = useState<any[]>(ENTERPRISE_SEED_ARTICLES);
+  const [articles, setArticles] = useState<any[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   // AI Knowledge Coverage Map states
@@ -392,143 +181,26 @@ export default function KBPage() {
         const data = await res.json();
         setCoverageData(data.dashboard || data);
       } else {
-        console.warn("Coverage API response was not OK, falling back to local simulation logic.");
-        simulateLocalCoverageCalculation();
+        setCoverageData(emptyCoverageSnapshot());
       }
     } catch (error) {
-      console.error("Error fetching coverage, falling back to simulation:", error);
-      simulateLocalCoverageCalculation();
+      console.error("Error fetching coverage:", error);
+      setCoverageData(emptyCoverageSnapshot());
     } finally {
       setIsLoadingCoverage(false);
     }
   };
 
-  const simulateLocalCoverageCalculation = () => {
-    const mockCoverage = {
-      overallPercentage: 74,
-      totalExpected: 24,
-      totalExistingMatched: 18,
-      totalMissing: 6,
-      healthStatus: 'Excellent',
-      criticalGaps: [
-        { topic: 'Disaster Recovery Guide', category: 'Troubleshooting', importance: 'High' },
-        { topic: 'API Rate Limits FAQ', category: 'API Documentation', importance: 'High' },
-        { topic: 'SAML SSO Setup Playbook', category: 'Getting Started', importance: 'High' }
-      ],
-      categories: [
-        {
-          categoryId: 'getting_started',
-          categoryName: 'Getting Started',
-          percentage: 75,
-          totalExpected: 4,
-          matchedCount: 3,
-          missingCount: 1,
-          topics: [
-            { name: 'Setup Guide', status: 'Matched', importance: 'High', matchedArticles: [{ id: 'seed-1', title: 'Onboarding Agent Checklist & Guide' }] },
-            { name: 'Onboarding Checklist', status: 'Matched', importance: 'Medium', matchedArticles: [{ id: 'seed-1', title: 'Onboarding Agent Checklist & Guide' }] },
-            { name: 'SSO Integration', status: 'Missing', importance: 'High', matchedArticles: [] },
-            { name: 'Workspace Workspace FAQ', status: 'Matched', importance: 'Low', matchedArticles: [{ id: 'seed-2', title: 'Workspace Layout Customization Playbook' }] }
-          ]
-        },
-        {
-          categoryId: 'billing',
-          categoryName: 'Billing',
-          percentage: 100,
-          totalExpected: 3,
-          matchedCount: 3,
-          missingCount: 0,
-          topics: [
-            { name: 'Invoicing Setup', status: 'Matched', importance: 'High', matchedArticles: [{ id: 'seed-3', title: 'Enterprise Billing & Invoice Diagnostics' }] },
-            { name: 'Refund Workflows', status: 'Matched', importance: 'High', matchedArticles: [{ id: 'seed-4', title: 'Refund Discrepancies Resolution SOP' }] },
-            { name: 'Payment Portals Guide', status: 'Matched', importance: 'Medium', matchedArticles: [{ id: 'seed-3', title: 'Enterprise Billing & Invoice Diagnostics' }] }
-          ]
-        },
-        {
-          categoryId: 'api_documentation',
-          categoryName: 'API Documentation',
-          percentage: 66,
-          totalExpected: 3,
-          matchedCount: 2,
-          missingCount: 1,
-          topics: [
-            { name: 'Webhook Bindings', status: 'Matched', importance: 'High', matchedArticles: [{ id: 'seed-5', title: 'API Webhook Subscriptions Protocols' }] },
-            { name: 'Rate Limits Guide', status: 'Missing', importance: 'High', matchedArticles: [] },
-            { name: 'OAuth Security SOP', status: 'Matched', importance: 'High', matchedArticles: [{ id: 'seed-5', title: 'API Webhook Subscriptions Protocols' }] }
-          ]
-        },
-        {
-          categoryId: 'integrations',
-          categoryName: 'Integrations',
-          percentage: 50,
-          totalExpected: 4,
-          matchedCount: 2,
-          missingCount: 2,
-          topics: [
-            { name: 'Slack Integration SOP', status: 'Matched', importance: 'High', matchedArticles: [{ id: 'seed-6', title: 'Slack Intercom Integration Playbook' }] },
-            { name: 'MS Teams Setup', status: 'Missing', importance: 'Medium', matchedArticles: [] },
-            { name: 'Bot Sync Protocols', status: 'Matched', importance: 'Medium', matchedArticles: [{ id: 'seed-6', title: 'Slack Intercom Integration Playbook' }] },
-            { name: 'External Webhooks FAQ', status: 'Missing', importance: 'Low', matchedArticles: [] }
-          ]
-        },
-        {
-          categoryId: 'troubleshooting',
-          categoryName: 'Troubleshooting',
-          percentage: 75,
-          totalExpected: 4,
-          matchedCount: 3,
-          missingCount: 1,
-          topics: [
-            { name: 'VPN Access Guide', status: 'Matched', importance: 'High', matchedArticles: [{ id: 'seed-7', title: 'PulseSecure VPN Diagnostic Path' }] },
-            { name: 'DNS Routing SOP', status: 'Matched', importance: 'High', matchedArticles: [{ id: 'seed-8', title: 'DNS Resolution Error Resolution Guide' }] },
-            { name: 'Incident Playbooks', status: 'Matched', importance: 'High', matchedArticles: [{ id: 'seed-7', title: 'PulseSecure VPN Diagnostic Path' }] },
-            { name: 'Disaster Recovery Guide', status: 'Missing', importance: 'High', matchedArticles: [] }
-          ]
-        },
-        {
-          categoryId: 'internal_sops',
-          categoryName: 'Internal SOPs',
-          percentage: 80,
-          totalExpected: 5,
-          matchedCount: 4,
-          missingCount: 1,
-          topics: [
-            { name: 'SOC2 Audit Guide', status: 'Matched', importance: 'High', matchedArticles: [{ id: 'seed-9', title: 'SOC2 Sanitization Audit Procedures' }] },
-            { name: 'Incident Logs', status: 'Matched', importance: 'High', matchedArticles: [{ id: 'seed-9', title: 'SOC2 Sanitization Audit Procedures' }] },
-            { name: 'GDPR Compliance FAQ', status: 'Matched', importance: 'Medium', matchedArticles: [{ id: 'seed-9', title: 'SOC2 Sanitization Audit Procedures' }] },
-            { name: 'PII Scrubbing SOP', status: 'Matched', importance: 'High', matchedArticles: [{ id: 'seed-9', title: 'SOC2 Sanitization Audit Procedures' }] },
-            { name: 'Data Residency Audit SOP', status: 'Missing', importance: 'Medium', matchedArticles: [] }
-          ]
-        }
-      ],
-      aiSuggestions: [
-        {
-          title: "SAML SSO Setup Playbook",
-          category: "Getting Started",
-          reason: "Identified via support tickets where users raised support overhead regarding user authentication reset lockouts.",
-          priority: "High"
-        },
-        {
-          title: "API Rate Limits FAQ",
-          category: "API Documentation",
-          reason: "Created during dynamic webhook analysis where developer logs indicated a spikes of 429 Too Many Requests issues.",
-          priority: "High"
-        },
-        {
-          title: "Disaster Recovery Guide",
-          category: "Troubleshooting",
-          reason: "Identified via SOC2 compliance mandate checklists demanding clear procedures during database regional failover incidents.",
-          priority: "High"
-        },
-        {
-          title: "MS Teams Setup SOP",
-          category: "Integrations",
-          reason: "Suggested based on ticket analysis showing a 34% increase in customer tickets requesting Teams bot configurations.",
-          priority: "Medium"
-        }
-      ]
-    };
-    setCoverageData(mockCoverage);
-  };
+  const emptyCoverageSnapshot = () => ({
+    overallPercentage: 0,
+    totalExpected: 0,
+    totalExistingMatched: 0,
+    totalMissing: 0,
+    healthStatus: 'Empty',
+    criticalGaps: [],
+    categories: [],
+    aiSuggestions: [],
+  });
 
   const handleRecalculate = async () => {
     setIsLoadingCoverage(true);
@@ -541,23 +213,22 @@ export default function KBPage() {
         toast.success("AI Coverage Map recalculated & cached successfully!", { id: toastId });
       } else {
         setTimeout(() => {
-          simulateLocalCoverageCalculation();
-          toast.success("AI Coverage Map successfully updated! (Local Scoring Mode)", { id: toastId });
-        }, 1200);
+          setCoverageData(emptyCoverageSnapshot());
+          toast.error("Coverage map could not be recalculated.", { id: toastId });
+        }, 400);
       }
     } catch (err) {
       setTimeout(() => {
-        simulateLocalCoverageCalculation();
-        toast.success("AI Coverage Map successfully updated! (Local Scoring Mode)", { id: toastId });
-      }, 1200);
+        setCoverageData(emptyCoverageSnapshot());
+        toast.error("Coverage map could not be recalculated.", { id: toastId });
+      }, 400);
     } finally {
       setIsLoadingCoverage(false);
     }
   };
 
   useEffect(() => {
-    // Proactively pre-fill coverage data on mount so it feels instantaneous
-    simulateLocalCoverageCalculation();
+    void fetchCoverageData();
   }, []);
 
   useEffect(() => {
@@ -568,15 +239,15 @@ export default function KBPage() {
       setNewArticle({
         title: '',
         content: '',
-        category: selectedCategory || 'Getting Started',
-        subCategory: 'Workspace Setup',
+        category: selectedCategory === 'All' ? UNCATEGORIZED_CATEGORY_ID : selectedCategory,
+        subCategory: '',
         visibility: 'Public',
         tags: [],
-        owner: 'Sarah James',
-        reviewer: 'Mike Chen',
-        lastEditor: 'Sarah James',
-        status: 'Published',
-        avgReadTime: '3m 00s'
+        owner: user?.email || '',
+        reviewer: '',
+        lastEditor: user?.email || '',
+        status: 'Draft',
+        avgReadTime: '',
       });
       setTagInput('');
       setEditingArticleId(null);
@@ -669,15 +340,15 @@ export default function KBPage() {
   const [newArticle, setNewArticle] = useState<KBArticleDraft>({
     title: '',
     content: '',
-    category: 'Getting Started',
-    subCategory: 'Workspace Setup',
+    category: UNCATEGORIZED_CATEGORY_ID,
+    subCategory: '',
     visibility: 'Public',
     tags: [],
-    owner: 'Sarah James',
-    reviewer: 'Mike Chen',
-    lastEditor: 'Sarah James',
-    status: 'Published',
-    avgReadTime: '3m 00s',
+    owner: '',
+    reviewer: '',
+    lastEditor: '',
+    status: 'Draft',
+    avgReadTime: '',
   });
   const [tagInput, setTagInput] = useState('');
 
@@ -893,23 +564,23 @@ export default function KBPage() {
     });
   }, [restorePendingDelete, t]);
 
-  const openCreateArticle = (category = selectedCategory || 'getting-started') => {
+  const openCreateArticle = (category = selectedCategory || UNCATEGORIZED_CATEGORY_ID) => {
     const catId =
       category === 'All'
-        ? 'getting-started'
+        ? (categories[0]?.id ?? UNCATEGORIZED_CATEGORY_ID)
         : resolveArticleCategoryId({ category }, categories);
     setNewArticle({
       title: '',
       content: '',
       category: catId,
-      subCategory: 'Workspace Setup',
+      subCategory: '',
       visibility: 'Public',
       tags: [],
-      owner: 'Sarah James',
-      reviewer: 'Mike Chen',
-      lastEditor: 'Sarah James',
-      status: 'Published',
-      avgReadTime: '3m 00s',
+      owner: user?.email || '',
+      reviewer: '',
+      lastEditor: user?.email || '',
+      status: 'Draft',
+      avgReadTime: '',
     });
     setTagInput('');
     setEditingArticleId(null);
@@ -925,7 +596,7 @@ export default function KBPage() {
           title: newArticle.title,
           content: newArticle.content,
           category: newArticle.category,
-          subCategory: newArticle.subCategory || 'Workspace Setup',
+          subCategory: newArticle.subCategory || '',
           visibility: newArticle.visibility,
           tags: tags,
           owner: newArticle.owner,
@@ -976,15 +647,15 @@ export default function KBPage() {
         setNewArticle({ 
           title: '', 
           content: '', 
-          category: selectedCategory, 
-          subCategory: 'Workspace Setup', 
+          category: selectedCategory === 'All' ? UNCATEGORIZED_CATEGORY_ID : selectedCategory, 
+          subCategory: '', 
           visibility: 'Public', 
           tags: [], 
-          owner: 'Sarah James', 
-          reviewer: 'Mike Chen', 
-          lastEditor: 'Sarah James', 
-          status: 'Published',
-          avgReadTime: '3m 00s' 
+          owner: user?.email || '', 
+          reviewer: '', 
+          lastEditor: user?.email || '', 
+          status: 'Draft',
+          avgReadTime: '' 
         });
         setTagInput('');
       } catch (e) {
@@ -1001,12 +672,12 @@ export default function KBPage() {
       title: article.title,
       content: article.content,
       category: resolveArticleCategoryId(article, categories),
-      subCategory: article.subCategory || 'Workspace Setup',
+      subCategory: article.subCategory || '',
       visibility: article.visibility || 'Public',
       tags: article.tags || [],
-      owner: article.owner || 'Sarah James',
-      reviewer: article.reviewer || 'Mike Chen',
-      lastEditor: article.lastEditor || 'Sarah James',
+      owner: article.owner || user?.email || '',
+      reviewer: article.reviewer || '',
+      lastEditor: article.lastEditor || user?.email || '',
       status: article.status || 'Published',
       avgReadTime: article.avgReadTime || '3m 15s'
     });
@@ -1181,6 +852,7 @@ export default function KBPage() {
 
   const isOverviewMode = isKbOverviewMode(kbNav);
   const isAiAssistantMode = isKbAiAssistantMode(kbNav);
+  const isKbEmpty = workspaceArticles.length === 0 && categories.length === 0;
 
   const articlesSectionTitle = useMemo(() => {
     if (isOverviewMode) return t('kb.allArticlesSection', 'All Articles');
@@ -1350,11 +1022,11 @@ export default function KBPage() {
       );
     }
 
-    const overallPercentage = coverageData.overallPercentage || 0;
+    const overallPercentage = coverageData.overallPercentage ?? coverageData.overallCoverage ?? 0;
     const totalExpected = coverageData.totalExpected || 0;
     const totalExistingMatched = coverageData.totalExistingMatched || 0;
     const totalMissing = coverageData.totalMissing || 0;
-    const healthStatus = coverageData.healthStatus || 'Good';
+    const healthStatus = coverageData.healthStatus || coverageData.health || 'Empty';
 
     const getProgressColor = (pct: number) => {
       if (pct >= 80) return 'bg-emerald-500';
@@ -1674,12 +1346,12 @@ export default function KBPage() {
                                 title: topic.name,
                                 content: `<h2>${topic.name} Standard Operating Procedure</h2><p>Provide specific step-by-step operating checklists for addressing ${topic.name} within secure regional workspace bounds.</p>`,
                                 category: activeCategoryData.categoryName,
-                                subCategory: 'Workspace Setup',
+                                subCategory: '',
                                 visibility: 'Public',
                                 tags: ['automation-gap'],
-                                owner: 'Sarah James',
-                                reviewer: 'Mike Chen',
-                                lastEditor: 'Sarah James',
+                                owner: user?.email || '',
+                                reviewer: '',
+                                lastEditor: user?.email || '',
                                 status: 'Draft',
                                 avgReadTime: '3m 00s'
                               });
@@ -1768,13 +1440,13 @@ export default function KBPage() {
                         setNewArticle({
                           title: sug.title,
                           content: `<h2>${sug.title} Draft SOP</h2><p>Auto-generated placeholders regarding ${sug.title} specifically mapped to deflect ticketing cascades.</p>`,
-                          category: sug.category || "Getting Started",
-                          subCategory: "Workspace Setup",
+                          category: sug.category || UNCATEGORIZED_CATEGORY_ID,
+                          subCategory: '',
                           visibility: "Public",
                           tags: ["ai-suggested", "critical-gap"],
-                          owner: "Sarah James",
-                          reviewer: "Mike Chen",
-                          lastEditor: "Sarah James",
+                          owner: user?.email || '',
+                          reviewer: '',
+                          lastEditor: user?.email || '',
                           status: "Draft",
                           avgReadTime: "3m 00s"
                         });
@@ -1836,7 +1508,7 @@ export default function KBPage() {
               onOpenSettings={() => setIsCategoryAdminOpen(true)}
               categories={categories}
               counts={sidebarCounts}
-              healthScore={healthScore}
+              healthScore={workspaceArticles.length === 0 ? undefined : healthScore}
             />
             {isAddingArticle ? (
               <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#F8F9FB] overflow-hidden">
@@ -1882,6 +1554,11 @@ export default function KBPage() {
                       embedded
                       onBackToKB={() => handleKbNavigate({ type: 'workspace', id: 'overview' })}
                       onArticlePublished={() => handleKbNavigate({ type: 'workspace', id: 'overview' })}
+                    />
+                  ) : isKbEmpty && isOverviewMode ? (
+                    <KBEmptyWorkspace
+                      onCreateArticle={() => openCreateArticle()}
+                      onImportDocs={() => setIsImportOpen(true)}
                     />
                   ) : (
                     <>
@@ -2079,7 +1756,7 @@ export default function KBPage() {
                     reviewCount={needsReviewCount}
                     missingTagsCount={missingTagsCount}
                     outdatedCount={outdatedCount}
-                    aiRecommendations={coverageData?.aiSuggestions?.length ?? 0}
+                    aiRecommendations={workspaceArticles.length === 0 ? 0 : (coverageData?.aiSuggestions?.length ?? 0)}
                     contributors={topContributors}
                   />
                 </aside>

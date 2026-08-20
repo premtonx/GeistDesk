@@ -1,5 +1,5 @@
 import { GoogleGenAI } from "@google/genai";
-import { getDocsDirect, setDocDirect, getDocDirect } from '../lib/postgres-backend';
+import { getDocsDirect, setDocDirect, deleteDocDirect } from '../lib/postgres-backend';
 
 export interface ExpectedTopic {
   id: string;
@@ -24,11 +24,16 @@ export interface CategoryCoverage {
 
 export interface CoverageDashboard {
   overallCoverage: number;
+  overallPercentage: number;
   totalArticles: number;
+  totalExpected: number;
+  totalExistingMatched: number;
   totalMissing: number;
-  health: 'Excellent' | 'Good' | 'Critical';
+  health: 'Excellent' | 'Good' | 'Critical' | 'Empty';
+  healthStatus: 'Excellent' | 'Good' | 'Critical' | 'Empty';
   criticalGaps: { topic: string; category: string; priority: 'High' | 'Medium'; reason: string }[];
   categorySummaries: { categoryName: string; coverage: number; health: string; existingCount: number; missingCount: number }[];
+  categories: CategoryCoverage[];
   aiSuggestions: { title: string; category: string; reason: string; priority: 'High' | 'Medium'; matchedTicketId?: string }[];
 }
 
@@ -72,135 +77,179 @@ export const DEFAULT_EXPECTED_TOPICS: { [category: string]: Omit<ExpectedTopic, 
   ]
 };
 
-// Seed articles defined inline to guarantee coverage matches seeds loaded on the front-end
-const SEED_ARTICLES = [
-  { id: "seed-1", title: "Getting Started with GeistDesk", category: "Getting Started", subCategory: "Workspace Setup", content: "General Interface Overview...", tags: ["onboarding", "setup", "basics"] },
-  { id: "seed-2", title: "Inviting and Managing Team Members", category: "Getting Started", subCategory: "User Provisioning", content: "User Onboarding Guide...", tags: ["team", "rbac", "permissions"] },
-  { id: "seed-3", title: "Billing Plans and Invoices FAQ", category: "Billing", subCategory: "Invoicing Methods", content: "Common Billing Structure...", tags: ["invoice", "pricing", "plans"] },
-  { id: "seed-4", title: "API Authentication & Secret Management Guide", category: "API Documentation", subCategory: "Authentication", content: "Bearer Token Authorization...", tags: ["api", "auth", "token", "developer"] },
-  { id: "seed-5", title: "Slack and MS Teams Live Webhook Integration", category: "Integrations", subCategory: "Slack Integrations", content: "Webhook Integration...", tags: ["slack", "teams", "webhooks"] },
-  { id: "seed-6", title: "Enterprise VPN and DNS Routing Debug Protocols", category: "Troubleshooting", subCategory: "VPN Configuration Issues", content: "DNS Routing Leak Mitigations...", tags: ["vpn", "dns", "network", "debug"] },
-  { id: "seed-7", title: "SOC2 Compliance and Server Sanitization Guidelines", category: "Internal SOPs", subCategory: "SOC2 Incident Playbooks", content: "Sanitization of logs...", tags: ["soc2", "sop", "compliance", "security"] },
-  { id: "seed-8", title: "MFA Token De-synchronization Playbook", category: "Troubleshooting", subCategory: "MFA Token De-synchronization", content: "MFA Desynchronization...", tags: ["mfa", "auth", "security", "troubleshoot"] }
-];
+type CoverageArticle = {
+  id: string;
+  title: string;
+  category: string;
+  subCategory: string;
+  content: string;
+  tags: string[];
+};
 
-export async function calculateCoverage(): Promise<CategoryCoverage[]> {
-  // 1. Load custom articles of the knowledge base from database
-  const dbArticles = await getDocsDirect("kb_articles", []);
-  
-  // Merge seed articles with db articles
-  const allArticles = [...SEED_ARTICLES];
-  for (const dbArt of dbArticles) {
-    if (!allArticles.some(art => art.id === dbArt.id || art.title.toLowerCase() === dbArt.title.toLowerCase())) {
-      allArticles.push({
-        id: dbArt.id,
-        title: dbArt.title,
-        category: dbArt.category || "Getting Started",
-        subCategory: dbArt.subCategory || "General Node",
-        content: dbArt.content || "",
-        tags: dbArt.tags || []
-      });
+function mapDbArticle(dbArt: { id: string; title?: string; category?: string; subCategory?: string; content?: string; tags?: string[] }): CoverageArticle {
+  return {
+    id: dbArt.id,
+    title: dbArt.title || "",
+    category: dbArt.category || "",
+    subCategory: dbArt.subCategory || "",
+    content: dbArt.content || "",
+    tags: Array.isArray(dbArt.tags) ? dbArt.tags : [],
+  };
+}
+
+function coverageContainsSeedArticles(coverages: Array<{ existingArticles?: Array<{ id?: string }> }>): boolean {
+  return coverages.some((cov) =>
+    (cov.existingArticles || []).some((art) => String(art?.id || "").startsWith("seed-")),
+  );
+}
+
+async function replaceCoverageCache(coverages: CategoryCoverage[]): Promise<void> {
+  const previous = await getDocsDirect("kb_coverage", []);
+  const nextIds = new Set(coverages.map((cov) => cov.id));
+  for (const prev of previous) {
+    if (!nextIds.has(prev.id)) {
+      await deleteDocDirect("kb_coverage", prev.id);
     }
   }
+  for (const cov of coverages) {
+    await setDocDirect("kb_coverage", cov.id, cov);
+  }
+}
 
-  // Determine dynamic categories list (default 6 + any other custom ones found)
-  const categoryNames = new Set(Object.keys(DEFAULT_EXPECTED_TOPICS));
+function emptyDashboard(): CoverageDashboard {
+  return {
+    overallCoverage: 0,
+    overallPercentage: 0,
+    totalArticles: 0,
+    totalExpected: 0,
+    totalExistingMatched: 0,
+    totalMissing: 0,
+    health: "Empty",
+    healthStatus: "Empty",
+    criticalGaps: [],
+    categorySummaries: [],
+    categories: [],
+    aiSuggestions: [],
+  };
+}
+
+export async function calculateCoverage(): Promise<CategoryCoverage[]> {
+  const dbArticles = await getDocsDirect("kb_articles", []);
+  const dbCategories = await getDocsDirect("kb_categories", []);
+  const allArticles = dbArticles.map(mapDbArticle);
+
+  type CategoryRef = { id: string; name: string };
+  const categoryRefs: CategoryRef[] = [];
+  const seen = new Set<string>();
+
+  for (const cat of dbCategories) {
+    const name = String(cat.name || cat.id || "").trim();
+    const id = String(cat.id || name);
+    if (!id || seen.has(id) || seen.has(name)) continue;
+    seen.add(id);
+    if (name) seen.add(name);
+    categoryRefs.push({ id, name: name || id });
+  }
+
   for (const art of allArticles) {
-    if (art.category) {
-      categoryNames.add(art.category);
-    }
+    if (!art.category || seen.has(art.category)) continue;
+    seen.add(art.category);
+    categoryRefs.push({ id: art.category, name: art.category });
+  }
+
+  if (categoryRefs.length === 0) {
+    await replaceCoverageCache([]);
+    return [];
   }
 
   const coverages: CategoryCoverage[] = [];
 
-  for (const catName of categoryNames) {
-    // Get expected topics for this category
-    const defaultTopics = DEFAULT_EXPECTED_TOPICS[catName] || [
-      { id: `${catName.toLowerCase().replace(/\s+/g, '-')}-general`, title: "Setup Guide", description: "General Setup Guide for Category", required: true, matchKeywords: ["setup", "guide", "onboarding"] },
-      { id: `${catName.toLowerCase().replace(/\s+/g, '-')}-troubleshoot`, title: "Troubleshooting Guide", description: "Troubleshooting and issue remediation procedures for Category", required: true, matchKeywords: ["troubleshoot", "debug", "error", "leak"] },
-      { id: `${catName.toLowerCase().replace(/\s+/g, '-')}-advanced`, title: "Advanced Settings SOP", description: "Standard operating procedures for advanced setup in Category", required: false, matchKeywords: ["advanced", "sop", "policy", "security"] }
-    ];
+  for (const cat of categoryRefs) {
+    const templateTopics = DEFAULT_EXPECTED_TOPICS[cat.name] || [];
+    const categoryArticles = allArticles.filter(
+      (art) => art.category === cat.id || art.category === cat.name,
+    );
 
-    const categoryArticles = allArticles.filter(art => art.category === catName);
-
-    const expectedTopics: ExpectedTopic[] = defaultTopics.map(topic => {
-      // Look for a matching article in this category
-      let matchedArticle: any = null;
-      
+    const expectedTopics: ExpectedTopic[] = templateTopics.map((topic) => {
+      let matchedArticle: CoverageArticle | null = null;
       for (const art of categoryArticles) {
         const titleLower = art.title.toLowerCase();
         const contentLower = (art.content || "").toLowerCase();
         const tagsLower = (art.tags || []).map((t: string) => t.toLowerCase());
-
-        // Smart check: keyword matching on title, content, or tags
-        const matchesKeyword = topic.matchKeywords.some(keyword => {
-          return titleLower.includes(keyword) || 
-                 contentLower.includes(keyword) || 
-                 tagsLower.includes(keyword);
+        const matchesKeyword = topic.matchKeywords.some((keyword) => {
+          return titleLower.includes(keyword) || contentLower.includes(keyword) || tagsLower.includes(keyword);
         });
-
         if (matchesKeyword) {
           matchedArticle = art;
           break;
         }
       }
-
       return {
         ...topic,
         matched: !!matchedArticle,
-        matchedArticleId: matchedArticle ? matchedArticle.id : null
+        matchedArticleId: matchedArticle ? matchedArticle.id : null,
       };
     });
 
     const existingArticles = categoryArticles;
-    const missingArticles = expectedTopics.filter(t => !t.matched);
-    
-    const matchedCount = expectedTopics.filter(t => t.matched).length;
+    const missingArticles = categoryArticles.length === 0 ? [] : expectedTopics.filter((t) => !t.matched);
+    const matchedCount = expectedTopics.filter((t) => t.matched).length;
     const totalCount = expectedTopics.length;
-    const coveragePercentage = totalCount > 0 ? Math.round((matchedCount / totalCount) * 100) : 100;
+    const coveragePercentage =
+      categoryArticles.length === 0
+        ? 0
+        : totalCount > 0
+          ? Math.round((matchedCount / totalCount) * 100)
+          : 100;
 
-    let documentationHealth: 'Excellent' | 'Good' | 'Critical' = 'Critical';
-    if (coveragePercentage >= 80) documentationHealth = 'Excellent';
-    else if (coveragePercentage >= 50) documentationHealth = 'Good';
+    let documentationHealth: "Excellent" | "Good" | "Critical" = "Critical";
+    if (categoryArticles.length === 0) documentationHealth = "Critical";
+    else if (coveragePercentage >= 80) documentationHealth = "Excellent";
+    else if (coveragePercentage >= 50) documentationHealth = "Good";
 
     coverages.push({
-      id: catName.replace(/\s+/g, '_').toLowerCase(),
-      categoryName: catName,
+      id: cat.id.replace(/\s+/g, "-").toLowerCase(),
+      categoryName: cat.name,
       expectedTopics,
       existingArticles,
       missingArticles,
       coveragePercentage,
       documentationHealth,
-      lastCalculated: new Date().toISOString()
+      lastCalculated: new Date().toISOString(),
     });
   }
 
-  // Set to database cache collection `kb_coverage`
-  for (const cov of coverages) {
-    await setDocDirect("kb_coverage", cov.id, cov);
-  }
-
+  await replaceCoverageCache(coverages);
   return coverages;
 }
 
 export async function getDashboardData(apiKey?: string): Promise<CoverageDashboard> {
-  // Query KB coverages from cache (calculate first if empty)
+  const dbArticles = await getDocsDirect("kb_articles", []);
   let coverages = await getDocsDirect("kb_coverage", []);
-  if (coverages.length === 0) {
+  if (coverages.length === 0 || coverageContainsSeedArticles(coverages) || dbArticles.length === 0) {
     coverages = await calculateCoverage();
   }
 
-  // overall stats
-  const totalPercentage = coverages.reduce((sum, cov) => sum + cov.coveragePercentage, 0);
-  const overallCoverage = coverages.length > 0 ? Math.round(totalPercentage / coverages.length) : 100;
+  if (coverages.length === 0 && dbArticles.length === 0) {
+    return emptyDashboard();
+  }
 
-  let health: 'Excellent' | 'Good' | 'Critical' = 'Critical';
-  if (overallCoverage >= 80) health = 'Excellent';
+  const totalPercentage = coverages.reduce((sum, cov) => sum + (Number(cov.coveragePercentage) || 0), 0);
+  const overallCoverage = coverages.length > 0 ? Math.round(totalPercentage / coverages.length) : 0;
+
+  let health: 'Excellent' | 'Good' | 'Critical' | 'Empty' = 'Empty';
+  if (coverages.length === 0) health = 'Empty';
+  else if (overallCoverage >= 80) health = 'Excellent';
   else if (overallCoverage >= 50) health = 'Good';
+  else health = 'Critical';
 
-  // Gather total articles and missing
-  const totalArticles = coverages.reduce((sum, cov) => sum + cov.existingArticles.length, 0);
-  const totalMissing = coverages.reduce((sum, cov) => sum + cov.missingArticles.length, 0);
+  const totalArticles = coverages.reduce((sum, cov) => sum + (cov.existingArticles?.length || 0), 0);
+  const totalExpected = coverages.reduce((sum, cov) => sum + (cov.expectedTopics?.length || 0), 0);
+  const totalExistingMatched = coverages.reduce(
+    (sum, cov) => sum + (cov.expectedTopics?.filter((t: ExpectedTopic) => t.matched).length || 0),
+    0,
+  );
+  const totalMissing = coverages.reduce((sum, cov) => sum + (cov.missingArticles?.length || 0), 0);
 
   // Critical gaps mapping (any required expectedTopic that is missing)
   const criticalGaps: { topic: string; category: string; priority: 'High' | 'Medium'; reason: string }[] = [];
@@ -211,8 +260,8 @@ export async function getDashboardData(apiKey?: string): Promise<CoverageDashboa
       categoryName: cov.categoryName,
       coverage: cov.coveragePercentage,
       health: cov.documentationHealth,
-      existingCount: cov.existingArticles.length,
-      missingCount: cov.missingArticles.length
+      existingCount: cov.existingArticles?.length || 0,
+      missingCount: cov.missingArticles?.length || 0,
     });
 
     for (const missing of cov.missingArticles) {
@@ -285,23 +334,24 @@ export async function getDashboardData(apiKey?: string): Promise<CoverageDashboa
     });
   }
 
-  // Populate basic fallback suggestions to ensure something is always shown
-  if (aiSuggestions.length === 0) {
-    aiSuggestions.push({
-      title: "Active Directory SSO SAML Handshake Guide",
-      category: "Integrations",
-      reason: "Detected as missing core security integration documentation in your workspace setup.",
-      priority: "High"
-    });
-    aiSuggestions.push({
-      title: "Disaster Recovery Procedures drill playbook",
-      category: "Getting Started",
-      reason: "High-priority gap mapping. Disaster recovery guidelines are recommended for standard SOC2 auditing compliance levels.",
-      priority: "Medium"
-    });
+  // Empty knowledge bases must not invent recommendations from tickets or templates.
+  if (totalArticles === 0) {
+    return {
+      overallCoverage,
+      overallPercentage: overallCoverage,
+      totalArticles,
+      totalExpected,
+      totalExistingMatched,
+      totalMissing,
+      health,
+      healthStatus: health,
+      criticalGaps: criticalGaps.slice(0, 5),
+      categorySummaries,
+      categories: coverages as CategoryCoverage[],
+      aiSuggestions: [],
+    };
   }
 
-  // If Gemini API Key is available, enrich suggestions!
   if (apiKey || process.env.GEMINI_API_KEY) {
     try {
       const activeApiKey = apiKey || process.env.GEMINI_API_KEY || "";
@@ -373,11 +423,16 @@ Generate 3 rich missing article suggestions based on this. Provide only valid JS
 
   return {
     overallCoverage,
+    overallPercentage: overallCoverage,
     totalArticles,
+    totalExpected,
+    totalExistingMatched,
     totalMissing,
     health,
+    healthStatus: health,
     criticalGaps: criticalGaps.slice(0, 5),
     categorySummaries,
+    categories: coverages as CategoryCoverage[],
     aiSuggestions
   };
 }

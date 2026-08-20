@@ -117,8 +117,11 @@ export function KBActivitySidebar({
             ))}
           </ul>
         ) : (
-          <p className="text-[11px] text-slate-500 px-1">
-            {t('kb.insights.allClear', 'No outstanding knowledge gaps detected.')}
+          <p className="text-[11px] text-slate-500 leading-relaxed">
+            {t(
+              'kb.insights.empty',
+              'Keine KI-Empfehlungen — Verfassen Sie Artikel, um Analysen zu generieren',
+            )}
           </p>
         )}
       </div>
@@ -127,7 +130,9 @@ export function KBActivitySidebar({
         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">
           {t('kb.activity.title', 'Recent Activity')}
         </h3>
-        {recentActivity.length > 0 ? (
+        {recentActivity.length === 0 ? (
+          <p className="text-[11px] text-slate-400">{t('kb.activity.empty', 'Noch keine Aktivität')}</p>
+        ) : (
           <ul className="space-y-3">
             {recentActivity.slice(0, 5).map((item) => (
               <li key={item.id} className="flex items-start gap-2.5">
@@ -139,8 +144,6 @@ export function KBActivitySidebar({
               </li>
             ))}
           </ul>
-        ) : (
-          <p className="text-[11px] text-slate-500">{t('kb.activity.empty', 'No recent article activity.')}</p>
         )}
       </div>
 
@@ -165,6 +168,7 @@ export function KBActivitySidebar({
         </div>
       ) : null}
 
+      {recentActivity.length > 0 || contributors.length > 0 ? (
       <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50/80 to-white p-4 shadow-sm">
         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2">
           {t('kb.health.title', 'Knowledge Health Score')}
@@ -174,6 +178,7 @@ export function KBActivitySidebar({
           <div className="h-full rounded-full bg-emerald-500" style={{ width: `${healthScore}%` }} />
         </div>
       </div>
+      ) : null}
     </aside>
   );
 }

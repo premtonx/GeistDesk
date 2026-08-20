@@ -166,6 +166,18 @@ async function main() {
     if (platform.vaultFolders > 0) {
       console.log(`[seed] Purged ${platform.vaultFolders} leftover demo vault_folders (folder-seed-*).`);
     }
+    if (platform.kbCategoriesPurged > 0) {
+      console.log(`[seed] Purged ${platform.kbCategoriesPurged} leftover placeholder kb_categories.`);
+    }
+    if (platform.kbSeedArticlesPurged > 0) {
+      console.log(`[seed] Purged ${platform.kbSeedArticlesPurged} leftover frontend seed kb_articles.`);
+    }
+    if (platform.kbCoveragePurged > 0) {
+      console.log(`[seed] Cleared ${platform.kbCoveragePurged} stale kb_coverage cache rows.`);
+    }
+    if (platform.autopilotPurged > 0) {
+      console.log(`[seed] Purged ${platform.autopilotPurged} leftover Autopilot demo fixtures.`);
+    }
     if (platform.promptTemplates > 0) {
       console.log(`[seed] Inserted ${platform.promptTemplates} German ai_prompt_templates.`);
     }

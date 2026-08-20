@@ -14,15 +14,6 @@ const COLLECTION = 'kb_categories';
 const ARTICLES = 'kb_articles';
 const UNCATEGORIZED = 'uncategorized';
 
-const DEFAULT_CATEGORIES = [
-  { id: 'getting-started', name: 'Getting Started', iconName: 'BookOpen', order: 1 },
-  { id: 'billing', name: 'Billing', iconName: 'CreditCard', order: 2 },
-  { id: 'api-documentation', name: 'API Documentation', iconName: 'Code2', order: 3 },
-  { id: 'integrations', name: 'Integrations', iconName: 'Plug', order: 4 },
-  { id: 'troubleshooting', name: 'Troubleshooting', iconName: 'Wrench', order: 5 },
-  { id: 'internal-sops', name: 'Internal SOPs', iconName: 'ShieldCheck', order: 6 },
-];
-
 function slugifyCategoryId(name: string): string {
   return (
     name
@@ -33,26 +24,9 @@ function slugifyCategoryId(name: string): string {
   );
 }
 
-async function ensureDefaultCategories() {
-  const existing = await getDocsDirect(COLLECTION, []);
-  if (existing.length > 0) return existing;
-
-  const now = new Date().toISOString();
-  for (const cat of DEFAULT_CATEGORIES) {
-    await setDocDirect(COLLECTION, cat.id, {
-      ...cat,
-      desc: '',
-      owner: 'Sarah James',
-      updatedAt: now,
-      createdAt: now,
-    });
-  }
-  return getDocsDirect(COLLECTION, []);
-}
-
 router.get('/', authenticate, async (_req: Request, res: Response) => {
   try {
-    const rows = await ensureDefaultCategories();
+    const rows = await getDocsDirect(COLLECTION, []);
     const categories = rows
       .map((row) => ({ ...row, id: row.id }))
       .sort((a, b) => (Number(a.order) || 0) - (Number(b.order) || 0));
@@ -80,7 +54,7 @@ router.post('/', authenticate, async (req: Request, res: Response) => {
     const payload = {
       name: name.trim(),
       desc: typeof desc === 'string' ? desc : '',
-      owner: typeof owner === 'string' ? owner : 'Sarah James',
+      owner: typeof owner === 'string' ? owner : '',
       subCategory: typeof subCategory === 'string' ? subCategory : 'General',
       iconName: typeof iconName === 'string' ? iconName : 'BookOpen',
       order: typeof order === 'number' ? order : Date.now(),

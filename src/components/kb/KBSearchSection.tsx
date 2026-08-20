@@ -10,23 +10,18 @@ interface KBSearchSectionProps {
   onSearchChange: (value: string) => void;
   onAdvancedFilters?: () => void;
   showFilters?: boolean;
+  popularTerms?: string[];
   onPopularSearch?: (term: string) => void;
   onAskAi?: (query: string) => void;
   className?: string;
 }
-
-const POPULAR_KEYS = [
-  { key: 'kb.popular.ssoSetup', defaultLabel: 'SSO Setup' },
-  { key: 'kb.popular.apiAuth', defaultLabel: 'API Authentication' },
-  { key: 'kb.popular.billing', defaultLabel: 'Billing FAQ' },
-  { key: 'kb.popular.vpn', defaultLabel: 'VPN Troubleshooting' },
-] as const;
 
 export function KBSearchSection({
   searchQuery,
   onSearchChange,
   onAdvancedFilters,
   showFilters,
+  popularTerms = [],
   onPopularSearch,
   onAskAi,
   className,
@@ -135,13 +130,13 @@ export function KBSearchSection({
         </div>
       ) : null}
 
+      {popularTerms.length > 0 ? (
       <div className="flex flex-wrap items-center gap-2 mt-3">
         <span className="text-[11px] font-medium text-slate-500">{t('kb.popularLabel', 'Popular')}:</span>
-        {POPULAR_KEYS.map((item) => {
-          const label = t(item.key, item.defaultLabel);
+        {popularTerms.map((label) => {
           return (
             <button
-              key={item.key}
+              key={label}
               type="button"
               onClick={() => applyPopularSearch(label)}
               className={cn(
@@ -156,6 +151,7 @@ export function KBSearchSection({
           );
         })}
       </div>
+      ) : null}
     </section>
   );
 }

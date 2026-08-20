@@ -48,13 +48,7 @@ export const autopilotService = {
         ...doc.data()
       })) as AutopilotSuggestion[];
       
-      // If we don't have suggestions seeded yet, we will seed default ones that meet the criteria
-      if (suggestions.length === 0) {
-        autopilotService.seedDefaultSuggestions().then(() => {
-          // Sub will automatically trigger again when write occurs
-        });
-      }
-      
+      // Empty workspaces stay empty — do not invent Autopilot demo suggestions.
       callback(suggestions);
     });
   },
@@ -228,9 +222,9 @@ export const autopilotService = {
       const snap = await getDoc(docRef);
       if (snap.exists()) {
         const metrics = snap.data() as AutopilotMetrics;
-        const prevented = (metrics.ticketsPrevented || 142) + 14;
-        const usefulness = Math.min(99, (metrics.articleUsefulness || 94) + 0.5);
-        const deflection = Math.min(50, (metrics.deflectionRate || 42.5) + 0.8);
+        const prevented = (metrics.ticketsPrevented || 0) + 1;
+        const usefulness = Math.min(100, metrics.articleUsefulness || 0);
+        const deflection = metrics.deflectionRate || 0;
         await setDoc(docRef, {
           ticketsPrevented: prevented,
           articleUsefulness: usefulness,
@@ -238,9 +232,9 @@ export const autopilotService = {
         });
       } else {
         await setDoc(docRef, {
-          ticketsPrevented: 156,
-          articleUsefulness: 96,
-          deflectionRate: 43.3
+          ticketsPrevented: 1,
+          articleUsefulness: 0,
+          deflectionRate: 0
         });
       }
     } catch (e) {
@@ -255,73 +249,13 @@ export const autopilotService = {
       if (snap.exists()) {
         callback(snap.data() as AutopilotMetrics);
       } else {
-        // Default seed
-        const defaultMetrics = { ticketsPrevented: 142, articleUsefulness: 94, deflectionRate: 42.5 };
-        setDoc(docRef, defaultMetrics).then(() => {
-          callback(defaultMetrics);
-        });
+        callback({ ticketsPrevented: 0, articleUsefulness: 0, deflectionRate: 0 });
       }
     });
   },
 
-  // Seed default high-quality initial suggestions that fit the user criteria
+  // Intentionally empty: production workspaces must not receive demo Autopilot suggestions.
   seedDefaultSuggestions: async () => {
-    const defaults: Omit<AutopilotSuggestion, 'id'>[] = [
-      {
-        title: 'Disaster Recovery Guide & regional failovers',
-        problemSummary: "During DNS router sync operations, servers in the Berlin region threw continuous timeouts. Customer webhooks were backlogged for over 4 hours with severe SLA implications.",
-        rootCause: "A misconfigured regional health-check route automatically redirected API requests into a decommissioned cold-standby server stack.",
-        resolutionSteps: "1. Flush routing cache in active clusters.\n2. Re-route the public gateway targeting hot-standby instances.\n3. Modify external healthcheck polling endpoints.",
-        relatedSystems: ['DNS Engine', 'Berlin AWS Gateway'],
-        confidenceScore: 94,
-        sourceTickets: [
-          { id: 't-101', subject: 'Berlin portal timeouts', customerName: 'ZettaMedia Corp' },
-          { id: 't-102', subject: 'Gateway 504 errors in Germany', customerName: 'Bayer AG' },
-          { id: 't-103', subject: 'Webhook synchronization failing', customerName: 'Sovereign ID GmbH' }
-        ],
-        suggestedOwner: 'Mike Chen',
-        reviewStatus: 'Pending'
-      },
-      {
-        title: 'SAML SSO Setup & AD Integration playbook',
-        problemSummary: "Active Directory integration fails with credentials rejection despite matching tenant identifiers on the Okta auth screen.",
-        rootCause: "Okta metadata certificates expired leading to a strict trust breakdown inside the GeistDesk ID Vault pipeline.",
-        resolutionSteps: "1. Download the renewed SHA256 Okta tenant cert.\n2. Access PII Vault settings and edit SAML properties.\n3. Save config and perform a test verification.",
-        relatedSystems: ['Auth Vault', 'Okta SSO', 'Active Directory'],
-        confidenceScore: 89,
-        sourceTickets: [
-          { id: 't-201', subject: 'Cannot authenticate via AD', customerName: 'Siemens' },
-          { id: 't-202', subject: 'Okta auth gives 401 error', customerName: 'SAP UK' }
-        ],
-        suggestedOwner: 'Sarah James',
-        reviewStatus: 'Pending'
-      },
-      {
-        title: 'API Gateway Rate Limits Policy',
-        problemSummary: "Third-party customer integrations experienced cascading 429 Too Many Requests errors causing workflow terminations.",
-        rootCause: "Outnumbered rate-limit metrics configured statically to 100 requests per minute without enterprise tier overrides.",
-        resolutionSteps: "1. Match subscription status in client schema.\n2. Create dynamic rate limit rules matching enterprise limits.\n3. Reload redis quota caching rules.",
-        relatedSystems: ['API Hub', 'Redis Rate-Limiter'],
-        confidenceScore: 96,
-        sourceTickets: [
-          { id: 't-301', subject: 'Cassandra connection spike rate limits', customerName: 'Lufthansa Tech' },
-          { id: 't-302', subject: '429 error logs during export', customerName: 'BASF IT' },
-          { id: 't-303', subject: 'Webhooks blocked due to spikes', customerName: 'Deutsche Bank' }
-        ],
-        suggestedOwner: 'Anna Bell',
-        reviewStatus: 'Approved'
-      }
-    ];
-
-    try {
-      for (const item of defaults) {
-        await addDoc(collection(db, SUGGESTIONS_COLLECTION), {
-          ...item,
-          createdAt: serverTimestamp()
-        });
-      }
-    } catch (e) {
-      console.warn('Silent seeding error:', e);
-    }
+    return;
   }
 };

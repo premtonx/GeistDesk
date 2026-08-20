@@ -10,6 +10,12 @@ import {
   buildDefaultPromptTemplates,
 } from '../data/platform-defaults.js';
 import { purgeSeededVaultFolders } from '../lib/vault-demo-purge.js';
+import {
+  purgeDemoAutopilotFixtures,
+  purgeFrontendSeedKbArticles,
+  purgeKbCoverageCache,
+  purgePlaceholderKbCategories,
+} from '../lib/kb-demo-purge.js';
 
 async function batchUpsert(
   client: pg.PoolClient,
@@ -152,12 +158,30 @@ export async function seedOrchestratorPersonaSkills(client: pg.PoolClient): Prom
 export async function seedAllPlatformDefaults(client: pg.PoolClient): Promise<{
   moduleConfig: boolean;
   vaultFolders: number;
+  kbCategoriesPurged: number;
+  kbSeedArticlesPurged: number;
+  kbCoveragePurged: number;
+  autopilotPurged: number;
   promptTemplates: number;
   personaSkills: boolean;
 }> {
+  const exec = (sql: string, params?: unknown[]) => client.query(sql, params ?? []);
   const moduleConfig = await seedModuleConfig(client);
   const vaultFolders = await seedVaultFolders(client);
+  const kbCategoriesPurged = await purgePlaceholderKbCategories(exec);
+  const kbSeedArticlesPurged = await purgeFrontendSeedKbArticles(exec);
+  const kbCoveragePurged = await purgeKbCoverageCache(exec);
+  const autopilotPurged = await purgeDemoAutopilotFixtures(exec);
   const promptTemplates = await seedPromptTemplates(client);
   const personaSkills = await seedOrchestratorPersonaSkills(client);
-  return { moduleConfig, vaultFolders, promptTemplates, personaSkills };
+  return {
+    moduleConfig,
+    vaultFolders,
+    kbCategoriesPurged,
+    kbSeedArticlesPurged,
+    kbCoveragePurged,
+    autopilotPurged,
+    promptTemplates,
+    personaSkills,
+  };
 }
