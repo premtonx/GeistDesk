@@ -242,6 +242,11 @@ export async function runAiRequestLifecycle(
       const shield = await PIIShield.redact(ctx.prompt);
       redactedPrompt = shield.cleanText;
       policiesChecked.push('pii_shield');
+      if (shield.counts) {
+        void import('./sanitization-stats.js')
+          .then(({ recordSanitizationCounts }) => recordSanitizationCounts(shield.counts))
+          .catch(() => undefined);
+      }
 
       if (cloudAnonymizationRequired) {
         const [vaultFingerprints, workspaceName] = await Promise.all([
