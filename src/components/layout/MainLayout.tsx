@@ -15,7 +15,6 @@ import {
   HelpCircle,
   Users,
   Building2,
-  Globe,
   Radio,
   Share2,
   Lock,
@@ -68,6 +67,10 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import { GeistDeskLogo } from '../ui/GeistDeskLogo';
 import { FlagIcon } from '../ui/FlagIcon';
 import { syncModuleConfigFromServer, getModuleConfig } from '../../lib/module-config';
+import { PiiShieldPopover } from './PiiShieldPopover';
+import { SovereigntyStatusPopover } from './SovereigntyStatusPopover';
+import { EMPTY_HEADER_TELEMETRY, fetchHeaderTelemetry } from '../../services/headerTelemetryApi';
+import type { HeaderTelemetrySnapshot } from '../../types/headerTelemetry';
 
 const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', key: 'dashboard' },
@@ -148,6 +151,7 @@ export default function MainLayout() {
 
   const [aiStatus, setAiStatus] = useState<'loading' | 'healthy' | 'degraded' | 'offline'>('loading');
   const [activeModel, setActiveModel] = useState<string>('');
+  const [headerTelemetry, setHeaderTelemetry] = useState<HeaderTelemetrySnapshot>(EMPTY_HEADER_TELEMETRY);
 
   useEffect(() => {
     if (!user) return;
@@ -155,7 +159,7 @@ export default function MainLayout() {
     const applyHealth = (data: { status?: string; primaryModel?: string }) => {
       if (data.status === 'healthy') {
         setAiStatus('healthy');
-        setActiveModel(data.primaryModel || 'GPT-5');
+        setActiveModel(data.primaryModel || '');
       } else if (data.status === 'degraded') {
         setAiStatus('degraded');
         setActiveModel(data.primaryModel || '');
@@ -166,6 +170,22 @@ export default function MainLayout() {
     };
     void fetchAiStatus().then((h) => h && applyHealth(h));
     return subscribeAiHealth((h) => applyHealth(h));
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    const load = () => {
+      void fetchHeaderTelemetry().then((snapshot) => {
+        if (!cancelled) setHeaderTelemetry(snapshot);
+      });
+    };
+    load();
+    const timer = window.setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
   }, [user]);
 
   // Hydrate workspace module config from PostgreSQL so admin changes persist across sessions.
@@ -275,165 +295,9 @@ export default function MainLayout() {
             <WorkTimer variant="horizontal" />
           </div>
 
-          {/* Sovereignty Status interactive global indicator popover (visible everywhere including mobile) */}
-          <div className="shrink-0">
-            <DropdownMenu>
-              <DropdownMenuTrigger render={
-                <button 
-                  title={t('header.dataSovereignDe', 'Data Sovereign: DE')}
-                  className="flex items-center justify-center h-9 w-9 bg-[#EBF5FF] text-[#1E40AF] hover:bg-[#DBEAFE] rounded-full border border-[#BFDBFE]/80 transition-all shrink-0 cursor-pointer shadow-xs select-none relative"
-                >
-                  <Globe className="w-4.5 h-4.5" />
-                  <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-[#3B82F6] animate-pulse shadow-[0_0_4px_rgba(59,130,246,0.5)]" />
-                </button>
-              } />
-              <DropdownMenuContent align="end" className="w-[285px] bg-white border border-slate-100 shadow-xl rounded-xl p-4 z-50 transition-all duration-200">
-                <div className="flex items-center gap-2 mb-3 border-b border-slate-100 pb-2.5">
-                  <div className="p-1 h-6 w-6 rounded-lg bg-[#EBF5FF] border border-[#BFDBFE] flex items-center justify-center text-[#1E40AF]">
-                    <Globe className="w-4 h-4" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">
-                      {t('header.sovereignCloudStatus', 'Sovereign Cloud Status')}
-                    </h4>
-                    <p className="text-[9px] text-slate-500 font-mono">
-                      {t('header.germanyLocalNode', 'Germany Local Node')}
-                    </p>
-                  </div>
-                </div>
+          <SovereigntyStatusPopover telemetry={headerTelemetry} />
 
-                <div className="space-y-3">
-                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-3.5 space-y-3">
-                    <div className="flex flex-col gap-1 text-[11px] pb-2 border-b border-slate-200/50">
-                      <span className="text-slate-400 font-medium">
-                        {t('header.localDeNodeResidency', 'Local DE Node: Data Residency')}
-                      </span>
-                      <span className="font-bold text-slate-800 flex items-center gap-1.5">
-                        <FlagIcon code="de" className="w-4 h-3" />
-                        {t('header.germanyDe', 'Germany (DE)')}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-1 text-[11px] py-2 border-b border-slate-200/50">
-                      <span className="text-slate-400 font-medium">
-                        {t('header.deploymentType', 'Deployment Type')}
-                      </span>
-                      <span className="font-bold text-slate-800 flex items-center gap-1 text-[#059669]">
-                        ✓ {t('header.selfHostedVpc', 'Self-Hosted (VPC)')}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-1 text-[11px] py-2 border-b border-slate-200/50">
-                      <span className="text-slate-400 font-medium">
-                        {t('header.processingRoute', 'Processing Route')}
-                      </span>
-                      <span className="font-bold text-slate-800 flex items-center gap-1 text-[#059669]">
-                        ✓ {t('header.noExternalAiLeaks', 'No External AI Leaks')}
-                      </span>
-                    </div>
-                    <div className="flex flex-col gap-1 text-[11px] pt-1">
-                      <span className="text-slate-400 font-medium">
-                        {t('header.slaAuditLog', 'SLA Audit Log')}
-                      </span>
-                      <span className="font-bold text-slate-800 flex items-center gap-1 text-[#059669]">
-                        ✓ {t('header.immutableActive', 'Immutable & Active')}
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="text-[9.5px] leading-relaxed text-slate-500 bg-[#EBF5FF]/40 p-2.5 rounded-xl border border-[#BFDBFE]/40">
-                    {t('header.sovereigntyDesc', 'Your enterprise deployment secures all context windows and telemetry safely here inside Germany.')}
-                  </div>
-
-                  <div className="border-t border-slate-100 pt-2.5 text-center flex justify-center">
-                    <Link 
-                      to="/admin/sovereignty"
-                      className="text-[9.5px] font-black text-[#1A73E8] hover:underline uppercase tracking-wider font-mono cursor-pointer block py-1 w-full text-center"
-                    >
-                      {t('header.sovereigntyCenterLink', 'Sovereignty Center →')}
-                    </Link>
-                  </div>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-
-          {/* PII Shield Active interactive global indicator popover (visible everywhere including mobile) */}
-          <div className="shrink-0">
-            <DropdownMenu>
-              <DropdownMenuTrigger render={
-                <button 
-                  title={t('header.piiShieldActive', 'PII Shield Active')}
-                  className="flex items-center justify-center h-9 w-9 bg-emerald-50 text-emerald-700 hover:bg-emerald-100/70 rounded-full border border-emerald-100/80 transition-all shrink-0 cursor-pointer shadow-xs select-none relative"
-                >
-                  <ShieldCheck className="w-4.5 h-4.5" />
-                  <span className="absolute top-1 right-1 h-2 w-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_4px_rgba(16,185,129,0.5)]" />
-                </button>
-              } />
-              <DropdownMenuContent align="end" className="w-[280px] bg-white border border-slate-100 shadow-xl rounded-xl p-4 z-50 transition-all duration-200">
-                <div className="flex items-center gap-2 mb-3 border-b border-slate-100 pb-2.5">
-                  <div className="p-1 h-6 w-6 rounded-lg bg-emerald-50 border border-emerald-100 flex items-center justify-center">
-                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-black text-slate-800 uppercase tracking-widest">
-                      {t('header.sovereignPiiShield', 'Sovereign PII Shield')}
-                    </h4>
-                    <p className="text-[9px] text-slate-500 font-mono">
-                      {t('header.realtimeAnonymization', 'Real-time Anonymization')}
-                    </p>
-                  </div>
-                </div>
-                
-                <div className="space-y-3">
-                  <div className="bg-slate-50 border border-slate-100 rounded-xl p-2 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      {t('header.status', 'Status')}
-                    </span>
-                    <span className="text-[10px] font-black text-emerald-600 uppercase tracking-widest">
-                      🟢 {t('header.shielded', 'Shielded')}
-                    </span>
-                  </div>
-
-                  <div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div className="bg-slate-50/60 hover:bg-slate-50 border border-slate-100/60 rounded-xl p-2.5 transition-colors flex flex-col">
-                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                          {t('header.emails', 'Emails')}
-                        </p>
-                        <p className="text-base font-black text-slate-800 font-mono">421</p>
-                      </div>
-                      <div className="bg-slate-50/60 hover:bg-slate-50 border border-slate-100/60 rounded-xl p-2.5 transition-colors flex flex-col">
-                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                          {t('header.passwords', 'Passwords')}
-                        </p>
-                        <p className="text-base font-black text-slate-800 font-mono">82</p>
-                      </div>
-                      <div className="bg-slate-50/60 hover:bg-slate-50 border border-slate-100/60 rounded-xl p-2.5 transition-colors flex flex-col">
-                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                          {t('header.apiKeys', 'API Keys')}
-                        </p>
-                        <p className="text-base font-black text-slate-800 font-mono">41</p>
-                      </div>
-                      <div className="bg-slate-50/60 hover:bg-slate-50 border border-slate-100/60 rounded-xl p-2.5 transition-colors flex flex-col">
-                        <p className="text-[9px] font-bold text-slate-500 uppercase tracking-wider">
-                          {t('header.ipAddresses', 'IP Addresses')}
-                        </p>
-                        <p className="text-base font-black text-slate-800 font-mono">129</p>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="border-t border-slate-100 pt-2.5 text-center flex justify-center">
-                    <Link 
-                      to="/admin/pii"
-                      className="text-[9.5px] font-black text-[#1A73E8] hover:underline uppercase tracking-wider font-mono cursor-pointer block py-1 w-full text-center"
-                    >
-                      {t('header.configureGuardrails', 'Configure Guardrails →')}
-                    </Link>
-                  </div>
-                </div>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
+          <PiiShieldPopover telemetry={headerTelemetry} />
 
           <AiWorkspaceStatusBanner />
 
