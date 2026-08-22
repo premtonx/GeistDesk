@@ -10,6 +10,7 @@ const RUNTIME_MODELS: Record<string, { kind: 'google' | 'openai' | 'anthropic' |
   claude: { kind: 'anthropic', model: 'claude-3-5-sonnet-20241022' },
   'local-llama': { kind: 'local', model: 'llama3' },
   local: { kind: 'local', model: 'llama3' },
+  'qwen-36b': { kind: 'local', model: 'qwen:36b' },
 };
 
 function estimateConfidence(output: string, feature: AiFeatureId): number {

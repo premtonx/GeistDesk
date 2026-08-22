@@ -16,6 +16,7 @@ import {
   DEFAULT_PLATFORM_MODULES,
   normalizeModuleConfig,
   normalizePlatformModules,
+  type AIConfig,
   type ModuleConfig,
   type PlatformModules,
 } from './module-config.js';
@@ -40,6 +41,11 @@ import { resolveTenantFromRequest, DEFAULT_TENANT_ID } from './tenant-context.js
 import { safeErrorMessage } from './safe-log.js';
 import type { EmailConnectionType } from './email-ingestion/types.js';
 import type { Request } from 'express';
+import {
+  ORCHESTRATOR_MODEL_OPTIONS,
+  featureRoutingForModel,
+  type AiFeatureRouting,
+} from '../types/aiOrchestrator.js';
 
 const MODULE_COLLECTION = 'module_config';
 const MODULE_DOC_ID = 'global';
@@ -381,23 +387,92 @@ async function pingCloudProvider(
   return { success: true, message: 'Azure OpenAI connected.' };
 }
 
+const ROUTING_MODEL_IDS = new Set<string>(ORCHESTRATOR_MODEL_OPTIONS.map((option) => option.value));
+
+/** Map the Day-0 engine pick onto a Feature-Routing catalog id. */
+export function resolveOnboardingRoutingModel(ai: TestAiInput): string {
+  const chat = String(ai.chatModel || '').trim();
+  const chatLower = chat.toLowerCase();
+
+  if (ROUTING_MODEL_IDS.has(chat)) return chat;
+
+  if (chatLower.includes('qwen')) return 'qwen-36b';
+  if (chatLower.includes('gemini-pro') || chatLower.includes('gemini-2.5-pro')) return 'gemini-pro';
+  if (chatLower.includes('gemini') || chatLower.includes('flash')) return 'gemini-flash';
+  if (
+    chatLower.includes('claude') ||
+    chatLower.includes('sonnet') ||
+    chatLower.includes('opus') ||
+    chatLower.includes('haiku')
+  ) {
+    return 'claude';
+  }
+  if (chatLower.includes('gpt') || chatLower.includes('o1') || chatLower.includes('o3') || /\bo4\b/.test(chatLower)) {
+    return 'gpt-5';
+  }
+
+  if (ai.mode === 'sovereign' || ai.mode === 'disabled') return 'local-llama';
+  if (ai.provider === 'anthropic') return 'claude';
+  if (ai.provider === 'groq') return 'local-llama';
+  if (ai.provider === 'azure' || ai.provider === 'openai') return 'gpt-5';
+  return 'local-llama';
+}
+
+function moduleAiFromOnboarding(ai: TestAiInput, routingModel: string, endpointUrl: string): AIConfig {
+  const chat = ai.chatModel?.trim();
+  if (ai.mode === 'sovereign' || ai.mode === 'disabled') {
+    return {
+      sentimentModel: routingModel === 'gemini-flash' ? 'gemini-flash' : 'local-llama',
+      deepThinkingModel: routingModel === 'qwen-36b' ? 'qwen-36b' : 'llama-3-70b',
+      summaryModel: 'sentiment',
+      localEndpoint: endpointUrl,
+      apiKey: '',
+      customSentimentModelName: chat || 'llama3.1',
+      customThinkingModelName: chat || 'llama3.1',
+    };
+  }
+  if (routingModel === 'gemini-flash' || routingModel === 'gemini-pro') {
+    return {
+      sentimentModel: 'gemini-flash',
+      deepThinkingModel: 'gemini-pro',
+      summaryModel: 'sentiment',
+      localEndpoint: endpointUrl,
+      apiKey: '',
+    };
+  }
+  return {
+    sentimentModel: 'custom-local',
+    deepThinkingModel: 'custom-local',
+    summaryModel: 'sentiment',
+    localEndpoint: endpointUrl,
+    apiKey: '',
+    customSentimentModelName: chat || routingModel,
+    customThinkingModelName: chat || routingModel,
+  };
+}
+
 function mapAiToOrchestrator(ai: TestAiInput): {
   endpointUrl: string;
   primaryModel: string;
   reasoningModel: string;
   triageModel: string;
   providerPriority: string[];
+  featureRouting: AiFeatureRouting;
   killSwitchMaster: boolean;
   secretProvider?: string;
   secretValue?: string;
 } {
+  const routingModel = resolveOnboardingRoutingModel(ai);
+  const routing = featureRoutingForModel(routingModel);
+
   if (ai.mode === 'disabled') {
     return {
       endpointUrl: '',
-      primaryModel: 'local-llama',
-      reasoningModel: 'local-llama',
-      triageModel: 'local-llama',
-      providerPriority: ['local-llama'],
+      primaryModel: routingModel,
+      reasoningModel: routingModel,
+      triageModel: routingModel,
+      providerPriority: [routingModel],
+      featureRouting: routing,
       killSwitchMaster: true,
     };
   }
@@ -405,13 +480,13 @@ function mapAiToOrchestrator(ai: TestAiInput): {
   if (ai.mode === 'sovereign') {
     const endpoint = normalizeEndpoint(ai.endpointUrl || getOllamaEndpoint() || 'http://ollama:11434');
     const withV1 = endpoint.endsWith('/v1') ? endpoint : `${endpoint}/v1`;
-    const chat = ai.chatModel?.trim() || 'llama3.1';
     return {
       endpointUrl: withV1,
-      primaryModel: chat,
-      reasoningModel: chat,
-      triageModel: chat,
-      providerPriority: ['local-llama'],
+      primaryModel: routingModel,
+      reasoningModel: routingModel,
+      triageModel: routingModel,
+      providerPriority: [routingModel],
+      featureRouting: routing,
       killSwitchMaster: false,
       secretProvider: ai.apiKey ? 'local' : undefined,
       secretValue: ai.apiKey || undefined,
@@ -419,14 +494,14 @@ function mapAiToOrchestrator(ai: TestAiInput): {
   }
 
   const provider = ai.provider || 'openai';
-  const chat = ai.chatModel?.trim();
   if (provider === 'anthropic') {
     return {
       endpointUrl: '',
-      primaryModel: chat || 'claude',
-      reasoningModel: chat || 'claude',
-      triageModel: chat || 'claude',
-      providerPriority: ['claude'],
+      primaryModel: routingModel,
+      reasoningModel: routingModel,
+      triageModel: routingModel,
+      providerPriority: [routingModel],
+      featureRouting: routing,
       killSwitchMaster: false,
       secretProvider: 'anthropic',
       secretValue: ai.apiKey,
@@ -435,10 +510,11 @@ function mapAiToOrchestrator(ai: TestAiInput): {
   if (provider === 'groq') {
     return {
       endpointUrl: 'https://api.groq.com/openai/v1',
-      primaryModel: chat || 'llama-3.3-70b-versatile',
-      reasoningModel: chat || 'llama-3.3-70b-versatile',
-      triageModel: chat || 'llama-3.3-70b-versatile',
-      providerPriority: ['local-llama'],
+      primaryModel: routingModel,
+      reasoningModel: routingModel,
+      triageModel: routingModel,
+      providerPriority: [routingModel],
+      featureRouting: routing,
       killSwitchMaster: false,
       secretProvider: 'local',
       secretValue: ai.apiKey,
@@ -448,10 +524,11 @@ function mapAiToOrchestrator(ai: TestAiInput): {
     const endpoint = normalizeEndpoint(ai.endpointUrl || '');
     return {
       endpointUrl: endpoint,
-      primaryModel: chat || 'gpt-5',
-      reasoningModel: chat || 'gpt-5',
-      triageModel: chat || 'gpt-4o-mini',
-      providerPriority: ['gpt-5'],
+      primaryModel: routingModel,
+      reasoningModel: routingModel,
+      triageModel: routingModel,
+      providerPriority: [routingModel],
+      featureRouting: routing,
       killSwitchMaster: false,
       secretProvider: 'azure_openai',
       secretValue: ai.apiKey,
@@ -459,10 +536,13 @@ function mapAiToOrchestrator(ai: TestAiInput): {
   }
   return {
     endpointUrl: '',
-    primaryModel: chat || 'gpt-5',
-    reasoningModel: chat || 'gpt-5',
-    triageModel: chat || 'gpt-4o-mini',
-    providerPriority: ['gpt-5', 'claude', 'gemini-flash', 'local-llama'],
+    primaryModel: routingModel,
+    reasoningModel: routingModel,
+    triageModel: routingModel,
+    providerPriority: [routingModel, 'claude', 'gemini-flash', 'local-llama'].filter(
+      (id, index, all) => all.indexOf(id) === index,
+    ),
+    featureRouting: routing,
     killSwitchMaster: false,
     secretProvider: 'openai',
     secretValue: ai.apiKey,
@@ -729,6 +809,7 @@ export async function completeOnboarding(
     tenantId,
   };
 
+  const aiMapped = mapAiToOrchestrator(input.ai);
   const nextConfig: ModuleConfig = normalizeModuleConfig({
     ...existing,
     is_initialized: true,
@@ -736,6 +817,10 @@ export async function completeOnboarding(
     initializedBy: cleanEmail,
     platformModules,
     modules: platformModules,
+    ai: {
+      ...existing.ai,
+      ...moduleAiFromOnboarding(input.ai, aiMapped.primaryModel, aiMapped.endpointUrl),
+    },
     email: {
       ...existing.email,
       supportEmail: input.ingestion?.supportEmail || existing.email.supportEmail,
@@ -746,7 +831,6 @@ export async function completeOnboarding(
     },
   });
 
-  const aiMapped = mapAiToOrchestrator(input.ai);
   const existingCfg = await getOrchestratorConfig(WORKSPACE_ID);
   await upsertOrchestratorConfig(
     {
@@ -756,6 +840,7 @@ export async function completeOnboarding(
       reasoningModel: aiMapped.reasoningModel,
       triageModel: aiMapped.triageModel,
       providerPriority: aiMapped.providerPriority,
+      featureRouting: aiMapped.featureRouting,
       killSwitch: {
         ...existingCfg.killSwitch,
         master: aiMapped.killSwitchMaster,

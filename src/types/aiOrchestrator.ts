@@ -595,9 +595,10 @@ export const PROVIDER_RESIDENCY_MAP: Record<string, AiDataResidencyRegion[]> = {
   'gemini-pro': ['USA', 'EU', 'Asia'],
   'local-llama': ['Germany', 'EU'],
   local: ['Germany', 'EU'],
+  'qwen-36b': ['Germany', 'EU'],
 };
 
-export const LOCAL_PROVIDER_IDS = new Set(['local-llama', 'local']);
+export const LOCAL_PROVIDER_IDS = new Set(['local-llama', 'local', 'qwen-36b']);
 
 /** Step-by-step decision engine flow chart for every incoming AI prompt. */
 export const AI_DECISION_ENGINE_FLOW: Array<{ step: AiDecisionEngineStep; label: string }> = [
@@ -771,6 +772,13 @@ export const FEATURE_ROUTING_KEYS: Array<keyof AiFeatureRouting> = [
   'translation',
   'vault_insights',
 ];
+
+export function featureRoutingForModel(model: string): AiFeatureRouting {
+  return FEATURE_ROUTING_KEYS.reduce((acc, key) => {
+    acc[key] = model;
+    return acc;
+  }, {} as AiFeatureRouting);
+}
 
 export const DEFAULT_KILL_SWITCH: AiKillSwitch = {
   master: false,
