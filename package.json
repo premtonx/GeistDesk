@@ -93,7 +93,7 @@
   },
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild src/db/migrate.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/migrate.cjs && esbuild src/db/seed.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/seed.cjs",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild src/db/migrate.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/migrate.cjs && esbuild src/db/seed.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/seed.cjs && esbuild scripts/seed-demo.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/seed-demo.cjs",
     "build:strict": "npm run lint && node scripts/verify-no-react-namespace.mjs && npm run build && node scripts/verify-production-build.mjs",
     "verify:license": "node scripts/verify-license-compliance.mjs",
     "verify:hybrid-crypto": "tsx scripts/verify-hybrid-crypto.mjs",
@@ -107,7 +107,8 @@
     "db:prisma:generate": "prisma generate",
     "vectors:backfill": "tsx scripts/backfill-vectors.ts",
     "seed": "tsx src/db/seed.ts",
-    "seed:demo": "tsx scripts/seed-demo.ts",
+    "seed:demo": "node dist/seed-demo.cjs",
+    "seed:demo:dev": "tsx scripts/seed-demo.ts",
     "seed:prod": "node dist/seed.cjs",
     "prod:bootstrap": "npm run db:deploy:prod && npm run seed:prod",
     "prod:start": "npm run prod:bootstrap && node dist/server.cjs",

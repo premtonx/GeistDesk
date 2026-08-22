@@ -40,7 +40,8 @@ RUN npm run build \
   && test -f dist/index.html \
   && test -f dist/server.cjs \
   && test -f dist/migrate.cjs \
-  && test -f dist/seed.cjs
+  && test -f dist/seed.cjs \
+  && test -f dist/seed-demo.cjs
 
 # Production node_modules for the runner (keeps generated Prisma client).
 RUN npm prune --omit=dev && npm cache clean --force
