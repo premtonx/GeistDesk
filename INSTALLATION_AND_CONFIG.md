@@ -19,11 +19,19 @@ Enterprise production / pilot runbook for deploying GeistDesk with Docker, wirin
 
 ### 1.2 Create the environment file
 
+Preferred (generates secrets, writes `.env`, starts Compose):
+
+```bash
+./setup.sh
+```
+
+Manual equivalent:
+
 ```bash
 cp .env.example .env
 ```
 
-Generate secrets:
+Generate secrets (skip if you used `./setup.sh`):
 
 ```bash
 node -e "console.log('JWT_SECRET=' + require('crypto').randomBytes(48).toString('hex'))"

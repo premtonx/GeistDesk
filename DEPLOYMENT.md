@@ -9,9 +9,20 @@ This document describes how to run GeistDesk in production with **zero-configura
 External adopters can bring up a fully populated environment with:
 
 ```bash
-cp .env.example .env   # if present; otherwise create .env (see below)
-docker compose up --build -d
+./setup.sh
 ```
+
+The installer creates `.env` from `.env.example` if missing, generates
+`POSTGRES_PASSWORD`, `JWT_SECRET`, `MASTER_KEY_SALT`, `VAULT_ENCRYPTION_KEY`,
+and `INBOUND_MAIL_WEBHOOK_SECRET`, asks for a public domain (default
+`http://localhost:3000`, or e.g. `desk.geistai.eu`), then runs
+`docker compose up --build -d`. Non-interactive:
+
+```bash
+./setup.sh --yes
+```
+
+Do not edit `docker-compose.yml` — host, router, and Traefik network come from `.env`.
 
 On every container start the entrypoint (`scripts/docker-entrypoint.sh`) runs:
 

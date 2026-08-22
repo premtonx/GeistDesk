@@ -141,6 +141,13 @@ jobs:
             set_env_default BETA_AUTO_ADMIN false
             set_env_default ALLOW_PUBLIC_REGISTRATION false
             set_env_default ENABLE_SANDBOX false
+            # Compose Traefik labels now read from .env. Pin the live host so
+            # Host(`${DOMAIN_NAME:-localhost}`) does not fall back to localhost.
+            set_env_default DOMAIN_NAME app.premtonx.cloud
+            set_env_default PUBLIC_HOSTNAME app.premtonx.cloud
+            set_env_default PUBLIC_APP_URL https://app.premtonx.cloud
+            set_env_default ROUTER_NAME geistdesk-sso
+            set_env_default TRAEFIK_NETWORK traefik-public
             set_env_if_missing GRAPH_CLIENT_STATE_SECRET
             set_env_if_missing INBOUND_MAIL_WEBHOOK_SECRET
 
