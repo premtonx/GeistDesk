@@ -31,9 +31,11 @@ function formatVaultHistoryItem(
   companies: Company[],
 ): ExchangeItemRow {
   const isReq = item.type === 'request';
-  const name = isReq
-    ? item.metadata?.requestName || `Dropzone Diagnostic #${item.id.substring(0, 4)}`
-    : `Secure ${item.metadata?.secretType || 'Secret'} Payload`;
+  const name = item.metadata?.requestName
+    ? item.metadata.requestName
+    : isReq
+      ? `Dropzone Diagnostic #${item.id.substring(0, 4)}`
+      : `Secure ${item.metadata?.secretType || 'Secret'} Payload`;
 
   const relatedTicketObj = tickets.find((t) => t.id === item.metadata?.relatedTicketId);
   const relatedCompanyObj = companies.find((c) => c.id === item.metadata?.relatedCompanyId);

@@ -78,6 +78,23 @@ import {
   type CredentialVaultFolder,
 } from '../../services/credentialVaultApi';
 
+async function fetchSimulationVaultCatalog(): Promise<{
+  credentials: VaultCredential[];
+  categories: VaultCategory[];
+}> {
+  try {
+    const res = await fetch('/api/demo/catalog', { credentials: 'include' });
+    if (!res.ok) return { credentials: [], categories: [] };
+    const body = await res.json();
+    return {
+      credentials: Array.isArray(body.credentials) ? body.credentials : [],
+      categories: Array.isArray(body.categories) ? body.categories : [],
+    };
+  } catch {
+    return { credentials: [], categories: [] };
+  }
+}
+
 import { 
   Dialog, 
   DialogContent, 
@@ -396,6 +413,21 @@ export default function CredentialVaultPage() {
 
       let mergedCredentials = remoteCredentials;
       let mergedCategories = remoteCategories;
+      const simulationCatalog = await fetchSimulationVaultCatalog();
+      if (simulationCatalog.credentials.length > 0) {
+        const existingIds = new Set(mergedCredentials.map((item) => String(item.id || item.label)));
+        mergedCredentials = [
+          ...mergedCredentials,
+          ...simulationCatalog.credentials.filter((item) => !existingIds.has(String(item.id || item.label))),
+        ];
+      }
+      if (simulationCatalog.categories.length > 0) {
+        const existingCats = new Set(mergedCategories.map((cat) => cat.name));
+        mergedCategories = [
+          ...mergedCategories,
+          ...simulationCatalog.categories.filter((cat) => !existingCats.has(cat.name)),
+        ];
+      }
 
       // Never invent demo secrets. Strip leftover showcase rows from every
       // decrypted folder — not only the personal vault — unless showcase login

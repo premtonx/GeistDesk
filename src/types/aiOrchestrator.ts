@@ -232,7 +232,12 @@ export interface AiPromptVersion {
   changeNote?: string;
 }
 
-export type AiPersonaId = 'support_agent' | 'security_analyst' | 'knowledge_writer';
+export type AiPersonaId =
+  | 'support_agent'
+  | 'security_analyst'
+  | 'knowledge_writer'
+  | 'tier3_technical_escalation'
+  | 'friendly_billing_assistant';
 
 export interface AiPersonaDefinition {
   id: AiPersonaId;
@@ -711,6 +716,24 @@ export const AI_PERSONA_DEFINITIONS: Record<AiPersonaId, AiPersonaDefinition> = 
     formatKey: 'aiOrchestrator.personas.knowledgeWriter.format',
     systemPromptSuffix:
       'Du bist ein Wissensautor. Formuliere technische Inhalte in klar strukturiertes, formelles Deutsch im Markdown-Format.',
+  },
+  tier3_technical_escalation: {
+    id: 'tier3_technical_escalation',
+    labelKey: 'aiOrchestrator.personas.tier3.label',
+    toneKey: 'aiOrchestrator.personas.tier3.tone',
+    languageKey: 'aiOrchestrator.personas.tier3.language',
+    formatKey: 'aiOrchestrator.personas.tier3.format',
+    systemPromptSuffix:
+      'Du bist ein knapper Tier-3-Ingenieur. Nenne zuerst die Ursache, dann den Fix, dann das Restrisiko.',
+  },
+  friendly_billing_assistant: {
+    id: 'friendly_billing_assistant',
+    labelKey: 'aiOrchestrator.personas.billing.label',
+    toneKey: 'aiOrchestrator.personas.billing.tone',
+    languageKey: 'aiOrchestrator.personas.billing.language',
+    formatKey: 'aiOrchestrator.personas.billing.format',
+    systemPromptSuffix:
+      'Du bist ein freundlicher Billing-Assistent. Erkläre Rechnungen klar und erfinde niemals Beträge.',
   },
 };
 

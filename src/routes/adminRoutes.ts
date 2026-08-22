@@ -663,7 +663,13 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
   }
 });
 
-const AGENT_SKILL_IDS: AiPersonaId[] = ['support_agent', 'security_analyst', 'knowledge_writer'];
+const AGENT_SKILL_IDS: AiPersonaId[] = [
+  'support_agent',
+  'security_analyst',
+  'knowledge_writer',
+  'tier3_technical_escalation',
+  'friendly_billing_assistant',
+];
 
 /**
  * 5a. PUT /api/admin/orchestrator/agent-skills/:agentId

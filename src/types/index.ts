@@ -225,6 +225,14 @@ export interface Ticket {
   devStatus?: 'backlog' | 'in_dev' | 'qa' | 'merged';
   resolvedAt?: any;
   closedAt?: any;
+  /** Minutes from createdAt to resolvedAt when the ticket was closed. */
+  resolutionTimeMinutes?: number;
+  /** Customer CSAT stars (1–5) after resolve. */
+  satisfactionRating?: number;
+  /** True when an AI draft/summary was accepted or shown. */
+  aiSuggestionUsed?: boolean;
+  /** How many AI suggestions this ticket contributed to the dashboard counter. */
+  aiSuggestionsCount?: number;
   linkedTicketIds?: string[];
   masterTicketId?: string | null;
   isMasterTicket?: boolean;

@@ -212,10 +212,21 @@ async function queryExtendedTicketStats() {
             OR (NULLIF(data->>'firstResponseDue', '') IS NOT NULL AND (data->>'firstResponseDue')::timestamptz < NOW())
           )
       )::int AS overdue,
-      COUNT(*) FILTER (
-        WHERE COALESCE(data->>'aiSummary', '') <> ''
-          OR COALESCE(data->>'aiSuggestedDraft', '') <> ''
-      )::int AS ai_suggestions,
+      COALESCE(SUM(
+        COALESCE(
+          NULLIF(data->>'aiSuggestionsCount', '')::int,
+          CASE
+            WHEN LOWER(COALESCE(data->>'aiSuggestionUsed', '')) IN ('true', '1')
+              OR COALESCE(data->>'aiSummary', '') <> ''
+              OR COALESCE(data->>'aiSuggestedDraft', '') <> ''
+            THEN 1 ELSE 0
+          END
+        )
+      ), 0)::int AS ai_suggestions,
+      AVG(NULLIF(data->>'satisfactionRating', '')::numeric) FILTER (
+        WHERE LOWER(data->>'status') IN ('resolved', 'closed')
+          AND NULLIF(data->>'satisfactionRating', '') IS NOT NULL
+      ) AS avg_satisfaction_rating,
       AVG(
         EXTRACT(EPOCH FROM (
           COALESCE(NULLIF(data->>'resolvedAt', '')::timestamptz, NULLIF(data->>'closedAt', '')::timestamptz)
@@ -251,6 +262,7 @@ async function queryExtendedTicketStats() {
     aiSuggestions: Number(row.ai_suggestions) || 0,
     avgResolutionHours: Number(row.avg_resolution_hours) || 0,
     satisfactionPct,
+    avgSatisfactionRating: Number(row.avg_satisfaction_rating) || 0,
   };
 }
 
@@ -527,7 +539,11 @@ export async function buildDashboardStats(): Promise<DashboardStatsPayload> {
       avgResolutionTime: formatHours(stats.avgResolutionHours),
       resolvedCount: stats.resolved,
       satisfaction:
-        stats.resolved > 0 ? `${Math.round(stats.satisfactionPct)}%` : '—',
+        stats.avgSatisfactionRating > 0
+          ? `${stats.avgSatisfactionRating.toFixed(1)}/5`
+          : stats.resolved > 0
+            ? `${Math.round(stats.satisfactionPct)}%`
+            : '—',
       aiSuggestionsCount: stats.aiSuggestions,
       trends: {
         resolutionRate: momDelta(resolutionRateValue, previousResolution),
