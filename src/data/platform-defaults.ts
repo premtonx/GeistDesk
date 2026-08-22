@@ -32,7 +32,7 @@ export interface PlatformVaultFolderSeed {
  */
 export const PLATFORM_DEFAULT_VAULT_FOLDERS: PlatformVaultFolderSeed[] = [];
 
-const PERSONA_BLUEPRINT_MAP: Record<AiPersonaId, { blueprintId: string; fileName: string }> = {
+const PERSONA_BLUEPRINT_MAP: Partial<Record<AiPersonaId, { blueprintId: string; fileName: string }>> = {
   support_agent: { blueprintId: 'support_empathy_translation', fileName: 'support_empathy_translation.sample.json' },
   security_analyst: { blueprintId: 'security_audit_pii', fileName: 'security_audit_pii.sample.json' },
   knowledge_writer: { blueprintId: 'knowledge_formal_docs', fileName: 'knowledge_formal_docs.sample.json' },
@@ -42,6 +42,7 @@ const PERSONA_BLUEPRINT_MAP: Record<AiPersonaId, { blueprintId: string; fileName
 export function buildDefaultPersonaSkills(): AiPersonaSkillsMap {
   const skills: AiPersonaSkillsMap = {};
   for (const [personaId, meta] of Object.entries(PERSONA_BLUEPRINT_MAP) as [AiPersonaId, typeof PERSONA_BLUEPRINT_MAP[AiPersonaId]][]) {
+    if (!meta) continue;
     const manifest = AGENT_SKILL_BLUEPRINT_MANIFESTS[meta.blueprintId];
     if (!manifest) continue;
     skills[personaId] = {

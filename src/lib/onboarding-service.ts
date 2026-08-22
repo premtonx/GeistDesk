@@ -28,6 +28,7 @@ import { detectLocalModels } from './ai-orchestrator-service.js';
 import { createEmailChannel, listEmailChannels } from './email-ingestion/channel-store.js';
 import { setPersonalVaultInitialized } from './personal-vault-store.js';
 import { purgeSeededVaultFolders } from './vault-demo-purge.js';
+import { seedDemoSimulation } from './demo-simulation-seed.js';
 import {
   purgeDemoAutopilotFixtures,
   purgeFrontendSeedKbArticles,
@@ -616,59 +617,11 @@ async function importOnboardingSampleData(opts: {
   includeKb: boolean;
 }): Promise<{ tickets: number; articles: number; tags: number }> {
   const now = new Date().toISOString();
-  const tickets = [
-    {
-      id: 'tkt-sample-0001',
-      customId: 'GD-0001',
-      subject: 'VPN-Verbindung bricht regelmäßig ab',
-      description: 'Beispielticket: Der VPN-Tunnel trennt sich alle wenigen Minuten im Engineering-Subnetz.',
-      status: 'open',
-      priority: 'high',
-      team: 'engineering',
-      channel: 'email',
-      customerName: 'Beispielkunde',
-      company: 'Beispiel GmbH',
-      agentId: null,
-      tags: ['network', 'vpn'],
-      tenantId: opts.tenantId,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: 'tkt-sample-0002',
-      customId: 'GD-0002',
-      subject: 'E-Mail synchronisiert nicht auf dem Mobilgerät',
-      description: 'Beispielticket: Outlook Mobile synchronisiert nach einer Passwortänderung nicht mehr.',
-      status: 'pending',
-      priority: 'medium',
-      team: 'support',
-      channel: 'chat',
-      customerName: 'Beispielkunde',
-      company: 'Beispiel GmbH',
-      agentId: null,
-      tags: ['email', 'mobile'],
-      tenantId: opts.tenantId,
-      createdAt: now,
-      updatedAt: now,
-    },
-    {
-      id: 'tkt-sample-0003',
-      customId: 'GD-0003',
-      subject: 'Passwort-Reset kommt nicht an',
-      description: 'Beispielticket: Self-Service-Reset-Mails erreichen mehrere Benutzer nicht.',
-      status: 'open',
-      priority: 'urgent',
-      team: 'support',
-      channel: 'email',
-      customerName: 'Beispielkunde',
-      company: 'Beispiel GmbH',
-      agentId: null,
-      tags: ['account', 'auth'],
-      tenantId: opts.tenantId,
-      createdAt: now,
-      updatedAt: now,
-    },
-  ];
+  const simulation = await seedDemoSimulation({
+    actorUserId: opts.userId,
+    tenantId: opts.tenantId,
+    replaceLegacySamples: true,
+  });
 
   const tags = [
     { id: 'tag-sample-network', name: 'network', color: '#2563eb', tenantId: opts.tenantId, createdAt: now },
@@ -711,9 +664,6 @@ async function importOnboardingSampleData(opts: {
       ]
     : [];
 
-  for (const ticket of tickets) {
-    await setDocDirect('tickets', ticket.id, ticket);
-  }
   for (const tag of tags) {
     await setDocDirect('tags', tag.id, tag);
   }
@@ -721,7 +671,7 @@ async function importOnboardingSampleData(opts: {
     await setDocDirect('kb_articles', article.id, article);
   }
 
-  return { tickets: tickets.length, articles: articles.length, tags: tags.length };
+  return { tickets: simulation.tickets, articles: articles.length, tags: tags.length };
 }
 
 export async function completeOnboarding(

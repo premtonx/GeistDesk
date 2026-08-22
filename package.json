@@ -107,6 +107,7 @@
     "db:prisma:generate": "prisma generate",
     "vectors:backfill": "tsx scripts/backfill-vectors.ts",
     "seed": "tsx src/db/seed.ts",
+    "seed:demo": "tsx scripts/seed-demo.ts",
     "seed:prod": "node dist/seed.cjs",
     "prod:bootstrap": "npm run db:deploy:prod && npm run seed:prod",
     "prod:start": "npm run prod:bootstrap && node dist/server.cjs",

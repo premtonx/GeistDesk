@@ -20,6 +20,7 @@ import { initDb } from "../lib/postgres-backend.js";
 import seedDatasetJson from "./seed-data.json";
 import { seedAllPlatformDefaults } from "./seed-platform-defaults.js";
 import { isDemoLoginEnabled } from "../lib/runtime-env.js";
+import { seedDemoSimulation } from "../lib/demo-simulation-seed.js";
 
 const { Pool } = pg;
 
@@ -132,13 +133,7 @@ async function main() {
           updatedAt: new Date().toISOString()
         });
       }
-      for (const t of dataset.tickets) {
-        tickets.push({
-          ...t,
-          createdAt: t.createdAt || new Date().toISOString(),
-          updatedAt: t.updatedAt || new Date().toISOString()
-        });
-      }
+      // Ticket fixtures come from the production-simulation seeder (relative dates + KPIs).
     } else {
       console.log(
         "[seed] Skipping demo users/tickets — ENABLE_DEMO_LOGIN is unset or this is a production runtime.",
@@ -152,11 +147,26 @@ async function main() {
     const platform = await seedAllPlatformDefaults(client);
     await client.query("COMMIT");
 
+    let simulation = { tickets: 0, messages: 0, vaultSecrets: 0, exchangeSessions: 0, personas: 0, purged: 0 };
+    if (seedDemoFixtures) {
+      const actor =
+        users.find((user) => user.role === "admin" || user.is_admin) || users[0] || { id: "user-demo-admin" };
+      simulation = await seedDemoSimulation({
+        actorUserId: String(actor.id || "user-demo-admin"),
+        actorName: String(actor.name || "Demo Administrator"),
+        actorEmail: String(actor.email || "demo@geistdesk.com"),
+        replaceLegacySamples: true,
+      });
+    }
+
     if (purged > 0) {
       console.log(`[seed] Purged ${purged} stale duplicate user row(s) sharing a seeded email.`);
     }
     if (seedDemoFixtures) {
-      console.log(`[seed] Upserted ${u} users and ${k} tickets into geistdesk_documents.`);
+      console.log(`[seed] Upserted ${u} users into geistdesk_documents.`);
+      console.log(
+        `[seed] Simulation: ${simulation.tickets} tickets, ${simulation.vaultSecrets} vault secrets, ${simulation.exchangeSessions} exchange sessions, ${simulation.personas} personas (purged ${simulation.purged}).`,
+      );
     } else {
       console.log("[seed] Fresh boot: no fixture users. Complete /onboarding to create the primary admin.");
     }
