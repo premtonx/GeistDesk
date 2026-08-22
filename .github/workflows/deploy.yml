@@ -160,7 +160,7 @@ jobs:
               exit 1
             fi
 
-            # Runtime-only Docker image — dist/ is supplied by CI artifact (no on-host Vite build).
+            # Multi-stage image builds dist/ inside Docker; host node_modules/dist are not required.
             rm -rf .vite node_modules/.vite || true
 
             docker compose build --pull \
@@ -218,4 +218,4 @@ jobs:
             done
 
             echo "=== Deploy success: ${BUNDLE} @ ${DEPLOY_COMMIT} ==="
-            echo "Deploy model: CI prebuilt dist + runtime Docker image (no on-host Vite build)"
+            echo "Deploy model: multi-stage Docker image (builder runs npm run build)"
