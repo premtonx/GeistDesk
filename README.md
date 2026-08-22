@@ -137,8 +137,8 @@ docker run -p 3000:3000 \
 ### 3️⃣ Docker-Compose Multi-Container Orchestration
 A custom `docker-compose.yml` file is provided, mapping essential environment variables and allowing quick, scaling deployments:
 ```bash
-# Bring the service up under high performance container isolation
-docker-compose up --build -d
+# Zero-config: generates .env secrets, prompts for a domain, then compose up
+./setup.sh
 ```
 
 **Zero-config bootstrap:** The container entrypoint automatically deploys the PostgreSQL schema, seeds German platform defaults, and starts the server — no manual `npm run seed` required. See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full one-command bootstrapping guide.

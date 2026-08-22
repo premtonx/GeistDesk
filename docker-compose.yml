@@ -1,7 +1,6 @@
-# GeistDesk production / pilot compose.
-# Compatible with CI deploy that syncs prebuilt dist/ and runs:
-#   docker compose build --build-arg BUILD_ID=... geistdesk-gateway
-#   docker compose up -d geistdesk-gateway
+# GeistDesk production / self-host compose.
+# All host-specific values come from `.env` (see `.env.example` or `./setup.sh`).
+# No container_name pins — Docker namespaces containers from the project folder.
 #
 # Boot (scripts/docker-entrypoint.sh):
 #   wait for Postgres → db:deploy:prod → seed:prod → server
@@ -12,31 +11,28 @@ services:
       context: .
       args:
         BUILD_ID: ${BUILD_ID:-local}
-    container_name: geistdesk-sovereign-gate
     depends_on:
       geistdesk-db:
         condition: service_healthy
+    ports:
+      - "${HOST_PORT:-3000}:3000"
     environment:
-      - NODE_ENV=production
+      - NODE_ENV=${NODE_ENV:-production}
       - PORT=3000
-      - PUBLIC_APP_URL=${PUBLIC_APP_URL:-https://app.premtonx.cloud}
+      - PUBLIC_APP_URL=${PUBLIC_APP_URL:-http://localhost:3000}
 
-      # Bundled Postgres URL — MUST match geistdesk-db credentials below.
-      # Intentionally NOT reading host .env DATABASE_URL: production .env often
-      # contains a leftover postgres://postgres@... value that overrides the
-      # default and causes "password authentication failed for user postgres".
-      # For managed Postgres, set GEISTDESK_DATABASE_URL explicitly.
-      - DATABASE_URL=${GEISTDESK_DATABASE_URL:-postgresql://geist_user:geist_password@geistdesk-db:5432/geistdesk_prod?sslmode=disable}
+      # Bundled Postgres URL. Prefer GEISTDESK_DATABASE_URL from `.env` (setup.sh
+      # writes it to match POSTGRES_*). Nested defaults keep greenfield boots working
+      # without sed. Existing volumes that used geist_password stay compatible.
+      - DATABASE_URL=${GEISTDESK_DATABASE_URL:-postgresql://${POSTGRES_USER:-geist_user}:${POSTGRES_PASSWORD:-geist_password}@geistdesk-db:5432/${POSTGRES_DB:-geistdesk_prod}?sslmode=disable}
       - DATABASE_SSL_INSECURE=${DATABASE_SSL_INSECURE:-false}
 
-      # Required security secrets (must exist in host .env — deploy script enforces JWT/VAULT)
       - JWT_SECRET=${JWT_SECRET}
       - VAULT_ENCRYPTION_KEY=${VAULT_ENCRYPTION_KEY}
       - MASTER_KEY_SALT=${MASTER_KEY_SALT:-}
       - AI_SECRETS_KEY=${AI_SECRETS_KEY:-}
       - MICROSOFT_PROVIDER_CLIENT_ID=${MICROSOFT_PROVIDER_CLIENT_ID:-}
 
-      # Security hardening
       - BETA_AUTO_ADMIN=${BETA_AUTO_ADMIN:-false}
       - ALLOW_PUBLIC_REGISTRATION=${ALLOW_PUBLIC_REGISTRATION:-false}
       - ENABLE_SANDBOX=${ENABLE_SANDBOX:-false}
@@ -45,16 +41,14 @@ services:
       - VITE_ENABLE_DEMO_LOGIN=${VITE_ENABLE_DEMO_LOGIN:-false}
       - GRAPH_CLIENT_STATE_SECRET=${GRAPH_CLIENT_STATE_SECRET:-}
       - INBOUND_MAIL_WEBHOOK_SECRET=${INBOUND_MAIL_WEBHOOK_SECRET:-}
-      - INBOUND_MAIL_FORWARD_DOMAIN=${INBOUND_MAIL_FORWARD_DOMAIN:-app.premtonx.cloud}
+      - INBOUND_MAIL_FORWARD_DOMAIN=${INBOUND_MAIL_FORWARD_DOMAIN:-${DOMAIN_NAME:-localhost}}
       - EMAIL_INGESTION_INTERVAL_MS=${EMAIL_INGESTION_INTERVAL_MS:-60000}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
 
-      # Outbound mail (optional)
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_USER=${SMTP_USER:-}
       - MAIL_DISPATCH_URL=${MAIL_DISPATCH_URL:-}
 
-      # LLM
       - OLLAMA_ENDPOINT=${OLLAMA_ENDPOINT:-}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-}
@@ -66,7 +60,6 @@ services:
       - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME:-}
       - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
 
-      # OIDC / SSO
       - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
       - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
       - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
@@ -75,13 +68,12 @@ services:
       - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
       - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-}
 
-      # Firebase / client (legacy compose passthrough)
       - VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY:-}
       - VITE_FIREBASE_AUTH_DOMAIN=${VITE_FIREBASE_AUTH_DOMAIN:-}
       - VITE_FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID:-}
       - VITE_AI_PROVIDER=${VITE_AI_PROVIDER:-azure}
+      - VITE_MASTER_KEY_SALT=${VITE_MASTER_KEY_SALT:-}
 
-      # Teams Bot
       - MicrosoftAppId=${MicrosoftAppId:-}
       - MicrosoftAppPassword=${MicrosoftAppPassword:-}
       - MicrosoftAppType=${MicrosoftAppType:-}
@@ -89,22 +81,18 @@ services:
     restart: always
     networks:
       - geistdesk-internal
-      - traefik-public
+      - traefik
     labels:
       - "traefik.enable=true"
-      - "traefik.docker.network=traefik-public"
-      - "traefik.http.routers.geistdesk-sso.rule=Host(`app.premtonx.cloud`)"
-      - "traefik.http.routers.geistdesk-sso.entrypoints=websecure"
-      - "traefik.http.routers.geistdesk-sso.tls.certresolver=myresolver"
-      - "traefik.http.services.geistdesk-sso.loadbalancer.server.port=3000"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik-public}"
+      - "traefik.http.routers.${ROUTER_NAME:-geistdesk}.rule=Host(`${DOMAIN_NAME:-localhost}`)"
+      - "traefik.http.routers.${ROUTER_NAME:-geistdesk}.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.${ROUTER_NAME:-geistdesk}.tls.certresolver=${TRAEFIK_CERTRESOLVER:-myresolver}"
+      - "traefik.http.services.${ROUTER_NAME:-geistdesk}.loadbalancer.server.port=3000"
 
   geistdesk-db:
-    # pgvector-enabled Postgres (required for KnowledgeEmbedding / RAG HNSW).
     image: pgvector/pgvector:pg15
-    container_name: geistdesk-db-container
     environment:
-      # Defaults preserve existing production volumes created with geist_user/geist_password.
-      # Override via .env only when provisioning a NEW empty volume.
       - POSTGRES_USER=${POSTGRES_USER:-geist_user}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-geist_password}
       - POSTGRES_DB=${POSTGRES_DB:-geistdesk_prod}
@@ -125,7 +113,6 @@ volumes:
 networks:
   geistdesk-internal:
     driver: bridge
-  traefik-public:
+  traefik:
+    name: ${TRAEFIK_NETWORK:-traefik-public}
     external: true
-    # Local verification without Traefik:
-    #   docker network create traefik-public
