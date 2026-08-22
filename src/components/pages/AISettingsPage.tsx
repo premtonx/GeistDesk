@@ -33,15 +33,15 @@ import {
   RotateCcw,
   Ban,
   Loader2,
-  Info,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import axios from 'axios';
 import { AdminBreadcrumbs } from '../AdminBreadcrumbs';
-import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { useTranslation } from '../../lib/context/I18nContext';
 import {
   DEFAULT_ORCHESTRATOR_CONFIG,
+  FEATURE_ROUTING_KEYS,
+  ORCHESTRATOR_MODEL_OPTIONS,
   type AiFeatureRouting,
   type AiOrchestratorAuditEntry,
   type AiOrchestratorConfig,
@@ -58,7 +58,9 @@ import {
   startOrchestratorConfigSync,
   subscribeOrchestratorConfig,
 } from '../../lib/aiOrchestratorClient';
+import { persistOrchestratorPatch } from '../../lib/persistOrchestratorPatch';
 import { ProviderPriorityList } from '../ai-orchestrator/ProviderPriorityList';
+import { FeatureRoutingMatrix } from '../ai-orchestrator/FeatureRoutingMatrix';
 import { AiOrchestratorWorkbench } from '../ai-orchestrator/AiOrchestratorWorkbench';
 import { AiOperationsCommandCenter } from '../ai-orchestrator/AiOperationsCommandCenter';
 import { cn } from '../../lib/utils';
@@ -71,25 +73,7 @@ const ORCHESTRATOR_SUB_TABS: Array<{ id: OrchestratorSubTab; label: string }> = 
   { id: 'quality', label: '📊 Qualität & Auditing' },
 ];
 
-const MODEL_OPTIONS = [
-  { value: 'gemini-flash', label: 'Gemini Flash' },
-  { value: 'gemini-pro', label: 'Gemini Pro' },
-  { value: 'gpt-5', label: 'GPT-5' },
-  { value: 'claude', label: 'Claude' },
-  { value: 'local-llama', label: 'Local Llama' },
-  { value: 'qwen-36b', label: 'Qwen 36B (Local)' },
-];
-
-const FEATURE_ROUTING_KEYS: Array<keyof AiFeatureRouting> = [
-  'ticket_summarization',
-  'sentiment_analysis',
-  'smart_reply',
-  'kb_generation',
-  'escalation_analysis',
-  'root_cause_analysis',
-  'translation',
-  'vault_insights',
-];
+const MODEL_OPTIONS = ORCHESTRATOR_MODEL_OPTIONS;
 
 const PROVIDER_SECRET_FIELDS = [
   { id: 'google', label: 'Google Gemini API Key' },
@@ -129,26 +113,6 @@ function SectionHeader({ icon: Icon, title, description }: { icon: ElementType; 
   );
 }
 
-function FeatureInfoTooltip({ text }: { text: string }) {
-  return (
-    <Tooltip>
-      <TooltipTrigger
-        type="button"
-        className="inline-flex shrink-0 items-center text-slate-400 hover:text-slate-600 focus:outline-none focus-visible:ring-2 focus-visible:ring-slate-300 rounded-sm"
-        aria-label={text}
-      >
-        <Info className="w-3.5 h-3.5" />
-      </TooltipTrigger>
-      <TooltipContent
-        side="top"
-        className="max-w-[280px] text-left leading-snug font-normal normal-case tracking-normal"
-      >
-        {text}
-      </TooltipContent>
-    </Tooltip>
-  );
-}
-
 export default function AISettingsPage() {
   const { t } = useTranslation();
   const [config, setConfig] = useState<AiOrchestratorConfig>(DEFAULT_ORCHESTRATOR_CONFIG);
@@ -165,7 +129,7 @@ export default function AISettingsPage() {
   const [isDetectingModels, setIsDetectingModels] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [lastSyncAt, setLastSyncAt] = useState<string>('');
-  const [bulkRoutingModel, setBulkRoutingModel] = useState(MODEL_OPTIONS[0]?.value ?? 'gemini-flash');
+  const [bulkRoutingModel, setBulkRoutingModel] = useState<string>(MODEL_OPTIONS[0]?.value ?? 'gemini-flash');
   const [activeSubTab, setActiveSubTab] = useState<OrchestratorSubTab>('command');
 
   const loadAll = useCallback(async (silent = false) => {
@@ -201,27 +165,44 @@ export default function AISettingsPage() {
     });
   }, [loadAll]);
 
+  const persistWorkspacePatch = async (patch: Partial<AiOrchestratorConfig>) => {
+    if (config.configLocked) {
+      toast.error('Configuration is locked. Unlock to save changes.');
+      return;
+    }
+    setConfig((prev) => ({
+      ...prev,
+      ...patch,
+      featureRouting: patch.featureRouting ?? prev.featureRouting,
+    }));
+    try {
+      const saved = await persistOrchestratorPatch(patch);
+      setConfig(saved);
+      toast.success(t('aiOrchestrator.featureRouting.savedWorkspace', 'Saved to the workspace database.'));
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err)
+        ? err.response?.data?.error || err.message
+        : 'Failed to save configuration.';
+      toast.error(String(message));
+      await loadAll(true);
+    }
+  };
+
   const patchConfig = (patch: Partial<AiOrchestratorConfig>) => {
     setConfig((prev) => ({ ...prev, ...patch }));
   };
 
-  const patchRouting = (key: keyof AiFeatureRouting, value: string) => {
-    setConfig((prev) => ({
-      ...prev,
-      featureRouting: { ...prev.featureRouting, [key]: value },
-    }));
+  const persistRouting = (next: AiFeatureRouting) => {
+    void persistWorkspacePatch({ featureRouting: next });
   };
 
   const applyBulkRouting = () => {
     if (config.configLocked || !bulkRoutingModel) return;
-    setConfig((prev) => ({
-      ...prev,
-      featureRouting: FEATURE_ROUTING_KEYS.reduce(
-        (acc, key) => ({ ...acc, [key]: bulkRoutingModel }),
-        { ...prev.featureRouting },
-      ),
-    }));
-    toast.success(t('aiOrchestrator.featureRouting.bulkApplied', 'Routed model applied to all features.'));
+    const next = FEATURE_ROUTING_KEYS.reduce(
+      (acc, key) => ({ ...acc, [key]: bulkRoutingModel }),
+      { ...config.featureRouting },
+    );
+    void persistWorkspacePatch({ featureRouting: next });
   };
 
   const handleSkillsSaved = (agentId: AiPersonaId, skill: AiPersonaSkillProfile) => {
@@ -538,7 +519,7 @@ export default function AISettingsPage() {
                 <Select
                   value={config[key]}
                   disabled={readOnly}
-                  onValueChange={(v) => patchConfig({ [key]: v })}
+                  onValueChange={(v) => void persistWorkspacePatch({ [key]: String(v) })}
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
@@ -562,82 +543,17 @@ export default function AISettingsPage() {
             />
           </CardHeader>
           <CardContent>
-            <div className="rounded-xl border overflow-hidden bg-white">
-              <div className="flex flex-wrap items-center gap-2.5 px-3 py-2.5 border-b border-slate-100 bg-slate-50/80">
-                <span className="text-xs font-semibold text-slate-700 whitespace-nowrap shrink-0">
-                  {t('aiOrchestrator.featureRouting.bulkRouter', 'Bulk Model Router')}
-                </span>
-                <Select
-                  value={bulkRoutingModel}
-                  disabled={readOnly}
-                  onValueChange={setBulkRoutingModel}
-                >
-                  <SelectTrigger className="h-8 w-[min(100%,200px)] bg-white">
-                    <SelectValue placeholder={t('aiOrchestrator.featureRouting.selectModel', 'Select model…')} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {MODEL_OPTIONS.map((m) => (
-                      <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  size="sm"
-                  className="h-8 shrink-0"
-                  disabled={readOnly || !bulkRoutingModel}
-                  onClick={applyBulkRouting}
-                >
-                  {t('aiOrchestrator.featureRouting.applyToAll', 'Apply to All')}
-                </Button>
-              </div>
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50">
-                  <tr>
-                    <th className="text-left p-3 font-semibold text-slate-600">
-                      {t('aiOrchestrator.featureRouting.featureColumn', 'Feature')}
-                    </th>
-                    <th className="text-left p-3 font-semibold text-slate-600">
-                      {t('aiOrchestrator.featureRouting.routedModelColumn', 'Routed Model')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {FEATURE_ROUTING_KEYS.map((key) => (
-                    <tr key={key} className="border-t border-slate-100">
-                      <td className="p-3 font-medium">
-                        <div className="flex items-center gap-1.5 min-w-0">
-                          <span className="truncate">
-                            {t(`aiOrchestrator.features.${key}.label`, key.replace(/_/g, ' '))}
-                          </span>
-                          <FeatureInfoTooltip
-                            text={t(
-                              `aiOrchestrator.features.${key}.tooltip`,
-                              'Configure which model handles this AI feature.',
-                            )}
-                          />
-                        </div>
-                      </td>
-                      <td className="p-3">
-                        <Select
-                          value={config.featureRouting[key]}
-                          disabled={readOnly}
-                          onValueChange={(v) => patchRouting(key, v)}
-                        >
-                          <SelectTrigger className="h-8 max-w-[200px]"><SelectValue /></SelectTrigger>
-                          <SelectContent>
-                            {MODEL_OPTIONS.map((m) => (
-                              <SelectItem key={m.value} value={m.value}>{m.label}</SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <p className="text-[11px] font-semibold uppercase tracking-widest text-emerald-600 mb-3">
+              {t('aiOrchestrator.featureRouting.workspaceScope', 'Workspace-wide · saved to the database')}
+            </p>
+            <FeatureRoutingMatrix
+              routing={config.featureRouting}
+              disabled={readOnly}
+              bulkModel={bulkRoutingModel}
+              onBulkModelChange={setBulkRoutingModel}
+              onRoutingChange={persistRouting}
+              onApplyAll={applyBulkRouting}
+            />
           </CardContent>
         </Card>
 

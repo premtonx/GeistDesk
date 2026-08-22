@@ -41,6 +41,7 @@ import {
 } from "../lib/ai-orchestrator-policies.js";
 import { resumeApprovedAiRequest } from "../lib/ai-request-lifecycle.js";
 import { getOperationsDashboard } from "../lib/ai-orchestrator-operations.js";
+import { syncLegacyModuleAiFromOrchestrator } from "../lib/sync-legacy-ai-config.js";
 import { getProviderBenchmarkGrid, runPlaygroundComparison } from "../lib/ai-orchestrator-admin.js";
 import {
   listPromptTemplates,
@@ -602,36 +603,62 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
       {
         workspaceId,
         scope: (payload.scope as string) === "personal" ? "workspace" : payload.scope,
-        primaryModel: payload.primaryModel,
-        reasoningModel: payload.reasoningModel,
-        triageModel: payload.triageModel,
-        providerPriority: payload.providerPriority,
-        fallbackModels: payload.fallbackModels,
-        featureRouting: payload.featureRouting as AiFeatureRouting | undefined,
-        endpointUrl: payload.endpointUrl,
-        piiEnabled: payload.piiEnabled,
-        autoEscalationEnabled: payload.autoEscalationEnabled,
-        auditEnabled: payload.auditEnabled,
-        configLocked: payload.configLocked,
-        reasoningLevel: payload.reasoningLevel,
-        contentFilteringEnabled: payload.contentFilteringEnabled,
-        promptLoggingEnabled: payload.promptLoggingEnabled,
-        dataResidency: payload.dataResidency,
-        corporatePolicies: payload.corporatePolicies as AiCorporatePolicies | undefined,
-        trustLevel: payload.trustLevel as AiTrustLevel | undefined,
-        dataResidencyPolicy: payload.dataResidencyPolicy as AiDataResidencyPolicy | undefined,
-        confidenceThresholds: payload.confidenceThresholds as AiConfidenceThresholds | undefined,
-        memoryPolicy: payload.memoryPolicy as AiMemoryPolicy | undefined,
-        featurePersonas: payload.featurePersonas as AiFeaturePersonaMap | undefined,
-        personaSkills: payload.personaSkills,
-        killSwitch: payload.killSwitch as AiKillSwitch | undefined,
-        dailyBudgetUsd: payload.dailyBudgetUsd,
-        monthlyBudgetUsd: payload.monthlyBudgetUsd,
-        dailyBudgetEur: payload.dailyBudgetEur,
-        budgetExceededAction: payload.budgetExceededAction,
+        ...(payload.primaryModel !== undefined ? { primaryModel: payload.primaryModel } : {}),
+        ...(payload.reasoningModel !== undefined ? { reasoningModel: payload.reasoningModel } : {}),
+        ...(payload.triageModel !== undefined ? { triageModel: payload.triageModel } : {}),
+        ...(payload.providerPriority !== undefined ? { providerPriority: payload.providerPriority } : {}),
+        ...(payload.fallbackModels !== undefined ? { fallbackModels: payload.fallbackModels } : {}),
+        ...(payload.featureRouting !== undefined
+          ? { featureRouting: payload.featureRouting as AiFeatureRouting }
+          : {}),
+        ...(payload.endpointUrl !== undefined ? { endpointUrl: payload.endpointUrl } : {}),
+        ...(payload.piiEnabled !== undefined ? { piiEnabled: payload.piiEnabled } : {}),
+        ...(payload.autoEscalationEnabled !== undefined
+          ? { autoEscalationEnabled: payload.autoEscalationEnabled }
+          : {}),
+        ...(payload.auditEnabled !== undefined ? { auditEnabled: payload.auditEnabled } : {}),
+        ...(payload.configLocked !== undefined ? { configLocked: payload.configLocked } : {}),
+        ...(payload.reasoningLevel !== undefined ? { reasoningLevel: payload.reasoningLevel } : {}),
+        ...(payload.contentFilteringEnabled !== undefined
+          ? { contentFilteringEnabled: payload.contentFilteringEnabled }
+          : {}),
+        ...(payload.promptLoggingEnabled !== undefined
+          ? { promptLoggingEnabled: payload.promptLoggingEnabled }
+          : {}),
+        ...(payload.dataResidency !== undefined ? { dataResidency: payload.dataResidency } : {}),
+        ...(payload.corporatePolicies !== undefined
+          ? { corporatePolicies: payload.corporatePolicies as AiCorporatePolicies }
+          : {}),
+        ...(payload.trustLevel !== undefined ? { trustLevel: payload.trustLevel as AiTrustLevel } : {}),
+        ...(payload.dataResidencyPolicy !== undefined
+          ? { dataResidencyPolicy: payload.dataResidencyPolicy as AiDataResidencyPolicy }
+          : {}),
+        ...(payload.confidenceThresholds !== undefined
+          ? { confidenceThresholds: payload.confidenceThresholds as AiConfidenceThresholds }
+          : {}),
+        ...(payload.memoryPolicy !== undefined
+          ? { memoryPolicy: payload.memoryPolicy as AiMemoryPolicy }
+          : {}),
+        ...(payload.featurePersonas !== undefined
+          ? { featurePersonas: payload.featurePersonas as AiFeaturePersonaMap }
+          : {}),
+        ...(payload.personaSkills !== undefined ? { personaSkills: payload.personaSkills } : {}),
+        ...(payload.killSwitch !== undefined ? { killSwitch: payload.killSwitch as AiKillSwitch } : {}),
+        ...(payload.dailyBudgetUsd !== undefined ? { dailyBudgetUsd: payload.dailyBudgetUsd } : {}),
+        ...(payload.monthlyBudgetUsd !== undefined ? { monthlyBudgetUsd: payload.monthlyBudgetUsd } : {}),
+        ...(payload.dailyBudgetEur !== undefined ? { dailyBudgetEur: payload.dailyBudgetEur } : {}),
+        ...(payload.budgetExceededAction !== undefined
+          ? { budgetExceededAction: payload.budgetExceededAction }
+          : {}),
       },
       updatedBy,
     );
+
+    try {
+      await syncLegacyModuleAiFromOrchestrator(saved);
+    } catch (syncError) {
+      console.warn("[Admin Orchestrator POST] Legacy module_config.ai sync skipped:", syncError);
+    }
 
     if (payload.secrets && typeof payload.secrets === "object") {
       for (const [provider, secret] of Object.entries(payload.secrets)) {

@@ -1814,7 +1814,10 @@
       "cloud": "Cloud thinking",
       "ollama": "Ollama / local endpoint",
       "latency": "Gateway latency",
-      "endpointUnset": "Not configured"
+      "endpointUnset": "Not configured",
+      "loadError": "Could not load workspace AI routing.",
+      "saveError": "Could not save workspace AI routing.",
+      "locked": "Configuration is locked. Unlock it in the AI Orchestrator."
     },
     "hubGov": {
       "piiTitle": "PII Shield",
@@ -2182,6 +2185,8 @@
       "selectModel": "Select model…",
       "applyToAll": "Apply to All",
       "bulkApplied": "Routed model applied to all features.",
+      "savedWorkspace": "Saved to the workspace database.",
+      "workspaceScope": "Workspace-wide · saved to the database",
       "featureColumn": "Feature",
       "routedModelColumn": "Routed Model"
     },

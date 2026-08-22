@@ -752,6 +752,15 @@ export const PLAYGROUND_MODEL_OPTIONS = [
   { value: 'local-llama', label: 'Local Llama' },
 ] as const;
 
+export const ORCHESTRATOR_MODEL_OPTIONS = [
+  { value: 'gemini-flash', label: 'Gemini Flash' },
+  { value: 'gemini-pro', label: 'Gemini Pro' },
+  { value: 'gpt-5', label: 'GPT-5' },
+  { value: 'claude', label: 'Claude' },
+  { value: 'local-llama', label: 'Local Llama' },
+  { value: 'qwen-36b', label: 'Qwen 36B (Local)' },
+] as const;
+
 export const FEATURE_ROUTING_KEYS: Array<keyof AiFeatureRouting> = [
   'ticket_summarization',
   'sentiment_analysis',
