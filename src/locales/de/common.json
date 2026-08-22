@@ -2059,10 +2059,62 @@
     "redactionLatency": "P99 Anonymisierungs-Verzögerung",
     "uptime": "Uptime (30 Tage)",
     "configureSection": "Bereich konfigurieren",
+    "hubTabs": {
+      "overview": "Übersicht",
+      "aiEngine": "Kern-KI & Modelle",
+      "governance": "PII & Compliance",
+      "integrations": "Mail & Schnittstellen",
+      "system": "Infrastruktur & Backups"
+    },
+    "hubAi": {
+      "title": "Kern-KI & Modelle",
+      "subtitle": "Aktives Engine-Routing, lokale Ollama/OpenAI-Endpunkte und Live-Latenz.",
+      "openOrchestrator": "KI-Orchestrator öffnen",
+      "sentiment": "Sentiment / Flash",
+      "cloud": "Cloud-Thinking",
+      "ollama": "Ollama / lokaler Endpunkt",
+      "latency": "Gateway-Latenz",
+      "endpointUnset": "Nicht konfiguriert"
+    },
+    "hubGov": {
+      "piiTitle": "PII-Schutzschild",
+      "piiSubtitle": "Anonymisierungsregeln vor dem Modell-Egress.",
+      "auditTitle": "Audit-Protokolle",
+      "auditSubtitle": "Unveränderliches Protokoll für Redaktion und Richtlinienereignisse.",
+      "openAudit": "Audit-Log öffnen",
+      "ruleEmail": "E-Mail-Adressen",
+      "rulePhone": "Telefonnummern",
+      "ruleCc": "Kreditkarten (PCI)",
+      "ruleAddress": "Physische Adressen",
+      "ruleSsn": "Sensible IDs (SSN/USt-IdNr)",
+      "auditRedaction": "PII-Redaktionsereignisse fließen in das Legal-Intercept-Protokoll.",
+      "auditSovereignty": "Souveränitäts- und Egress-Prüfungen bleiben für den Compliance-Export erhalten.",
+      "auditRoles": "Rollenänderungen und Vault-Freischaltungen erscheinen unter Berichte & Auditing."
+    },
+    "hubInt": {
+      "mailTitle": "Eingehende E-Mail",
+      "openChannels": "E-Mail-Kanäle",
+      "webhookTitle": "Webhooks & APIs",
+      "webhookBody": "Personio, Slack und eingehende Webhook-Listener.",
+      "openIntegrations": "Integrations-Hub",
+      "botsTitle": "Bot-Adapter",
+      "botsBody": "Teams-/Graph-Bot und Benachrichtigungsadapter.",
+      "openNotifications": "Benachrichtigungen"
+    },
+    "hubSys": {
+      "health": "Control Plane",
+      "healthHint": "SLA-Uptime der souveränen Runtime",
+      "assets": "Verwaltete Datensätze",
+      "assetsHint": "Tickets, Vault-Einträge und Verzeichniszeilen",
+      "backup": "Import & Wiederherstellung",
+      "backupValue": "CSV / JSON",
+      "backupHint": "Nutzen Sie den Datenimport für Tenant-Backups und Migrationen"
+    },
     "categories": {
       "core_ai": "Kern-KI",
       "identity_access": "Identität & Zugriff",
       "governance": "Governance",
+      "integrations": "Integrationen",
       "platform": "Plattform"
     }
   },

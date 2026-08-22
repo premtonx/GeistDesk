@@ -1799,10 +1799,62 @@
     "redactionLatency": "P99 Redaction Latency",
     "uptime": "Uptime (30d)",
     "configureSection": "Configure Section",
+    "hubTabs": {
+      "overview": "Overview",
+      "aiEngine": "Core AI & Models",
+      "governance": "PII & Compliance",
+      "integrations": "Mail & Interfaces",
+      "system": "Infrastructure & Backups"
+    },
+    "hubAi": {
+      "title": "Core AI & Models",
+      "subtitle": "Active engine routing, local Ollama/OpenAI endpoints, and live latency.",
+      "openOrchestrator": "Open AI Orchestrator",
+      "sentiment": "Sentiment / Flash",
+      "cloud": "Cloud thinking",
+      "ollama": "Ollama / local endpoint",
+      "latency": "Gateway latency",
+      "endpointUnset": "Not configured"
+    },
+    "hubGov": {
+      "piiTitle": "PII Shield",
+      "piiSubtitle": "Anonymization rules applied before model egress.",
+      "auditTitle": "Audit logs",
+      "auditSubtitle": "Immutable protocol trail for redaction and policy events.",
+      "openAudit": "Open audit log",
+      "ruleEmail": "Email addresses",
+      "rulePhone": "Phone numbers",
+      "ruleCc": "Credit cards (PCI)",
+      "ruleAddress": "Physical addresses",
+      "ruleSsn": "Sensitive IDs (SSN/VAT)",
+      "auditRedaction": "PII redaction events stream into the legal intercept log.",
+      "auditSovereignty": "Sovereignty and egress checks are retained for compliance export.",
+      "auditRoles": "Role changes and vault unlocks appear on the Reports & Auditing page."
+    },
+    "hubInt": {
+      "mailTitle": "Inbound mail",
+      "openChannels": "Email channels",
+      "webhookTitle": "Webhooks & APIs",
+      "webhookBody": "Personio, Slack, and inbound webhook listeners.",
+      "openIntegrations": "Integrations hub",
+      "botsTitle": "Bot adapters",
+      "botsBody": "Teams / Graph bot and notification adapters.",
+      "openNotifications": "Notifications"
+    },
+    "hubSys": {
+      "health": "Control plane",
+      "healthHint": "SLA uptime on the sovereign runtime",
+      "assets": "Managed records",
+      "assetsHint": "Tickets, vault items, and directory rows",
+      "backup": "Import & restore",
+      "backupValue": "CSV / JSON",
+      "backupHint": "Use Data Import for tenant backups and migrations"
+    },
     "categories": {
       "core_ai": "Core AI",
       "identity_access": "Identity & Access",
       "governance": "Governance",
+      "integrations": "Integrations",
       "platform": "Platform"
     },
     "sections": {
