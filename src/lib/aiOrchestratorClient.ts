@@ -28,6 +28,11 @@ function applyConfig(data: Partial<AiOrchestratorConfig>) {
   notifyConfig(cachedConfig);
 }
 
+export function hydrateOrchestratorConfig(data: Partial<AiOrchestratorConfig>): AiOrchestratorConfig {
+  applyConfig(data);
+  return cachedConfig!;
+}
+
 export function getCachedOrchestratorConfig(): AiOrchestratorConfig {
   return cachedConfig ?? DEFAULT_ORCHESTRATOR_CONFIG;
 }

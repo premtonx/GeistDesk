@@ -229,6 +229,14 @@ function configInsertParams(config: AiOrchestratorConfig, updatedBy: string): un
   ];
 }
 
+function omitUndefined<T extends Record<string, unknown>>(input: T): Partial<T> {
+  const out: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(input)) {
+    if (value !== undefined) out[key] = value;
+  }
+  return out as Partial<T>;
+}
+
 export async function upsertOrchestratorConfig(
   config: Partial<AiOrchestratorConfig> & { workspaceId?: string },
   updatedBy: string,
@@ -237,31 +245,35 @@ export async function upsertOrchestratorConfig(
   const workspaceId = config.workspaceId ?? 'default';
   const existing = await getOrchestratorConfig(workspaceId);
   const nextVersion = options?.skipVersion ? existing.configVersion : existing.configVersion + 1;
+  const incoming = omitUndefined({ ...config, workspaceId: undefined }) as Partial<AiOrchestratorConfig>;
   const merged: AiOrchestratorConfig = {
     ...existing,
-    ...config,
+    ...incoming,
     workspaceId,
     configVersion: nextVersion,
-    providerPriority: config.providerPriority ?? existing.providerPriority,
-    corporatePolicies: config.corporatePolicies
-      ? { ...existing.corporatePolicies, ...config.corporatePolicies }
+    providerPriority: incoming.providerPriority ?? existing.providerPriority,
+    featureRouting: incoming.featureRouting
+      ? { ...DEFAULT_FEATURE_ROUTING, ...existing.featureRouting, ...incoming.featureRouting }
+      : existing.featureRouting,
+    corporatePolicies: incoming.corporatePolicies
+      ? { ...existing.corporatePolicies, ...incoming.corporatePolicies }
       : existing.corporatePolicies,
-    dataResidencyPolicy: config.dataResidencyPolicy
-      ? { ...existing.dataResidencyPolicy, ...config.dataResidencyPolicy }
+    dataResidencyPolicy: incoming.dataResidencyPolicy
+      ? { ...existing.dataResidencyPolicy, ...incoming.dataResidencyPolicy }
       : existing.dataResidencyPolicy,
-    confidenceThresholds: config.confidenceThresholds
-      ? { ...existing.confidenceThresholds, ...config.confidenceThresholds }
+    confidenceThresholds: incoming.confidenceThresholds
+      ? { ...existing.confidenceThresholds, ...incoming.confidenceThresholds }
       : existing.confidenceThresholds,
-    memoryPolicy: config.memoryPolicy
-      ? { ...existing.memoryPolicy, ...config.memoryPolicy }
+    memoryPolicy: incoming.memoryPolicy
+      ? { ...existing.memoryPolicy, ...incoming.memoryPolicy }
       : existing.memoryPolicy,
-    featurePersonas: config.featurePersonas
-      ? { ...existing.featurePersonas, ...config.featurePersonas }
+    featurePersonas: incoming.featurePersonas
+      ? { ...existing.featurePersonas, ...incoming.featurePersonas }
       : existing.featurePersonas,
-    personaSkills: config.personaSkills
-      ? { ...existing.personaSkills, ...config.personaSkills }
+    personaSkills: incoming.personaSkills
+      ? { ...existing.personaSkills, ...incoming.personaSkills }
       : existing.personaSkills,
-    killSwitch: config.killSwitch ? { ...existing.killSwitch, ...config.killSwitch } : existing.killSwitch,
+    killSwitch: incoming.killSwitch ? { ...existing.killSwitch, ...incoming.killSwitch } : existing.killSwitch,
   };
 
   if (merged.providerPriority.length > 0) {

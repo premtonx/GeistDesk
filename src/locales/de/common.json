@@ -2074,7 +2074,10 @@
       "cloud": "Cloud-Thinking",
       "ollama": "Ollama / lokaler Endpunkt",
       "latency": "Gateway-Latenz",
-      "endpointUnset": "Nicht konfiguriert"
+      "endpointUnset": "Nicht konfiguriert",
+      "loadError": "Workspace-KI-Routing konnte nicht geladen werden.",
+      "saveError": "Workspace-KI-Routing konnte nicht gespeichert werden.",
+      "locked": "Konfiguration gesperrt. Entsperren Sie sie im KI-Orchestrator."
     },
     "hubGov": {
       "piiTitle": "PII-Schutzschild",
@@ -2461,6 +2464,8 @@
       "selectModel": "Modell wählen…",
       "applyToAll": "Auf alle anwenden",
       "bulkApplied": "Modell auf alle Funktionen angewendet.",
+      "savedWorkspace": "In der Workspace-Datenbank gespeichert.",
+      "workspaceScope": "Workspace-weit · in der Datenbank gespeichert",
       "featureColumn": "Funktion",
       "routedModelColumn": "Geroutetes Modell"
     },
