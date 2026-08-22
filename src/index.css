@@ -186,3 +186,12 @@
   padding: 12px !important;
   border-radius: 8px !important;
 }
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
