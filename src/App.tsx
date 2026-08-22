@@ -14,14 +14,12 @@ import InsightsPage from './components/pages/InsightsPage';
 import AuditLogPage from './components/pages/AuditLogPage';
 import GeistDeskMigratorPage from './components/pages/GeistDeskMigratorPage';
 import EmailChannelsPage from './components/pages/EmailChannelsPage';
-import AiOrchestratorPage from './pages/AiOrchestrator';
 import LegalSettingsPage from './components/pages/LegalSettingsPage';
 import AdminHubPage from './components/pages/AdminHubPage';
 import PolyglotBridgeAdminPage from './components/pages/PolyglotBridgeAdminPage';
 import NotificationEnginePage from './components/pages/NotificationEnginePage';
 import CompanySchemaPage from './components/pages/CompanySchemaPage';
 import ContactSchemaPage from './components/pages/ContactSchemaPage';
-import MCPHubPage from './components/pages/MCPHubPage';
 import PIIShieldPage from './components/pages/PIIShieldPage';
 import SovereigntyCenterPage from './components/pages/SovereigntyCenterPage';
 import IntegrationsPage from './components/pages/IntegrationsPage';
@@ -184,8 +182,9 @@ function AppRoutes() {
                     <Route path="audit" element={<AdminRoute><AuditLogPage /></AdminRoute>} />
                     <Route path="settings" element={<SettingsPage />} />
                     <Route path="admin" element={<AdminRoute><AdminHubPage /></AdminRoute>} />
-                    <Route path="admin/mcp" element={<AdminRoute><MCPHubPage /></AdminRoute>} />
-                    <Route path="admin/ai" element={<AdminRoute><AiOrchestratorPage /></AdminRoute>} />
+                    <Route path="admin/mcp" element={<Navigate to="/admin?tab=ai-engine" replace />} />
+                    <Route path="admin/ai" element={<Navigate to="/admin?tab=ai-engine" replace />} />
+                    <Route path="ai-orchestrator" element={<Navigate to="/admin?tab=ai-engine" replace />} />
                     <Route path="admin/legal" element={<AdminRoute><LegalSettingsPage /></AdminRoute>} />
                     <Route path="admin/notifications" element={<AdminRoute><NotificationEnginePage /></AdminRoute>} />
                     <Route path="admin/schema" element={<AdminRoute><CompanySchemaPage /></AdminRoute>} />

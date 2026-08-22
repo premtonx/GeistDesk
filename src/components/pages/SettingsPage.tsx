@@ -367,7 +367,7 @@ export default function SettingsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
              <div 
-               onClick={() => navigate('/admin/ai')}
+               onClick={() => navigate('/admin?tab=ai-engine')}
                className="group flex items-center justify-between p-4 bg-white rounded-2xl border border-blue-100 cursor-pointer hover:border-blue-300 hover:bg-blue-50/50 transition-all shadow-sm"
              >
                 <div className="flex items-center gap-4">

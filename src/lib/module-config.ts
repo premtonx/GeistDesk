@@ -68,6 +68,7 @@ export const DEFAULT_SUPPORTED_LANGUAGES: PolyglotLanguage[] = PLATFORM_DEFAULT_
   ...entry,
 }));
 
+/** @deprecated Use the unified AiOrchestratorConfig + getTriageModel/getSentimentModel/getPrimaryModel from src/types/aiOrchestrator. Kept only for backward-compat services (aiAccountService, legalService, neuralLinkService). */
 export interface AIConfig {
   sentimentModel: 'local-gemma' | 'local-llama' | 'gemini-flash' | 'custom-local';
   deepThinkingModel: 'qwen-36b' | 'llama-3-70b' | 'gemini-pro' | 'custom-local';

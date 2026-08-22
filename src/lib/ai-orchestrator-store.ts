@@ -123,6 +123,7 @@ function rowToConfig(row: Record<string, unknown>): AiOrchestratorConfig {
     primaryModel: String(row.primary_model ?? DEFAULT_ORCHESTRATOR_CONFIG.primaryModel),
     reasoningModel: String(row.reasoning_model ?? DEFAULT_ORCHESTRATOR_CONFIG.reasoningModel),
     triageModel: String(row.triage_model ?? DEFAULT_ORCHESTRATOR_CONFIG.triageModel),
+    modelMode: row.model_mode === 'simple' ? 'simple' : 'advanced',
     providerPriority: Array.isArray(priority) && priority.length ? priority : DEFAULT_PROVIDER_PRIORITY,
     fallbackModels: Array.isArray(fallbacks) ? fallbacks : DEFAULT_ORCHESTRATOR_CONFIG.fallbackModels,
     featureRouting: { ...DEFAULT_FEATURE_ROUTING, ...(routing as AiFeatureRouting) },
@@ -175,7 +176,7 @@ export async function getOrchestratorConfig(workspaceId = 'default'): Promise<Ai
 async function insertOrchestratorConfig(config: AiOrchestratorConfig, updatedBy: string): Promise<void> {
   await queryDb(
     `INSERT INTO ai_orchestrator_config (
-      workspace_id, scope, primary_model, reasoning_model, triage_model,
+      workspace_id, scope, primary_model, reasoning_model, triage_model, model_mode,
       fallback_models, provider_priority, feature_routing_json, endpoint_url,
       pii_enabled, auto_escalation_enabled, audit_enabled, config_locked,
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
@@ -185,7 +186,7 @@ async function insertOrchestratorConfig(config: AiOrchestratorConfig, updatedBy:
       kill_switch_json, daily_budget_usd, monthly_budget_usd, daily_budget_eur,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,NOW()
     )
     ON CONFLICT (workspace_id) DO NOTHING`,
     configInsertParams(config, updatedBy),
@@ -199,6 +200,7 @@ function configInsertParams(config: AiOrchestratorConfig, updatedBy: string): un
     config.primaryModel,
     config.reasoningModel,
     config.triageModel,
+    config.modelMode,
     JSON.stringify(config.fallbackModels),
     JSON.stringify(config.providerPriority),
     JSON.stringify(config.featureRouting),
@@ -283,7 +285,7 @@ export async function upsertOrchestratorConfig(
 
   await queryDb(
     `INSERT INTO ai_orchestrator_config (
-      workspace_id, scope, primary_model, reasoning_model, triage_model,
+      workspace_id, scope, primary_model, reasoning_model, triage_model, model_mode,
       fallback_models, provider_priority, feature_routing_json, endpoint_url,
       pii_enabled, auto_escalation_enabled, audit_enabled, config_locked,
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
@@ -293,13 +295,14 @@ export async function upsertOrchestratorConfig(
       kill_switch_json, daily_budget_usd, monthly_budget_usd, daily_budget_eur,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,NOW()
     )
     ON CONFLICT (workspace_id) DO UPDATE SET
       scope = EXCLUDED.scope,
       primary_model = EXCLUDED.primary_model,
       reasoning_model = EXCLUDED.reasoning_model,
       triage_model = EXCLUDED.triage_model,
+      model_mode = EXCLUDED.model_mode,
       fallback_models = EXCLUDED.fallback_models,
       provider_priority = EXCLUDED.provider_priority,
       feature_routing_json = EXCLUDED.feature_routing_json,

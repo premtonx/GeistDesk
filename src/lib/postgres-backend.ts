@@ -145,6 +145,7 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_ai_usage_log_workspace ON ai_usage_log(workspace_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_ai_usage_log_feature ON ai_usage_log(workspace_id, feature, created_at DESC);
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS provider_priority JSONB NOT NULL DEFAULT '["gpt-5","claude","gemini-flash","local-llama"]';
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS model_mode VARCHAR(16) NOT NULL DEFAULT 'advanced';
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS kill_switch_json JSONB NOT NULL DEFAULT '{"master":false,"smartReply":false,"summaries":false,"kbGeneration":false,"sentiment":false}';
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS daily_budget_usd NUMERIC(12,2) NOT NULL DEFAULT 10;
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS monthly_budget_usd NUMERIC(12,2) NOT NULL DEFAULT 300;

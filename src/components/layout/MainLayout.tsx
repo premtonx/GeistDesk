@@ -79,7 +79,6 @@ const navItems = [
   { icon: Lock, label: 'GeistVault', path: '/credentials', key: 'geistVault' },
   { icon: UploadCloud, label: 'Geist Exchange', path: '/vault', key: 'geistExchange' },
   { icon: LayoutGrid, label: 'Admin Hub', path: '/admin', key: 'admin' },
-  { icon: BrainCircuit, label: 'AI Operations', path: '/admin/ai', key: 'aiOrchestrator' },
 ];
 
 import { WorkTimer } from './WorkTimer';
@@ -382,7 +381,7 @@ export default function MainLayout() {
                   {isSystemAdmin && (
                     <div className="border-t border-slate-100 pt-2.5 text-center flex justify-center">
                       <Link 
-                        to="/admin/ai"
+                        to="/admin?tab=ai-engine"
                         className="text-[9.5px] font-black text-[#1A73E8] hover:underline uppercase tracking-wider font-mono cursor-pointer block py-1 w-full text-center"
                       >
                         {t('header.aiDashboardConfig', 'AI Dashboard Configuration →')}

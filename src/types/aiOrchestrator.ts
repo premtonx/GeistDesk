@@ -367,6 +367,8 @@ export interface AiOrchestratorConfig {
   primaryModel: string;
   reasoningModel: string;
   triageModel: string;
+  /** Routing granularity: 'simple' = one global model for all tasks, 'advanced' = per-task routing matrix. */
+  modelMode: 'simple' | 'advanced';
   /** Ordered failover chain — runtime follows exact order */
   providerPriority: string[];
   fallbackModels: string[];
@@ -829,6 +831,7 @@ export const DEFAULT_ORCHESTRATOR_CONFIG: AiOrchestratorConfig = {
   primaryModel: 'gemini-flash',
   reasoningModel: 'gemini-pro',
   triageModel: 'gemini-flash',
+  modelMode: 'advanced',
   providerPriority: DEFAULT_PROVIDER_PRIORITY,
   fallbackModels: ['claude', 'gpt-5', 'local-llama'],
   featureRouting: DEFAULT_FEATURE_ROUTING,
@@ -874,17 +877,67 @@ export function resolveFailoverModel(config: AiOrchestratorConfig, index = 0): s
   return chain[index] ?? config.primaryModel;
 }
 
+/** Task → routing key mapping for the unified model getters. */
+export const TASK_ROUTING_KEYS = {
+  primary: 'smart_reply',
+  triage: 'sentiment_analysis',
+  sentiment: 'sentiment_analysis',
+  deepReasoning: 'root_cause_analysis',
+  summarization: 'ticket_summarization',
+} as const;
+
+/**
+ * Unified model resolution — all backend model getters read from this single
+ * configuration schema (AiOrchestratorConfig), never from scattered legacy fields.
+ */
+export function getModelForTask(config: AiOrchestratorConfig, task: keyof typeof TASK_ROUTING_KEYS): string {
+  const key = TASK_ROUTING_KEYS[task];
+  const routed = config.featureRouting[key];
+  if (routed) return routed;
+  if (task === 'triage' || task === 'sentiment') return config.triageModel;
+  if (task === 'deepReasoning') return config.reasoningModel;
+  if (task === 'summarization') return config.triageModel;
+  return config.primaryModel;
+}
+
+/** Primary model for chat & ticket drafting (smart_reply routing). */
+export function getPrimaryModel(config: AiOrchestratorConfig): string {
+  return getModelForTask(config, 'primary');
+}
+
+/** Triage & categorization model (sentiment_analysis routing). */
+export function getTriageModel(config: AiOrchestratorConfig): string {
+  return getModelForTask(config, 'triage');
+}
+
+/** Sentiment & escalation analysis model. */
+export function getSentimentModel(config: AiOrchestratorConfig): string {
+  return getModelForTask(config, 'sentiment');
+}
+
+/** Deep reasoning / root-cause analysis model. */
+export function getDeepReasoningModel(config: AiOrchestratorConfig): string {
+  return getModelForTask(config, 'deepReasoning');
+}
+
+/** Thread summarization model. */
+export function getSummaryModel(config: AiOrchestratorConfig): string {
+  return getModelForTask(config, 'summarization');
+}
+
 /** Maps orchestrator config to legacy AIAdapter shape (no secrets). */
 export function toLegacyAiConfig(config: AiOrchestratorConfig) {
   const primary = resolveFailoverModel(config, 0);
+  const routedSentiment = getSentimentModel(config);
+  const routedThinking = getDeepReasoningModel(config);
   return {
-    sentimentModel: config.triageModel as 'gemini-flash',
-    deepThinkingModel: config.reasoningModel as 'gemini-pro',
+    sentimentModel: LOCAL_PROVIDER_IDS.has(routedSentiment) ? 'local-llama' : 'gemini-flash',
+    deepThinkingModel: LOCAL_PROVIDER_IDS.has(routedThinking) ? 'qwen-36b' : 'gemini-pro',
     summaryModel: 'sentiment' as const,
     localEndpoint: config.endpointUrl,
     apiKey: '',
-    customSentimentModelName: config.triageModel,
-    customThinkingModelName: config.reasoningModel,
+    customSentimentModelName: routedSentiment,
+    customThinkingModelName: routedThinking,
     customApiKey: '',
     featureRouting: config.featureRouting,
     primaryModel: primary,
@@ -902,6 +955,7 @@ export function toPublicOrchestratorConfig(config: AiOrchestratorConfig): Partia
     primaryModel: config.primaryModel,
     reasoningModel: config.reasoningModel,
     triageModel: config.triageModel,
+    modelMode: config.modelMode,
     providerPriority: config.providerPriority,
     fallbackModels: config.fallbackModels,
     featureRouting: config.featureRouting,

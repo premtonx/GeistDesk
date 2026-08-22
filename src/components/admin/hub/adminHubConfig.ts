@@ -77,7 +77,7 @@ export const ADMIN_HUB_CATEGORIES: AdminHubCategory[] = [
         title: 'AI Orchestrator',
         description: 'Configure LLM routing, sentiment analysis, and intelligence layers.',
         icon: Sparkles,
-        path: '/admin/ai',
+        path: '/admin?tab=ai-engine',
         color: 'text-blue-500',
         bgColor: 'bg-blue-50',
         borderColor: 'border-blue-105',

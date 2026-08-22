@@ -10,8 +10,7 @@
     "aiInsights": "AI Insights",
     "integrations": "Integrations",
     "settings": "Settings",
-    "admin": "Admin Hub",
-    "aiOrchestrator": "AI Operations"
+    "admin": "Admin Hub"
   },
   "actions": {
     "create": "Create",

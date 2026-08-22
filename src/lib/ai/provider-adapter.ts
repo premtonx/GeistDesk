@@ -4,7 +4,11 @@
 
 import { getCachedLegacyAiConfig, getCachedOrchestratorConfig } from "../aiOrchestratorClient";
 import { executeViaLifecycle, resolveLifecycleOutput, resolveOperatorLanguage } from "../aiLifecycleClient";
-import type { AiExecutionContext, AiFeatureId } from "../../types/aiOrchestrator";
+import type { AiExecutionContext, AiFeatureId, AiOrchestratorConfig } from "../../types/aiOrchestrator";
+import {
+  getSentimentModel,
+  getDeepReasoningModel,
+} from "../../types/aiOrchestrator";
 import type { AIConfig } from "../module-config";
 import { translateSupportContent } from "../polyglot-bridge";
 
@@ -33,21 +37,29 @@ export interface RAGSource {
   articleId: string;
 }
 
+const LOCAL_MODEL_SLUGS = new Set(['local-llama', 'local', 'qwen-36b', 'local-gemma']);
+
+function isLocalSlug(model: string): boolean {
+  return LOCAL_MODEL_SLUGS.has(model);
+}
+
 export class AIAdapter {
   private config: AIConfig;
+  private orchestrator: AiOrchestratorConfig;
 
   constructor() {
     this.config = getCachedLegacyAiConfig();
+    this.orchestrator = getCachedOrchestratorConfig();
   }
 
   /** Refresh in-memory config from workspace orchestrator cache. */
   reloadConfig() {
     this.config = getCachedLegacyAiConfig();
+    this.orchestrator = getCachedOrchestratorConfig();
   }
 
   get isConfigured(): boolean {
-    const orchestrator = getCachedOrchestratorConfig();
-    if (orchestrator.killSwitch?.master) return false;
+    if (this.orchestrator.killSwitch?.master) return false;
 
     const sentimentProfile = this.getProfileForType('sentiment');
     const thinkingProfile = this.getProfileForType('thinking');
@@ -64,37 +76,34 @@ export class AIAdapter {
   }
 
   private getProfileForType(type: 'sentiment' | 'thinking'): ModelProfile {
-    const {
-      sentimentModel,
-      deepThinkingModel,
-      localEndpoint,
-      customSentimentModelName,
-      customThinkingModelName,
-      customApiKey
-    } = this.config;
+    const orchestrator = this.orchestrator;
+    const localEndpoint = orchestrator.endpointUrl;
+    const localApiKey = this.config.customApiKey;
 
     if (type === 'sentiment') {
-      if (sentimentModel === 'gemini-flash') {
+      const routed = getSentimentModel(orchestrator);
+      if (!isLocalSlug(routed)) {
         return { name: "Gemini Flash", provider: "google", model: "gemini-3-flash-preview" };
       }
       return {
-        name: sentimentModel === 'custom-local' ? (customSentimentModelName || "Custom Local Model") : (sentimentModel === 'local-gemma' ? "Gemma" : "Llama"),
+        name: routed === 'qwen-36b' ? "Qwen 36B" : "Llama",
         provider: "local-ollama",
-        model: sentimentModel === 'custom-local' ? (customSentimentModelName || "gemma") : (sentimentModel === 'local-gemma' ? "gemma" : "llama3"),
+        model: routed === 'qwen-36b' ? "qwen:36b" : "llama3",
         endpoint: localEndpoint,
-        apiKey: customApiKey || "ollama"
+        apiKey: localApiKey || "ollama"
       };
     }
 
-    if (deepThinkingModel === 'gemini-pro') {
+    const routedThinking = getDeepReasoningModel(orchestrator);
+    if (!isLocalSlug(routedThinking)) {
       return { name: "Gemini Pro", provider: "google", model: "gemini-3.1-pro-preview" };
     }
     return {
-      name: deepThinkingModel === 'custom-local' ? (customThinkingModelName || "Custom Local Model") : (deepThinkingModel === 'qwen-36b' ? "Qwen 36B" : "Llama 70B"),
+      name: routedThinking === 'qwen-36b' ? "Qwen 36B" : "Llama 70B",
       provider: "local-ollama",
-      model: deepThinkingModel === 'custom-local' ? (customThinkingModelName || "qwen:36b") : (deepThinkingModel === 'qwen-36b' ? "qwen:36b" : "llama3:70b"),
+      model: routedThinking === 'qwen-36b' ? "qwen:36b" : "llama3:70b",
       endpoint: localEndpoint,
-      apiKey: customApiKey || "ollama"
+      apiKey: localApiKey || "ollama"
     };
   }
 

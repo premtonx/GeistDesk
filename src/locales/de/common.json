@@ -10,8 +10,7 @@
     "aiInsights": "KI-Erkenntnisse",
     "integrations": "Integrationen",
     "settings": "Einstellungen",
-    "admin": "Admin-Hub",
-    "aiOrchestrator": "KI-Orchestrator"
+    "admin": "Admin-Hub"
   },
   "actions": {
     "create": "Erstellen",
