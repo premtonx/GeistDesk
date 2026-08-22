@@ -47,9 +47,8 @@ import { I18nProvider } from './lib/context/I18nContext';
 function AdminRoute({ children }: { children: ReactNode }) {
   const { loading: authLoading } = useAuth();
   const { isAdmin, checking } = useAdmin();
-  const { role, userProfile, loading } = usePermissions();
 
-  if (authLoading || checking || loading) {
+  if (authLoading || checking) {
     return (
       <div className="h-full w-full flex items-center justify-center p-20 bg-background">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
@@ -57,7 +56,7 @@ function AdminRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!isSystemAdminSession(isAdmin, userProfile, role)) {
+  if (!isAdmin) {
     return <Navigate to="/dashboard" replace />;
   }
 

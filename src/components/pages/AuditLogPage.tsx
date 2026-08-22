@@ -24,7 +24,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { collection, query, orderBy, onSnapshot, limit } from 'firebase/firestore';
 import { db } from '../../lib/firebase';
-import { useAdmin, useAuth } from '../../lib/hooks';
+import { useAdmin } from '../../lib/hooks';
 import { usePermissions } from '../../hooks/usePermissions';
 import { Card, CardContent } from '../../components/ui/card';
 import { Input } from '../../components/ui/input';
@@ -32,12 +32,10 @@ import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
 import { useTranslation } from '../../lib/context/I18nContext';
-import { seedAuditLogsIfNeeded, seedComplianceLogsIfNeeded } from '../../services/auditService';
 
 export default function AuditLogPage() {
   const { t } = useTranslation();
   const { isAdmin, checking } = useAdmin();
-  const { user } = useAuth();
   const { userProfile, role, loading: permissionsLoading } = usePermissions();
   const [logs, setLogs] = useState<any[]>([]);
   const [complianceLogs, setComplianceLogs] = useState<any[]>([]);
@@ -54,12 +52,6 @@ export default function AuditLogPage() {
     if (checking || permissionsLoading) return;
     if (!isAuthorized) return;
 
-    // Run dynamic seeds to populate Firestore collections if they are totally empty
-    if (user?.email && user?.uid) {
-      seedAuditLogsIfNeeded(user.email, user.uid);
-      seedComplianceLogsIfNeeded();
-    }
-
     const qSystem = query(collection(db, 'audit_logs'), orderBy('timestamp', 'desc'), limit(100));
     const unsubSystem = onSnapshot(qSystem, (snapshot) => {
       setLogs(snapshot.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -74,7 +66,7 @@ export default function AuditLogPage() {
       unsubSystem();
       unsubCompliance();
     };
-  }, [isAuthorized, checking, permissionsLoading, user]);
+  }, [isAuthorized, checking, permissionsLoading]);
 
   if (checking || permissionsLoading) return <div className="p-8 h-screen flex items-center justify-center font-mono text-xs uppercase tracking-widest text-slate-400">Authenticating Governance Layer...</div>;
   if (!isAuthorized) return <div className="p-8 text-black font-black h-screen flex flex-col items-center justify-center bg-red-50">
@@ -118,7 +110,7 @@ export default function AuditLogPage() {
   const stats = [
     { label: t('audit.totalEvents', 'Total Events'), value: logs.length + complianceLogs.length, icon: Database, color: 'text-blue-600' },
     { label: t('audit.securityAlerts', 'Security Alerts'), value: filteredCompliance.length, icon: ShieldAlert, color: 'text-red-600' },
-    { label: t('audit.systemIntegrity', 'System Integrity'), value: '100%', icon: FileCheck2, color: 'text-emerald-600' },
+    { label: t('audit.systemIntegrity', 'System Integrity'), value: t('audit.protected', 'Protected'), icon: FileCheck2, color: 'text-emerald-600' },
     { label: t('audit.verifiableSignatures', 'Verifiable Signatures'), value: logs.filter(l => l.signature).length, icon: Fingerprint, color: 'text-purple-600' },
   ];
 

@@ -614,6 +614,32 @@ export async function resolveApprovalRequest(
   };
 }
 
+export async function getApprovalEntry(
+  approvalId: string,
+  workspaceId = 'default',
+): Promise<AiApprovalQueueEntry | null> {
+  const res = await queryDb(
+    `SELECT id, request_id, workspace_id, feature, approval_role, status, requested_by, approved_by, created_at, resolved_at
+     FROM ai_approval_queue
+     WHERE id = $1 AND workspace_id = $2`,
+    [approvalId, workspaceId],
+  );
+  if (!res.rows[0]) return null;
+  const row = res.rows[0];
+  return {
+    id: String(row.id),
+    requestId: String(row.request_id),
+    workspaceId: String(row.workspace_id),
+    feature: row.feature as AiFeatureId,
+    approvalRole: row.approval_role as 'manager' | 'engineer',
+    status: row.status as AiApprovalQueueEntry['status'],
+    requestedBy: row.requested_by ? String(row.requested_by) : undefined,
+    approvedBy: row.approved_by ? String(row.approved_by) : undefined,
+    createdAt: new Date(row.created_at).toISOString(),
+    resolvedAt: row.resolved_at ? new Date(row.resolved_at).toISOString() : undefined,
+  };
+}
+
 export async function getApprovalPayload(
   approvalId: string,
   workspaceId = 'default',

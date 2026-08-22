@@ -4,6 +4,8 @@ import { AI_DECISION_ENGINE_FLOW, type AiExecutionContext, type AiFeatureId } fr
 import { executeAiFeatureRequest } from '../lib/ai-orchestrator-service.js';
 import { translatePolyglotContent, resolvePolyglotTranslationEngine } from '../lib/polyglot-translate-service.js';
 import { getDocDirect } from '../lib/postgres-backend.js';
+import { getApprovalEntry, getApprovalPayload } from '../lib/ai-orchestrator-store.js';
+import { resumeApprovedAiRequest } from '../lib/ai-request-lifecycle.js';
 import {
   normalizePolyglotBridgeSettings,
 } from '../lib/module-config.js';
@@ -70,31 +72,56 @@ router.post('/execute', authenticate, async (req: Request, res: Response) => {
 
 /**
  * POST /api/ai/execute/resume
- * Resumes a previously approved queued request.
+ * Resumes an approved queued request.
+ *
+ * Security: resuming is only allowed for a queue entry that has already been
+ * approved (via POST /api/admin/orchestrator/approvals/:id/resolve), and only
+ * by the original requester or a SYSTEM_ADMIN. The prompt/metadata are taken
+ * from the stored approval payload — the client cannot substitute its own.
  */
 router.post('/execute/resume', authenticate, async (req: Request, res: Response) => {
   try {
-    const feature = String(req.body.feature || '') as AiFeatureId;
-    const prompt = String(req.body.prompt || '');
+    const workspaceId = String(req.body.workspaceId || 'default');
+    const approvalId = String(req.body.approvalId || '');
 
-    if (!VALID_FEATURES.has(feature) || !prompt.trim()) {
-      return res.status(400).json({ error: 'feature and prompt are required.' });
+    if (!approvalId.trim()) {
+      return res.status(400).json({ error: 'approvalId is required.' });
     }
 
-    const ctx: AiExecutionContext = {
-      workspaceId: String(req.body.workspaceId || 'default'),
-      feature,
-      prompt,
-      userId: req.user?.id,
-      userEmail: req.user?.email,
-      departmentId: req.body.departmentId ? String(req.body.departmentId) : undefined,
-      customerId: req.body.customerId ? String(req.body.customerId) : undefined,
-      customerScope: req.body.customerScope,
-      ticketId: req.body.ticketId ? String(req.body.ticketId) : undefined,
-      metadata: req.body.metadata,
-    };
+    const entry = await getApprovalEntry(approvalId, workspaceId);
+    if (!entry) {
+      return res.status(404).json({ error: 'Approval entry not found.' });
+    }
+    if (entry.status !== 'approved') {
+      return res.status(403).json({ error: 'This request has not been approved yet.' });
+    }
 
-    const result = await executeAiFeatureRequest(ctx, { approvalAlreadyGranted: true });
+    const callerEmail = req.user?.email;
+    const callerId = req.user?.id;
+    const isRequester =
+      (entry.requestedBy && callerEmail && entry.requestedBy === callerEmail) ||
+      (entry.requestedBy && callerId && entry.requestedBy === callerId);
+    const isAdmin = req.user?.role === 'SYSTEM_ADMIN';
+
+    if (!isRequester && !isAdmin) {
+      return res.status(403).json({
+        error: 'Only the requester of an approved request or an administrator may resume it.',
+      });
+    }
+
+    const payload = await getApprovalPayload(approvalId, workspaceId);
+    if (!payload?.prompt) {
+      return res.status(400).json({ error: 'Approved request has no payload to resume.' });
+    }
+
+    const result = await resumeApprovedAiRequest({
+      workspaceId,
+      feature: entry.feature,
+      prompt: payload.prompt,
+      userId: callerId,
+      userEmail: callerEmail,
+      metadata: payload.metadata,
+    });
     return res.status(200).json(result);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

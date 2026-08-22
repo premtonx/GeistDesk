@@ -1,92 +1,80 @@
 import { useState, useEffect } from 'react';
-import {
-  db,
-  doc,
-  getDoc,
-} from './firebase';
-import { getModuleConfig } from './module-config';
 import { signOut, auth } from './firebase';
 import { useAuthContext } from './context/AuthContext';
 import { isBetaAutoAdminEnabled } from './beta-admin-bypass';
-
-function readCachedAdminSession(): boolean {
-  try {
-    const savedProfile = localStorage.getItem('geistdesk_cached_user_profile');
-    const savedRole = localStorage.getItem('geistdesk_cached_user_role');
-    if (!savedProfile) return false;
-    const profile = JSON.parse(savedProfile) as { is_admin?: boolean; role?: string };
-    const role = savedRole ? JSON.parse(savedRole) as { name?: string; id?: string } : null;
-    return (
-      profile.is_admin === true ||
-      profile.role === 'admin' ||
-      role?.name === 'admin' ||
-      role?.id === 'guest-admin' ||
-      role?.id === 'beta-admin'
-    );
-  } catch {
-    return false;
-  }
-}
 
 export function useAuth() {
   return useAuthContext();
 }
 
+/**
+ * Determines whether the current session holds SYSTEM_ADMIN privileges.
+ *
+ * The check is server-authoritative: it calls GET /api/auth/session, which
+ * resolves the user's role strictly from the verified JWT + database record
+ * (see middleware/authMiddleware.ts). Client-side caches and module-config
+ * flags are intentionally NOT trusted — a user can edit localStorage or
+ * module_config, so using them for an admin gate would be a privilege
+ * escalation. This is a UI convenience gate only; every /api/admin/* endpoint
+ * re-validates the role server-side.
+ */
 export function useAdmin() {
   const { user, loading: authLoading } = useAuth();
   const [isAdmin, setIsAdmin] = useState(false);
   const [checking, setChecking] = useState(true);
 
   useEffect(() => {
+    let active = true;
+
     async function checkAdmin() {
       if (authLoading) {
         setChecking(true);
         return;
       }
 
+      // Explicit dev-only flag (VITE_BETA_AUTO_ADMIN=true), refused in
+      // production builds by isBetaAutoAdminEnabled() consumers.
       if (isBetaAutoAdminEnabled() && user) {
-        setIsAdmin(true);
-        setChecking(false);
-        return;
-      }
-
-      const config = getModuleConfig();
-      if (config.debugAdminMode) {
-        setIsAdmin(true);
-        setChecking(false);
+        if (active) {
+          setIsAdmin(true);
+          setChecking(false);
+        }
         return;
       }
 
       if (!user) {
-        setIsAdmin(false);
-        setChecking(false);
-        return;
-      }
-
-      if (readCachedAdminSession()) {
-        setIsAdmin(true);
-        setChecking(false);
+        if (active) {
+          setIsAdmin(false);
+          setChecking(false);
+        }
         return;
       }
 
       try {
-        const [adminSnap, userSnap] = await Promise.all([
-          getDoc(doc(db, 'admins', user.uid)),
-          getDoc(doc(db, 'users', user.uid)),
-        ]);
-
-        const actsAsAdmin =
-          adminSnap.exists() ||
-          (userSnap.exists() && (userSnap.data()?.is_admin === true || userSnap.data()?.role === 'admin'));
-
-        setIsAdmin(!!actsAsAdmin);
+        const res = await fetch('/api/auth/session', { credentials: 'include' });
+        if (!res.ok) {
+          if (active) setIsAdmin(false);
+          return;
+        }
+        const data = (await res.json()) as { user?: { role?: string; is_admin?: boolean } };
+        const role = data.user?.role ?? '';
+        const sessionIsAdmin =
+          role === 'SYSTEM_ADMIN' ||
+          role === 'admin' ||
+          data.user?.is_admin === true;
+        if (active) setIsAdmin(!!sessionIsAdmin);
       } catch {
-        setIsAdmin(false);
+        // Session endpoint unreachable — fail closed (never grant admin).
+        if (active) setIsAdmin(false);
       } finally {
-        setChecking(false);
+        if (active) setChecking(false);
       }
     }
-    checkAdmin();
+
+    void checkAdmin();
+    return () => {
+      active = false;
+    };
   }, [user, authLoading]);
 
   return { isAdmin, checking };

@@ -10,16 +10,11 @@ service cloud.firestore {
     // Helper Functions
     function isSignedIn() { return request.auth != null; }
     function isVerified() { 
-      return request.auth != null && (
-        request.auth.token.email_verified == true || 
-        (request.auth.token.get('email', '').lower() == "premtonxh@gmail.com")
-      ); 
+      return request.auth != null && request.auth.token.email_verified == true;
     }
     function isAdmin() { 
-      return request.auth != null && (
-        (request.auth.token.get('email', '').lower() == "premtonxh@gmail.com") || 
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
-      ); 
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid));
     }
     function isOwner(userId) { return isSignedIn() && request.auth.uid == userId; }
     function isValidId(id) { return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$'); }
@@ -337,10 +332,19 @@ service cloud.firestore {
 
     // Phantom Vault (Self-destructing links)
     match /vault_items/{itemId} {
-      allow read: if true; // Publicly readable for link recipients
+      // Only signed-in owners can read their own vault items; recipients of a
+      // shared link are expected to be resolved through the vault's sharedWith
+      // list on the owning /vaults document. Public reads are intentionally
+      // denied so secret payloads cannot be enumerated or scraped.
+      allow read: if isVerified() && (
+        isAdmin() ||
+        resource.data.createdBy == request.auth.uid
+      );
       allow create: if isVerified() && incoming().createdBy == request.auth.uid;
-      // Allow update if not burned yet (enables recipients to upload data for 'request' items OR burn for 'secret' items)
-      allow update: if (isAdmin() || (isSignedIn() && resource.data.createdBy == request.auth.uid)) || (resource.data.isBurned == false);
+      // Only the creator (or an admin) may mutate an item — including burning
+      // it. The previous rule allowed ANY signed-in user to modify any item
+      // that had not been burned yet.
+      allow update: if isVerified() && (isAdmin() || resource.data.createdBy == request.auth.uid);
       allow delete: if isAdmin() || (isSignedIn() && resource.data.createdBy == request.auth.uid);
     }
 
