@@ -22,7 +22,7 @@ Usage: ./setup.sh [options]
   Interactive / zero-config installer for GeistDesk.
 
   --yes, -y     Non-interactive (keep existing .env values; use localhost if unset)
-  --check       Validate compose + this script without starting Docker
+  --check       Validate compose, Dockerfile (clean-clone build), and this script
   --help, -h    Show this help
 
 Environment:
@@ -145,6 +145,103 @@ PY
 
 compose_has_container_name() {
   grep -nE '^[[:space:]]*container_name:' "$COMPOSE_FILE" || true
+}
+
+dockerfile_copies_host_dist() {
+  local file="$1"
+  [[ -f "$file" ]] || return 1
+  python3 - "$file" <<'PY'
+import re, sys
+path = sys.argv[1]
+host_copy = re.compile(r"^\s*COPY\s+(?!--from=)\S.*\bdist\b", re.IGNORECASE)
+with open(path, encoding="utf-8") as fh:
+    for i, line in enumerate(fh, 1):
+        if line.lstrip().startswith("#"):
+            continue
+        if host_copy.search(line):
+            print(f"{path}:{i}:{line.rstrip()}")
+            sys.exit(0)
+sys.exit(1)
+PY
+}
+
+check_dockerfile_self_contained() {
+  local failed=0
+  local df="${ROOT}/Dockerfile"
+  local df_multi="${ROOT}/Dockerfile.multistage"
+  local dockerignore="${ROOT}/.dockerignore"
+
+  if [[ ! -f "$df" ]]; then
+    err "Missing ${df}"
+    return 1
+  fi
+  if [[ ! -f "${ROOT}/prisma.config.ts" || ! -f "${ROOT}/prisma/schema.prisma" ]]; then
+    err "prisma.config.ts and prisma/schema.prisma are required for prisma generate in Docker."
+    failed=1
+  fi
+
+  if ! grep -qE '^FROM[[:space:]].+[[:space:]]AS[[:space:]]builder' "$df"; then
+    err "Dockerfile must have a builder stage (FROM … AS builder)."
+    failed=1
+  fi
+  if ! grep -qE '^FROM[[:space:]].+[[:space:]]AS[[:space:]]runner' "$df"; then
+    err "Dockerfile must have a runner stage (FROM … AS runner)."
+    failed=1
+  fi
+  if ! grep -qE 'prisma generate' "$df"; then
+    err "Dockerfile builder must run prisma generate."
+    failed=1
+  fi
+  if ! grep -q 'npm run build' "$df"; then
+    err "Dockerfile builder must run npm run build to produce dist/."
+    failed=1
+  fi
+  if ! grep -qE 'COPY --from=builder .*/dist' "$df"; then
+    err "Dockerfile runner must COPY dist/ from the builder stage."
+    failed=1
+  fi
+  if ! grep -qE 'COPY --from=builder .*/node_modules' "$df"; then
+    err "Dockerfile runner must COPY production node_modules from the builder."
+    failed=1
+  fi
+  if ! grep -q 'docker-entrypoint.sh' "$df"; then
+    err "Dockerfile runner must copy scripts/docker-entrypoint.sh."
+    failed=1
+  fi
+
+  local host_dist
+  host_dist="$(dockerfile_copies_host_dist "$df" || true)"
+  if [[ -n "$host_dist" ]]; then
+    err "Dockerfile must not COPY host dist/ (breaks clean clones; dist/ is gitignored):"
+    printf '%s\n' "$host_dist" >&2
+    failed=1
+  fi
+
+  if [[ -f "$df_multi" ]]; then
+    if ! grep -qE '^FROM[[:space:]].+[[:space:]]AS[[:space:]]builder' "$df_multi" \
+      || ! grep -q 'npm run build' "$df_multi"; then
+      err "Dockerfile.multistage must remain a full in-Docker source build."
+      failed=1
+    fi
+  fi
+
+  if [[ ! -f "$dockerignore" ]] || ! grep -qE '^dist$' "$dockerignore"; then
+    err ".dockerignore must ignore host dist/ so the image builds from source."
+    failed=1
+  fi
+  if [[ -f "$dockerignore" ]] && grep -qE '^Dockerfile(\.multistage)?$' "$dockerignore"; then
+    err ".dockerignore must not exclude the Dockerfiles."
+    failed=1
+  fi
+
+  if grep -qE 'dockerfile:[[:space:]]+' "$COMPOSE_FILE"; then
+    if ! grep -qE 'dockerfile:[[:space:]]+Dockerfile$' "$COMPOSE_FILE"; then
+      err "docker-compose.yml must build from the default multi-stage Dockerfile."
+      failed=1
+    fi
+  fi
+
+  return "$failed"
 }
 
 check_compose_sanitized() {
@@ -292,7 +389,7 @@ compose_up() {
     exit 1
   fi
   ensure_traefik_network
-  log "Building and starting GeistDesk…"
+  log "Building from source inside Docker (host node_modules/ and dist/ are not required)…"
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up --build -d
 }
 
@@ -327,6 +424,9 @@ run_check() {
     failed=1
   fi
   if ! check_compose_sanitized; then
+    failed=1
+  fi
+  if ! check_dockerfile_self_contained; then
     failed=1
   fi
   if [[ ! -f "$ENV_EXAMPLE" ]]; then
@@ -369,6 +469,7 @@ if ! command -v python3 >/dev/null 2>&1; then
 fi
 
 check_compose_sanitized
+check_dockerfile_self_contained
 ensure_env_file
 fill_secrets
 public_url="$(prompt_public_url)"

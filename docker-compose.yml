@@ -1,6 +1,7 @@
 # GeistDesk production / self-host compose.
 # All host-specific values come from `.env` (see `.env.example` or `./setup.sh`).
 # No container_name pins — Docker namespaces containers from the project folder.
+# Gateway image is multi-stage (Dockerfile): clean clones do not need host dist/.
 #
 # Boot (scripts/docker-entrypoint.sh):
 #   wait for Postgres → db:deploy:prod → seed:prod → server
@@ -9,8 +10,15 @@ services:
   geistdesk-gateway:
     build:
       context: .
+      dockerfile: Dockerfile
       args:
         BUILD_ID: ${BUILD_ID:-local}
+        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-false}
+        VITE_ENABLE_DEMO_LOGIN: ${VITE_ENABLE_DEMO_LOGIN:-false}
+        VITE_BETA_AUTO_ADMIN: ${VITE_BETA_AUTO_ADMIN:-false}
+        VITE_OLLAMA_ENDPOINT: ${VITE_OLLAMA_ENDPOINT:-}
+        VITE_MASTER_KEY_SALT: ${VITE_MASTER_KEY_SALT:-}
+        VITE_PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
     depends_on:
       geistdesk-db:
         condition: service_healthy

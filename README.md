@@ -123,9 +123,9 @@ npm run dev
 The client and backend server boot simultaneously at `http://localhost:3000`.
 
 ### 2️⃣ Docker Production Build
-A clean and optimized `Dockerfile` is pre-configured to bundle assets, drop heavy devDependencies, isolate server outputs, and serve the application:
+The multi-stage `Dockerfile` installs dependencies, generates the Prisma client, and runs `npm run build` inside Docker — no host `dist/` is required:
 ```bash
-# Build the production docker image
+# Build the production docker image from a clean clone
 docker build -t geistdesk-support-gate .
 
 # Run the docker container locally or on your remote host

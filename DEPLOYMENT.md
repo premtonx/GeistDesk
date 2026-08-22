@@ -142,17 +142,16 @@ Pushes to `main` trigger `.github/workflows/deploy.yml`:
 
 1. **Strict build gate** (`lint`, license check, `npm run build` on GitHub Actions runners)
 2. **Artifact upload** — `dist/` bundle (frontend + `server.cjs`, `migrate.cjs`, `seed.cjs`)
-3. **Deploy** — SCP prebuilt `dist/` to production host, then build a **runtime-only** Docker image (no on-server Vite/TypeScript compile; avoids SSH timeouts)
+3. **Deploy** — pull `main` on the host and `docker compose build` the multi-stage image (frontend + backend compiled inside the builder; host `dist/` is not required)
 4. Post-deploy health check against `https://app.premtonx.cloud/api/health`
 
 Database bootstrap runs inside the container entrypoint — the workflow does not SSH in to run seed manually.
 
-**Local Docker builds** require a prebuilt `dist/` folder:
+**Local Docker builds** work from a clean clone:
 
 ```bash
-npm run build
-docker compose build geistdesk-gateway
-docker compose up -d
+./setup.sh
+# or: docker compose up --build -d
 ```
 
 ---

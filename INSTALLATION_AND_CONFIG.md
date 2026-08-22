@@ -58,23 +58,26 @@ Optional but recommended for a fresh pilot:
 
 ### 1.3 Build and start
 
-**Local / greenfield** (Compose builds from prebuilt or host `dist/`):
+**Local / greenfield** (clean Git clone — no host `node_modules/` or `dist/` required):
 
 ```bash
-npm ci && npm run build   # if dist/ is not already present
+./setup.sh
+```
+
+Equivalent:
+
+```bash
 docker compose up --build -d
 ```
 
-**CI / production host model** (matches `premtonx` deploy): CI uploads `dist/`, host runs:
+The default `Dockerfile` is **multi-stage**: the builder installs dependencies (including devDependencies), generates the Prisma client, and runs `npm run build`. The runner copies `dist/`, `package.json`, production `node_modules`, and the entrypoint.
+
+**CI / production host model** (matches `premtonx` deploy): the host pulls source and builds the same image:
 
 ```bash
 docker compose build --pull --build-arg BUILD_ID="$DEPLOY_COMMIT" geistdesk-gateway
 docker compose up -d geistdesk-gateway
 ```
-
-The default `Dockerfile` is **runtime-only** (copies `dist/`). For a full source build inside Docker, use `Dockerfile.multistage`.
-
-> **Important:** `.dockerignore` must **not** exclude `dist/` — the production image copies the CI-prebuilt artifact from the host build context.
 
 > **Compose defaults:** `POSTGRES_PASSWORD` defaults to `geist_password` so existing production `.env` files without that key keep working. Override only when creating a **new** empty DB volume. `DATABASE_URL` defaults to `postgresql://geist_user:geist_password@geistdesk-db:5432/geistdesk_prod?sslmode=disable`.
 
