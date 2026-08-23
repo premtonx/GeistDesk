@@ -26,13 +26,22 @@ const SECRET_FIELDS = [
   'oauthRefreshToken',
 ] as const;
 
+/** Exclude localhost / loopback values so generated addresses never persist @localhost. */
+function configuredDomain(env: string | undefined): string {
+  const value = (env || '').trim();
+  if (!value) return '';
+  const lowered = value.toLowerCase();
+  if (lowered === 'localhost' || lowered === '127.0.0.1' || lowered === '0.0.0.0') return '';
+  return value;
+}
+
 function forwardingDomain(): string {
   return (
-    process.env.INBOUND_EMAIL_DOMAIN ||
-    process.env.INBOUND_MAIL_FORWARD_DOMAIN ||
-    process.env.MAIL_FORWARD_DOMAIN ||
-    'app.premtonx.cloud'
-  ).trim();
+    configuredDomain(process.env.INBOUND_EMAIL_DOMAIN) ||
+    configuredDomain(process.env.INBOUND_MAIL_FORWARD_DOMAIN) ||
+    configuredDomain(process.env.MAIL_FORWARD_DOMAIN) ||
+    'inbound.geistai.eu'
+  );
 }
 
 /** Publicly-renderable forwarding domain (help-{slug}@domain) for the admin UI. */
@@ -43,6 +52,27 @@ export function getForwardingDomain(): string {
 export function buildForwardingAddress(channelId: string): string {
   const slug = channelId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 16).toLowerCase() || 'channel';
   return `help-${slug}@${forwardingDomain()}`;
+}
+
+/**
+ * Repair a persisted forwarding address: trailing @localhost (or loopback) is
+ * swapped for the configured inbound domain so dev defaults never leak to the
+ * mail host. Missing addresses are generated from the channel id.
+ */
+export function normalizeForwardingAddress(
+  address: string | null | undefined,
+  channelId?: string,
+): string {
+  if (!address || !address.includes('@')) {
+    return channelId ? buildForwardingAddress(channelId) : '';
+  }
+  const at = address.lastIndexOf('@');
+  const local = address.slice(0, at);
+  const host = address.slice(at + 1).toLowerCase().trim();
+  if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
+    return `${local}@${forwardingDomain()}`;
+  }
+  return address;
 }
 
 export function generateWebhookSecret(): string {
@@ -108,6 +138,30 @@ async function backfillDomainVerificationIfNeeded(
   return next;
 }
 
+/**
+ * Repair @localhost forwarding addresses that were persisted from dev defaults.
+ * Returns the channel with a corrected address and persists the fix so the
+ * mail host never sees a loopback destination.
+ */
+async function repairForwardingAddressIfNeeded(
+  channel: EmailChannelConfig,
+): Promise<EmailChannelConfig> {
+  if (channel.connectionType !== 'webhook') return channel;
+
+  const raw = channel.forwardingAddress || '';
+  const normalized = normalizeForwardingAddress(raw, channel.id);
+  if (normalized === raw) return channel;
+
+  const next: EmailChannelConfig = { ...channel, forwardingAddress: normalized };
+  await updateDocDirect(EMAIL_CHANNELS_COLLECTION, channel.id, {
+    forwardingAddress: normalized,
+    updatedAt: new Date().toISOString(),
+  }).catch((err) => {
+    console.warn('[channel-store] failed to repair forwarding address:', err?.message || err);
+  });
+  return next;
+}
+
 export async function listEmailChannels(): Promise<EmailChannelConfig[]> {
   const docs = await getDocsDirect(EMAIL_CHANNELS_COLLECTION, []);
   const channels: EmailChannelConfig[] = [];
@@ -115,7 +169,8 @@ export async function listEmailChannels(): Promise<EmailChannelConfig[]> {
   for (const doc of docs) {
     const base = { id: doc.id, ...doc, forwardingDomain: domain } as EmailChannelConfig;
     const ensured = await backfillDomainVerificationIfNeeded(base);
-    channels.push(redactChannelSecrets(ensured));
+    const repaired = await repairForwardingAddressIfNeeded(ensured);
+    channels.push(redactChannelSecrets(repaired));
   }
   return channels;
 }
@@ -131,7 +186,8 @@ export async function getEmailChannel(
     ...doc,
     forwardingDomain: getForwardingDomain(),
   } as EmailChannelConfig);
-  return opts?.includeSecrets ? ensured : redactChannelSecrets(ensured);
+  const repaired = await repairForwardingAddressIfNeeded(ensured);
+  return opts?.includeSecrets ? repaired : redactChannelSecrets(repaired);
 }
 
 /** IMAP / Graph server fields are unused for webhook channels — persist as null. */
@@ -192,7 +248,7 @@ export async function createEmailChannel(
 
   const id = created.id as string;
   const webhookSecret = input.webhookSecret || generateWebhookSecret();
-  const forwardingAddress = input.forwardingAddress || buildForwardingAddress(id);
+  const forwardingAddress = normalizeForwardingAddress(input.forwardingAddress, id);
   const domainFields = ensureDomainVerificationFields({
     ...input,
     dnsVerified: false,
@@ -249,7 +305,7 @@ export async function updateEmailChannel(
 
   if (next.connectionType === 'webhook') {
     next.webhookSecret = next.webhookSecret || generateWebhookSecret();
-    next.forwardingAddress = next.forwardingAddress || buildForwardingAddress(id);
+    next.forwardingAddress = normalizeForwardingAddress(next.forwardingAddress, id);
     // Explicitly clear pull-driver fields so nulls persist (spread of undefined is a no-op).
     clearActivePullFields(next);
   }
@@ -372,18 +428,15 @@ export async function findChannelForWebhook(params: {
 
   for (const doc of docs) {
     const channel = { id: doc.id, ...doc } as EmailChannelConfig;
-    if (channel.connectionType !== 'webhook' && channel.connectionType) {
-      // Still allow secret match for hybrid setups
-    }
     if (secret && channel.webhookSecret && channel.webhookSecret === secret) {
       return channel;
     }
-    if (
-      recipient &&
-      channel.forwardingAddress &&
-      channel.forwardingAddress.toLowerCase() === recipient
-    ) {
-      return channel;
+    if (recipient && channel.forwardingAddress) {
+      const stored = channel.forwardingAddress.toLowerCase().trim();
+      const normalized = normalizeForwardingAddress(stored, channel.id).toLowerCase().trim();
+      if (stored === recipient || normalized === recipient) {
+        return channel;
+      }
     }
   }
   return null;

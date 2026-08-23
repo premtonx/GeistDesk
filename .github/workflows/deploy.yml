@@ -148,6 +148,7 @@ jobs:
             set_env_default PUBLIC_APP_URL https://app.premtonx.cloud
             set_env_default ROUTER_NAME geistdesk-sso
             set_env_default TRAEFIK_NETWORK traefik-public
+            set_env_default INBOUND_EMAIL_DOMAIN inbound.geistai.eu
             set_env_if_missing GRAPH_CLIENT_STATE_SECRET
             set_env_if_missing INBOUND_MAIL_WEBHOOK_SECRET
 

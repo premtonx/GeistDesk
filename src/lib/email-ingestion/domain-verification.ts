@@ -10,13 +10,22 @@ import type { EmailChannelConfig } from './types.js';
 export const VERIFICATION_TXT_PREFIX = 'geist-verification=';
 export const DEFAULT_DKIM_SELECTOR = 'geist';
 
+/** Exclude loopback values so DNS records never reference localhost. */
+function configuredDomain(env: string | undefined): string {
+  const value = (env || '').trim();
+  if (!value) return '';
+  const lowered = value.toLowerCase();
+  if (lowered === 'localhost' || lowered === '127.0.0.1' || lowered === '0.0.0.0') return '';
+  return value;
+}
+
 export function mailForwardDomain(): string {
   return (
-    process.env.INBOUND_EMAIL_DOMAIN ||
-    process.env.INBOUND_MAIL_FORWARD_DOMAIN ||
-    process.env.MAIL_FORWARD_DOMAIN ||
-    'app.premtonx.cloud'
-  ).trim();
+    configuredDomain(process.env.INBOUND_EMAIL_DOMAIN) ||
+    configuredDomain(process.env.INBOUND_MAIL_FORWARD_DOMAIN) ||
+    configuredDomain(process.env.MAIL_FORWARD_DOMAIN) ||
+    'inbound.geistai.eu'
+  );
 }
 
 export function generateVerificationToken(): string {

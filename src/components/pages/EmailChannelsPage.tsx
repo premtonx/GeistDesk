@@ -73,6 +73,28 @@ const CONNECTION_OPTIONS: {
   },
 ];
 
+const DEFAULT_INBOUND_DOMAIN = 'inbound.geistai.eu';
+
+/** Normalize a forwarding address: swap trailing @localhost / loopback for the inbound domain. */
+function normalizeForwardingAddress(
+  address: string | null | undefined,
+  domain?: string,
+): string {
+  const inbound = (domain || '').trim() || DEFAULT_INBOUND_DOMAIN;
+  if (!address || !address.includes('@')) return '';
+  const at = address.lastIndexOf('@');
+  const local = address.slice(0, at);
+  const host = address.slice(at + 1).toLowerCase().trim();
+  if (host === 'localhost' || host === '127.0.0.1' || host === '0.0.0.0') {
+    return `${local}@${inbound}`;
+  }
+  return address;
+}
+
+/** Freemail / webmail providers that do not support TXT/DKIM/SPF DNS verification. */
+const FREEMAIL_RE =
+  /@(gmail\.com|googlemail\.com|yahoo\.|hotmail\.|outlook\.|icloud\.com|gmx\.|web\.de)$/i;
+
 function emptyDraft(forwardingDomain?: string): Partial<EmailChannelConfig> {
   return {
     name: '',
@@ -201,8 +223,11 @@ export default function EmailChannelsPage() {
     try {
       const list = await emailChannelApi.list();
       setChannels(list);
-      const domain = list.find((c) => c.forwardingDomain)?.forwardingDomain || '';
-      if (domain) setForwardingDomain(domain);
+      const domain =
+        list
+          .map((c) => c.forwardingDomain || '')
+          .find((d) => d && d.toLowerCase() !== 'localhost' && d.toLowerCase() !== '127.0.0.1') || '';
+      setForwardingDomain(domain || DEFAULT_INBOUND_DOMAIN);
     } catch (err: any) {
       toast.error(err?.response?.data?.error || err?.message || 'Failed to load email channels');
     } finally {
@@ -734,9 +759,9 @@ export default function EmailChannelsPage() {
                       <Input
                         readOnly
                         value={
-                          editing.forwardingAddress ||
+                          normalizeForwardingAddress(editing.forwardingAddress, forwardingDomain) ||
                           (editing.id
-                            ? `help-${editing.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 16).toLowerCase()}@${forwardingDomain || 'app.premtonx.cloud'}`
+                            ? `help-${editing.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 16).toLowerCase()}@${forwardingDomain || DEFAULT_INBOUND_DOMAIN}`
                             : 'Speichern, um die Adresse zu generieren')
                         }
                         className="font-mono text-xs bg-white"
@@ -746,7 +771,12 @@ export default function EmailChannelsPage() {
                           type="button"
                           variant="outline"
                           size="sm"
-                          onClick={() => void copyText(editing.forwardingAddress!, 'Address')}
+                          onClick={() =>
+                            void copyText(
+                              normalizeForwardingAddress(editing.forwardingAddress, forwardingDomain),
+                              'Address',
+                            )
+                          }
                         >
                           <Copy className="w-3.5 h-3.5" />
                         </Button>
@@ -806,22 +836,33 @@ export default function EmailChannelsPage() {
                     </span>
                   </div>
 
-                  <details open className="rounded-xl border border-slate-200 bg-white overflow-hidden">
-                    <summary className="cursor-pointer list-none px-3 py-2.5 flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
-                        <Globe2 className="w-3.5 h-3.5 text-emerald-600" />
-                        DNS Verification
-                      </div>
-                      {editing.dnsVerified ? (
-                        <Badge className="text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border-emerald-100">
-                          Verifiziert
-                        </Badge>
-                      ) : (
-                        <Badge className="text-[10px] font-bold uppercase bg-amber-50 text-amber-700 border-amber-100">
-                          Unverifiziert
-                        </Badge>
-                      )}
-                    </summary>
+                  {FREEMAIL_RE.test((editing.email || '').trim()) ? (
+                    <div className="rounded-xl border border-sky-200 bg-sky-50/70 px-3 py-3 space-y-1.5">
+                      <p className="text-[11px] font-bold text-sky-800">💡 Gmail / Webmail Weiterleitung</p>
+                      <p className="text-[11px] text-sky-700 leading-relaxed">
+                        Fügen Sie die oben stehende Weiterleitungsadresse in Ihren Gmail-Einstellungen
+                        unter „Weiterleitung &amp; POP/IMAP" hinzu. DNS-Einträge sind für{' '}
+                        <span className="font-mono font-semibold">@{(editing.email || '').split('@')[1]}</span>{' '}
+                        nicht erforderlich.
+                      </p>
+                    </div>
+                  ) : (
+                    <details open className="rounded-xl border border-slate-200 bg-white overflow-hidden">
+                      <summary className="cursor-pointer list-none px-3 py-2.5 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 text-xs font-bold text-slate-800">
+                          <Globe2 className="w-3.5 h-3.5 text-emerald-600" />
+                          DNS Verification
+                        </div>
+                        {editing.dnsVerified ? (
+                          <Badge className="text-[10px] font-bold uppercase bg-emerald-50 text-emerald-700 border-emerald-100">
+                            Verifiziert
+                          </Badge>
+                        ) : (
+                          <Badge className="text-[10px] font-bold uppercase bg-amber-50 text-amber-700 border-amber-100">
+                            Unverifiziert
+                          </Badge>
+                        )}
+                      </summary>
                     <div className="border-t border-slate-100 px-3 py-3 space-y-3">
                       <p className="text-[11px] text-slate-500 leading-relaxed">
                         Add these <span className="font-semibold text-slate-700">TXT</span> records
@@ -864,7 +905,7 @@ export default function EmailChannelsPage() {
                           host="@"
                           value={
                             editing.spfRecordValue ||
-                            'v=spf1 include:app.premtonx.cloud ~all'
+                            `v=spf1 include:${forwardingDomain || DEFAULT_INBOUND_DOMAIN} ~all`
                           }
                           onCopy={(value) => void copyText(value, 'SPF record')}
                         />
@@ -909,6 +950,7 @@ export default function EmailChannelsPage() {
                       </Button>
                     </div>
                   </details>
+                  )}
                 </div>
               ) : null}
 
