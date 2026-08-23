@@ -46,6 +46,11 @@ const DDL = `
   );
   CREATE INDEX IF NOT EXISTS idx_geistdesk_documents_collection ON geistdesk_documents(collection);
   CREATE INDEX IF NOT EXISTS idx_geistdesk_documents_data_gin ON geistdesk_documents USING GIN (data);
+  -- Self-heal: repair existing tables from older images that predate the data column.
+  ALTER TABLE geistdesk_documents
+    ADD COLUMN IF NOT EXISTS data JSONB,
+    ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
 `;
 
 /**

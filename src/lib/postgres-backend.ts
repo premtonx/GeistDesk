@@ -75,6 +75,16 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_geistdesk_documents_collection ON geistdesk_documents(collection);
     CREATE INDEX IF NOT EXISTS idx_geistdesk_documents_data_gin ON geistdesk_documents USING GIN (data);
   `);
+  // Self-heal: an existing geistdesk_documents table created by an older image
+  // or foreign schema may predate the `data` JSONB column. CREATE TABLE IF NOT
+  // EXISTS is a no-op on an existing table, so repair it explicitly. Every
+  // accessor (getDocDirect / updateDocDirect / query filters) reads `data`.
+  await pgPool.query(`
+    ALTER TABLE geistdesk_documents
+      ADD COLUMN IF NOT EXISTS data JSONB,
+      ADD COLUMN IF NOT EXISTS created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+      ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP;
+  `);
   await pgPool.query(`
     CREATE TABLE IF NOT EXISTS ai_orchestrator_config (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
