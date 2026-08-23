@@ -119,6 +119,19 @@ export async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(workspace_id, provider)
     );
+    CREATE TABLE IF NOT EXISTS rag_pipeline_config (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',
+      resolution_mode VARCHAR(24) NOT NULL DEFAULT 'hybrid',
+      redact_pii BOOLEAN NOT NULL DEFAULT true,
+      chunk_overlap_tokens INTEGER NOT NULL DEFAULT 100,
+      updated_by VARCHAR(255),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id)
+    );
+    ALTER TABLE rag_pipeline_config ADD COLUMN IF NOT EXISTS resolution_mode VARCHAR(24) NOT NULL DEFAULT 'hybrid';
+    ALTER TABLE rag_pipeline_config ADD COLUMN IF NOT EXISTS redact_pii BOOLEAN NOT NULL DEFAULT true;
+    ALTER TABLE rag_pipeline_config ADD COLUMN IF NOT EXISTS chunk_overlap_tokens INTEGER NOT NULL DEFAULT 100;
     CREATE TABLE IF NOT EXISTS ai_orchestrator_audit (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',

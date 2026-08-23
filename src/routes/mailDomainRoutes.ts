@@ -2,13 +2,17 @@ import { Router, type Request, type Response } from 'express';
 import { authenticate, requireRole } from '../middleware/authMiddleware.js';
 import { getEmailChannel } from '../lib/email-ingestion/channel-store.js';
 import {
+  buildDkimRecordName,
+  buildSpfRecordValue,
   checkDomainDnsRecords,
+  DEFAULT_DKIM_SELECTOR,
   ensureDomainVerificationFields,
+  mailForwardDomain,
   verificationTxtValue,
 } from '../lib/email-ingestion/domain-verification.js';
 import { EMAIL_CHANNELS_COLLECTION } from '../lib/email-ingestion/types.js';
 import { routeParam } from '../lib/route-params.js';
-import { updateDocDirect } from '../lib/postgres-backend.js';
+import { getDocsDirect, updateDocDirect } from '../lib/postgres-backend.js';
 
 const router = Router();
 
@@ -93,6 +97,75 @@ router.post(
         success: false,
         error: err?.message || 'Domain verification failed',
       });
+    }
+  },
+);
+
+/**
+ * GET /api/mail/reputation
+ * Outbound sender reputation overview: configured SMTP/dispatcher, per-channel
+ * SPF/DKIM/DMARC material, and live DNS verification state. Used by the
+ * pre-production checklist to confirm mail lands in the inbox, not spam.
+ */
+router.get(
+  '/reputation',
+  authenticate,
+  requireRole(['SYSTEM_ADMIN']),
+  async (_req: Request, res: Response) => {
+    try {
+      const channels = await getDocsDirect(EMAIL_CHANNELS_COLLECTION, []);
+      const domain = mailForwardDomain();
+
+      const channelStatus = [];
+      for (const doc of channels) {
+        const data = (doc as any).data || {};
+        const email = String(data.email || '');
+        if (!email) continue;
+        const channel = await getEmailChannel(String(doc.id), { includeSecrets: true });
+        if (!channel) continue;
+        const verified = Boolean(channel.dnsVerified);
+        const records = verified
+          ? {
+              spfRecordValue: channel.spfRecordValue || buildSpfRecordValue(domain),
+              dkimRecordName: channel.dkimRecordName || `${DEFAULT_DKIM_SELECTOR}._domainkey`,
+              dkimRecordValue: channel.dkimRecordValue || '(generated per channel)',
+              verificationTxt: verificationTxtValue(channel.verificationToken || ''),
+            }
+          : null;
+        channelStatus.push({
+          id: channel.id,
+          email,
+          dnsVerified: verified,
+          dnsVerifiedAt: channel.dnsVerifiedAt || null,
+          provider: channel.provider || 'custom',
+          records,
+        });
+      }
+
+      return res.json({
+        success: true,
+        configured: {
+          smtpHost: process.env.SMTP_HOST || null,
+          mailDispatchUrl: process.env.MAIL_DISPATCH_URL || null,
+          mailFromAddress: process.env.MAIL_FROM_ADDRESS || null,
+          mailForwardDomain: domain,
+        },
+        // External dispatchers (Resend/Postmark/Mailgun/Mailcow) own SPF/DKIM
+        // for their sending domain; the checklist is satisfied when at least
+        // one channel is DNS-verified and a dispatcher is configured.
+        reputation: {
+          dispatcherConfigured: Boolean(
+            process.env.MAIL_DISPATCH_URL || process.env.SMTP_HOST || process.env.RESEND_API_KEY,
+          ),
+          anyChannelVerified: channelStatus.some((c) => c.dnsVerified),
+          verifiedDomains: [...new Set(channelStatus.filter((c) => c.dnsVerified).map((c) => c.email.split('@')[1]))],
+        },
+        channels: channelStatus,
+        note: 'Verify SPF, DKIM, and DMARC at your sending domain DNS provider. dnsVerified reflects the TXT/DKIM/SPF records published for each support alias.',
+      });
+    } catch (err: any) {
+      console.error('[mail/reputation] failed', err?.message || err);
+      return res.status(500).json({ success: false, error: err?.message || 'Reputation check failed' });
     }
   },
 );

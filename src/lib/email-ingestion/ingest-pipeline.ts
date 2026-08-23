@@ -13,6 +13,9 @@ import {
   logBlacklistDrop,
 } from '../global-blacklist.js';
 import { htmlToPlainTextServer, sanitizeInboundHtml } from './sanitize-server.js';
+import { checkEmailLoopGuard } from './loop-guard.js';
+import { checkSenderRateLimit } from './sender-rate-limiter.js';
+import { classifySpam, shouldDropSpam, isDisposableSender } from './spam-guard.js';
 import type { NormalizedInboundEmail } from './types.js';
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_MESSAGE } from './types.js';
 
@@ -95,6 +98,59 @@ export async function ingestNormalizedEmail(
     };
   }
 
+  // --- Pre-ticket safety gates (loop guard, rate limit, spam) ---
+  const loop = await checkEmailLoopGuard({
+    from: sender,
+    rawHeaders: email.rawHeaders || null,
+  });
+  if (loop.blocked) {
+    await logBlacklistDrop({
+      sender,
+      subject,
+      reason: loop.reason || 'auto_reply_loop_guard',
+    });
+    return {
+      success: true,
+      blocked: true,
+      status: 'ignored',
+      action: 'drop',
+    };
+  }
+
+  const rate = checkSenderRateLimit(sender);
+  if (!rate.allowed) {
+    await logBlacklistDrop({
+      sender,
+      subject,
+      reason: `per_sender_rate_limit:${rate.domain}`,
+    });
+    return {
+      success: true,
+      blocked: true,
+      status: 'ignored',
+      action: 'drop',
+    };
+  }
+
+  const spam = classifySpam({ from: sender, subject, body: bodyForAi });
+  if (spam.isSpam || isDisposableSender(sender)) {
+    if (shouldDropSpam()) {
+      await logBlacklistDrop({
+        sender,
+        subject,
+        reason: `spam_classification:${spam.reasons.join(',')}`,
+      });
+      return {
+        success: true,
+        blocked: true,
+        status: 'ignored',
+        action: 'drop',
+      };
+    }
+    // Non-drop mode: allow ticket creation but never auto-dispatch AI replies.
+    email.tags = ['spam-suspected', ...(email.tags || [])];
+  }
+
   if (await isSenderBlacklisted(sender)) {
     await logBlacklistDrop({
       sender,
@@ -142,7 +198,7 @@ export async function ingestNormalizedEmail(
         from_email: sender,
         customId,
         channel: 'email',
-        tags: ['inbound-email', `source:${email.source}`],
+        tags: ['inbound-email', `source:${email.source}`, ...(email.tags || [])],
         mailbox: email.mailbox || undefined,
         createdAt: now,
         updatedAt: now,

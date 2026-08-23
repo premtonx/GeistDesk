@@ -113,6 +113,7 @@
     "prod:start": "npm run prod:bootstrap && node dist/server.cjs",
     "start:prod": "npm run prod:start",
     "lint": "tsc --noEmit",
-    "test:lifecycle": "tsx scripts/test-ai-lifecycle.ts"
+    "test:lifecycle": "tsx scripts/test-ai-lifecycle.ts",
+    "verify:rag": "tsx scripts/verify-rag-pipeline.ts"
   }
 }

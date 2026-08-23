@@ -188,6 +188,13 @@ export class ImapDriver implements EmailIngestionDriver {
           externalMessageId: parsed.messageId || undefined,
           mailbox: this.channel.email,
           source: this.connectionType,
+          rawHeaders: {
+            'auto-submitted': String(parsed.headers?.get?.('auto-submitted') || ''),
+            'x-autoreply': String(parsed.headers?.get?.('x-autoreply') || ''),
+            'x-auto-response-suppress': String(parsed.headers?.get?.('x-auto-response-suppress') || ''),
+            precedence: String(parsed.headers?.get?.('precedence') || ''),
+            'list-unsubscribe': String(parsed.headers?.get?.('list-unsubscribe') || ''),
+          },
         });
       }
 

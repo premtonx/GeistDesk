@@ -131,6 +131,43 @@ export function parseInboundWebhookPayload(params: {
     params.defaultMailbox,
   );
 
+  // Collect loop-detection headers so the ingest pipeline can drop auto-replies.
+  // Providers pass these at the top level (Mailgun / Postal) or in `headers`.
+  const headerSources = [body, body.headers || {}, body.headers_raw || {}];
+  const rawHeaders: Record<string, string> = {};
+  const HEADER_KEYS = [
+    'auto-submitted',
+    'x-autoreply',
+    'x-auto-response-suppress',
+    'x-autorespond',
+    'precedence',
+    'x-precedence',
+    'list-unsubscribe',
+    'list-id',
+    'x-failed-recipients',
+    'return-path',
+    'x-original-to',
+  ];
+  for (const source of headerSources) {
+    if (!source || typeof source !== 'object') continue;
+    for (const key of HEADER_KEYS) {
+      const value = firstString(source[key], source[key.toLowerCase()], source[key.toUpperCase()]);
+      if (value && !rawHeaders[key]) rawHeaders[key] = value;
+    }
+  }
+  // A single "headers" object with auto-submitted nested under it.
+  if (typeof body.headers === 'string') {
+    try {
+      const parsed = JSON.parse(body.headers);
+      for (const key of HEADER_KEYS) {
+        const value = firstString(parsed[key], parsed[key.toLowerCase()]);
+        if (value && !rawHeaders[key]) rawHeaders[key] = value;
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
   return {
     sender,
     from_email: sender,
@@ -147,6 +184,7 @@ export function parseInboundWebhookPayload(params: {
     ) || undefined,
     mailbox: extractEmailAddress(recipient) || recipient || undefined,
     source: 'webhook',
+    rawHeaders,
   };
 }
 

@@ -38,6 +38,7 @@ import ticketSpamRoutes from "./src/routes/ticketSpamRoutes.js";
 import emailChannelRoutes from "./src/routes/emailChannelRoutes.js";
 import mailDomainRoutes from "./src/routes/mailDomainRoutes.js";
 import vectorRoutes from "./src/routes/vectorRoutes.js";
+import ragAdminRoutes from "./src/routes/ragAdminRoutes.js";
 import importRoutes from "./src/routes/importRoutes.js";
 import onboardingRoutes from "./src/routes/onboardingRoutes.js";
 import { ensureOnboardingState } from "./src/lib/onboarding-service.js";
@@ -164,7 +165,13 @@ const require = createRequire(
 );
 const pdf = require("pdf-parse");
 
-const upload = multer({ storage: multer.memoryStorage() });
+// Inbound mail webhook uploads: cap total body at 15 MB (files: 12 max) so a
+// 35 MB PDF cannot exhaust container memory. The ingest pipeline independently
+// caps persisted attachments at 5 MB x 10.
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 15 * 1024 * 1024, files: 12, fieldSize: 4 * 1024 * 1024 },
+});
 
 const admin = {
   firestore: {
@@ -683,6 +690,7 @@ async function startServer() {
   app.use("/api/email-channels", emailChannelRoutes);
   app.use("/api/mail", mailDomainRoutes);
   app.use("/api/vectors", vectorRoutes);
+  app.use("/api/admin/rag", ragAdminRoutes);
 
   // Authoritative, SQL-computed ticket metrics for dashboards.
   app.get("/api/stats/tickets", authenticate, async (req: any, res) => {
@@ -1282,7 +1290,21 @@ async function startServer() {
     (req: any, res, next) => {
       const ct = String(req.headers["content-type"] || "");
       if (ct.includes("multipart/form-data")) {
-        return upload.any()(req, res, next);
+        return upload.any()(req, res, (err: any) => {
+          if (err) {
+            console.warn("[inbound-mail] upload rejected:", err?.message || err);
+            const tooLarge =
+              err?.code === "LIMIT_FILE_SIZE" ||
+              err?.code === "LIMIT_FIELD_SIZE" ||
+              err?.code === "LIMIT_FILE_COUNT";
+            return res.status(tooLarge ? 413 : 400).json({
+              error: tooLarge
+                ? "Inbound mail payload exceeds the 15 MB attachment limit."
+                : "Invalid multipart payload.",
+            });
+          }
+          return next();
+        });
       }
       return next();
     },

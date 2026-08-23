@@ -8,6 +8,12 @@ import { chunkText, stripHtmlToPlainText } from './text-chunker.js';
 import { embedTexts, vectorToSqlLiteral } from './embeddings.js';
 import { documentBelongsToTenant, DEFAULT_TENANT_ID } from '../tenant-context.js';
 import { safeErrorMessage } from '../safe-log.js';
+import {
+  buildTicketResolution,
+  fetchTicketMessages,
+  redactForRag,
+} from './resolution-extractor.js';
+import { getRagPipelineConfig } from '../rag-pipeline-config.js';
 
 export type VectorJobType = 'INDEX_KB_ARTICLE' | 'INDEX_RESOLVED_TICKET' | 'DELETE_EMBEDDINGS';
 export type KnowledgeSourceType = 'KB_ARTICLE' | 'RESOLVED_TICKET';
@@ -89,9 +95,10 @@ async function upsertChunks(params: {
   title: string;
   body: string;
   metadata: Record<string, unknown>;
+  overlapTokens?: number;
 }): Promise<number> {
   const combined = `${params.title}\n\n${params.body}`.trim();
-  const chunks = chunkText(combined);
+  const chunks = chunkText(combined, { overlapTokens: params.overlapTokens ?? 100 });
   if (chunks.length === 0) {
     await deleteEmbeddingsForSource(params.tenantId, params.sourceType, params.sourceId);
     return 0;
@@ -165,14 +172,24 @@ async function indexKbArticle(tenantId: string, sourceId: string): Promise<void>
   }
 
   const title = String(doc.title || 'Untitled');
-  const body = stripHtmlToPlainText(String(doc.content || doc.body || ''));
+  const body = await redactForRag(
+    stripHtmlToPlainText(String(doc.content || doc.body || '')),
+    tenantId,
+  );
+  const ragConfig = await getRagPipelineConfig(tenantId);
   await upsertChunks({
     tenantId,
     sourceType: 'KB_ARTICLE',
     sourceId,
     title,
     body,
+    overlapTokens: ragConfig.chunkOverlapTokens,
     metadata: {
+      workspace_id: tenantId,
+      article_id: sourceId,
+      title: doc.title,
+      locale: doc.language || 'en',
+      updated_at: doc.updatedAt || doc.createdAt || null,
       status: doc.status,
       visibility: doc.visibility,
       category: doc.category,
@@ -202,24 +219,37 @@ async function indexResolvedTicket(tenantId: string, sourceId: string): Promise<
   }
 
   const title = String(doc.subject || doc.title || `Ticket ${sourceId}`);
-  const body = [
-    stripHtmlToPlainText(String(doc.description || '')),
-    stripHtmlToPlainText(String(doc.internalNotes || '')),
-    stripHtmlToPlainText(String(doc.resolution || doc.resolutionNotes || '')),
-  ]
-    .filter(Boolean)
-    .join('\n\n');
+  const messages = await fetchTicketMessages(sourceId);
+  const { issue, resolution } = await buildTicketResolution(doc, messages, tenantId);
 
+  const body = await redactForRag(
+    [
+      issue || stripHtmlToPlainText(String(doc.description || '')),
+      stripHtmlToPlainText(String(doc.internalNotes || '')),
+      resolution,
+    ]
+      .filter(Boolean)
+      .join('\n\n'),
+    tenantId,
+  );
+
+  const ragConfig = await getRagPipelineConfig(tenantId);
   await upsertChunks({
     tenantId,
     sourceType: 'RESOLVED_TICKET',
     sourceId,
     title,
     body,
+    overlapTokens: ragConfig.chunkOverlapTokens,
     metadata: {
+      workspace_id: tenantId,
+      source: 'ticket',
+      ticket_id: sourceId,
       status: doc.status,
       customId: doc.customId,
       priority: doc.priority,
+      category: doc.category || null,
+      resolution_date: doc.resolvedAt || doc.closedAt || doc.updatedAt || null,
       tags: doc.tags || [],
     },
   });

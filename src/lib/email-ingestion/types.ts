@@ -33,6 +33,8 @@ export interface NormalizedInboundEmail {
   /** Driver that produced this message. */
   source: EmailConnectionType | 'webhook';
   rawHeaders?: Record<string, string>;
+  /** Additional tags applied to the created ticket (e.g. spam-suspected). */
+  tags?: string[];
 }
 
 export interface EmailIngestionDriver {

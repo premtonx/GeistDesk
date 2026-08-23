@@ -101,6 +101,11 @@ export async function trySendTicketReplyEmail(params: {
         domainVerified: fromResolution.domainVerified,
         unverifiedDomainWarning: fromResolution.warning || null,
         replyTo: params.channel?.email || null,
+        // Loop-breaking conventions for conforming dispatchers (Resend/Postmark/
+        // Mailgun/Mailcow). Not stamped by this payload; the dispatcher is
+        // expected to send Auto-Submitted: no and proper In-Reply-To/References.
+        autoSubmitted: 'no',
+        inReplyTo: params.ticketId ? `geistdesk-ticket-${params.ticketId}` : undefined,
       }),
     });
 

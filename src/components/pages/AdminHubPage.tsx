@@ -8,6 +8,7 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import { ADMIN_HUB_TABS, resolveAdminHubTab, type AdminHubTabId } from '../../components/admin/hub/adminHubConfig';
 import { AdminHubOverviewTab } from '../../components/admin/hub/AdminHubOverviewTab';
 import { AdminHubAiEngineTab } from '../../components/admin/hub/AdminHubAiEngineTab';
+import { AdminHubRagTab } from '../../components/admin/hub/AdminHubRagTab';
 import { AdminHubGovernanceTab } from '../../components/admin/hub/AdminHubGovernanceTab';
 import { AdminHubIntegrationsTab } from '../../components/admin/hub/AdminHubIntegrationsTab';
 import { AdminHubSystemTab } from '../../components/admin/hub/AdminHubSystemTab';
@@ -123,6 +124,9 @@ export default function AdminHubPage() {
           </TabsContent>
           <TabsContent value={'ai-engine' satisfies AdminHubTabId} className="mt-6 outline-none">
             <AdminHubAiEngineTab telemetry={telemetry} />
+          </TabsContent>
+          <TabsContent value={'rag' satisfies AdminHubTabId} className="mt-6 outline-none">
+            <AdminHubRagTab />
           </TabsContent>
           <TabsContent value={'governance' satisfies AdminHubTabId} className="mt-6 outline-none">
             <AdminHubGovernanceTab />
