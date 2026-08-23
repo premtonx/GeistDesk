@@ -48,6 +48,46 @@ export const DB_AUTHENTICATED_COLLECTIONS = new Set([
   'platform_analytics',
 ]);
 
+/**
+ * Collections whose documents are bound to a single owning user.
+ *
+ * Non-admin access is scoped to the caller's uid for every action:
+ *  - `get_doc` / `update_doc` / `set_doc` / `delete_doc` only succeed when the
+ *    existing document's `ownerField` matches the caller.
+ *  - `get_docs` is constrained server-side to the caller's ownership field.
+ *  - `add_doc` auto-stamps `ownerField` from the verified session uid — any
+ *    client-supplied ownership value is overwritten.
+ *
+ * `createOwnerFrom` names a source payload field whose value is copied into
+ * `ownerField` on create *after* being checked against the caller's uid (used
+ * when the client already tracks ownership under a different key, e.g.
+ * `notifications.userId`). When absent, `ownerField` is stamped directly with
+ * the caller's uid.
+ */
+export const DB_OWNER_SCOPED_COLLECTIONS: Record<string, { ownerField: string; createOwnerFrom?: string }> = {
+  notifications: { ownerField: 'userId', createOwnerFrom: 'userId' },
+};
+
+/**
+ * Shared team collections whose documents remain readable by all
+ * authenticated users (tenant-scoped), but where mutation is restricted to
+ * admins or the document owner. Reads are never owner-filtered so
+ * collaborative features (e.g. reviewing autopilot suggestions) keep working.
+ *
+ * `add_doc` always stamps `ownerField` from the verified session uid.
+ */
+export const DB_WRITE_OWNER_OR_ADMIN_COLLECTIONS: Record<string, { ownerField: string }> = {
+  autopilot_suggestions: { ownerField: 'ownerId' },
+};
+
+export function getOwnerScope(collection: string): { ownerField: string; createOwnerFrom?: string } | null {
+  return DB_OWNER_SCOPED_COLLECTIONS[collection] ?? null;
+}
+
+export function getWriteScope(collection: string): { ownerField: string } | null {
+  return DB_WRITE_OWNER_OR_ADMIN_COLLECTIONS[collection] ?? null;
+}
+
 export type DbAction = 'get_doc' | 'get_docs' | 'add_doc' | 'update_doc' | 'set_doc' | 'delete_doc';
 
 export interface DbAccessContext {

@@ -1,6 +1,10 @@
 /**
  * PostgreSQL-backed database client entry point.
  * Re-exports the Postgres adapter — no Firebase SDK is loaded on the client.
+ *
+ * `firebase/firestore` and `firebase/auth` resolve to this module (see
+ * tsconfig.json / vite.config.ts aliases). All reads/writes go through the
+ * Express `/api/db` endpoint, where access control is enforced server-side.
  */
 import {
   auth,

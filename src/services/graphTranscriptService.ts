@@ -1,7 +1,6 @@
 import axios from 'axios';
 import { PIIShield } from './teamsBotService';
-import { getFirestore } from 'firebase-admin/firestore';
-import * as admin from 'firebase-admin';
+import { addDocDirect } from '../lib/postgres-backend';
 
 // Structure of a Microsoft Graph Subscription Request
 export interface GraphSubscriptionRequest {
@@ -194,19 +193,19 @@ export const graphTranscriptService = {
             `[TranscriptBuffer] Flushed meeting ${mId}: scrubbedLen=${cleanScrubbed?.length || 0} originalLen=${orig?.length || 0}`,
           );
 
-          // Persist the clean transcript context in firestore under meeting_transcripts for retrieval by LLM bots or compliance agents
+          // Persist the clean transcript context under meeting_transcripts for
+          // retrieval by LLM bots or compliance agents. This app has no real
+          // Firestore — the Firebase-shaped API is a Postgres-backed facade, so
+          // the server persists directly through the document store.
           try {
-            const db = admin.apps.length > 0 ? getFirestore() : null;
-            if (db) {
-              await db.collection('meeting_transcripts').add({
-                meetingId: mId,
-                scrubbedTranscript: cleanScrubbed,
-                originalLen: orig.length,
-                flushedAt: admin.firestore.FieldValue.serverTimestamp(),
-                vetted: true
-              });
-              console.log(`[Meeting Transcripts] Registered vetted transcript entry in Sovereign Firestore database.`);
-            }
+            const record = await addDocDirect('meeting_transcripts', {
+              meetingId: mId,
+              scrubbedTranscript: cleanScrubbed,
+              originalLen: orig.length,
+              flushedAt: new Date().toISOString(),
+              vetted: true,
+            });
+            console.log(`[Meeting Transcripts] Registered vetted transcript entry (id=${record.id}) in document store.`);
           } catch (dbErr: any) {
             console.error('[Meeting Transcripts] Database logging bypass/error:', dbErr?.message || 'unknown');
           }

@@ -46,7 +46,6 @@
     "express": "^5.0.1",
     "express-rate-limit": "^8.5.2",
     "firebase": "*",
-    "firebase-admin": "^12.0.0",
     "framer-motion": "*",
     "hash-wasm": "*",
     "helmet": "^8.2.0",

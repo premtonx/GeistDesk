@@ -77,7 +77,7 @@ import headerTelemetryRoutes from "./src/routes/headerTelemetryRoutes.js";
 import { orchestratorEventBus } from "./src/lib/ai-orchestrator-events.js";
 import { hashPassword, verifyPassword, assertVaultEncryptionConfigured } from "./src/lib/crypto.js";
 import { calculateCoverage, getDashboardData } from "./src/services/coverageEngine.js";
-import { assertDbCollectionAccess } from "./src/lib/db-access-policy.js";
+import { assertDbCollectionAccess, getOwnerScope, getWriteScope } from "./src/lib/db-access-policy.js";
 import { setSessionCookie, clearSessionCookie } from "./src/lib/session-cookie.js";
 import { issueSessionToken } from "./src/lib/session-token.js";
 import { DEMO_LOGIN_EMAIL, isDemoLoginEnabled } from "./src/lib/runtime-env.js";
@@ -324,7 +324,7 @@ async function startServer() {
 
   // Generic database API router for standard PostgreSQL / fallback execution
   app.post("/api/db", authenticate, async (req: any, res) => {
-    const { action, collection, id, data, constraints } = req.body;
+    let { action, collection, id, data, constraints } = req.body;
     if (!action || !collection) {
       return res.status(400).json({ error: "Missing action or collection parameter" });
     }
@@ -401,6 +401,78 @@ async function startServer() {
         return res.status(403).json({
           error: "Forbidden: tenantId in payload does not match authenticated session tenant.",
         });
+      }
+    }
+
+    // Ownership-scoped collections: non-admins may only see and touch their own
+    // documents. Ownership is derived from the verified session uid — never from
+    // the client payload. Admins bypass these checks (they are still bound by
+    // the collection-level policy above).
+    const ownerScope = getOwnerScope(collection);
+    // Write-scoped collections: reads stay shared (tenant-scoped) for
+    // collaborative features, but non-admin mutations are restricted to the
+    // document owner (or admin).
+    const writeScope = getWriteScope(collection);
+    if ((ownerScope || writeScope) && !userIsAdmin) {
+      const scope = ownerScope ?? writeScope!;
+      const ownerField = scope.ownerField;
+      const isWriteAction =
+        action === "add_doc" || action === "update_doc" || action === "set_doc" || action === "delete_doc";
+
+      if (isWriteAction) {
+        if (action === "add_doc") {
+          const createOwnerFrom = ownerScope?.createOwnerFrom;
+          const rawOwner =
+            (createOwnerFrom &&
+              data &&
+              typeof data === "object" &&
+              (data as Record<string, unknown>)[createOwnerFrom]) ||
+            null;
+          if (rawOwner != null && rawOwner !== uid) {
+            return res.status(403).json({
+              error: `Forbidden: Cannot create ${collection} documents for another user.`,
+            });
+          }
+          // Stamp ownership from the verified session; drop any client claim.
+          if (data && typeof data === "object") {
+            const stamped: Record<string, unknown> = { ...data };
+            delete stamped[createOwnerFrom ?? ownerField];
+            stamped[ownerField] = uid;
+            data = stamped;
+          }
+        } else {
+          const existing = await getDocDirect(collection, id);
+          if (!existing) {
+            return res.status(404).json({ error: "Document not found" });
+          }
+          if ((existing as Record<string, unknown>)[ownerField] !== uid) {
+            return res.status(404).json({ error: "Document not found" });
+          }
+          if (action === "update_doc" || action === "set_doc") {
+            // Never let a user re-assign ownership through the payload.
+            if (data && typeof data === "object") {
+              const mutating: Record<string, unknown> = { ...data };
+              delete mutating[ownerField];
+              if (ownerScope?.createOwnerFrom) delete mutating[ownerScope.createOwnerFrom];
+              data = mutating;
+            }
+          }
+        }
+      } else if (ownerScope && (action === "get_doc" || action === "get_docs")) {
+        if (action === "get_doc") {
+          const existing = await getDocDirect(collection, id);
+          if (!existing) {
+            return res.status(404).json({ error: "Document not found" });
+          }
+          if ((existing as Record<string, unknown>)[ownerField] !== uid) {
+            return res.status(404).json({ error: "Document not found" });
+          }
+        } else {
+          // get_docs — constrain to the caller's owned documents.
+          const scopedConstraints = Array.isArray(constraints) ? [...constraints] : [];
+          scopedConstraints.push({ type: "where", field: ownerField, op: "==", value: uid });
+          constraints = scopedConstraints;
+        }
       }
     }
 

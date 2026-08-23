@@ -1,5 +1,17 @@
 // PostgreSQL-backed client database & authentication adapter.
 // Preserves a Firebase-shaped API surface for legacy service modules.
+//
+// ⚠️ IMPORTANT ARCHITECTURE NOTE — THERE IS NO FIRESTORE.
+//
+// `firebase/app`, `firebase/auth`, and `firebase/firestore` are aliased to this
+// module in tsconfig.json and vite.config.ts. Every "Firestore" call made by a
+// service (`collection`, `doc`, `getDoc`, `setDoc`, `updateDoc`, `onSnapshot`,
+// …) is translated here into an authenticated POST to the Express `/api/db`
+// endpoint. Authorization is enforced **server-side** by `authenticate` +
+// `requireRole` middleware and the `db-access-policy.ts` allow/deny lists — the
+// browser can never bypass Express RBAC by writing "directly to Firestore".
+// This file exists only to preserve a Firebase-shaped API for legacy services;
+// do not treat it as a thin wrapper around a cloud database.
 
 import platformConfig from '../../geistdesk-platform-config.json';
 import { applySessionAuthHeader } from './session-auth';
