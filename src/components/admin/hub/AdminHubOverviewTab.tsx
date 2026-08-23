@@ -33,7 +33,7 @@ export function AdminHubOverviewTab({ telemetry }: AdminHubOverviewTabProps) {
           </div>
           <div className="flex items-center gap-4 text-[10px] text-slate-400 font-mono">
             <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Local Model: OLLAMA / gemma
+              <span className="w-1.5 h-1.5 rounded-full bg-blue-500" /> Local Model: {telemetry.primaryModel ?? '—'}
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Latency: {telemetry.latencyMs} ms
@@ -50,7 +50,7 @@ export function AdminHubOverviewTab({ telemetry }: AdminHubOverviewTabProps) {
                 {telemetry.activeAgents} <span className="text-[10px] text-slate-400 font-normal">/ 12</span>
               </>
             }
-            hint={<span className="text-emerald-600 flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" /> 100% Online</span>}
+            hint={<span className="text-emerald-600 flex items-center gap-1"><span className="w-1 h-1 rounded-full bg-emerald-500 animate-pulse" /> {telemetry.systemHealth}% Online</span>}
           />
           <MetricCard
             label="Pipeline"
@@ -111,25 +111,30 @@ export function AdminHubOverviewTab({ telemetry }: AdminHubOverviewTabProps) {
             <div className="mt-6 space-y-4">
               <HealthRow
                 label={t('admin.vectorIndex', 'Vector Index (GeistDesk_KB)')}
-                status={t('admin.statusHealthy', 'Healthy')}
-                tone="emerald"
+                status={telemetry.activeVectors > 0 ? t('admin.statusHealthy', 'Healthy') : t('admin.statusIdle', 'Idle')}
+                tone={telemetry.activeVectors > 0 ? 'emerald' : 'amber'}
               />
-              <HealthRow
-                label={t('admin.geminiEngine', 'Gemini 3.5 Pro Engine')}
-                status={t('admin.statusAvailable', 'Available')}
-                tone="emerald"
-              />
-              <HealthRow
-                label={t('admin.ghostInstance', 'Local G3 Ghost Instance')}
-                status={t('admin.statusWarming', 'Warming')}
-                tone="amber"
-              />
+              {telemetry.providers.slice(0, 2).map((p) => (
+                <HealthRow
+                  key={p.provider}
+                  label={p.label}
+                  status={p.status === 'online' ? t('admin.statusAvailable', 'Available') : p.status === 'missing_key' ? t('admin.statusNoKey', 'No Key') : p.status === 'degraded' ? t('admin.statusDegraded', 'Degraded') : t('admin.statusOffline', 'Offline')}
+                  tone={p.status === 'online' ? 'emerald' : 'amber'}
+                />
+              ))}
+              {telemetry.providers.length === 0 && (
+                <HealthRow
+                  label={t('admin.noProviders', 'No AI providers configured')}
+                  status={t('admin.statusIdle', 'Idle')}
+                  tone="amber"
+                />
+              )}
             </div>
           </div>
           <div className="flex flex-wrap gap-4">
-            <GaugeCard icon={<Database className="w-5 h-5 text-slate-400 mb-3" />} value="1,204" label={t('admin.activeVectors', 'Active Vectors')} />
+            <GaugeCard icon={<Database className="w-5 h-5 text-slate-400 mb-3" />} value={telemetry.activeVectors.toLocaleString()} label={t('admin.activeVectors', 'Active Vectors')} />
             <GaugeCard icon={<Users className="w-5 h-5 text-slate-400 mb-3" />} value={`${telemetry.latencyMs || 12} ms`} label={t('admin.redactionLatency', 'P99 Redaction Latency')} />
-            <GaugeCard icon={<Activity className="w-5 h-5 text-slate-400 mb-3" />} value="99.9%" label={t('admin.uptime', 'Uptime (30d)')} />
+            <GaugeCard icon={<Activity className="w-5 h-5 text-slate-400 mb-3" />} value={`${telemetry.systemHealth}%`} label={t('admin.uptime', 'Uptime (30d)')} />
           </div>
         </div>
       </div>

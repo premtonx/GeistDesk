@@ -210,7 +210,7 @@ export async function ensureOnboardingState(): Promise<OnboardingStatus> {
       updatedAt: new Date().toISOString(),
     });
     console.log('[Onboarding] Fresh install detected — is_initialized=false');
-    return toStatus(fresh, false);
+    return toStatus(fresh, false, false);
   }
 
   // Undo the former boot heuristic that stamped true with initializedBy=legacy-migration
@@ -232,10 +232,10 @@ export async function ensureOnboardingState(): Promise<OnboardingStatus> {
           : '[Onboarding] module_config.is_initialized missing — defaulted to false',
       );
     }
-    return toStatus(normalizeModuleConfig({ ...existing, is_initialized: false }), await hasPrimaryAdmin());
+    return toStatus(normalizeModuleConfig({ ...existing, is_initialized: false }), await hasPrimaryAdmin(), false);
   }
 
-  return toStatus(normalizeModuleConfig(existing), await hasPrimaryAdmin());
+  return toStatus(normalizeModuleConfig(existing), await hasPrimaryAdmin(), false);
 }
 
 async function probePgvector(): Promise<boolean> {
@@ -268,10 +268,10 @@ export async function needsFirstRun(): Promise<boolean> {
   return config?.is_initialized !== true;
 }
 
-function toStatus(config: ModuleConfig, hasAdmin: boolean): OnboardingStatus {
+function toStatus(config: ModuleConfig, hasAdmin: boolean, isAuthenticatedAdmin: boolean): OnboardingStatus {
   const ollama = getOllamaEndpoint() || 'http://ollama:11434';
   const complete = isOnboardingComplete(config);
-  return {
+  const status: OnboardingStatus = {
     isInitialized: config.is_initialized === true,
     hasAdminUser: hasAdmin,
     initializedAt: config.initializedAt,
@@ -280,20 +280,33 @@ function toStatus(config: ModuleConfig, hasAdmin: boolean): OnboardingStatus {
     needsResume: config.is_initialized === true && !complete,
     modules: config.platformModules || DEFAULT_PLATFORM_MODULES,
     defaults: {
-      ollamaEndpoint: ollama.replace(/\/v1\/?$/, ''),
-      chatModel: 'llama3.1',
-      embeddingModel: 'nomic-embed-text',
+      ollamaEndpoint: '',
+      chatModel: '',
+      embeddingModel: '',
     },
     health: {
       database: 'ok',
       pgvector: false,
     },
   };
+  // Endpoint/model defaults are internal configuration. Only expose them to an
+  // authenticated admin session (wizard resume); unauthenticated callers must
+  // not learn the server-side Ollama endpoint from the public status probe.
+  if (isAuthenticatedAdmin) {
+    status.defaults = {
+      ollamaEndpoint: ollama.replace(/\/v1\/?$/, ''),
+      chatModel: 'llama3.1',
+      embeddingModel: 'nomic-embed-text',
+    };
+  }
+  return status;
 }
 
-export async function getOnboardingStatus(_req?: Request): Promise<OnboardingStatus> {
+export async function getOnboardingStatus(req?: Request): Promise<OnboardingStatus> {
   const config = (await loadModuleConfigDoc()) || emptyModuleConfig();
-  const status = toStatus(config, await hasPrimaryAdmin());
+  const user = (req as { user?: { role?: string; is_admin?: boolean } | null } | undefined)?.user;
+  const isAuthenticatedAdmin = user?.role === 'SYSTEM_ADMIN' || user?.is_admin === true;
+  const status = toStatus(config, await hasPrimaryAdmin(), isAuthenticatedAdmin);
   status.health.pgvector = await probePgvector();
   return status;
 }

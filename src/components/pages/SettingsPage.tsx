@@ -731,7 +731,7 @@ export default function SettingsPage() {
 
             {/* MCP hub */}
             <div 
-              onClick={() => navigate('/admin/mcp')}
+              onClick={() => navigate('/admin?tab=ai-engine')}
               className="group flex flex-col justify-between p-5 bg-white rounded-2xl border border-[#DADCE0] cursor-pointer hover:border-rose-300 hover:bg-rose-50/5 transition-all shadow-xs"
             >
               <div className="flex items-start justify-between">

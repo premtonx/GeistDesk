@@ -440,6 +440,27 @@ function applyQueryConstraints(docs: any[], constraints: any[]): any[] {
   return result;
 }
 
+/**
+ * Builds a type-aware SQL expression for jsonb range comparisons.
+ *
+ * `data->>field` returns text, so `>`/`<` would compare lexicographically
+ * (e.g. '100' < '9'). When the comparison value looks numeric, the field is
+ * cast so SQL matches the JS value semantics of the in-memory fallback filter.
+ * ISO timestamps compare correctly as text (lexicographic order matches
+ * chronological order), so they are left untouched. Non-numeric rows yield
+ * NULL in the CASE, which never satisfies a range predicate — mirroring the
+ * JS fallback where `'abc' > 5` is false.
+ *
+ * @param paramIndex Index of the field-name query parameter (value is +1).
+ */
+function sqlRangeCast(value: unknown, paramIndex: number): string {
+  const raw = String(value ?? '').trim();
+  if (raw !== '' && /^-?\d+(\.\d+)?$/.test(raw)) {
+    return `CASE WHEN data->>$${paramIndex} ~ '^-?\\d+(\\.\\d+)?$' THEN (data->>$${paramIndex})::numeric END`;
+  }
+  return `data->>$${paramIndex}`;
+}
+
 // Deep process dynamic insert object (replacing Firestore types with native formats)
 function processValueMutations(obj: any, existingDocData: any = {}): any {
   if (!obj || typeof obj !== 'object') {
@@ -582,6 +603,11 @@ export async function getDocsDirect(collectionName: string, constraints: any[]):
           throw new Error(`Unsupported query operator: ${String(op)}`);
         }
         const paramIndex = queryParams.length + 1;
+        // Range comparisons must not run lexicographically on jsonb text: a
+        // numeric or ISO-timestamp field is cast so SQL matches the JS value
+        // semantics of the in-memory fallback filter (applyQueryConstraints).
+        const isRange = op === '>' || op === '>=' || op === '<' || op === '<=';
+        const castExpr = isRange ? sqlRangeCast(value, paramIndex) : `data->>$${paramIndex}`;
         if (op === '==' || op === '===') {
           queryStr += ` AND data->>$${paramIndex} = $${paramIndex + 1}`;
           queryParams.push(field, String(value));
@@ -589,16 +615,16 @@ export async function getDocsDirect(collectionName: string, constraints: any[]):
           queryStr += ` AND data->>$${paramIndex} != $${paramIndex + 1}`;
           queryParams.push(field, String(value));
         } else if (op === '>') {
-          queryStr += ` AND (data->>$${paramIndex})::text > $${paramIndex + 1}`;
+          queryStr += ` AND ${castExpr} > $${paramIndex + 1}`;
           queryParams.push(field, String(value));
         } else if (op === '>=') {
-          queryStr += ` AND (data->>$${paramIndex})::text >= $${paramIndex + 1}`;
+          queryStr += ` AND ${castExpr} >= $${paramIndex + 1}`;
           queryParams.push(field, String(value));
         } else if (op === '<') {
-          queryStr += ` AND (data->>$${paramIndex})::text < $${paramIndex + 1}`;
+          queryStr += ` AND ${castExpr} < $${paramIndex + 1}`;
           queryParams.push(field, String(value));
         } else if (op === '<=') {
-          queryStr += ` AND (data->>$${paramIndex})::text <= $${paramIndex + 1}`;
+          queryStr += ` AND ${castExpr} <= $${paramIndex + 1}`;
           queryParams.push(field, String(value));
         }
       }
@@ -645,16 +671,64 @@ export async function addDocDirect(collectionName: string, data: any): Promise<a
   return { id: generatedId, data: processed };
 }
 
+/**
+ * Marker-aware JSON patch build for atomic `updateDocDirect`.
+ * Returns `{ expr, params }` where `expr` is a chained jsonb expression
+ * applied on top of the stored `data` column, so concurrent writers never
+ * clobber each other's fields (no read-modify-write in JS).
+ *
+ * Marker values ({ _type: 'arrayUnion' | 'increment' | 'serverTimestamp' |
+ * 'deleteField' }) are resolved inside the SQL against the live row; all
+ * other values replace the key wholesale (matching the previous shallow-merge
+ * semantics of `{ ...existing, ...patch }`).
+ */
+function buildAtomicJsonbPatch(data: Record<string, unknown>) {
+  let expr = 'data';
+  const params: unknown[] = [];
+  // $1 (collection) and $2 (id) are reserved by the INSERT statement.
+  let paramIndex = 3;
+
+  for (const key of Object.keys(data)) {
+    if (key === 'id') continue;
+    const val = data[key];
+    const keyParam = `$${paramIndex++}`;
+    params.push(key);
+
+    if (val && typeof val === 'object' && !Array.isArray(val) && (val as { _type?: string })._type === 'deleteField') {
+      // data = data - 'key'
+      expr = `${expr} - ${keyParam}`;
+    } else if (val && typeof val === 'object' && !Array.isArray(val) && (val as { _type?: string })._type === 'arrayUnion') {
+      // data = jsonb_set(data, '{key}', COALESCE(data->'key','[]') || '[added]')
+      const arrParam = `$${paramIndex++}`;
+      params.push(toJsonbParam((val as { values?: unknown[] }).values || []));
+      expr = `jsonb_set(${expr}, ARRAY[${keyParam}], COALESCE(${expr}->${keyParam}, '[]'::jsonb) || ${arrParam}::jsonb, true)`;
+    } else if (val && typeof val === 'object' && !Array.isArray(val) && (val as { _type?: string })._type === 'increment') {
+      // data = jsonb_set(data, '{key}', to_jsonb(COALESCE((data->>'key')::numeric, 0) + amount))
+      const amtParam = `$${paramIndex++}`;
+      params.push(Number((val as { value?: unknown }).value) || 0);
+      expr = `jsonb_set(${expr}, ARRAY[${keyParam}], to_jsonb(COALESCE((${expr}->>${keyParam})::numeric, 0) + ${amtParam}), true)`;
+    } else if (val && typeof val === 'object' && !Array.isArray(val) && (val as { _type?: string })._type === 'serverTimestamp') {
+      // data = jsonb_set(data, '{key}', to_jsonb(NOW()))
+      expr = `jsonb_set(${expr}, ARRAY[${keyParam}], to_jsonb(NOW()), true)`;
+    } else {
+      // Plain value (object, array, scalar) — replace or create the key.
+      const valParam = `$${paramIndex++}`;
+      params.push(toJsonbParam(val));
+      expr = `jsonb_set(${expr}, ARRAY[${keyParam}], ${valParam}::jsonb, true)`;
+    }
+  }
+
+  return { expr, params };
+}
+
 export async function updateDocDirect(collectionName: string, id: string, data: any): Promise<void> {
   const pool = requirePool();
-  const existing = await getDocDirect(collectionName, id) || {};
-  const processed = { ...existing, ...processValueMutations(data, existing) };
-  delete processed.id; // Primary ID is handled in row columns
+  const { expr, params } = buildAtomicJsonbPatch(data || {});
 
   await pool.query(
-    `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, $3::jsonb)
+    `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, ${expr})
      ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-    [collectionName, id, toJsonbParam(processed)]
+    [collectionName, id, ...params],
   );
 }
 

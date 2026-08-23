@@ -72,7 +72,11 @@ const router = Router();
  */
 router.get("/hub-stats", authenticate, requireRole(["SYSTEM_ADMIN"]), async (_req: Request, res: Response): Promise<any> => {
   try {
-    const [tickets, users, kbArticles, vaultStores, aiUsageRes, healthRes] = await Promise.all([
+    const vectorCount = queryDb(
+      `SELECT COUNT(*)::int AS total FROM "KnowledgeEmbedding"`,
+    ).catch(() => ({ rows: [{ total: 0 }] }));
+
+    const [tickets, users, kbArticles, vaultStores, aiUsageRes, healthRes, vectorRes] = await Promise.all([
       getDocsDirect("tickets", []),
       getDocsDirect("users", []),
       getDocsDirect("kb_articles", []),
@@ -83,6 +87,7 @@ router.get("/hub-stats", authenticate, requireRole(["SYSTEM_ADMIN"]), async (_re
          FROM ai_usage_log WHERE workspace_id = 'default'`,
       ),
       getOrchestratorHealth("default").catch(() => null),
+      vectorCount,
     ]);
 
     const activeAgents = users.filter(
@@ -102,6 +107,14 @@ router.get("/hub-stats", authenticate, requireRole(["SYSTEM_ADMIN"]), async (_re
       aiRequests: Number(aiRow?.total) || 0,
       systemHealth: healthRes?.status === 'offline' ? 95 : healthRes?.status === 'degraded' ? 98.5 : 99.98,
       latencyMs: avgLatency,
+      activeVectors: Number((vectorRes.rows[0] as { total?: number } | undefined)?.total) || 0,
+      primaryModel: healthRes?.primaryModel ?? null,
+      providers: (healthRes?.providers ?? []).map((p) => ({
+        provider: p.provider,
+        label: p.label,
+        status: p.status,
+        latencyMs: p.latencyMs,
+      })),
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

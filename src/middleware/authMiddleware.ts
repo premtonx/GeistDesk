@@ -234,6 +234,116 @@ export async function authenticate(req: AuthenticatedRequest, res: Response, nex
 }
 
 /**
+ * Optional authentication for public-but-informational endpoints.
+ *
+ * Resolves `req.user` when a valid session/SSO token is present, but never
+ * rejects the request: unauthenticated callers simply continue without a user
+ * so handlers can expose reduced (non-sensitive) responses.
+ */
+export async function optionalAuthenticate(req: AuthenticatedRequest, _res: Response, next: NextFunction): Promise<any> {
+  try {
+    const authHeader = req.headers.authorization;
+    const cookieSession = readSessionCookie(req);
+
+    let verifiedEmail: string | undefined;
+    let verifiedUid: string | undefined;
+
+    if (authHeader && authHeader.startsWith("Bearer ")) {
+      const token = authHeader.split(" ")[1];
+      const decoded: any = jwt.decode(token, { complete: true });
+      if (decoded?.payload) {
+        const iss = decoded.payload.iss || "";
+        if (iss.startsWith("https://login.microsoftonline.com") || iss.startsWith("https://sts.windows.net")) {
+          const expectedAudience = process.env.MICROSOFT_PROVIDER_CLIENT_ID;
+          if (expectedAudience) {
+            try {
+              const verifiedToken = await new Promise<any>((resolve, reject) => {
+                jwt.verify(
+                  token,
+                  getMicrosoftSigningKey,
+                  { algorithms: ["RS256"], audience: expectedAudience },
+                  (err, decodedToken) => (err ? reject(err) : resolve(decodedToken)),
+                );
+              });
+              verifiedEmail = verifiedToken.preferred_username || verifiedToken.email || verifiedToken.upn || verifiedToken.unique_name;
+              verifiedUid = verifiedToken.oid || verifiedToken.sub;
+            } catch {
+              // Invalid SSO token — treat as anonymous.
+            }
+          }
+        } else {
+          try {
+            const verifiedToken = jwt.verify(token, LOCAL_JWT_SECRET as string, { algorithms: ["HS256"] }) as any;
+            verifiedEmail = verifiedToken.email;
+            verifiedUid = verifiedToken.uid || verifiedToken.id;
+          } catch {
+            // Invalid local token — treat as anonymous.
+          }
+        }
+      }
+    } else if (cookieSession) {
+      try {
+        const verifiedToken = jwt.verify(cookieSession, LOCAL_JWT_SECRET as string, { algorithms: ["HS256"] }) as any;
+        verifiedEmail = verifiedToken.email;
+        verifiedUid = verifiedToken.uid || verifiedToken.id;
+      } catch {
+        // Invalid session cookie — treat as anonymous.
+      }
+    }
+
+    if (verifiedUid || verifiedEmail) {
+      let userDoc: any = null;
+      if (verifiedUid) {
+        userDoc = await getDocDirect("users", verifiedUid);
+      }
+      if (!userDoc && verifiedEmail) {
+        const results = await getDocsDirect("users", [
+          { type: "where", field: "email", op: "==", value: verifiedEmail.toLowerCase().trim() },
+        ]);
+        if (results && results.length > 0) {
+          userDoc = results[0];
+        }
+      }
+      if (userDoc && !userDoc.isDeactivated) {
+        let computedRole = userDoc.role || "agent";
+        let isAdminClaim = userDoc.is_admin === true;
+        if (userDoc.roleId) {
+          try {
+            const roleDoc = await getDocDirect("roles", userDoc.roleId);
+            if (roleDoc && (roleDoc.name === "admin" || roleDoc.is_admin === true || roleDoc.name === "SYSTEM_ADMIN")) {
+              computedRole = "SYSTEM_ADMIN";
+              isAdminClaim = true;
+            }
+          } catch {
+            // Role lookup failure is non-fatal for optional auth.
+          }
+        }
+        if (computedRole === "admin" || computedRole === "SYSTEM_ADMIN" || isAdminClaim) {
+          computedRole = "SYSTEM_ADMIN";
+          isAdminClaim = true;
+        }
+        if (isServerBetaAutoAdminEnabled()) {
+          computedRole = "SYSTEM_ADMIN";
+          isAdminClaim = true;
+        }
+        req.user = {
+          id: userDoc.id || verifiedUid,
+          name: userDoc.name || "Default User",
+          email: userDoc.email || verifiedEmail || "",
+          role: computedRole,
+          is_admin: isAdminClaim,
+          tenantId: resolveUserTenantId(userDoc as Record<string, unknown>),
+          dbRecord: userDoc,
+        };
+      }
+    }
+  } catch {
+    // Any failure in optional auth means the caller stays anonymous.
+  }
+  return next();
+}
+
+/**
  * Strict Role-Based Access Control Rule Middleware
  * @param allowedRolesArray Array of allowed role codes (e.g., ["SYSTEM_ADMIN", "team_lead"])
  */

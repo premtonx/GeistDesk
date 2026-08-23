@@ -22,6 +22,9 @@ const EMPTY_TELEMETRY: AdminHubTelemetry = {
   aiRequests: 0,
   systemHealth: 100,
   latencyMs: 0,
+  activeVectors: 0,
+  primaryModel: null,
+  providers: [],
 };
 
 export default function AdminHubPage() {
@@ -83,11 +86,15 @@ export default function AdminHubPage() {
             </div>
             <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-3.5 py-1.5 rounded-full shadow-[0_1px_2px_rgba(0,0,0,0.02)] scale-95 origin-right">
               <span className="relative flex h-2 w-2">
-                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${telemetry.systemHealth >= 99 ? 'bg-emerald-400' : telemetry.systemHealth >= 97 ? 'bg-amber-400' : 'bg-red-400'}`} />
+                <span className={`relative inline-flex rounded-full h-2 w-2 ${telemetry.systemHealth >= 99 ? 'bg-emerald-500' : telemetry.systemHealth >= 97 ? 'bg-amber-500' : 'bg-red-500'}`} />
               </span>
               <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 font-mono">
-                Control Plane : Active & Sovereign
+                {telemetry.systemHealth >= 99
+                  ? 'Control Plane : Active & Sovereign'
+                  : telemetry.systemHealth >= 97
+                    ? 'Control Plane : Degraded'
+                    : 'Control Plane : Offline'}
               </span>
             </div>
           </div>

@@ -99,7 +99,7 @@ export const ADMIN_HUB_CATEGORIES: AdminHubCategory[] = [
         title: 'MCP Protocol Hub',
         description: 'Model Context Protocol (MCP) management. Swap brains and secure local LLMs.',
         icon: Radio,
-        path: '/admin/mcp',
+        path: '/admin?tab=ai-engine',
         color: 'text-rose-600',
         bgColor: 'bg-rose-50',
         borderColor: 'border-rose-105',

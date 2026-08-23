@@ -113,6 +113,25 @@ function enrichResult(result: ImportResult) {
   };
 }
 
+/** Maps import/parse failures to HTTP status codes: 4xx for client-caused
+ *  validation errors, 5xx for unexpected server failures. */
+function importErrorStatus(err: unknown): number {
+  const message = err instanceof Error ? err.message : String(err);
+  if (
+    /^Invalid JSON|^CSV parse error|^Missing required field|^No records|^Invalid payload/i.test(message)
+  ) {
+    return 400;
+  }
+  return 500;
+}
+
+/** Generic catch handler: safe-redacts the message and picks a proper status. */
+function handleImportError(res: Response, err: unknown, fallback: string) {
+  const message = safeErrorMessage(err, fallback);
+  console.error('[import]', message);
+  return res.status(importErrorStatus(err)).json({ error: message });
+}
+
 router.use(authenticate, requireRole(['SYSTEM_ADMIN']));
 
 /** Downloadable CSV templates */
@@ -157,9 +176,7 @@ router.post('/tickets', upload.single('file'), async (req: Request, res: Respons
       ...enrichResult(result),
     });
   } catch (err: unknown) {
-    const message = safeErrorMessage(err, 'Ticket import failed');
-    console.error('[import/tickets]', message);
-    return res.status(400).json({ error: message });
+    return handleImportError(res, err, 'Ticket import failed');
   }
 });
 
@@ -185,9 +202,7 @@ router.post('/kb', upload.single('file'), async (req: Request, res: Response) =>
       ...enrichResult(result),
     });
   } catch (err: unknown) {
-    const message = safeErrorMessage(err, 'KB import failed');
-    console.error('[import/kb]', message);
-    return res.status(400).json({ error: message });
+    return handleImportError(res, err, 'KB import failed');
   }
 });
 
@@ -203,6 +218,7 @@ router.post('/preview', upload.single('file'), async (req: Request, res: Respons
     });
   } catch (err: unknown) {
     const message = safeErrorMessage(err, 'Preview failed');
+    console.error('[import/preview]', message);
     return res.status(400).json({ error: message });
   }
 });

@@ -7,4 +7,14 @@ export interface AdminHubTelemetry {
   aiRequests: number;
   systemHealth: number;
   latencyMs: number;
+  activeVectors: number;
+  primaryModel: string | null;
+  providers: AdminHubProviderHealth[];
+}
+
+export interface AdminHubProviderHealth {
+  provider: string;
+  label: string;
+  status: 'online' | 'offline' | 'degraded' | 'missing_key';
+  latencyMs?: number;
 }

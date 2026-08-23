@@ -10,7 +10,7 @@
  */
 
 import { Router, type NextFunction, type Request, type Response } from 'express';
-import { authenticate, requireRole } from '../middleware/authMiddleware.js';
+import { authenticate, optionalAuthenticate, requireRole } from '../middleware/authMiddleware.js';
 import { authRateLimiter } from '../middleware/rate-limiters.js';
 import {
   OnboardingAdminExistsError,
@@ -68,7 +68,7 @@ async function requireWizardAdminSession(req: Request, res: Response, next: Next
   }
 }
 
-router.get('/status', async (req: Request, res: Response) => {
+router.get('/status', optionalAuthenticate, async (req: Request, res: Response) => {
   try {
     const status = await getOnboardingStatus(req);
     return res.json(status);
