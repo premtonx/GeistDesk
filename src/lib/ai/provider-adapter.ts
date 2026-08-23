@@ -4,7 +4,14 @@
 
 import { getCachedLegacyAiConfig, getCachedOrchestratorConfig } from "../aiOrchestratorClient";
 import { executeViaLifecycle, resolveLifecycleOutput, resolveOperatorLanguage } from "../aiLifecycleClient";
-import type { AiExecutionContext, AiFeatureId, AiOrchestratorConfig } from "../../types/aiOrchestrator";
+import type {
+  AiCritiqueLog,
+  AiExecutionContext,
+  AiExecutionResult,
+  AiFeatureId,
+  AiOrchestratorConfig,
+  AiTicketExecutionStatus,
+} from "../../types/aiOrchestrator";
 import {
   getSentimentModel,
   getDeepReasoningModel,
@@ -111,17 +118,26 @@ export class AIAdapter {
     feature: AiFeatureId,
     prompt: string,
     ctx: Partial<AiExecutionContext> = {},
-  ): Promise<string> {
+  ): Promise<{
+    output: string;
+    result: AiExecutionResult;
+  }> {
     const result = await executeViaLifecycle({
       feature,
       prompt,
       operatorLanguage: resolveOperatorLanguage(),
       ...ctx,
     });
-    return resolveLifecycleOutput(result);
+    return { output: resolveLifecycleOutput(result), result };
   }
 
-  async generateDraft(context: TicketContext): Promise<{ text: string; sources: RAGSource[] }> {
+  async generateDraft(context: TicketContext): Promise<{
+    text: string;
+    sources: RAGSource[];
+    confidenceScore?: number | null;
+    critiqueLog?: AiCritiqueLog | null;
+    executionStatus?: AiTicketExecutionStatus | null;
+  }> {
     const systemPrompt = `You are a professional support agent. Use the provided Knowledge Base context to draft a reply.
 TRANSPARENCY RULE: If you use information from the KB, you MUST return a JSON object with:
 "text": (your reply),
@@ -137,18 +153,32 @@ TICKET DESCRIPTION: ${context.description}
 Return JSON:`;
 
     try {
-      const output = await this.runLifecycleFeature('smart_reply', `${systemPrompt}\n\n${userPrompt}`, {
+      const { output, result } = await this.runLifecycleFeature('smart_reply', `${systemPrompt}\n\n${userPrompt}`, {
         ticketId: context.ticketId,
         customerScope: context.customerMetadata?.vip ? 'vip' : undefined,
       });
-      const body = JSON.parse(output);
+      let body: { text?: string; sources?: RAGSource[] } = {};
+      try {
+        body = JSON.parse(output) as typeof body;
+      } catch {
+        body = { text: output };
+      }
+      const confidenceScore =
+        result.critiqueLog?.finalConfidence !== undefined && result.critiqueLog?.finalConfidence !== null
+          ? result.critiqueLog.finalConfidence
+          : result.confidence !== undefined
+            ? Math.round(result.confidence * 100)
+            : null;
       return {
         text: body.text || "Failed to generate draft.",
-        sources: (body.sources || []).map((s: any) => ({ ...s, articleId: "lifecycle-rag" }))
+        sources: (body.sources || []).map((s: any) => ({ ...s, articleId: "lifecycle-rag" })),
+        confidenceScore,
+        critiqueLog: result.critiqueLog ?? null,
+        executionStatus: result.ticketExecutionStatus ?? null,
       };
     } catch (e) {
       console.error("Lifecycle draft error:", e);
-      return { text: "Error connecting to AI model.", sources: [] };
+      return { text: "Error connecting to AI model.", sources: [], confidenceScore: null, critiqueLog: null, executionStatus: null };
     }
   }
 
@@ -160,9 +190,10 @@ Return JSON:`;
     const prompt = `Summarize the following support thread ${format}:\n\n${history.join("\n")}`;
 
     try {
-      return await this.runLifecycleFeature('ticket_summarization', prompt, {
+      const { output } = await this.runLifecycleFeature('ticket_summarization', prompt, {
         ticketId: options?.ticketId,
       });
+      return output;
     } catch (e) {
       console.error("Lifecycle summarization error:", e);
       return "AI summarization failed.";
@@ -189,7 +220,7 @@ TICKET DESCRIPTION: ${context.description}
 THREAD HISTORY: ${context.threadHistory?.join("\n") || "No history."}`;
 
     try {
-      const output = await this.runLifecycleFeature('kb_generation', prompt);
+      const { output } = await this.runLifecycleFeature('kb_generation', prompt);
       const body = JSON.parse(output);
       return {
         title: body.title || defaultResponse.title,
@@ -227,9 +258,10 @@ Article Title: ${title}
 Article Content:
 ${plain.slice(0, 14000)}`;
 
-    return await this.runLifecycleFeature('ticket_summarization', prompt, {
+    const { output } = await this.runLifecycleFeature('ticket_summarization', prompt, {
       metadata: { entityId: `kb-explain-${articleId}`, kbArticleId: articleId },
     });
+    return output;
   }
 
   /**
@@ -264,10 +296,11 @@ Provide a concise, helpful answer in 2-4 short paragraphs or bullet points.`;
       `kb-search-${query.trim().toLowerCase().replace(/\s+/g, '-').slice(0, 96)}`;
 
     try {
-      return await this.runLifecycleFeature("ticket_summarization", prompt, {
+      const { output } = await this.runLifecycleFeature("ticket_summarization", prompt, {
         metadata: { entityId: cacheEntityId, kbArticleId: cacheEntityId },
         forceRefresh: options?.forceRefresh,
       });
+      return output;
     } catch (error) {
       console.error("KB semantic search AI error:", error);
       throw error;
@@ -285,7 +318,8 @@ DRAFT:
 ${text}`;
 
     try {
-      return await this.runLifecycleFeature('smart_reply', prompt);
+      const { output } = await this.runLifecycleFeature('smart_reply', prompt);
+      return output;
     } catch (error) {
       console.warn("Tone polish failed, falling back to original:", error);
       return text;

@@ -687,7 +687,16 @@
       "threadDigest": "Thread-Zusammenfassung",
       "discard": "Verwerfen",
       "auditing": "Prüfe...",
-      "sendReply": "Antwort senden"
+      "sendReply": "Antwort senden",
+      "approveAndSend": "⚡ Genehmigen & Senden",
+      "autoDispatched": "Dieser KI-Entwurf wurde automatisch versendet. Bei Bedarf vor dem manuellen Senden prüfen.",
+      "critiqueTraceTitle": "KI-Begründung & Kritik-Nachvollziehbarkeit",
+      "critiquePass": "Kritik-Durchlauf",
+      "criticNotes": "Kritiker-Anmerkungen:",
+      "finalRevision": "Endgültig akzeptierte Revision:",
+      "criticFailedNote": "Das Kritiker-Modell ist ausgelaufen — dieser Entwurf wurde nicht unabhängig verifiziert.",
+      "maxIterationsNote": "Maximale Selbstkorrektur-Iterationen erreicht. Entwurf benötigt weiterhin menschliche Prüfung.",
+      "thresholdMetNote": "Schleife beendet, nachdem die Konfidenzschwelle erreicht wurde."
     },
     "aiInsightsTab": {
       "emptyCitations": "KI-Zitate sind derzeit leer. Klicken Sie auf „Mit KI entwerfen“ oder starten Sie eine Abfrage gegen die Wissensdatenbank."
@@ -2099,7 +2108,19 @@
       "routingMatrixDesc": "Jede KI-Aufgabe an ihr eigenes abgestimmtes Modell routen – mit erklärenden Tooltips und Test-Prompts.",
       "secretsSaved": "API-Schlüssel gespeichert und verschlüsselt.",
       "modelsDetected": "Lokale Modelle erkannt:",
-      "modelsDetectError": "Modellerkennung fehlgeschlagen. Endpunkt-URL prüfen."
+      "modelsDetectError": "Modellerkennung fehlgeschlagen. Endpunkt-URL prüfen.",
+      "agenticLoopsTitle": "Agentische Loops & Selbstkorrektur",
+      "agenticLoopsDesc": "Evaluator-Optimizer-Selbstkritik-Engine, Human-Diff-Feedback-Learning und Schwarm-Ausfallerkennung.",
+      "selfCritiqueEngine": "Selbstkritik-Engine",
+      "selfCritiqueEngineDesc": "KI-Entwürfe durchlaufen den Evaluator-Optimizer-Loop, bevor sie im Posteingang landen.",
+      "maxIterations": "Max. Selbstkritik-Iterationen",
+      "confidenceThreshold": "Konfidenzschwelle (Hoch vs. Nuanciert)",
+      "criticModel": "Kritiker-Modell",
+      "criticModelDesc": "Bewertet Entwürfe auf Faktenrichtigkeit, Richtlinientreue und Konfidenz.",
+      "swarmDetector": "Schwarm-Detektor",
+      "swarmDetectorDesc": "Überwacht 5+ ähnliche unzugewiesene Tickets in 15 Minuten und warnt vor möglichen Ausfällen.",
+      "humanDiffLearning": "Human-Diff-Feedback-Learning",
+      "humanDiffLearningDesc": "Protokolliert menschliche Bearbeitungen von KI-Entwürfen (>10 % Änderung) zur kontinuierlichen Prompt-Verbesserung."
     },
     "hubGov": {
       "piiTitle": "PII-Schutzschild",

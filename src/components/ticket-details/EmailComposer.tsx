@@ -13,7 +13,10 @@ import {
   HelpCircle,
   Mail,
   ListRestart,
-  Scale
+  Scale,
+  Zap,
+  ChevronUp,
+  CheckCircle2
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -24,6 +27,28 @@ import { Ticket as TicketType } from '../../types';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import { useTranslation } from '../../lib/context/I18nContext';
+
+export interface AiComposerMeta {
+  confidenceScore: number | null;
+  executionStatus: 'auto_dispatched' | 'high_confidence' | 'nuanced' | 'manual';
+  critiqueLog: {
+    iterations: Array<{
+      iteration: number;
+      draft: string;
+      critique: {
+        factual_accuracy: number;
+        policy_adherence: number;
+        confidence_score: number;
+        actionable_critique: string;
+      };
+      criticError?: boolean;
+      drafterModel?: string;
+      criticModel?: string;
+    }>;
+    finalConfidence: number | null;
+    exitReason: 'threshold_met' | 'max_iterations' | 'critic_failed' | 'critique_disabled';
+  } | null;
+}
 
 interface EmailComposerProps {
   ticket: TicketType;
@@ -42,6 +67,9 @@ interface EmailComposerProps {
   onSummarize: () => void;
   legalViolation: LegalValidationResult | null;
   isValidatingLegal: boolean;
+  aiDraftMeta?: AiComposerMeta | null;
+  autoDispatchThreshold?: number;
+  isAutoDispatched?: boolean;
 }
 
 export function EmailComposer({
@@ -60,10 +88,14 @@ export function EmailComposer({
   onTranslate,
   onSummarize,
   legalViolation,
-  isValidatingLegal
+  isValidatingLegal,
+  aiDraftMeta = null,
+  autoDispatchThreshold = 95,
+  isAutoDispatched = false,
 }: EmailComposerProps) {
   const { t } = useTranslation();
   const [suggestionApplied, setSuggestionApplied] = useState(false);
+  const [critiqueOpen, setCritiqueOpen] = useState(false);
   const suggestionText = "Hi there, I have investigated this issue and found similar cases where we resolved... Let me walk you through the troubleshooting.";
 
   const applySuggestion = () => {
@@ -72,8 +104,24 @@ export function EmailComposer({
     toast.success(t('tickets.emailComposer.suggestionApplied', 'AI strategic opening applied to composer.'));
   };
 
+  const isHighConfidence = (aiDraftMeta?.confidenceScore ?? 0) >= autoDispatchThreshold;
+  const isNuanced = aiDraftMeta !== null && !isHighConfidence && !isAutoDispatched;
+
   return (
-    <div id="email-reply-composer" className="bg-card border border-border rounded-2xl shadow-md overflow-hidden space-y-3 mt-4 transition-all hover:shadow-lg">
+    <div id="email-reply-composer" className={cn(
+      "bg-card border rounded-2xl shadow-md overflow-hidden space-y-3 mt-4 transition-all hover:shadow-lg",
+      aiDraftMeta && !isAutoDispatched ? "border-emerald-400 ring-1 ring-emerald-200/60" : "border-border",
+      isAutoDispatched ? "border-blue-400 ring-1 ring-blue-200/60" : "",
+    )}>
+      {/* Auto-dispatched indicator */}
+      {isAutoDispatched && (
+        <div className="px-4 pt-3">
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 text-blue-800 rounded-xl px-3 py-2 text-xs font-semibold">
+            <Zap className="w-4 h-4 text-blue-600 shrink-0" />
+            <span>{t('tickets.emailComposer.autoDispatched', 'This AI draft was automatically dispatched. Review before sending manually if needed.')}</span>
+          </div>
+        </div>
+      )}
       {/* Email-style Header rows */}
       <div className="bg-muted/15 p-4 border-b border-border space-y-2.5 text-xs text-muted-foreground/80">
         <div className="flex items-center gap-2">
@@ -133,6 +181,88 @@ export function EmailComposer({
           placeholder={t('tickets.emailComposer.placeholder', 'Type your professional response here... To activate AI drafting assistance, use the AI actions toolbar below.')}
         />
       </div>
+
+      {/* AI Reasoning & Critique Trace accordion (Nuanced drafts) */}
+      {isNuanced && aiDraftMeta?.critiqueLog && (
+        <div className="mx-4 rounded-xl border border-amber-200/70 bg-amber-50/40 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setCritiqueOpen((v) => !v)}
+            className="w-full flex items-center justify-between px-3 py-2.5 text-left"
+          >
+            <div className="flex items-center gap-2">
+              <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+              <span className="text-[11px] font-black text-amber-800 uppercase tracking-wide">
+                {t('tickets.emailComposer.critiqueTraceTitle', 'AI Reasoning & Critique Trace')}
+              </span>
+              <Badge variant="outline" className="text-[9px] font-bold text-amber-700 border-amber-200 bg-white h-4">
+                {aiDraftMeta.confidenceScore === null
+                  ? 'unverified'
+                  : `${aiDraftMeta.confidenceScore}%`}
+              </Badge>
+            </div>
+            {critiqueOpen ? <ChevronUp className="w-4 h-4 text-amber-600" /> : <ChevronDown className="w-4 h-4 text-amber-600" />}
+          </button>
+          {critiqueOpen && (
+            <div className="px-3 pb-3 space-y-2 text-[11px] text-slate-700">
+              {aiDraftMeta.critiqueLog.iterations.map((it, idx) => (
+                <div key={idx} className="rounded-lg border border-slate-200 bg-white/80 p-2.5 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-black text-slate-800">
+                      {t('tickets.emailComposer.critiquePass', 'Critique Pass')} #{idx + 1}
+                      {it.criticError ? (
+                        <span className="ml-1.5 text-[9px] font-bold text-rose-600 uppercase">critic failed</span>
+                      ) : null}
+                    </span>
+                    <span className="font-mono text-slate-500 text-[10px]">
+                      {it.drafterModel} → {it.criticModel}
+                    </span>
+                  </div>
+                  {!it.criticError && (
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge variant="outline" className="text-[9px] h-4 border-slate-200 bg-slate-50 text-slate-600">
+                        Factual {it.critique.factual_accuracy}
+                      </Badge>
+                      <Badge variant="outline" className="text-[9px] h-4 border-slate-200 bg-slate-50 text-slate-600">
+                        Policy {it.critique.policy_adherence}
+                      </Badge>
+                      <Badge
+                        className={cn(
+                          'text-[9px] h-4 border',
+                          it.critique.confidence_score >= 95
+                            ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                            : 'border-amber-200 bg-amber-50 text-amber-700',
+                        )}
+                      >
+                        Confidence {it.critique.confidence_score}
+                      </Badge>
+                    </div>
+                  )}
+                  {it.critique.actionable_critique && (
+                    <p className="text-slate-600 leading-snug">
+                      <span className="font-bold text-slate-800">{t('tickets.emailComposer.criticNotes', 'Critic notes:')}</span>{' '}
+                      {it.critique.actionable_critique}
+                    </p>
+                  )}
+                  {idx === aiDraftMeta.critiqueLog!.iterations.length - 1 && (
+                    <p className="text-slate-500 italic">
+                      {t('tickets.emailComposer.finalRevision', 'Final accepted revision:')}{' '}
+                      <span className="not-italic">{it.draft}</span>
+                    </p>
+                  )}
+                </div>
+              ))}
+              <p className="text-slate-500 font-medium">
+                {aiDraftMeta.critiqueLog.exitReason === 'critic_failed'
+                  ? t('tickets.emailComposer.criticFailedNote', 'The critic model timed out — this draft was not independently verified.')
+                  : aiDraftMeta.critiqueLog.exitReason === 'max_iterations'
+                    ? t('tickets.emailComposer.maxIterationsNote', 'Reached the maximum self-correction iterations. Draft still needs human review.')
+                    : t('tickets.emailComposer.thresholdMetNote', 'Loop exited after the confidence threshold was met.')}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Legal Guardrails Warnings Box */}
       {legalViolation && (
@@ -195,6 +325,16 @@ export function EmailComposer({
 
         {/* Send / Discard Operations */}
         <div className="flex items-center gap-2.5 ml-auto">
+          {isHighConfidence && !isAutoDispatched && (
+            <Button
+              className="h-9 font-bold text-xs rounded-xl shadow-md min-w-[110px] bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5"
+              onClick={onSend}
+              disabled={isValidatingLegal}
+            >
+              <Zap className="w-3.5 h-3.5" />
+              <span>{t('tickets.emailComposer.approveAndSend', '⚡ Approve & Send')}</span>
+            </Button>
+          )}
           <Button 
             variant="ghost" 
             size="sm" 

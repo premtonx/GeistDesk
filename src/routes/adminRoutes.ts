@@ -665,6 +665,22 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
           : {}),
         ...(payload.personaSkills !== undefined ? { personaSkills: payload.personaSkills } : {}),
         ...(payload.killSwitch !== undefined ? { killSwitch: payload.killSwitch as AiKillSwitch } : {}),
+        ...(payload.enableSelfCritiqueLoop !== undefined
+          ? { enableSelfCritiqueLoop: payload.enableSelfCritiqueLoop }
+          : {}),
+        ...(payload.maxCritiqueIterations !== undefined
+          ? { maxCritiqueIterations: payload.maxCritiqueIterations }
+          : {}),
+        ...(payload.autoDispatchThreshold !== undefined
+          ? { autoDispatchThreshold: payload.autoDispatchThreshold }
+          : {}),
+        ...(payload.criticModel !== undefined ? { criticModel: payload.criticModel } : {}),
+        ...(payload.enableSwarmDetection !== undefined
+          ? { enableSwarmDetection: payload.enableSwarmDetection }
+          : {}),
+        ...(payload.enableHumanDiffLearning !== undefined
+          ? { enableHumanDiffLearning: payload.enableHumanDiffLearning }
+          : {}),
         ...(payload.dailyBudgetUsd !== undefined ? { dailyBudgetUsd: payload.dailyBudgetUsd } : {}),
         ...(payload.monthlyBudgetUsd !== undefined ? { monthlyBudgetUsd: payload.monthlyBudgetUsd } : {}),
         ...(payload.dailyBudgetEur !== undefined ? { dailyBudgetEur: payload.dailyBudgetEur } : {}),

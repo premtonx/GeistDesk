@@ -224,6 +224,31 @@ export async function initDb() {
     CREATE INDEX IF NOT EXISTS idx_ai_prompt_versions_template ON ai_prompt_versions(template_id, version_number DESC);
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS feature_personas_json JSONB NOT NULL DEFAULT '{"ticket_summarization":"support_agent","smart_reply":"support_agent","kb_generation":"knowledge_writer","root_cause_analysis":"security_analyst","translation":"knowledge_writer"}';
     ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS persona_skills_json JSONB NOT NULL DEFAULT '{}';
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS enable_self_critique_loop BOOLEAN NOT NULL DEFAULT true;
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS max_critique_iterations INTEGER NOT NULL DEFAULT 2;
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS auto_dispatch_threshold INTEGER NOT NULL DEFAULT 95;
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS critic_model VARCHAR(64) NOT NULL DEFAULT 'deepseek-reasoner';
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS enable_swarm_detection BOOLEAN NOT NULL DEFAULT true;
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS enable_human_diff_learning BOOLEAN NOT NULL DEFAULT true;
+    CREATE TABLE IF NOT EXISTS ai_draft_learning_diffs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      ticket_id VARCHAR(255) NOT NULL,
+      agent_id VARCHAR(255),
+      original_draft TEXT NOT NULL,
+      final_sent_message TEXT NOT NULL,
+      diff_summary TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_draft_learning_diffs_ticket ON ai_draft_learning_diffs(ticket_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS ai_incident_clusters (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      cluster_title VARCHAR(255) NOT NULL,
+      ticket_count INTEGER NOT NULL DEFAULT 0,
+      sample_ticket_ids JSONB NOT NULL DEFAULT '[]',
+      status VARCHAR(16) NOT NULL DEFAULT 'active',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_incident_clusters_status ON ai_incident_clusters(status, created_at DESC);
   `);
 
   // Global email/domain blacklist for inbound spam rejection (pre-filter).

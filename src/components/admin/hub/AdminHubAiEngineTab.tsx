@@ -42,6 +42,7 @@ import {
 import {
   DEFAULT_ORCHESTRATOR_CONFIG,
   ORCHESTRATOR_MODEL_OPTIONS,
+  CRITIC_MODEL_OPTIONS,
   type AiFeatureRouting,
   type AiOrchestratorConfig,
   type AiOrchestratorHealth,
@@ -645,7 +646,179 @@ export function AdminHubAiEngineTab({ telemetry }: AdminHubAiEngineTabProps) {
             )}
           </div>
 
-          {/* ============ CARD C: Task Routing Matrix (Advanced only) ============ */}
+          {/* ============ CARD C: Agentic Loops & Self-Correction ============ */}
+          <div className="bg-white border border-teal-200/60 rounded-[2rem] p-6 xl:p-8 shadow-sm">
+            <div className="flex items-start gap-3 mb-6">
+              <div className="p-2 rounded-xl bg-teal-50 text-teal-600">
+                <RefreshCw className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-black uppercase tracking-widest text-slate-800">
+                  {t('admin.hubAi.agenticLoopsTitle', 'Agentic Loops & Self-Correction')}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {t('admin.hubAi.agenticLoopsDesc', 'Evaluator-optimizer self-critique engine, human-diff feedback learning, and swarm outage detection.')}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-5">
+              {/* Self-Critique Engine toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-teal-500" />
+                  <div>
+                    <p className="text-sm font-bold">
+                      {t('admin.hubAi.selfCritiqueEngine', 'Self-Critique Engine')}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('admin.hubAi.selfCritiqueEngineDesc', 'Run AI drafts through the evaluator-optimizer loop before they reach your inbox.')}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={config.enableSelfCritiqueLoop}
+                  disabled={readOnly}
+                  onCheckedChange={(checked) => void persistPatch({ enableSelfCritiqueLoop: checked })}
+                />
+              </div>
+
+              {/* Max Iterations Slider */}
+              <div className="p-3 rounded-xl border border-slate-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="w-3.5 h-3.5 text-slate-400" />
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      {t('admin.hubAi.maxIterations', 'Max Self-Critique Iterations')}
+                    </Label>
+                  </div>
+                  <Badge variant="outline" className="text-[11px] font-black text-teal-700 border-teal-200 bg-teal-50">
+                    {config.maxCritiqueIterations}
+                  </Badge>
+                </div>
+                <input
+                  type="range"
+                  min={1}
+                  max={3}
+                  step={1}
+                  value={config.maxCritiqueIterations}
+                  disabled={readOnly || !config.enableSelfCritiqueLoop}
+                  onChange={(e) => void persistPatch({ maxCritiqueIterations: Number(e.target.value) })}
+                  className="w-full accent-teal-600 disabled:opacity-40"
+                  aria-label={t('admin.hubAi.maxIterations', 'Max Self-Critique Iterations')}
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground font-medium">
+                  <span>1 · fastest</span>
+                  <span>2 · balanced</span>
+                  <span>3 · strictest</span>
+                </div>
+              </div>
+
+              {/* Confidence Threshold Slider */}
+              <div className="p-3 rounded-xl border border-slate-100 space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Gauge className="w-3.5 h-3.5 text-slate-400" />
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      {t('admin.hubAi.confidenceThreshold', 'Confidence Threshold (High vs Nuanced)')}
+                    </Label>
+                  </div>
+                  <Badge variant="outline" className="text-[11px] font-black text-emerald-700 border-emerald-200 bg-emerald-50">
+                    {config.autoDispatchThreshold}%
+                  </Badge>
+                </div>
+                <input
+                  type="range"
+                  min={70}
+                  max={99}
+                  step={1}
+                  value={config.autoDispatchThreshold}
+                  disabled={readOnly || !config.enableSelfCritiqueLoop}
+                  onChange={(e) => void persistPatch({ autoDispatchThreshold: Number(e.target.value) })}
+                  className="w-full accent-emerald-600 disabled:opacity-40"
+                  aria-label={t('admin.hubAi.confidenceThreshold', 'Confidence Threshold (High vs Nuanced)')}
+                />
+                <div className="flex justify-between text-[10px] text-muted-foreground font-medium">
+                  <span>70% · lenient</span>
+                  <span>85% · balanced</span>
+                  <span>99% · strict</span>
+                </div>
+              </div>
+
+              {/* Critic Model Dropdown */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl border border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Cpu className="w-4 h-4 text-slate-400" />
+                  <div>
+                    <Label className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                      {t('admin.hubAi.criticModel', 'Critic Model')}
+                    </Label>
+                    <p className="text-[10px] text-muted-foreground">
+                      {t('admin.hubAi.criticModelDesc', 'Evaluates drafts for factual accuracy, policy adherence and confidence.')}
+                    </p>
+                  </div>
+                </div>
+                <Select
+                  value={config.criticModel}
+                  disabled={readOnly || !config.enableSelfCritiqueLoop}
+                  onValueChange={(value) => void persistPatch({ criticModel: String(value) })}
+                >
+                  <SelectTrigger className="sm:w-[240px] bg-white">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CRITIC_MODEL_OPTIONS.map((m) => (
+                      <SelectItem key={m.value} value={m.value}>
+                        {m.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Swarm Detector Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="w-4 h-4 text-rose-500" />
+                  <div>
+                    <p className="text-sm font-bold">
+                      {t('admin.hubAi.swarmDetector', 'Swarm Detector')}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('admin.hubAi.swarmDetectorDesc', 'Watch for 5+ similar unassigned tickets in 15 minutes and alert on potential outages.')}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={config.enableSwarmDetection}
+                  disabled={readOnly}
+                  onCheckedChange={(checked) => void persistPatch({ enableSwarmDetection: checked })}
+                />
+              </div>
+
+              {/* Human Diff Learning Toggle */}
+              <div className="flex items-center justify-between p-3 rounded-xl border border-slate-100">
+                <div className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-indigo-500" />
+                  <div>
+                    <p className="text-sm font-bold">
+                      {t('admin.hubAi.humanDiffLearning', 'Human-Diff Feedback Learning')}
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      {t('admin.hubAi.humanDiffLearningDesc', 'Log human edits to AI drafts (>10% change) for continuous prompt refinement.')}
+                    </p>
+                  </div>
+                </div>
+                <Switch
+                  checked={config.enableHumanDiffLearning}
+                  disabled={readOnly}
+                  onCheckedChange={(checked) => void persistPatch({ enableHumanDiffLearning: checked })}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* ============ CARD D: Task Routing Matrix (Advanced only) ============ */}
           {!isSimple && (
             <div className="bg-white border border-purple-200/60 rounded-[2rem] p-6 xl:p-8 shadow-sm">
               <div className="flex items-start gap-3 mb-5">

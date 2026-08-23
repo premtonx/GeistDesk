@@ -148,12 +148,21 @@ import {
 } from "../../components/ui/select";
 import { Checkbox } from '../../components/ui/checkbox';
 import { Ticket as TicketType, Message, KBArticle, TicketStatus, TicketPriority, Company, Contact, TicketChecklistItem } from '../../types';
+import type { AiCritiqueLog, AiTicketExecutionStatus } from '../../types/aiOrchestrator';
 import { redactPII, isTextSensitive } from '../../lib/ai/pii-shield';
+import { logDraftDiffIfSubstantial } from '../../lib/ai/human-diff-learning';
 import { AIAdapter } from '../../lib/ai/provider-adapter';
 import { subscribeOrchestratorConfig, startOrchestratorConfigSync } from '../../lib/aiOrchestratorClient';
 import { useWorkspaceModuleConfig } from '../../hooks/useWorkspaceModuleConfig';
 import { getActiveSupportedLanguages } from '../../lib/polyglot-bridge';
 import { useTheme } from '../../lib/context/ThemeContext';
+
+interface AiDraftMetaState {
+  rawDraft: string;
+  confidenceScore: number | null;
+  critiqueLog: AiCritiqueLog | null;
+  executionStatus: AiTicketExecutionStatus;
+}
 
 import { logAudit } from '../../services/auditService';
 import { ticketService } from '../../services/ticketService';
@@ -191,6 +200,7 @@ import { SmartContextPanel } from '../ticket-details/SmartContextPanel';
 import { AiSummaryCard } from '../ticket-details/AiSummaryCard';
 import { ConversationTimeline } from '../ticket-details/ConversationTimeline';
 import { EmailComposer } from '../ticket-details/EmailComposer';
+import { SwarmOutageBanner } from '../tickets/SwarmOutageBanner';
 import { CustomerTabContent } from '../ticket-details/CustomerTabContent';
 import { TimelineTabContent } from '../ticket-details/TimelineTabContent';
 import { AiInsightsTabContent } from '../ticket-details/AiInsightsTabContent';
@@ -558,6 +568,10 @@ export default function TicketsPage() {
   const [isAiDrafting, setIsAiDrafting] = useState(false);
   const [ghostDraft, setGhostDraft] = useState('');
   const [isGhostDrafting, setIsGhostDrafting] = useState(false);
+  // 3-Tier Agentic Graph — dispatch metadata for the active draft (confidence,
+  // critique trace, execution status) used by the badge / approve & send UI.
+  const [aiDraftMeta, setAiDraftMeta] = useState<AiDraftMetaState | null>(null);
+  const [ghostDraftMeta, setGhostDraftMeta] = useState<AiDraftMetaState | null>(null);
   const [suggestedNeuralLinks, setSuggestedNeuralLinks] = useState<SuggestedLink[]>([]);
   const [isFindingNeuralLinks, setIsFindingNeuralLinks] = useState(false);
   const [linkInput, setLinkInput] = useState('');
@@ -1221,7 +1235,20 @@ export default function TicketsPage() {
         customerMetadata: currentContact?.metadata
       });
       
-      setGhostDraft(redactPII(response.text));
+      const draftText = redactPII(response.text);
+      const confidenceScore =
+        response.confidenceScore !== undefined && response.confidenceScore !== null
+          ? Math.min(100, Math.max(0, Math.round(response.confidenceScore)))
+          : null;
+      const executionStatus = response.executionStatus ?? (confidenceScore === null ? 'nuanced' : confidenceScore >= 95 ? 'high_confidence' : 'nuanced');
+
+      setGhostDraft(draftText);
+      setGhostDraftMeta({
+        rawDraft: draftText,
+        confidenceScore,
+        critiqueLog: response.critiqueLog ?? null,
+        executionStatus,
+      });
       setAiSources(response.sources);
     } catch (e) {
       console.error("Zero-Draft Error:", e);
@@ -1233,7 +1260,9 @@ export default function TicketsPage() {
   const acceptGhostDraft = () => {
     if (ghostDraft && !replyText) {
       setReplyText(ghostDraft);
+      setAiDraftMeta(ghostDraftMeta);
       setGhostDraft('');
+      setGhostDraftMeta(null);
       toast.success("AI draft accepted (Tab)");
     }
   };
@@ -1355,10 +1384,43 @@ export default function TicketsPage() {
       if (isTextSensitive(response.text)) {
         toast.info("PII Shield: Redacted sensitive data from AI draft.");
       }
-      
+
+      const draftText = redactPII(response.text);
+
+      // 3-Tier Agentic Graph — persist the evaluator-optimizer trace onto the
+      // ticket so the list badges, dispatch UI and diff logger can read it back.
+      const confidenceScore =
+        response.confidenceScore !== undefined && response.confidenceScore !== null
+          ? Math.min(100, Math.max(0, Math.round(response.confidenceScore)))
+          : null;
+      const executionStatus = response.executionStatus ?? (confidenceScore === null ? 'nuanced' : confidenceScore >= 95 ? 'high_confidence' : 'nuanced');
+
       setAiSources(response.sources);
-      setReplyText(redactPII(response.text));
-      toast.success("AI Draft generated with verified sources.");
+      setAiDraftMeta({
+        rawDraft: draftText,
+        confidenceScore,
+        critiqueLog: response.critiqueLog ?? null,
+        executionStatus,
+      });
+      setReplyText(draftText);
+      toast.success(
+        confidenceScore === null
+          ? "AI Draft generated (unverified — critic unavailable)."
+          : `AI Draft generated with verified sources (${confidenceScore}% confidence).`,
+      );
+
+      // Persist the trace — non-fatal when the write fails.
+      try {
+        await ticketService.updateTicket(selectedTicket.id, {
+          aiSuggestedDraft: draftText,
+          aiDraftRaw: draftText,
+          aiConfidenceScore: confidenceScore,
+          aiCritiqueLog: response.critiqueLog ?? null,
+          aiExecutionStatus: executionStatus,
+        });
+      } catch (writeErr) {
+        console.warn("Failed to persist AI draft trace:", writeErr);
+      }
     } catch (e) {
       console.error(e);
       toast.error("Failed to generate AI draft. Check your API key.");
@@ -1439,6 +1501,28 @@ export default function TicketsPage() {
     }
 
     setIsValidatingLegal(false);
+
+    // 3-Tier Agentic Graph — Tier 2: Human-Diff Feedback Learning.
+    // If the AI drafted the reply and the agent edited it beyond the 10%
+    // character threshold, log the (original → final) pair for prompt
+    // refinement. Non-fatal — never blocks the send.
+    const aiBaseline = aiDraftMeta?.rawDraft || selectedTicket?.aiDraftRaw || null;
+    if (aiBaseline && selectedTicket) {
+      void logDraftDiffIfSubstantial({
+        ticketId: selectedTicket.id,
+        agentId: user.uid,
+        originalDraft: aiBaseline,
+        finalSentMessage: replyText,
+      }).then(({ logged, ratio }) => {
+        if (logged) {
+          console.info(
+            `[Human-Diff Learning] Draft edit ratio ${(ratio * 100).toFixed(1)}% logged for ticket ${selectedTicket.id}.`,
+          );
+        }
+      });
+    }
+    // Clear the dispatch metadata — the draft was consumed by the human action.
+    setAiDraftMeta(null);
 
     let contentToSend = replyText;
     let originalContent = undefined;
@@ -1730,6 +1814,8 @@ export default function TicketsPage() {
                 <div className="flex-1 flex flex-col min-h-0 min-w-0">
                   {/* 1. Header component */}
                 <div className="px-4 md:px-6 pt-4 md:pt-5 pb-3 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shrink-0">
+                  {/* 3-Tier Agentic Graph — Tier 3 swarm outage banner */}
+                  <SwarmOutageBanner ticketId={selectedTicket.id} />
                   <button 
                     type="button"
                     onClick={closeFullTicketView}
@@ -2164,6 +2250,9 @@ export default function TicketsPage() {
                               onSummarize={updateSummary}
                               legalViolation={legalViolation}
                               isValidatingLegal={isValidatingLegal}
+                              aiDraftMeta={aiDraftMeta}
+                              autoDispatchThreshold={95}
+                              isAutoDispatched={selectedTicket?.aiAutoDispatched === true}
                             />
                             <div className="mt-2 flex justify-end">
                               <Button 
@@ -4199,15 +4288,40 @@ export default function TicketsPage() {
                              )}>
                                {ticket.subject}
                              </h3>
-                             <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-[10px] text-slate-400 font-medium font-mono shrink-0">
-                                  {formatTicketRef(ticket.id)}
-                                </span>
-                                {sla && (
-                                  <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-blue-100 bg-blue-50 text-blue-700 shrink-0">
-                                    SLA
-                                  </span>
-                                )}
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                               <span className="text-[10px] text-slate-400 font-medium font-mono shrink-0">
+                                 {formatTicketRef(ticket.id)}
+                               </span>
+                               {sla && (
+                                 <span className="text-[9px] font-semibold uppercase tracking-wide px-1.5 py-0.5 rounded border border-blue-100 bg-blue-50 text-blue-700 shrink-0">
+                                   SLA
+                                 </span>
+                               )}
+                               {/* 3-Tier Agentic Graph — AI confidence badge */}
+                               {ticket.aiExecutionStatus === 'auto_dispatched' && (
+                                 <span
+                                   title="AI reply was automatically dispatched"
+                                   className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border border-blue-200 bg-blue-50 text-blue-700 shrink-0"
+                                 >
+                                   🔵 Auto-Dispatched
+                                 </span>
+                               )}
+                               {ticket.aiExecutionStatus === 'high_confidence' && (
+                                 <span
+                                   title={`High confidence AI draft (${ticket.aiConfidenceScore ?? 95}%)`}
+                                   className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border border-emerald-200 bg-emerald-50 text-emerald-700 shrink-0"
+                                 >
+                                   🟢 High ({ticket.aiConfidenceScore ?? 95}%)
+                                 </span>
+                               )}
+                               {ticket.aiExecutionStatus === 'nuanced' && (
+                                 <span
+                                   title={`Nuanced AI draft (${ticket.aiConfidenceScore ?? '<95'}%) — needs review`}
+                                   className="text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded border border-amber-200 bg-amber-50 text-amber-700 shrink-0"
+                                 >
+                                   🟡 Nuanced ({ticket.aiConfidenceScore ?? '<95'}%)
+                                 </span>
+                               )}
                                 {viewDensity === 'comfortable' && duplicatesCount > 0 && (
                                   <Badge variant="outline" className="text-[8px] font-semibold bg-blue-50/50 border-blue-100 text-blue-700 h-4 flex items-center gap-0.5 shrink-0">
                                     <Link2 className="w-2.5 h-2.5" />

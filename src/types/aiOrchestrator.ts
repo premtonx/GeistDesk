@@ -120,6 +120,72 @@ export type AiExecutionStatus =
 
 export type AiCustomerScope = 'standard' | 'vip' | 'enterprise';
 
+/** Per-ticket AI dispatch execution state — persisted on the ticket document. */
+export type AiTicketExecutionStatus =
+  | 'auto_dispatched'
+  | 'high_confidence'
+  | 'nuanced'
+  | 'manual';
+
+/** One iteration of the evaluator-optimizer (self-critique) loop. */
+export interface AiCritiqueIteration {
+  /** 0-based iteration index; 0 = initial drafter pass. */
+  iteration: number;
+  /** Drafter output at this iteration (post-revision). */
+  draft: string;
+  /** Structured critic verdict for this pass. */
+  critique: {
+    factual_accuracy: number;
+    policy_adherence: number;
+    confidence_score: number;
+    actionable_critique: string;
+  };
+  /** True when the critic call timed out / failed and confidence was left null. */
+  criticError?: boolean;
+  /** Model ids used (drafter / critic). */
+  drafterModel?: string;
+  criticModel?: string;
+  createdAt: string;
+}
+
+/** Complete self-critique trace persisted as ai_critique_log on a ticket. */
+export interface AiCritiqueLog {
+  enabled: boolean;
+  iterations: AiCritiqueIteration[];
+  /** Final overall confidence (0–100); null when the critic failed/timed out. */
+  finalConfidence: number | null;
+  /** Final accepted draft after the loop terminated. */
+  finalDraft: string;
+  /** Why the loop stopped: threshold met, max iterations, or critic failure. */
+  exitReason:
+    | 'threshold_met'
+    | 'max_iterations'
+    | 'critic_failed'
+    | 'critique_disabled';
+  updatedAt: string;
+}
+
+/** Human-vs-AI edit diff captured for continuous system-prompt refinement. */
+export interface AiDraftLearningDiff {
+  id: string;
+  ticketId: string;
+  agentId: string;
+  originalDraft: string;
+  finalSentMessage: string;
+  diffSummary: string;
+  createdAt: string;
+}
+
+/** Swarm outage cluster — 5+ similar incoming tickets inside a short window. */
+export interface AiIncidentCluster {
+  id: string;
+  clusterTitle: string;
+  ticketCount: number;
+  sampleTicketIds: string[];
+  status: 'active' | 'resolved';
+  createdAt: string;
+}
+
 export type AiOperatorLanguage = 'de' | 'en';
 
 export interface AiExecutionContext {
@@ -176,6 +242,17 @@ export interface AiExecutionResult {
   redactedPrompt?: string;
   /** True when output was served from entity JSONB cache (no LLM call). */
   fromCache?: boolean;
+  /** Evaluator-optimizer loop trace for ticket drafts. */
+  critiqueLog?: AiCritiqueLog;
+  /** Per-ticket dispatch state (auto_dispatched | high_confidence | nuanced | manual). */
+  ticketExecutionStatus?: AiTicketExecutionStatus;
+  /** Ticket AI state persisted alongside the draft. */
+  ticketAiState?: {
+    aiConfidenceScore: number | null;
+    aiCritiqueLog: AiCritiqueLog;
+    aiExecutionStatus: AiTicketExecutionStatus;
+    aiDraftRaw: string;
+  };
 }
 
 export interface AiApprovalQueueEntry {
@@ -408,6 +485,18 @@ export interface AiOrchestratorConfig {
   featurePersonas: AiFeaturePersonaMap;
   /** Uploaded Markdown skill files keyed by persona id. */
   personaSkills: AiPersonaSkillsMap;
+  /** Agentic loop: evaluator-optimizer self-critique engine. */
+  enableSelfCritiqueLoop: boolean;
+  /** Maximum drafter↔critic iterations (1–3). */
+  maxCritiqueIterations: number;
+  /** Draft is "high confidence" (auto-dispatchable) at ≥ this score (70–99). */
+  autoDispatchThreshold: number;
+  /** Model id used for the critic/evaluator role. */
+  criticModel: string;
+  /** Background swarm/outage cluster detector. */
+  enableSwarmDetection: boolean;
+  /** Persist human-vs-AI edit diffs for continuous prompt refinement. */
+  enableHumanDiffLearning: boolean;
   killSwitch: AiKillSwitch;
   dailyBudgetUsd: number;
   monthlyBudgetUsd: number;
@@ -775,6 +864,15 @@ export const ORCHESTRATOR_MODEL_OPTIONS = [
   { value: 'qwen-36b', label: 'Qwen 36B (Local)' },
 ] as const;
 
+/** Models eligible for the critic/evaluator role in the self-critique loop. */
+export const CRITIC_MODEL_OPTIONS = [
+  { value: 'deepseek-reasoner', label: 'DeepSeek Reasoner' },
+  { value: 'claude', label: 'Claude Sonnet' },
+  { value: 'gemini-pro', label: 'Gemini Pro' },
+  { value: 'gpt-5', label: 'GPT-5' },
+  { value: 'local-llama', label: 'Local Llama' },
+] as const;
+
 export const FEATURE_ROUTING_KEYS: Array<keyof AiFeatureRouting> = [
   'ticket_summarization',
   'sentiment_analysis',
@@ -898,6 +996,12 @@ export const DEFAULT_ORCHESTRATOR_CONFIG: AiOrchestratorConfig = {
   memoryPolicy: DEFAULT_MEMORY_POLICY,
   featurePersonas: DEFAULT_FEATURE_PERSONAS,
   personaSkills: {},
+  enableSelfCritiqueLoop: true,
+  maxCritiqueIterations: 2,
+  autoDispatchThreshold: 95,
+  criticModel: 'deepseek-reasoner',
+  enableSwarmDetection: true,
+  enableHumanDiffLearning: true,
   killSwitch: DEFAULT_KILL_SWITCH,
   dailyBudgetUsd: 10,
   monthlyBudgetUsd: 300,

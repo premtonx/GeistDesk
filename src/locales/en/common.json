@@ -687,7 +687,16 @@
       "threadDigest": "Thread digest",
       "discard": "Discard",
       "auditing": "Auditing...",
-      "sendReply": "Send reply"
+      "sendReply": "Send reply",
+      "approveAndSend": "⚡ Approve & Send",
+      "autoDispatched": "This AI draft was automatically dispatched. Review before sending manually if needed.",
+      "critiqueTraceTitle": "AI Reasoning & Critique Trace",
+      "critiquePass": "Critique Pass",
+      "criticNotes": "Critic notes:",
+      "finalRevision": "Final accepted revision:",
+      "criticFailedNote": "The critic model timed out — this draft was not independently verified.",
+      "maxIterationsNote": "Reached the maximum self-correction iterations. Draft still needs human review.",
+      "thresholdMetNote": "Loop exited after the confidence threshold was met."
     },
     "aiInsightsTab": {
       "emptyCitations": "AI citations are currently empty. Click \"Draft with AI\" or trigger a prompt to query the knowledge database."
@@ -1839,7 +1848,19 @@
       "routingMatrixDesc": "Route each AI task to its own tuned model with explanatory tooltips and test prompts.",
       "secretsSaved": "API keys saved and encrypted.",
       "modelsDetected": "Local models detected:",
-      "modelsDetectError": "Model detection failed. Check endpoint URL."
+      "modelsDetectError": "Model detection failed. Check endpoint URL.",
+      "agenticLoopsTitle": "Agentic Loops & Self-Correction",
+      "agenticLoopsDesc": "Evaluator-optimizer self-critique engine, human-diff feedback learning, and swarm outage detection.",
+      "selfCritiqueEngine": "Self-Critique Engine",
+      "selfCritiqueEngineDesc": "Run AI drafts through the evaluator-optimizer loop before they reach your inbox.",
+      "maxIterations": "Max Self-Critique Iterations",
+      "confidenceThreshold": "Confidence Threshold (High vs Nuanced)",
+      "criticModel": "Critic Model",
+      "criticModelDesc": "Evaluates drafts for factual accuracy, policy adherence and confidence.",
+      "swarmDetector": "Swarm Detector",
+      "swarmDetectorDesc": "Watch for 5+ similar unassigned tickets in 15 minutes and alert on potential outages.",
+      "humanDiffLearning": "Human-Diff Feedback Learning",
+      "humanDiffLearningDesc": "Log human edits to AI drafts (>10% change) for continuous prompt refinement."
     },
     "hubGov": {
       "piiTitle": "PII Shield",

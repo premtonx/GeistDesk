@@ -5,8 +5,15 @@ import { AI_DECISION_ENGINE_FLOW, type AiExecutionContext, type AiFeatureId } fr
 import { executeAiFeatureRequest } from '../lib/ai-orchestrator-service.js';
 import { translatePolyglotContent, resolvePolyglotTranslationEngine } from '../lib/polyglot-translate-service.js';
 import { getDocDirect } from '../lib/postgres-backend.js';
-import { getApprovalEntry, getApprovalPayload } from '../lib/ai-orchestrator-store.js';
+import {
+  getApprovalEntry,
+  getApprovalPayload,
+  listActiveIncidentClusters,
+  resolveIncidentCluster,
+  saveAiDraftLearningDiff,
+} from '../lib/ai-orchestrator-store.js';
 import { resumeApprovedAiRequest } from '../lib/ai-request-lifecycle.js';
+import { runSwarmDetectionOnce } from '../lib/ai/swarm-detector.js';
 import {
   normalizePolyglotBridgeSettings,
 } from '../lib/module-config.js';
@@ -231,6 +238,92 @@ router.post('/polyglot/translate', authenticate, async (req: Request, res: Respo
     const message = genericAiError(error, 'Polyglot translation failed.');
     console.error('[Polyglot Translate]', message);
     return res.status(500).json({ error: 'Polyglot translation failed.', details: message });
+  }
+});
+
+/**
+ * POST /api/ai/draft-learning-diffs
+ * Human-Diff Feedback Learning (Tier 2): persists the (AI original → human
+ * final) pair when the agent's edit exceeded the 10% threshold. Non-fatal on
+ * DB failure — the reply flow must never be blocked by this log.
+ */
+const draftDiffSchema = z.object({
+  ticketId: z.string().min(1).max(255),
+  agentId: z.string().max(255).optional(),
+  originalDraft: z.string().min(1).max(100_000),
+  finalSentMessage: z.string().min(1).max(100_000),
+  diffSummary: z.string().max(1_000).optional(),
+});
+
+router.post('/draft-learning-diffs', authenticate, async (req: Request, res: Response) => {
+  const parsed = draftDiffSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: 'Invalid learning-diff payload',
+      details: parsed.error.flatten(),
+    });
+  }
+  const { ticketId, agentId, originalDraft, finalSentMessage, diffSummary } = parsed.data;
+  try {
+    const id = await saveAiDraftLearningDiff({
+      ticketId,
+      agentId: agentId || req.user?.id || 'agent',
+      originalDraft,
+      finalSentMessage,
+      diffSummary: diffSummary || 'Human edit logged via diff logger.',
+    });
+    return res.status(200).json({ success: true, id });
+  } catch (error: unknown) {
+    const message = genericAiError(error, 'Learning diff persistence failed.');
+    console.error('[AI Draft Learning Diff]', message);
+    return res.status(500).json({ error: 'Learning diff persistence failed.', details: message });
+  }
+});
+
+/**
+ * GET /api/ai/incident-clusters
+ * Swarm Outage Detection (Tier 3): returns active outage clusters for the
+ * dismissible emergency banner on the Ticket view.
+ */
+router.get('/incident-clusters', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const clusters = await listActiveIncidentClusters(10);
+    return res.status(200).json({ clusters });
+  } catch (error: unknown) {
+    const message = genericAiError(error, 'Incident cluster lookup failed.');
+    console.error('[AI Swarm] Cluster lookup:', message);
+    return res.status(500).json({ error: 'Incident cluster lookup failed.', details: message });
+  }
+});
+
+/**
+ * POST /api/ai/incident-clusters/scan
+ * Manually triggers the swarm detector (used by the admin self-test and on
+ * boot when the background timer has not yet run).
+ */
+router.post('/incident-clusters/scan', authenticate, async (_req: Request, res: Response) => {
+  try {
+    const result = await runSwarmDetectionOnce({ force: true });
+    return res.status(200).json({ success: true, ...result });
+  } catch (error: unknown) {
+    const message = genericAiError(error, 'Swarm scan failed.');
+    console.error('[AI Swarm] Scan:', message);
+    return res.status(500).json({ error: 'Swarm scan failed.', details: message });
+  }
+});
+
+/**
+ * POST /api/ai/incident-clusters/:id/resolve
+ * Marks an active outage cluster as resolved (dismisses the banner).
+ */
+router.post('/incident-clusters/:id/resolve', authenticate, async (req: Request, res: Response) => {
+  try {
+    await resolveIncidentCluster(String(req.params.id));
+    return res.status(200).json({ success: true });
+  } catch (error: unknown) {
+    const message = genericAiError(error, 'Cluster resolve failed.');
+    console.error('[AI Swarm] Resolve:', message);
+    return res.status(500).json({ error: 'Cluster resolve failed.', details: message });
   }
 });
 

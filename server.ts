@@ -2075,6 +2075,15 @@ Example output format:
   startEmailIngestionScheduler(60_000);
   startVectorQueueWorker();
 
+  // 3-Tier Agentic Graph — Tier 3: swarm/outage cluster detector (background).
+  try {
+    const { startSwarmDetector } = await import('./src/lib/ai/swarm-detector.js');
+    startSwarmDetector(5);
+    console.log('[AI Swarm] Outage cluster detector started (interval 5m).');
+  } catch (swarmErr: any) {
+    console.warn('[AI Swarm] Detector failed to start:', swarmErr?.message || String(swarmErr));
+  }
+
   app.listen(PORT, "0.0.0.0", () => {
     const publicBase =
       process.env.PUBLIC_APP_URL ||

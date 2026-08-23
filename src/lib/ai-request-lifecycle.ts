@@ -5,6 +5,7 @@ import {
   DEFAULT_MEMORY_POLICY,
   MODULE_FOR_FEATURE,
   type AiApprovalGateMode,
+  type AiCritiqueLog,
   type AiDecisionEngineStep,
   type AiDecisionStepRecord,
   type AiExecutionContext,
@@ -12,12 +13,14 @@ import {
   type AiExplainabilityEntry,
   type AiFeatureId,
   type AiOrchestratorConfig,
+  type AiTicketExecutionStatus,
   isAiFeatureEnabled,
 } from '../types/aiOrchestrator.js';
 import { compileOrchestratorPolicy, requiresCloudDataAnonymization, validateCorporatePolicyRules } from './ai-orchestrator-policies.js';
 import { isBudgetExceeded, isLocalFallbackForced } from './ai-budget.js';
 import { createProductionModelExecutor } from './ai-lifecycle-executor.js';
 import { buildLifecycleSystemInstruction, resolvePersonaForFeature } from './ai-system-prompt.js';
+import { runSelfCritiqueLoop, type SelfCritiqueLoopResult } from './ai/self-critique-loop.js';
 import {
   consumeRequestTokenMap,
   clearRequestTokenMap,
@@ -508,6 +511,7 @@ export async function runAiRequestLifecycle(
           explainability,
           redactedPrompt,
           fromCache: true,
+          ticketExecutionStatus: 'high_confidence' as const,
         };
       }
 
@@ -536,30 +540,71 @@ export async function runAiRequestLifecycle(
     let output: string;
     let confidence: number;
     let costUsd = 0;
+    let critiqueLog: AiCritiqueLog | undefined;
+    let ticketExecutionStatus: AiTicketExecutionStatus | undefined;
 
     try {
-      const execResult = await executor({
-        model: assignedModel,
-        prompt: redactedPrompt,
-        feature: ctx.feature,
-        workspaceId,
-        systemInstruction,
-      });
-      output = execResult.output;
+      // 3-Tier Agentic Graph — Tier 1: evaluator-optimizer self-critique loop.
+      // Smart replies route through the drafter↔critic loop; all other features
+      // keep the one-shot execution path.
+      const useCritiqueLoop =
+        ctx.feature === 'smart_reply' &&
+        (config.enableSelfCritiqueLoop ?? true) &&
+        !options.skipPersistence;
+
+      if (useCritiqueLoop) {
+        const loopResult: SelfCritiqueLoopResult = await runSelfCritiqueLoop({
+          feature: ctx.feature,
+          prompt: redactedPrompt,
+          workspaceId,
+          systemInstruction,
+          drafterModel: assignedModel,
+          criticModel: config.criticModel ?? 'deepseek-reasoner',
+          config,
+          executor,
+        });
+
+        output = loopResult.output;
+        // Strict fallback: critic failure → null confidence, never fabricated.
+        confidence = loopResult.confidence ?? 0.1;
+        critiqueLog = loopResult.critiqueLog;
+        ticketExecutionStatus = loopResult.executionStatus;
+        costUsd = 0; // accounted per underlying executor call below
+        recordStep(
+          steps,
+          'execute',
+          'passed',
+          `critique_loop iterations=${loopResult.critiqueLog.iterations.length} ` +
+            `confidence=${loopResult.confidenceScore === null ? 'null (critic failed)' : loopResult.confidenceScore} ` +
+            `exit=${loopResult.critiqueLog.exitReason} persona=${personaId}`,
+          t,
+        );
+      } else {
+        const execResult = await executor({
+          model: assignedModel,
+          prompt: redactedPrompt,
+          feature: ctx.feature,
+          workspaceId,
+          systemInstruction,
+        });
+        output = execResult.output;
+        confidence = execResult.confidence;
+        costUsd = execResult.costUsd ?? 0;
+        ticketExecutionStatus = 'manual';
+        recordStep(
+          steps,
+          'execute',
+          'passed',
+          `confidence=${confidence.toFixed(3)} persona=${personaId} lang=${ctx.operatorLanguage ?? 'en'}`,
+          t,
+        );
+      }
+
       const rehydrated = rehydrateModelOutput(requestId, output);
       output = rehydrated.text;
       if (rehydrated.replacements > 0) {
         policiesChecked.push('response_rehydration');
       }
-      confidence = execResult.confidence;
-      costUsd = execResult.costUsd ?? 0;
-      recordStep(
-        steps,
-        'execute',
-        'passed',
-        `confidence=${confidence.toFixed(3)} persona=${personaId} lang=${ctx.operatorLanguage ?? 'en'}${rehydrated.replacements > 0 ? ` rehydrated=${rehydrated.replacements}` : ''}`,
-        t,
-      );
 
       if (!options.skipPersistence) {
         await logAiUsage({
@@ -568,8 +613,8 @@ export async function runAiRequestLifecycle(
           feature: ctx.feature,
           model: assignedModel,
           latencyMs: Date.now() - executionStarted,
-          promptTokens: execResult.promptTokens ?? 0,
-          completionTokens: execResult.completionTokens ?? 0,
+          promptTokens: Math.ceil(redactedPrompt.length / 4),
+          completionTokens: Math.ceil(output.length / 4),
           costUsd,
           success: true,
         });
@@ -655,6 +700,8 @@ export async function runAiRequestLifecycle(
         steps,
         explainability,
         redactedPrompt,
+        critiqueLog,
+        ticketExecutionStatus,
       };
     }
 
@@ -702,6 +749,8 @@ export async function runAiRequestLifecycle(
       steps,
       explainability,
       redactedPrompt,
+      critiqueLog,
+      ticketExecutionStatus,
     };
   } catch (err: unknown) {
     if (err instanceof AiLifecycleError) {

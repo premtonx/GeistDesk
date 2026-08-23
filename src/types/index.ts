@@ -17,6 +17,8 @@ export type TicketStatus =
 export type TicketPriority = "low" | "medium" | "high" | "urgent";
 export type SenderType = "customer" | "agent" | "ai";
 
+import type { AiCritiqueLog, AiTicketExecutionStatus } from './aiOrchestrator';
+
 export interface Permission {
   id: string;
   moduleId: string;
@@ -244,6 +246,16 @@ export interface Ticket {
   aiInsights?: string[] | null;
   aiRootCause?: string | null;
   aiChecklist?: TicketChecklistItem[] | null;
+  /** Evaluator-optimizer loop confidence (0–100); null when the critic failed/timed out. */
+  aiConfidenceScore?: number | null;
+  /** Full iteration history of the self-critique loop. */
+  aiCritiqueLog?: AiCritiqueLog | null;
+  /** Dispatch state: auto_dispatched | high_confidence | nuanced | manual. */
+  aiExecutionStatus?: AiTicketExecutionStatus | null;
+  /** Original unedited AI draft (baseline for the human-edit diff logger). */
+  aiDraftRaw?: string | null;
+  /** True when this ticket's AI draft was auto-dispatched without a human click. */
+  aiAutoDispatched?: boolean;
   internalNotes?: string;
   activeAgents?: PresenceAgent[];
   agentComments?: AgentComment[];

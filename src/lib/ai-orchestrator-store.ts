@@ -15,12 +15,14 @@ import {
   type AiConfidenceThresholds,
   type AiCorporatePolicies,
   type AiDataResidencyPolicy,
+  type AiDraftLearningDiff,
   type AiExplainabilityEntry,
   type AiFeatureId,
   type AiFeaturePersonaMap,
   type AiPersonaSkillsMap,
   type AiFeatureRouting,
   type AiHumanReviewEntry,
+  type AiIncidentCluster,
   type AiKillSwitch,
   type AiMemoryPolicy,
   type AiOrchestratorAuditEntry,
@@ -155,6 +157,12 @@ function rowToConfig(row: Record<string, unknown>): AiOrchestratorConfig {
     memoryPolicy: parseMemoryPolicy(row),
     featurePersonas: parseFeaturePersonas(row),
     personaSkills: parsePersonaSkills(row),
+    enableSelfCritiqueLoop: row.enable_self_critique_loop !== false,
+    maxCritiqueIterations: Math.min(3, Math.max(1, Number(row.max_critique_iterations ?? 2) || 2)),
+    autoDispatchThreshold: Math.min(99, Math.max(70, Number(row.auto_dispatch_threshold ?? 95) || 95)),
+    criticModel: String(row.critic_model ?? 'deepseek-reasoner'),
+    enableSwarmDetection: row.enable_swarm_detection !== false,
+    enableHumanDiffLearning: row.enable_human_diff_learning !== false,
     killSwitch: parseKillSwitch(row),
     dailyBudgetUsd: Number(row.daily_budget_usd ?? DEFAULT_ORCHESTRATOR_CONFIG.dailyBudgetUsd),
     monthlyBudgetUsd: Number(row.monthly_budget_usd ?? DEFAULT_ORCHESTRATOR_CONFIG.monthlyBudgetUsd),
@@ -195,10 +203,12 @@ async function insertOrchestratorConfig(config: AiOrchestratorConfig, updatedBy:
       data_residency, corporate_policies_json, trust_level, data_residency_policy_json,
       confidence_thresholds_json, memory_policy_json, feature_personas_json,
       persona_skills_json,
+      enable_self_critique_loop, max_critique_iterations, auto_dispatch_threshold,
+      critic_model, enable_swarm_detection, enable_human_diff_learning,
       kill_switch_json, daily_budget_usd, monthly_budget_usd, daily_budget_eur,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,NOW()
     )
     ON CONFLICT (workspace_id) DO NOTHING`,
     configInsertParams(config, updatedBy),
@@ -233,6 +243,12 @@ function configInsertParams(config: AiOrchestratorConfig, updatedBy: string): un
     JSON.stringify(config.memoryPolicy),
     JSON.stringify(config.featurePersonas),
     JSON.stringify(config.personaSkills ?? {}),
+    config.enableSelfCritiqueLoop ?? true,
+    config.maxCritiqueIterations ?? 2,
+    config.autoDispatchThreshold ?? 95,
+    config.criticModel ?? 'deepseek-reasoner',
+    config.enableSwarmDetection ?? true,
+    config.enableHumanDiffLearning ?? true,
     JSON.stringify(config.killSwitch),
     config.dailyBudgetUsd,
     config.monthlyBudgetUsd,
@@ -305,10 +321,12 @@ export async function upsertOrchestratorConfig(
       data_residency, corporate_policies_json, trust_level, data_residency_policy_json,
       confidence_thresholds_json, memory_policy_json, feature_personas_json,
       persona_skills_json,
+      enable_self_critique_loop, max_critique_iterations, auto_dispatch_threshold,
+      critic_model, enable_swarm_detection, enable_human_diff_learning,
       kill_switch_json, daily_budget_usd, monthly_budget_usd, daily_budget_eur,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,$35,$36,$37,$38,$39,$40,NOW()
     )
     ON CONFLICT (workspace_id) DO UPDATE SET
       scope = EXCLUDED.scope,
@@ -336,6 +354,12 @@ export async function upsertOrchestratorConfig(
       memory_policy_json = EXCLUDED.memory_policy_json,
       feature_personas_json = EXCLUDED.feature_personas_json,
       persona_skills_json = EXCLUDED.persona_skills_json,
+      enable_self_critique_loop = EXCLUDED.enable_self_critique_loop,
+      max_critique_iterations = EXCLUDED.max_critique_iterations,
+      auto_dispatch_threshold = EXCLUDED.auto_dispatch_threshold,
+      critic_model = EXCLUDED.critic_model,
+      enable_swarm_detection = EXCLUDED.enable_swarm_detection,
+      enable_human_diff_learning = EXCLUDED.enable_human_diff_learning,
       kill_switch_json = EXCLUDED.kill_switch_json,
       daily_budget_usd = EXCLUDED.daily_budget_usd,
       monthly_budget_usd = EXCLUDED.monthly_budget_usd,
@@ -771,4 +795,109 @@ export async function listExplainabilityLogs(
     logLine: String(row.log_line ?? ''),
     createdAt: new Date(row.created_at).toISOString(),
   }));
+}
+
+// ---------------------------------------------------------------------------
+// 3-Tier Agentic Graph persistence (human-diff learning + swarm clusters)
+// ---------------------------------------------------------------------------
+
+export async function saveAiDraftLearningDiff(entry: {
+  ticketId: string;
+  agentId?: string;
+  originalDraft: string;
+  finalSentMessage: string;
+  diffSummary: string;
+}): Promise<string | null> {
+  try {
+    const res = await queryDb(
+      `INSERT INTO ai_draft_learning_diffs
+       (ticket_id, agent_id, original_draft, final_sent_message, diff_summary)
+       VALUES ($1,$2,$3,$4,$5)
+       RETURNING id`,
+      [
+        entry.ticketId,
+        entry.agentId ?? null,
+        entry.originalDraft,
+        entry.finalSentMessage,
+        entry.diffSummary,
+      ],
+    );
+    return res.rows[0] ? String(res.rows[0].id) : null;
+  } catch (e: unknown) {
+    console.warn('[AI Learning Diff] Persist skipped:', e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+
+export async function listAiDraftLearningDiffs(
+  ticketId: string,
+  limit = 20,
+): Promise<AiDraftLearningDiff[]> {
+  const res = await queryDb(
+    `SELECT id, ticket_id, agent_id, original_draft, final_sent_message, diff_summary, created_at
+     FROM ai_draft_learning_diffs
+     WHERE ticket_id = $1
+     ORDER BY created_at DESC
+     LIMIT $2`,
+    [ticketId, limit],
+  );
+  return res.rows.map((row) => ({
+    id: String(row.id),
+    ticketId: String(row.ticket_id),
+    agentId: row.agent_id ? String(row.agent_id) : '',
+    originalDraft: String(row.original_draft),
+    finalSentMessage: String(row.final_sent_message),
+    diffSummary: String(row.diff_summary ?? ''),
+    createdAt: new Date(row.created_at).toISOString(),
+  }));
+}
+
+export async function createIncidentCluster(entry: {
+  clusterTitle: string;
+  sampleTicketIds: string[];
+}): Promise<string | null> {
+  try {
+    const res = await queryDb(
+      `INSERT INTO ai_incident_clusters (cluster_title, ticket_count, sample_ticket_ids, status)
+       VALUES ($1, $2, $3, 'active')
+       RETURNING id`,
+      [entry.clusterTitle, entry.sampleTicketIds.length, JSON.stringify(entry.sampleTicketIds)],
+    );
+    return res.rows[0] ? String(res.rows[0].id) : null;
+  } catch (e: unknown) {
+    console.warn('[AI Swarm] Cluster persist skipped:', e instanceof Error ? e.message : String(e));
+    return null;
+  }
+}
+
+export async function listActiveIncidentClusters(limit = 10): Promise<AiIncidentCluster[]> {
+  try {
+    const res = await queryDb(
+      `SELECT id, cluster_title, ticket_count, sample_ticket_ids, status, created_at
+       FROM ai_incident_clusters
+       WHERE status = 'active'
+       ORDER BY created_at DESC
+       LIMIT $1`,
+      [limit],
+    );
+    return res.rows.map((row) => ({
+      id: String(row.id),
+      clusterTitle: String(row.cluster_title),
+      ticketCount: Number(row.ticket_count),
+      sampleTicketIds: parseJson<string[]>(row.sample_ticket_ids, []),
+      status: (row.status as AiIncidentCluster['status']) ?? 'active',
+      createdAt: new Date(row.created_at).toISOString(),
+    }));
+  } catch (e: unknown) {
+    console.warn('[AI Swarm] Cluster list skipped:', e instanceof Error ? e.message : String(e));
+    return [];
+  }
+}
+
+export async function resolveIncidentCluster(clusterId: string): Promise<void> {
+  try {
+    await queryDb(`UPDATE ai_incident_clusters SET status = 'resolved' WHERE id = $1`, [clusterId]);
+  } catch (e: unknown) {
+    console.warn('[AI Swarm] Cluster resolve skipped:', e instanceof Error ? e.message : String(e));
+  }
 }
