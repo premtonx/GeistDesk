@@ -272,6 +272,37 @@ export async function deleteEmailChannel(id: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Persist a channel test/verification result through the store so redaction,
+ * domain backfill, and status transitions stay centralized. Driver error
+ * messages must be redacted by the caller before passing them in.
+ */
+export async function updateEmailChannelStatus(
+  id: string,
+  patch: {
+    status: 'verified' | 'failed' | 'pending' | 'active' | 'disabled';
+    lastTestOk: boolean;
+    lastTestAt: string;
+    lastError?: string | null;
+  },
+): Promise<EmailChannelConfig | null> {
+  const existing = await getDocDirect(EMAIL_CHANNELS_COLLECTION, id);
+  if (!existing) return null;
+
+  const merged: EmailChannelConfig = {
+    ...(existing as EmailChannelConfig),
+    id,
+    status: patch.status,
+    lastTestOk: patch.lastTestOk,
+    lastTestAt: patch.lastTestAt,
+    lastError: patch.lastError ?? null,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await setDocDirect(EMAIL_CHANNELS_COLLECTION, id, merged);
+  return redactChannelSecrets(merged);
+}
+
 /** Resolve a channel for outbound From: selection (mailbox / support email / forwarding). */
 export async function findChannelForOutbound(params: {
   mailbox?: string | null;

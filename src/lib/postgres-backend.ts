@@ -99,6 +99,7 @@ export async function initDb() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(workspace_id)
     );
+    ALTER TABLE ai_orchestrator_config ADD COLUMN IF NOT EXISTS redaction_rules_json JSONB NOT NULL DEFAULT '[{"id":"email","name":"Email Addresses","description":"Detects and masks personal and corporate email patterns.","enabled":true},{"id":"phone","name":"Phone Numbers","description":"International and local phone number formats.","enabled":true},{"id":"cc","name":"Credit Card (PCI)","description":"Luhn-validated 13-16 digit card numbers.","enabled":true},{"id":"address","name":"Physical Addresses","description":"Street addresses, zip codes, and city names.","enabled":false},{"id":"ssn","name":"Sensitive IDs (SSN/VAT)","description":"Government-issued identification numbers.","enabled":true}]';
     CREATE TABLE IF NOT EXISTS ai_orchestrator_secrets (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',

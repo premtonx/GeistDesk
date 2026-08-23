@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { z } from 'zod';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { AI_DECISION_ENGINE_FLOW, type AiExecutionContext, type AiFeatureId } from '../types/aiOrchestrator.js';
 import { executeAiFeatureRequest } from '../lib/ai-orchestrator-service.js';
@@ -9,6 +10,7 @@ import { resumeApprovedAiRequest } from '../lib/ai-request-lifecycle.js';
 import {
   normalizePolyglotBridgeSettings,
 } from '../lib/module-config.js';
+import { safeErrorMessage } from '../lib/safe-log.js';
 
 const router = Router();
 
@@ -23,6 +25,52 @@ const VALID_FEATURES = new Set<string>([
   'vault_insights',
 ]);
 
+const MAX_PROMPT_LENGTH = 32_000;
+const MAX_METADATA_KEYS = 32;
+const MAX_METADATA_VALUE_LENGTH = 4_000;
+
+const executeSchema = z.object({
+  feature: z.string().min(1).max(64),
+  prompt: z.string().min(1).max(MAX_PROMPT_LENGTH),
+  workspaceId: z.string().max(128).optional().default('default'),
+  departmentId: z.string().max(128).optional(),
+  customerId: z.string().max(128).optional(),
+  customerScope: z.enum(['standard', 'vip', 'enterprise']).optional(),
+  ticketId: z.string().max(128).optional(),
+  ticketClosed: z.boolean().optional(),
+  metadata: z
+    .record(
+      z.string().max(128),
+      z.union([
+        z.string().max(MAX_METADATA_VALUE_LENGTH),
+        z.number(),
+        z.boolean(),
+        z.null(),
+        z.array(z.string().max(MAX_METADATA_VALUE_LENGTH)).max(200),
+      ]),
+    )
+    .refine((value) => Object.keys(value).length <= MAX_METADATA_KEYS, {
+      message: `metadata may contain at most ${MAX_METADATA_KEYS} keys`,
+    })
+    .optional(),
+});
+
+const resumeSchema = z.object({
+  workspaceId: z.string().max(128).optional().default('default'),
+  approvalId: z.string().min(1).max(256),
+});
+
+const translateSchema = z.object({
+  text: z.string().min(1).max(MAX_PROMPT_LENGTH),
+  targetLanguage: z.string().min(1).max(64),
+  mood: z.string().max(64).optional(),
+});
+
+/** Provider errors may embed endpoints, model names, or key prefixes — keep the client response generic. */
+function genericAiError(err: unknown, fallback: string): string {
+  return safeErrorMessage(err, fallback);
+}
+
 /**
  * GET /api/ai/lifecycle/flow
  * Returns the programmatic decision-engine step chart.
@@ -36,35 +84,40 @@ router.get('/lifecycle/flow', authenticate, (_req: Request, res: Response) => {
  * Runs an AI prompt through the full lifecycle middleware pipeline.
  */
 router.post('/execute', authenticate, async (req: Request, res: Response) => {
+  const parsed = executeSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: 'Invalid AI execution payload',
+      details: parsed.error.flatten(),
+    });
+  }
+  const body = parsed.data;
+  if (!VALID_FEATURES.has(body.feature)) {
+    return res.status(400).json({ error: 'Invalid or missing feature.' });
+  }
+  if (!body.prompt.trim()) {
+    return res.status(400).json({ error: 'prompt is required.' });
+  }
+
   try {
-    const feature = String(req.body.feature || '') as AiFeatureId;
-    const prompt = String(req.body.prompt || '');
-
-    if (!VALID_FEATURES.has(feature)) {
-      return res.status(400).json({ error: 'Invalid or missing feature.' });
-    }
-    if (!prompt.trim()) {
-      return res.status(400).json({ error: 'prompt is required.' });
-    }
-
     const ctx: AiExecutionContext = {
-      workspaceId: String(req.body.workspaceId || 'default'),
-      feature,
-      prompt,
+      workspaceId: body.workspaceId,
+      feature: body.feature as AiFeatureId,
+      prompt: body.prompt,
       userId: req.user?.id,
       userEmail: req.user?.email,
-      departmentId: req.body.departmentId ? String(req.body.departmentId) : undefined,
-      customerId: req.body.customerId ? String(req.body.customerId) : undefined,
-      customerScope: req.body.customerScope,
-      ticketId: req.body.ticketId ? String(req.body.ticketId) : undefined,
-      ticketClosed: req.body.ticketClosed === true,
-      metadata: req.body.metadata,
+      departmentId: body.departmentId,
+      customerId: body.customerId,
+      customerScope: body.customerScope,
+      ticketId: body.ticketId,
+      ticketClosed: body.ticketClosed === true,
+      metadata: body.metadata,
     };
 
     const result = await executeAiFeatureRequest(ctx);
     return res.status(200).json(result);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = genericAiError(error, 'AI lifecycle execution failed.');
     console.error('[AI Execute] Lifecycle error:', message);
     return res.status(500).json({ error: 'AI lifecycle execution failed.', details: message });
   }
@@ -80,14 +133,16 @@ router.post('/execute', authenticate, async (req: Request, res: Response) => {
  * from the stored approval payload — the client cannot substitute its own.
  */
 router.post('/execute/resume', authenticate, async (req: Request, res: Response) => {
+  const parsed = resumeSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: 'Invalid resume payload',
+      details: parsed.error.flatten(),
+    });
+  }
+  const { workspaceId, approvalId } = parsed.data;
+
   try {
-    const workspaceId = String(req.body.workspaceId || 'default');
-    const approvalId = String(req.body.approvalId || '');
-
-    if (!approvalId.trim()) {
-      return res.status(400).json({ error: 'approvalId is required.' });
-    }
-
     const entry = await getApprovalEntry(approvalId, workspaceId);
     if (!entry) {
       return res.status(404).json({ error: 'Approval entry not found.' });
@@ -124,7 +179,8 @@ router.post('/execute/resume', authenticate, async (req: Request, res: Response)
     });
     return res.status(200).json(result);
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = genericAiError(error, 'AI lifecycle resume failed.');
+    console.error('[AI Execute/Resume]', message);
     return res.status(500).json({ error: 'AI lifecycle resume failed.', details: message });
   }
 });
@@ -134,17 +190,16 @@ router.post('/execute/resume', authenticate, async (req: Request, res: Response)
  * Token-efficient Polyglot Bridge translation (dictionary + optional DeepL + optional LLM when enabled).
  */
 router.post('/polyglot/translate', authenticate, async (req: Request, res: Response) => {
-  try {
-    const text = String(req.body.text || '');
-    const targetLanguage = String(req.body.targetLanguage || '');
-    const mood = req.body.mood ? String(req.body.mood) : undefined;
-    if (!text.trim()) {
-      return res.status(400).json({ error: 'text is required.' });
-    }
-    if (!targetLanguage.trim()) {
-      return res.status(400).json({ error: 'targetLanguage is required.' });
-    }
+  const parsed = translateSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({
+      error: 'Invalid translation payload',
+      details: parsed.error.flatten(),
+    });
+  }
+  const { text, targetLanguage, mood } = parsed.data;
 
+  try {
     let polyglotOptions: {
       customDictionary?: Record<string, Record<string, string>>;
       translationProviderMode?: 'dictionary_only' | 'deepl' | 'orchestrator';
@@ -173,7 +228,8 @@ router.post('/polyglot/translate', authenticate, async (req: Request, res: Respo
     const engine = resolvePolyglotTranslationEngine(providerMode);
     return res.status(200).json({ translation, engine, providerMode });
   } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
+    const message = genericAiError(error, 'Polyglot translation failed.');
+    console.error('[Polyglot Translate]', message);
     return res.status(500).json({ error: 'Polyglot translation failed.', details: message });
   }
 });

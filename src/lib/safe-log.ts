@@ -19,6 +19,11 @@ const SECRET_PATTERNS: Array<{ re: RegExp; replace: string }> = [
   // API key-ish prefixes
   { re: /\b(sk-[A-Za-z0-9]{8,})\b/g, replace: 'sk-***' },
   { re: /\b(AIza[0-9A-Za-z\-_]{20,})\b/g, replace: 'AIza***' },
+  // OAuth form bodies echoed back by providers (client_secret, refresh_token, code, grant)
+  {
+    re: /\b(client_secret|client_secret_value|refresh_token|access_token|id_token|code)\b\s*[:=]\s*["']?([^\s"',;&]+)/gi,
+    replace: '$1=***',
+  },
 ];
 
 export function redactSecrets(input: unknown): string {

@@ -123,6 +123,7 @@ function AppRoutes() {
   const { user, loading } = useAuth();
   const { status, loading: onboardingLoading } = useOnboardingStatus();
   const firstRun = status?.hasAdminUser !== true && status?.isInitialized !== true;
+  const needsResume = status?.needsResume === true && status?.hasAdminUser === true;
 
   if (loading || onboardingLoading) {
     return (
@@ -146,7 +147,7 @@ function AppRoutes() {
             <Routes>
                 <Route path="/help" element={<HelpCenterPage />} />
                 <Route path="/v/:id" element={<SecretViewerPage />} />
-                {firstRun ? (
+                {firstRun || needsResume ? (
                   <>
                     <Route path="/onboarding" element={<OnboardingWizardPage />} />
                     <Route path="*" element={<Navigate to="/onboarding" replace />} />

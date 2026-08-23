@@ -124,6 +124,8 @@ export interface OnboardingStatus {
   initializedAt?: string;
   initializedBy?: string;
   requiresOnboarding: boolean;
+  /** True when is_initialized committed but side effects remain — the wizard should resume. */
+  needsResume: boolean;
   modules: PlatformModules;
   defaults: {
     ollamaEndpoint: string;
@@ -134,6 +136,48 @@ export interface OnboardingStatus {
     database: 'ok' | 'error';
     pgvector: boolean;
   };
+}
+
+/** Post-transaction side-effect progress for the Day-0 wizard. */
+export interface OnboardingStepState {
+  secretsStored: boolean;
+  emailChannelCreated: boolean;
+  vaultInitialized: boolean;
+  demoPurged: boolean;
+  sampleImported: boolean;
+}
+
+export const EMPTY_ONBOARDING_STEPS: OnboardingStepState = {
+  secretsStored: false,
+  emailChannelCreated: false,
+  vaultInitialized: false,
+  demoPurged: false,
+  sampleImported: false,
+};
+
+function readOnboardingSteps(config: ModuleConfig | null): OnboardingStepState {
+  const stored = (config as { onboardingSteps?: Partial<OnboardingStepState> } | null)?.onboardingSteps;
+  return { ...EMPTY_ONBOARDING_STEPS, ...(stored || {}) };
+}
+
+async function persistOnboardingSteps(steps: OnboardingStepState): Promise<void> {
+  await updateDocDirect(MODULE_COLLECTION, MODULE_DOC_ID, {
+    onboardingSteps: steps,
+    updatedAt: new Date().toISOString(),
+  });
+}
+
+/** True when every post-transaction side effect has finished (or was skipped). */
+export function isOnboardingComplete(config: ModuleConfig | null): boolean {
+  if (config?.is_initialized !== true) return false;
+  const steps = readOnboardingSteps(config);
+  return (
+    steps.secretsStored &&
+    steps.emailChannelCreated &&
+    steps.vaultInitialized &&
+    steps.demoPurged &&
+    steps.sampleImported
+  );
 }
 
 function emptyModuleConfig(): ModuleConfig {
@@ -226,12 +270,14 @@ export async function needsFirstRun(): Promise<boolean> {
 
 function toStatus(config: ModuleConfig, hasAdmin: boolean): OnboardingStatus {
   const ollama = getOllamaEndpoint() || 'http://ollama:11434';
+  const complete = isOnboardingComplete(config);
   return {
     isInitialized: config.is_initialized === true,
     hasAdminUser: hasAdmin,
     initializedAt: config.initializedAt,
     initializedBy: config.initializedBy,
     requiresOnboarding: config.is_initialized !== true && !hasAdmin,
+    needsResume: config.is_initialized === true && !complete,
     modules: config.platformModules || DEFAULT_PLATFORM_MODULES,
     defaults: {
       ollamaEndpoint: ollama.replace(/\/v1\/?$/, ''),
@@ -766,9 +812,19 @@ export async function completeOnboarding(
   modules: PlatformModules;
   importSampleData: boolean;
 }> {
-  await assertNotInitialized();
   const existing = (await loadModuleConfigDoc()) || emptyModuleConfig();
 
+  // Resume path: the transactional core already committed (is_initialized=true)
+  // but some post-transaction side effect was interrupted. Idempotently finish
+  // the remaining steps instead of failing forever.
+  if (existing.is_initialized === true) {
+    if (isOnboardingComplete(existing)) {
+      throw new OnboardingAlreadyCompleteError();
+    }
+    return resumeOnboardingSteps(req, input, existing);
+  }
+
+  await assertNotInitialized();
   const userId = String(req.user?.id || '');
   if (!userId) {
     throw new Error('Authenticated administrator is required.');
@@ -815,6 +871,7 @@ export async function completeOnboarding(
     is_initialized: true,
     initializedAt: now,
     initializedBy: cleanEmail,
+    onboardingSteps: EMPTY_ONBOARDING_STEPS,
     platformModules,
     modules: platformModules,
     ai: {
@@ -849,14 +906,6 @@ export async function completeOnboarding(
     userId,
   );
 
-  if (aiMapped.secretProvider && aiMapped.secretValue) {
-    await setProviderSecret(aiMapped.secretProvider, aiMapped.secretValue, userId, WORKSPACE_ID);
-  }
-
-  const ingest = input.ingestion;
-  const shouldCreateChannel = ingest && ingest.skip !== true;
-  let channelId: string | undefined;
-
   const userDoc = {
     ...existingUser,
     name: adminName,
@@ -886,62 +935,151 @@ export async function completeOnboarding(
       `INSERT INTO geistdesk_documents (collection, id, data)
        VALUES ('module_config', 'global', $1::jsonb)
        ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-      [JSON.stringify({ ...nextConfig, tenantId, modules: platformModules, platformModules, updatedAt: now })],
+      [
+        JSON.stringify({
+          ...nextConfig,
+          tenantId,
+          modules: platformModules,
+          platformModules,
+          onboardingSteps: EMPTY_ONBOARDING_STEPS,
+          updatedAt: now,
+        }),
+      ],
     );
   });
 
-  if (input.ai.mode !== 'disabled' && input.ai.embeddingModel) {
-    await updateDocDirect(MODULE_COLLECTION, MODULE_DOC_ID, {
-      embeddingModel: input.ai.embeddingModel,
-      updatedAt: now,
-    });
-  }
+  return resumeOnboardingSteps(req, input, normalizeModuleConfig(nextConfig));
+}
 
-  if (shouldCreateChannel && ingest) {
-    const existingChannels = await listEmailChannels();
-    if (existingChannels.length === 0) {
-      const connectionType = mapIngestChannel(ingest.channel || 'webhook');
-      const created = await createEmailChannel({
-        name: 'Primary inbound',
-        email: ingest.supportEmail || nextConfig.email.supportEmail,
-        connectionType,
-        isPrimary: true,
-        enabled: true,
-        status: 'pending',
-        provider: connectionType === 'microsoft_graph' ? 'microsoft' : 'custom',
-        imapHost: ingest.imapHost,
-        imapUser: ingest.imapUser,
-        imapPassword: ingest.imapPassword,
-        tenantId: ingest.graphTenantId,
-        clientId: ingest.graphClientId,
-        clientSecret: ingest.graphClientSecret,
-        mailbox: ingest.supportEmail,
-      });
-      channelId = created.id;
+/**
+ * Runs the post-transaction side effects idempotently. Each step is guarded by
+ * persisted step-state in module_config; interrupted runs resume from the next
+ * incomplete step instead of duplicating work or failing permanently.
+ */
+async function resumeOnboardingSteps(
+  req: Request,
+  input: CompleteOnboardingInput,
+  config: ModuleConfig,
+): Promise<{
+  success: true;
+  isInitialized: true;
+  channelId?: string;
+  tenantId: string;
+  user: OnboardingAdminUser;
+  modules: PlatformModules;
+  importSampleData: boolean;
+}> {
+  const userId = String(req.user?.id || '');
+  if (!userId) {
+    throw new Error('Authenticated administrator is required.');
+  }
+  const cleanEmail = String(req.user?.email || input.adminEmail).toLowerCase().trim();
+  const adminName = input.adminName.trim() || String(req.user?.name || 'Administrator').trim();
+  const existingUser = ((await getDocDirect('users', userId)) || {}) as Record<string, unknown>;
+  const tenantId =
+    (typeof existingUser.tenantId === 'string' && existingUser.tenantId.trim()) ||
+    resolveTenantFromRequest(req) ||
+    DEFAULT_TENANT_ID;
+  const platformModules = normalizePlatformModules({
+    tickets: true,
+    geistKB: input.modules.geistKB,
+    geistVault: input.modules.geistVault,
+    geistExchange: input.modules.geistExchange,
+  });
+
+  const adminUser: OnboardingAdminUser = {
+    id: userId,
+    email: cleanEmail,
+    name: adminName,
+    role: 'admin',
+    is_admin: true,
+    tenantId,
+  };
+
+  const steps = readOnboardingSteps(config);
+  let channelId: string | undefined;
+
+  // 1. Orchestrator secrets (upsert — safe to re-run).
+  if (!steps.secretsStored) {
+    const aiMapped = mapAiToOrchestrator(input.ai);
+    if (aiMapped.secretProvider && aiMapped.secretValue) {
+      await setProviderSecret(aiMapped.secretProvider, aiMapped.secretValue, userId, WORKSPACE_ID);
     }
+    await persistOnboardingSteps({ ...steps, secretsStored: true });
+    steps.secretsStored = true;
   }
 
-  if (input.vaultPassphraseSet && platformModules.geistVault) {
-    await setPersonalVaultInitialized(userId, true);
+  // 2. Primary inbound email channel (guarded — never duplicates).
+  if (!steps.emailChannelCreated) {
+    const ingest = input.ingestion;
+    const shouldCreateChannel = ingest && ingest.skip !== true;
+    if (shouldCreateChannel && ingest) {
+      const existingChannels = await listEmailChannels();
+      const intendedEmail = (ingest.supportEmail || config.email.supportEmail || '').toLowerCase();
+      const alreadyCreated = existingChannels.some(
+        (ch) =>
+          ch.isPrimary === true ||
+          (intendedEmail && String(ch.email || '').toLowerCase() === intendedEmail),
+      );
+      if (!alreadyCreated) {
+        const connectionType = mapIngestChannel(ingest.channel || 'webhook');
+        const created = await createEmailChannel({
+          name: 'Primary inbound',
+          email: intendedEmail,
+          connectionType,
+          isPrimary: true,
+          enabled: true,
+          status: 'pending',
+          provider: connectionType === 'microsoft_graph' ? 'microsoft' : 'custom',
+          imapHost: ingest.imapHost,
+          imapUser: ingest.imapUser,
+          imapPassword: ingest.imapPassword,
+          tenantId: ingest.graphTenantId,
+          clientId: ingest.graphClientId,
+          clientSecret: ingest.graphClientSecret,
+          mailbox: intendedEmail,
+        });
+        channelId = created.id;
+      }
+    }
+    await persistOnboardingSteps({ ...steps, emailChannelCreated: true });
+    steps.emailChannelCreated = true;
   }
 
-  // Sample import never writes vault secrets. Always remove leftover seed folders
-  // so GeistVault stays empty unless the operator creates entries.
-  await purgeSeededVaultFolders((sql, params) => queryDb(sql, params ?? []));
-  if (input.importSampleData !== true) {
-    const exec = (sql: string, params?: unknown[]) => queryDb(sql, params ?? []);
-    await purgePlaceholderKbCategories(exec);
-    await purgeFrontendSeedKbArticles(exec);
-    await purgeKbCoverageCache(exec);
-    await purgeDemoAutopilotFixtures(exec);
+  // 3. Personal vault initialization flag (idempotent set).
+  if (!steps.vaultInitialized) {
+    if (input.vaultPassphraseSet && platformModules.geistVault) {
+      await setPersonalVaultInitialized(userId, true);
+    }
+    await persistOnboardingSteps({ ...steps, vaultInitialized: true });
+    steps.vaultInitialized = true;
   }
 
-  if (input.importSampleData === true) {
-    await importOnboardingSampleData({
-      tenantId,
-      userId,
-      includeKb: platformModules.geistKB,
-    });
+  // 4. Demo fixture purging (idempotent deletes).
+  if (!steps.demoPurged) {
+    await purgeSeededVaultFolders((sql, params) => queryDb(sql, params ?? []));
+    if (input.importSampleData !== true) {
+      const exec = (sql: string, params?: unknown[]) => queryDb(sql, params ?? []);
+      await purgePlaceholderKbCategories(exec);
+      await purgeFrontendSeedKbArticles(exec);
+      await purgeKbCoverageCache(exec);
+      await purgeDemoAutopilotFixtures(exec);
+    }
+    await persistOnboardingSteps({ ...steps, demoPurged: true });
+    steps.demoPurged = true;
+  }
+
+  // 5. Optional sample import (deterministic IDs — re-runs replace cleanly).
+  if (!steps.sampleImported) {
+    if (input.importSampleData === true) {
+      await importOnboardingSampleData({
+        tenantId,
+        userId,
+        includeKb: platformModules.geistKB,
+      });
+    }
+    await persistOnboardingSteps({ ...steps, sampleImported: true });
+    steps.sampleImported = true;
   }
 
   return {

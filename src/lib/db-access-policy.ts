@@ -41,8 +41,6 @@ export const DB_AUTHENTICATED_COLLECTIONS = new Set([
   'notifications',
   'notification_templates',
   'autopilot_suggestions',
-  'vaults',
-  'vault_folders',
   'kb_coverage',
   'kb_article_history',
   'kb_categories',

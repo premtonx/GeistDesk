@@ -8,6 +8,7 @@ export interface OnboardingStatus {
   initializedAt?: string;
   initializedBy?: string;
   requiresOnboarding: boolean;
+  needsResume?: boolean;
   modules: PlatformModules;
   defaults: {
     ollamaEndpoint: string;
@@ -54,6 +55,7 @@ export function useOnboardingStatus() {
           initializedAt: detail.initializedAt ?? prev?.initializedAt,
           initializedBy: detail.initializedBy ?? prev?.initializedBy,
           requiresOnboarding: detail.requiresOnboarding ?? false,
+          needsResume: detail.needsResume ?? prev?.needsResume ?? false,
           modules: detail.modules ?? prev?.modules ?? {
             tickets: true,
             geistKB: true,

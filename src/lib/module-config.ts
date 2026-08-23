@@ -20,6 +20,8 @@ export interface PolyglotBridgeSettings {
   translationProviderMode: PolyglotTranslationProviderMode;
   /** DeepL auth key when translationProviderMode is `deepl`. */
   translationProviderKey: string;
+  /** True when a provider key is configured server-side but never echoed back. */
+  hasTranslationKey?: boolean;
   /** Source phrase → target language display name → translated text */
   customDictionary: Record<string, Record<string, string>>;
   /**
@@ -38,13 +40,13 @@ export const DEFAULT_POLYGLOT_BRIDGE_SETTINGS: PolyglotBridgeSettings = {
 export function resolvePolyglotTranslationProviderMode(
   polyglot: Partial<PolyglotBridgeSettings> | Record<string, unknown> | undefined,
 ): PolyglotTranslationProviderMode {
-  const raw = polyglot as Partial<PolyglotBridgeSettings> | undefined;
+  const raw = polyglot as Partial<PolyglotBridgeSettings> & { hasTranslationKey?: boolean } | undefined;
   const mode = raw?.translationProviderMode;
   if (mode === 'dictionary_only' || mode === 'deepl' || mode === 'orchestrator') {
     return mode;
   }
   if (raw?.allowAiFallback === true) return 'orchestrator';
-  if (String(raw?.translationProviderKey || '').trim()) return 'deepl';
+  if (raw?.hasTranslationKey === true || String(raw?.translationProviderKey || '').trim()) return 'deepl';
   return 'dictionary_only';
 }
 
@@ -52,10 +54,11 @@ export function normalizePolyglotBridgeSettings(
   polyglotRaw: Partial<PolyglotBridgeSettings> | Record<string, unknown> | undefined,
 ): PolyglotBridgeSettings {
   const mode = resolvePolyglotTranslationProviderMode(polyglotRaw);
-  const raw = (polyglotRaw ?? {}) as Partial<PolyglotBridgeSettings>;
+  const raw = (polyglotRaw ?? {}) as Partial<PolyglotBridgeSettings> & { hasTranslationKey?: boolean };
   return {
     translationProviderMode: mode,
     translationProviderKey: raw.translationProviderKey ?? '',
+    hasTranslationKey: raw.hasTranslationKey === true,
     customDictionary: raw.customDictionary ?? {},
     allowAiFallback: mode === 'orchestrator',
   };
@@ -146,6 +149,18 @@ export interface ModuleConfig {
   is_initialized: boolean;
   initializedAt?: string;
   initializedBy?: string;
+  /**
+   * Day-0 wizard side-effect progress (post-transaction steps). Persisted so a
+   * partially completed onboarding can be resumed idempotently instead of
+   * being locked behind `is_initialized=true`.
+   */
+  onboardingSteps?: {
+    secretsStored: boolean;
+    emailChannelCreated: boolean;
+    vaultInitialized: boolean;
+    demoPurged: boolean;
+    sampleImported: boolean;
+  };
   platformModules: PlatformModules;
   polyglotEnabled: boolean;
   languages: PolyglotLanguage[];
@@ -154,6 +169,8 @@ export interface ModuleConfig {
   personioEnabled: boolean;
   personioClientId: string;
   personioClientSecret: string;
+  /** True when a Personio secret is configured server-side but never echoed back. */
+  hasPersonioSecret?: boolean;
   personioEmployeeId: string;
   ai: AIConfig;
   email: EmailChannelConfig;
@@ -210,7 +227,8 @@ export const DEFAULT_MODULE_CONFIG: ModuleConfig = {
   ssoEnabled: false,
   ssoClientId: '',
   ssoTenantId: 'common',
-  ssoDomains: ['premtonxh.gmail.com', 'microsoft.onmicrosoft.com', 'entra-sso.com'],
+  // No default SSO allow-list — domains are configured per tenant by an admin.
+  ssoDomains: [],
   exchangeCustomTemplates: [],
   exchangeSettings: {
     defaultExpirationHours: 48,
@@ -244,7 +262,10 @@ export function normalizeModuleConfig(parsed: Partial<ModuleConfig> | Record<str
     platformModules: normalizePlatformModules(
       source.platformModules ?? (source as { modules?: PlatformModules }).modules,
     ),
-    ai: DEFAULT_MODULE_CONFIG.ai,
+    ai: {
+      ...DEFAULT_MODULE_CONFIG.ai,
+      ...(source.ai || {}),
+    },
     email: {
       ...DEFAULT_MODULE_CONFIG.email,
       ...(source.email || {})

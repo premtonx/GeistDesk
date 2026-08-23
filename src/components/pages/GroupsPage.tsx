@@ -141,6 +141,21 @@ export default function GroupsPage() {
     }
   };
 
+  const toggleBusinessHours = (checked: boolean) => {
+    setEditingGroup((prev) => ({
+      ...prev,
+      // Only the reference id is persisted — the schedule itself lives in the
+      // global "Global Support Hours" calendar reference.
+      businessHoursId: checked ? 'global-support-hours' : undefined,
+    }));
+  };
+
+  const handleConfigureRouting = () => {
+    toast.info('Routing rules are configured per ticket via triage and assignment policies.', {
+      duration: 5000,
+    });
+  };
+
   const toggleMember = async (userId: string) => {
     if (!editingGroup?.id) {
       toast.error("Save the group first before assigning members");
@@ -409,7 +424,10 @@ export default function GroupsPage() {
                              <Label className="text-sm font-bold">Business Hours</Label>
                              <p className="text-[10px] text-slate-500">Link a specific calendar to this group.</p>
                           </div>
-                          <Switch />
+                          <Switch
+                            checked={Boolean(editingGroup?.businessHoursId)}
+                            onCheckedChange={toggleBusinessHours}
+                          />
                        </div>
                        
                        <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
@@ -457,7 +475,11 @@ export default function GroupsPage() {
                       </div>
 
                       <div className="mt-8 pt-8 border-t border-slate-800">
-                         <Button variant="outline" className="w-full rounded-xl border-slate-700 bg-transparent text-slate-300 font-bold hover:bg-slate-800">
+                         <Button
+                           variant="outline"
+                           className="w-full rounded-xl border-slate-700 bg-transparent text-slate-300 font-bold hover:bg-slate-800"
+                           onClick={handleConfigureRouting}
+                         >
                             Configure Routing Rules
                          </Button>
                       </div>

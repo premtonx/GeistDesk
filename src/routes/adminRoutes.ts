@@ -119,7 +119,8 @@ const setPasswordSchema = z.object({
 const createLocalUserSchema = z.object({
   email: z.string().email("Invalid email format").transform(val => val.toLowerCase().trim()),
   name: z.string().min(1, "Name is required").max(100, "Name cannot exceed 100 characters"),
-  role: z.enum(["admin", "agent", "team_lead", "customer"])
+  role: z.enum(["admin", "agent", "team_lead", "customer"]),
+  authMethod: z.enum(["password", "sso"]).default("password")
 });
 
 // Zod schema for updating a user's role
@@ -213,7 +214,7 @@ router.post("/users/create-local", authenticate, requireRole(["SYSTEM_ADMIN"]), 
       });
     }
 
-    const { email, name, role } = validationResult.data;
+    const { email, name, role, authMethod } = validationResult.data;
 
     // Check if user already exists
     const queryResults = await getDocsDirect("users", [
@@ -225,9 +226,12 @@ router.post("/users/create-local", authenticate, requireRole(["SYSTEM_ADMIN"]), 
       });
     }
 
-    // Generate a secure temporary activation token and expired time (e.g. 24 hours)
-    const rawActivationToken = "act-" + crypto.randomBytes(24).toString("hex");
-    const activationTokenExpires = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 Hours
+    // Generate a secure temporary activation token (local accounts only) and
+    // expired time (e.g. 24 hours). SSO pre-approvals skip the token — their
+    // credential is the external identity provider.
+    const isSso = authMethod === "sso";
+    const rawActivationToken = isSso ? null : "act-" + crypto.randomBytes(24).toString("hex");
+    const activationTokenExpires = isSso ? null : new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(); // 24 Hours
 
     // Construct profile payload
     const is_admin = role === "admin";
@@ -236,7 +240,7 @@ router.post("/users/create-local", authenticate, requireRole(["SYSTEM_ADMIN"]), 
       email,
       role,
       is_admin,
-      authMethod: "password",
+      authMethod: isSso ? "sso" : "password",
       isDeactivated: false,
       can_create_tickets: true,
       can_view_knowledgebase: true,
@@ -524,6 +528,7 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
       "modelMode",
       "scope",
       "piiEnabled",
+      "redactionRules",
       "autoEscalationEnabled",
       "auditEnabled",
       "configLocked",
@@ -615,6 +620,7 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
           : {}),
         ...(payload.endpointUrl !== undefined ? { endpointUrl: payload.endpointUrl } : {}),
         ...(payload.piiEnabled !== undefined ? { piiEnabled: payload.piiEnabled } : {}),
+        ...(payload.redactionRules !== undefined ? { redactionRules: payload.redactionRules } : {}),
         ...(payload.autoEscalationEnabled !== undefined
           ? { autoEscalationEnabled: payload.autoEscalationEnabled }
           : {}),

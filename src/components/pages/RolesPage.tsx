@@ -20,7 +20,8 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  MoreVertical
+  MoreVertical,
+  Loader2
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../ui/card';
 import { Button } from '../ui/button';
@@ -85,6 +86,7 @@ export default function RolesPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingRole, setEditingRole] = useState<Partial<UserRole> | null>(null);
   const [isRoleDialogOpen, setIsRoleDialogOpen] = useState(false);
+  const [deletingRole, setDeletingRole] = useState(false);
 
   useEffect(() => {
     const unsubRoles = rbacService.subscribeToRoles((data) => {
@@ -406,15 +408,23 @@ export default function RolesPage() {
                       {editingRole?.id && !editingRole.isSystem && (
                         <Button 
                           variant="ghost" 
-                          className="h-14 sm:h-16 rounded-2xl px-8 font-black text-rose-600 bg-rose-50 hover:bg-rose-100"
-                          onClick={() => {
-                            if (confirm('Are you sure you want to delete this blueprint? This action is irreversible.')) {
-                              rbacService.deleteRole(editingRole.id!);
+                          className="h-14 sm:h-16 rounded-2xl px-8 font-black text-rose-600 bg-rose-50 hover:bg-rose-100 disabled:opacity-60"
+                          disabled={deletingRole}
+                          onClick={async () => {
+                            if (!confirm('Are you sure you want to delete this blueprint? This action is irreversible.')) return;
+                            setDeletingRole(true);
+                            try {
+                              await rbacService.deleteRole(editingRole.id!);
+                              toast.success('Role blueprint deleted');
                               setIsRoleDialogOpen(false);
+                            } catch (err) {
+                              toast.error(err instanceof Error ? err.message : 'Failed to delete role');
+                            } finally {
+                              setDeletingRole(false);
                             }
                           }}
                         >
-                          <Trash2 className="w-5 h-5 mr-2" /> Decommission
+                          {deletingRole ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Trash2 className="w-5 h-5 mr-2" />} Decommission
                         </Button>
                       )}
                       <div className="hidden sm:block flex-1" />

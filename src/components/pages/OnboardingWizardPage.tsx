@@ -100,8 +100,19 @@ export default function OnboardingWizardPage() {
 
   useEffect(() => {
     if (!status) return;
-    if (status.isInitialized || status.hasAdminUser) {
+    // A fully initialized workspace redirects away — except when side effects
+    // were interrupted mid-way (needsResume), where we stay to finish setup.
+    if (status.isInitialized && !status.needsResume) {
       navigate(user ? '/dashboard' : '/login', { replace: true });
+      return;
+    }
+    if (status.hasAdminUser && status.isInitialized) {
+      // Partial completion — resume: admin already exists, jump to the AI step.
+      setAdminRegistered(true);
+      setStep(2);
+    } else if (status.hasAdminUser) {
+      setAdminRegistered(true);
+      setStep(2);
       return;
     }
     if (status.defaults?.ollamaEndpoint) setEndpointUrl(status.defaults.ollamaEndpoint);
@@ -270,6 +281,7 @@ export default function OnboardingWizardPage() {
           detail: {
             isInitialized: true,
             requiresOnboarding: false,
+            needsResume: false,
             hasAdminUser: true,
             modules: enabledModules,
           },

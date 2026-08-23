@@ -10,6 +10,7 @@ import {
   DEFAULT_FEATURE_PERSONAS,
   DEFAULT_ORCHESTRATOR_CONFIG,
   DEFAULT_PROVIDER_PRIORITY,
+  DEFAULT_REDACTION_RULES,
   type AiApprovalQueueEntry,
   type AiConfidenceThresholds,
   type AiCorporatePolicies,
@@ -26,6 +27,7 @@ import {
   type AiOrchestratorConfig,
   type AiOrchestratorVersion,
   type AiTrustLevel,
+  type RedactionRule,
 } from '../types/aiOrchestrator.js';
 import { mergeCorporatePolicies, mergeDataResidencyPolicy } from './ai-orchestrator-policies.js';
 
@@ -110,6 +112,15 @@ function parsePersonaSkills(row: Record<string, unknown>): AiPersonaSkillsMap {
   return parseJson<AiPersonaSkillsMap>(row.persona_skills_json, {});
 }
 
+function parseRedactionRules(row: Record<string, unknown>): RedactionRule[] {
+  const raw = parseJson<RedactionRule[]>(row.redaction_rules_json, []);
+  if (!Array.isArray(raw) || raw.length === 0) return DEFAULT_REDACTION_RULES.map((r) => ({ ...r }));
+  return DEFAULT_REDACTION_RULES.map((defaultRule) => {
+    const stored = raw.find((r) => r && r.id === defaultRule.id);
+    return stored ? { ...defaultRule, ...stored } : { ...defaultRule };
+  });
+}
+
 function rowToConfig(row: Record<string, unknown>): AiOrchestratorConfig {
   const routing = parseJson(row.feature_routing_json, DEFAULT_FEATURE_ROUTING);
   const fallbacks = parseJson<string[]>(row.fallback_models, DEFAULT_ORCHESTRATOR_CONFIG.fallbackModels);
@@ -129,6 +140,7 @@ function rowToConfig(row: Record<string, unknown>): AiOrchestratorConfig {
     featureRouting: { ...DEFAULT_FEATURE_ROUTING, ...(routing as AiFeatureRouting) },
     endpointUrl: String(row.endpoint_url ?? DEFAULT_ORCHESTRATOR_CONFIG.endpointUrl),
     piiEnabled: row.pii_enabled !== false,
+    redactionRules: parseRedactionRules(row),
     autoEscalationEnabled: row.auto_escalation_enabled !== false,
     auditEnabled: row.audit_enabled !== false,
     configLocked: row.config_locked === true,
@@ -178,7 +190,7 @@ async function insertOrchestratorConfig(config: AiOrchestratorConfig, updatedBy:
     `INSERT INTO ai_orchestrator_config (
       workspace_id, scope, primary_model, reasoning_model, triage_model, model_mode,
       fallback_models, provider_priority, feature_routing_json, endpoint_url,
-      pii_enabled, auto_escalation_enabled, audit_enabled, config_locked,
+      pii_enabled, redaction_rules_json, auto_escalation_enabled, audit_enabled, config_locked,
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
       data_residency, corporate_policies_json, trust_level, data_residency_policy_json,
       confidence_thresholds_json, memory_policy_json, feature_personas_json,
@@ -186,7 +198,7 @@ async function insertOrchestratorConfig(config: AiOrchestratorConfig, updatedBy:
       kill_switch_json, daily_budget_usd, monthly_budget_usd, daily_budget_eur,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,NOW()
     )
     ON CONFLICT (workspace_id) DO NOTHING`,
     configInsertParams(config, updatedBy),
@@ -206,6 +218,7 @@ function configInsertParams(config: AiOrchestratorConfig, updatedBy: string): un
     JSON.stringify(config.featureRouting),
     config.endpointUrl,
     config.piiEnabled,
+    JSON.stringify(config.redactionRules ?? DEFAULT_REDACTION_RULES),
     config.autoEscalationEnabled,
     config.auditEnabled,
     config.configLocked,
@@ -287,7 +300,7 @@ export async function upsertOrchestratorConfig(
     `INSERT INTO ai_orchestrator_config (
       workspace_id, scope, primary_model, reasoning_model, triage_model, model_mode,
       fallback_models, provider_priority, feature_routing_json, endpoint_url,
-      pii_enabled, auto_escalation_enabled, audit_enabled, config_locked,
+      pii_enabled, redaction_rules_json, auto_escalation_enabled, audit_enabled, config_locked,
       reasoning_level, content_filtering_enabled, prompt_logging_enabled,
       data_residency, corporate_policies_json, trust_level, data_residency_policy_json,
       confidence_thresholds_json, memory_policy_json, feature_personas_json,
@@ -295,7 +308,7 @@ export async function upsertOrchestratorConfig(
       kill_switch_json, daily_budget_usd, monthly_budget_usd, daily_budget_eur,
       budget_exceeded_action, config_version, created_by, updated_by, updated_at
     ) VALUES (
-      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,NOW()
+      $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27,$28,$29,$30,$31,$32,$33,$34,NOW()
     )
     ON CONFLICT (workspace_id) DO UPDATE SET
       scope = EXCLUDED.scope,
@@ -308,6 +321,7 @@ export async function upsertOrchestratorConfig(
       feature_routing_json = EXCLUDED.feature_routing_json,
       endpoint_url = EXCLUDED.endpoint_url,
       pii_enabled = EXCLUDED.pii_enabled,
+      redaction_rules_json = EXCLUDED.redaction_rules_json,
       auto_escalation_enabled = EXCLUDED.auto_escalation_enabled,
       audit_enabled = EXCLUDED.audit_enabled,
       config_locked = EXCLUDED.config_locked,

@@ -361,6 +361,15 @@ export interface AiFeatureRouting {
   vault_insights: string;
 }
 
+/** A single PII redaction rule pattern applied before LLM egress. */
+export interface RedactionRule {
+  id: string;
+  name: string;
+  description: string;
+  enabled: boolean;
+  pattern?: string;
+}
+
 export interface AiOrchestratorConfig {
   workspaceId: string;
   scope: AiConfigScope;
@@ -375,6 +384,8 @@ export interface AiOrchestratorConfig {
   featureRouting: AiFeatureRouting;
   endpointUrl: string;
   piiEnabled: boolean;
+  /** PII redaction rule set — toggles are persisted per workspace. */
+  redactionRules: RedactionRule[];
   autoEscalationEnabled: boolean;
   auditEnabled: boolean;
   configLocked: boolean;
@@ -825,6 +836,40 @@ export const MODULE_FOR_FEATURE: Record<AiFeatureId, AiModuleId> = {
   vault_insights: 'vault',
 };
 
+/** Default PII redaction rule set shipped with a fresh workspace. */
+export const DEFAULT_REDACTION_RULES: RedactionRule[] = [
+  {
+    id: 'email',
+    name: 'Email Addresses',
+    description: 'Detects and masks personal and corporate email patterns.',
+    enabled: true,
+  },
+  {
+    id: 'phone',
+    name: 'Phone Numbers',
+    description: 'International and local phone number formats.',
+    enabled: true,
+  },
+  {
+    id: 'cc',
+    name: 'Credit Card (PCI)',
+    description: 'Luhn-validated 13-16 digit card numbers.',
+    enabled: true,
+  },
+  {
+    id: 'address',
+    name: 'Physical Addresses',
+    description: 'Street addresses, zip codes, and city names.',
+    enabled: false,
+  },
+  {
+    id: 'ssn',
+    name: 'Sensitive IDs (SSN/VAT)',
+    description: 'Government-issued identification numbers.',
+    enabled: true,
+  },
+];
+
 export const DEFAULT_ORCHESTRATOR_CONFIG: AiOrchestratorConfig = {
   workspaceId: 'default',
   scope: 'workspace',
@@ -838,6 +883,7 @@ export const DEFAULT_ORCHESTRATOR_CONFIG: AiOrchestratorConfig = {
   // Filled from OLLAMA_ENDPOINT / VITE_OLLAMA_ENDPOINT or Admin KI settings — never hardcode localhost in pilots.
   endpointUrl: '',
   piiEnabled: true,
+  redactionRules: DEFAULT_REDACTION_RULES,
   autoEscalationEnabled: true,
   auditEnabled: true,
   configLocked: false,

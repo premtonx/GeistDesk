@@ -41,6 +41,7 @@ export function useWorkspaceModuleConfig(options: UseWorkspaceModuleConfigOption
   }, [hydrateAsAdmin]);
 
   const persist = useCallback(async (next: ModuleConfig): Promise<boolean> => {
+    const previous = getModuleConfig();
     setConfig(next);
     try {
       await saveModuleConfig(next);
@@ -48,6 +49,10 @@ export function useWorkspaceModuleConfig(options: UseWorkspaceModuleConfigOption
     } catch (error) {
       console.error('[WorkspaceModuleConfig] Persist failed:', error);
       toast.error('Workspace settings could not be saved to the database. Please try again.');
+      // Roll back the optimistic update so the UI does not silently diverge
+      // from what is actually persisted.
+      setConfig(previous);
+      window.dispatchEvent(new Event('module-config-changed'));
       return false;
     }
   }, []);

@@ -50,6 +50,7 @@ import { toast } from 'sonner';
 import { motion, AnimatePresence } from 'motion/react';
 import { useWorkspaceModuleConfig } from '../../hooks/useWorkspaceModuleConfig';
 import { PersonalVaultResetButton, usePersonalVaultReset } from '../admin/UserManagementPanel';
+import axios from 'axios';
 
 export default function WorkforcePage() {
   const { config, persist } = useWorkspaceModuleConfig({ admin: true });
@@ -144,6 +145,8 @@ export default function WorkforcePage() {
   };
 
   // Onboard manual user
+  const [onboarding, setOnboarding] = useState(false);
+
   const handleOnboardUser = async (e: FormEvent) => {
     e.preventDefault();
     if (!newUser.email || !newUser.name) {
@@ -151,28 +154,53 @@ export default function WorkforcePage() {
       return;
     }
 
+    const isSso = inviteModalTab === 'sso';
+    if (!isSso && (!newUser.password || newUser.password.length < 8)) {
+      toast.error('Local accounts require a password of at least 8 characters.');
+      return;
+    }
+
+    setOnboarding(true);
     try {
-      const authSource = inviteModalTab === 'sso' ? 'sso' : 'password';
-      
-      const payload = {
+      // All provisioning goes through the server-side, admin-gated endpoint so
+      // the Express RBAC layer is enforced and the profile is created
+      // atomically. The hardcoded fallback password was removed; a real
+      // password is now required (and hashed server-side) for local accounts.
+      const createRes = await axios.post('/api/admin/users/create-local', {
         name: newUser.name,
         email: newUser.email.toLowerCase().trim(),
-        role: newUser.role as any,
-        is_admin: newUser.role === 'admin',
-        authMethod: authSource as any,
-        password: inviteModalTab === 'local' ? (newUser.password || 'TemporaryPassword2026!') : undefined,
-        can_create_tickets: true,
-        can_view_knowledgebase: true,
-      };
+        role: newUser.role,
+        authMethod: isSso ? 'sso' : 'password',
+      });
+      const created = createRes.data?.user as { id: string } | undefined;
+      if (!created?.id) {
+        throw new Error(createRes.data?.message || 'No user id returned.');
+      }
 
-      await agentService.onboardAgent(payload);
-      toast.success(`${newUser.name} created as ${authSource.toUpperCase()} account successfully!`);
-      
+      if (!isSso && newUser.password) {
+        await axios.post(`/api/admin/users/${created.id}/set-password`, {
+          password: newUser.password,
+        });
+      }
+
+      toast.success(
+        isSso
+          ? `${newUser.name} pre-approved as SSO account successfully!`
+          : `${newUser.name} created as local account with a hashed password.`,
+      );
+
       // Reset form
       setNewUser({ name: '', email: '', role: 'agent', password: '' });
       setIsInviteModalOpen(false);
-    } catch (err: any) {
-      toast.error(err.message || 'Failed to onboard workforce user');
+    } catch (err: unknown) {
+      const message = axios.isAxiosError(err)
+        ? err.response?.data?.error || err.response?.data?.message || err.message
+        : err instanceof Error
+          ? err.message
+          : String(err);
+      toast.error(message || 'Failed to onboard workforce user');
+    } finally {
+      setOnboarding(false);
     }
   };
 
@@ -598,14 +626,16 @@ export default function WorkforcePage() {
               {inviteModalTab === 'local' ? (
                 <div className="space-y-2">
                   <Label className="text-xs font-black uppercase tracking-widest text-slate-400">Pre-assigned Secure Password</Label>
-                  <Input 
+                  <Input
+                    required
                     type="password"
-                    placeholder="Enter manual password or blank for random"
+                    minLength={8}
+                    placeholder="Minimum 8 characters"
                     value={newUser.password}
                     onChange={(e) => setNewUser({...newUser, password: e.target.value})}
                     className="h-12 rounded-xl border-slate-200 bg-slate-50/50 focus:bg-white transition-all font-medium focus-visible:ring-indigo-500"
                   />
-                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">MINIMUM: 8 chars or fallback to system placeholder.</p>
+                  <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest">MINIMUM: 8 characters. The password is hashed server-side with Argon2id.</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -644,9 +674,10 @@ export default function WorkforcePage() {
                 </Button>
                 <Button 
                   type="submit" 
+                  disabled={onboarding}
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl px-6 min-w-[120px]"
                 >
-                  Confirm Provisioning
+                  {onboarding ? 'Provisioning…' : 'Confirm Provisioning'}
                 </Button>
               </DialogFooter>
             </form>

@@ -76,8 +76,9 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    setApiKeyInput(config.polyglot.translationProviderKey);
-  }, [config.polyglot.translationProviderKey]);
+    // The raw key is never echoed back from the server — only the presence flag.
+    if (!config.polyglot.hasTranslationKey) setApiKeyInput('');
+  }, [config.polyglot.hasTranslationKey, config.polyglot.translationProviderKey]);
 
   useEffect(() => {
     const preset = resolveLanguagePreset(isoInput);
@@ -152,7 +153,7 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
     }
   };
 
-  const toggleLanguageEnabled = (isoCode: string) => {
+  const toggleLanguageEnabled = async (isoCode: string) => {
     const nextLanguages = config.languages.map((l) =>
       l.isoCode === isoCode ? { ...l, enabled: !l.enabled } : l,
     );
@@ -160,7 +161,11 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
       toast.error(t('adminHub.polyglot.minOneActive', 'At least one language must stay active.'));
       return;
     }
-    persist({ ...config, languages: nextLanguages });
+    const saved = await persist({ ...config, languages: nextLanguages });
+    if (!saved) {
+      // Persist failure already surfaced a toast — do not silently desync the UI.
+      return;
+    }
   };
 
   const resetToDefaults = async () => {
@@ -171,17 +176,23 @@ export function PolyglotBridgeConfigPanel({ className }: PolyglotBridgeConfigPan
   };
 
   const handleSaveApiKey = async () => {
+    const trimmed = apiKeyInput.trim();
     const saved = await persist({
       ...config,
       polyglot: {
         ...config.polyglot,
         translationProviderMode: 'deepl',
-        translationProviderKey: apiKeyInput.trim(),
+        // When the admin clears the field, keep the existing configured key
+        // (hasTranslationKey drives the server-side keep). A typed value is a
+        // genuine replacement.
+        translationProviderKey: trimmed,
+        hasTranslationKey: trimmed.length === 0 ? config.polyglot.hasTranslationKey : true,
         allowAiFallback: false,
       },
     });
     if (saved) {
       toast.success(t('adminHub.polyglot.apiKeySaved', 'Translation provider credentials saved.'));
+      if (trimmed.length === 0) setApiKeyInput('');
     }
   };
 

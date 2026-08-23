@@ -42,6 +42,11 @@ function folderId(): string {
   return `folder-${crypto.randomUUID()}`;
 }
 
+/** Consistent vault-admin check: SYSTEM_ADMIN role or the verified is_admin flag. */
+function isVaultAdmin(user: any): boolean {
+  return user?.role === 'SYSTEM_ADMIN' || user?.is_admin === true;
+}
+
 /** GET /api/credential-vault/status — whether the authenticated user has initialized a personal vault */
 router.get('/status', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
@@ -66,11 +71,25 @@ router.post('/initialize', authenticate, async (req: Request, res: Response): Pr
   }
 });
 
-async function userCanAccessVaultFolder(vaultId: string, userId: string, isAdmin: boolean): Promise<boolean> {
+const SHARED_PARTITION_IDS = new Set(['shared', 'shared-company']);
+
+/**
+ * Shared partitions (shared / shared-company) may be READ by any authenticated
+ * user, but WRITE operations require a SYSTEM_ADMIN. Dynamic portfolios are
+ * governed by portfolio assignments. Personal ('local') vaults belong to the
+ * requesting user.
+ */
+async function userCanAccessVaultFolder(
+  vaultId: string,
+  userId: string,
+  isAdmin: boolean,
+  write = false,
+): Promise<boolean> {
   if (isAdmin) return true;
-  if (vaultId === 'local' || vaultId === 'shared' || vaultId === 'shared-company') return true;
+  if (vaultId === 'local') return true;
+  if (SHARED_PARTITION_IDS.has(vaultId)) return !write;
   const portfolio = await getDocDirect(COLLECTION, vaultId);
-  if (!portfolio) return vaultId === 'local';
+  if (!portfolio) return false;
   return userCanAccessPortfolio(portfolio, userId, false);
 }
 
@@ -79,7 +98,7 @@ router.get('/folders', authenticate, async (req: Request, res: Response): Promis
   try {
     const vaultId = String(req.query.vaultId || 'local');
     const userId = req.user!.id;
-    const isAdmin = req.user!.role === 'SYSTEM_ADMIN' || (req.user as any).is_admin === true;
+    const isAdmin = isVaultAdmin(req.user);
 
     if (!(await userCanAccessVaultFolder(vaultId, userId, isAdmin))) {
       return res.status(403).json({ error: 'Insufficient permissions for this vault.' });
@@ -106,10 +125,10 @@ router.post('/folders', authenticate, async (req: Request, res: Response): Promi
     }
 
     const userId = req.user!.id;
-    const isAdmin = req.user!.role === 'SYSTEM_ADMIN' || (req.user as any).is_admin === true;
+    const isAdmin = isVaultAdmin(req.user);
     const { vaultId, parentId = null, name, icon, sortOrder } = parsed.data;
 
-    if (!(await userCanAccessVaultFolder(vaultId, userId, isAdmin))) {
+    if (!(await userCanAccessVaultFolder(vaultId, userId, isAdmin, true))) {
       return res.status(403).json({ error: 'Insufficient permissions for this vault.' });
     }
 
@@ -158,8 +177,8 @@ router.put('/folders/:id', authenticate, async (req: Request, res: Response): Pr
     if (!existing) return res.status(404).json({ error: 'Folder not found' });
 
     const userId = req.user!.id;
-    const isAdmin = req.user!.role === 'SYSTEM_ADMIN' || (req.user as any).is_admin === true;
-    if (!(await userCanAccessVaultFolder(String(existing.vaultId), userId, isAdmin))) {
+    const isAdmin = isVaultAdmin(req.user);
+    if (!(await userCanAccessVaultFolder(String(existing.vaultId), userId, isAdmin, true))) {
       return res.status(403).json({ error: 'Insufficient permissions for this vault.' });
     }
 
@@ -193,8 +212,8 @@ router.delete('/folders/:id', authenticate, async (req: Request, res: Response):
     if (!existing) return res.status(404).json({ error: 'Folder not found' });
 
     const userId = req.user!.id;
-    const isAdmin = req.user!.role === 'SYSTEM_ADMIN' || (req.user as any).is_admin === true;
-    if (!(await userCanAccessVaultFolder(String(existing.vaultId), userId, isAdmin))) {
+    const isAdmin = isVaultAdmin(req.user);
+    if (!(await userCanAccessVaultFolder(String(existing.vaultId), userId, isAdmin, true))) {
       return res.status(403).json({ error: 'Insufficient permissions for this vault.' });
     }
 
@@ -247,7 +266,7 @@ function resolveUserRole(portfolio: any, userId: string, isAdmin: boolean): stri
 router.get('/portfolios', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const userId = req.user!.id;
-    const isAdmin = req.user!.role === 'SYSTEM_ADMIN' || (req.user as any).is_admin === true;
+    const isAdmin = isVaultAdmin(req.user);
     const all = await getDocsDirect(COLLECTION, []);
 
     const visible = isAdmin
@@ -265,7 +284,7 @@ router.get('/portfolios', authenticate, async (req: Request, res: Response): Pro
 router.get('/portfolios/mine', authenticate, async (req: Request, res: Response): Promise<any> => {
   try {
     const userId = req.user!.id;
-    const isAdmin = req.user!.role === 'SYSTEM_ADMIN' || (req.user as any).is_admin === true;
+    const isAdmin = isVaultAdmin(req.user);
     const all = await getDocsDirect(COLLECTION, []);
 
     const accessible = all
@@ -329,7 +348,7 @@ router.put('/portfolios/:id', authenticate, async (req: Request, res: Response):
     if (!existing) return res.status(404).json({ error: 'Portfolio not found' });
 
     const userId = req.user!.id;
-    const isAdmin = req.user!.role === 'SYSTEM_ADMIN';
+    const isAdmin = isVaultAdmin(req.user);
     const userRole = resolveUserRole(existing, userId, isAdmin);
     if (!['Besitzer', 'Admin'].includes(userRole) && !isAdmin) {
       return res.status(403).json({ error: 'Insufficient permissions to update portfolio' });
@@ -355,7 +374,7 @@ router.delete('/portfolios/:id', authenticate, async (req: Request, res: Respons
     if (!existing) return res.status(404).json({ error: 'Portfolio not found' });
 
     const userId = req.user!.id;
-    const isAdmin = req.user!.role === 'SYSTEM_ADMIN' || (req.user as any).is_admin === true;
+    const isAdmin = isVaultAdmin(req.user);
     const userRole = resolveUserRole(existing, userId, isAdmin);
     if (!isAdmin && userRole !== 'Besitzer') {
       return res.status(403).json({ error: 'Only the vault owner can delete this portfolio' });
@@ -453,7 +472,7 @@ function formatEncryptedVaultRow(row: any) {
 
 function userCanWriteEncryptedVault(vault: any, user: any): boolean {
   if (!vault || !user) return false;
-  if (user.role === 'SYSTEM_ADMIN') return true;
+  if (isVaultAdmin(user)) return true;
   if (vault.createdBy === user.id) return true;
   if (vault.type !== 'shared') return false;
   const email = String(user.email || '').toLowerCase();
@@ -658,7 +677,7 @@ router.delete('/vaults/:id', authenticate, async (req: Request, res: Response): 
     const vaultId = routeParam(req.params.id);
     const existing = await getDocDirect(ENCRYPTED_VAULT_STORE, vaultId);
     if (!existing) return res.status(404).json({ error: 'Vault folder not found.' });
-    if (existing.createdBy !== req.user!.id && req.user!.role !== 'SYSTEM_ADMIN') {
+    if (existing.createdBy !== req.user!.id && !isVaultAdmin(req.user)) {
       return res.status(403).json({ error: 'Forbidden: only the vault owner can delete this folder.' });
     }
 

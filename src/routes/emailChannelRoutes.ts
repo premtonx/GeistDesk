@@ -7,12 +7,12 @@ import {
   getEmailChannel,
   listEmailChannels,
   updateEmailChannel,
+  updateEmailChannelStatus,
 } from '../lib/email-ingestion/channel-store.js';
 import { createEmailIngestionDriver } from '../lib/email-ingestion/factory.js';
 import type { EmailConnectionType } from '../lib/email-ingestion/types.js';
 import { routeParam } from '../lib/route-params.js';
-import { updateDocDirect } from '../lib/postgres-backend.js';
-import { EMAIL_CHANNELS_COLLECTION } from '../lib/email-ingestion/types.js';
+import { safeErrorMessage } from '../lib/safe-log.js';
 
 const router = Router();
 
@@ -148,7 +148,7 @@ router.get('/', authenticate, requireRole(['SYSTEM_ADMIN']), async (_req, res: R
     const channels = await listEmailChannels();
     res.json({ channels });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Failed to list email channels' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Failed to list email channels') });
   }
 });
 
@@ -161,7 +161,7 @@ router.post('/', authenticate, requireRole(['SYSTEM_ADMIN']), async (req: Reques
     const channel = await createEmailChannel(sanitizeByConnectionType(parsed.data));
     res.status(201).json({ channel });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Failed to create channel' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Failed to create channel') });
   }
 });
 
@@ -176,7 +176,7 @@ router.put('/:id', authenticate, requireRole(['SYSTEM_ADMIN']), async (req: Requ
     if (!channel) return res.status(404).json({ error: 'Channel not found' });
     res.json({ channel });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Failed to update channel' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Failed to update channel') });
   }
 });
 
@@ -187,7 +187,7 @@ router.delete('/:id', authenticate, requireRole(['SYSTEM_ADMIN']), async (req: R
     if (!ok) return res.status(404).json({ error: 'Channel not found' });
     res.json({ success: true });
   } catch (err: any) {
-    res.status(500).json({ error: err?.message || 'Failed to delete channel' });
+    res.status(500).json({ error: safeErrorMessage(err, 'Failed to delete channel') });
   }
 });
 
@@ -226,17 +226,20 @@ router.post('/:id/test', authenticate, requireRole(['SYSTEM_ADMIN']), async (req
       ? await driver.testConnection()
       : { ok: true, message: 'No test implemented for this driver.' };
 
-    await updateDocDirect(EMAIL_CHANNELS_COLLECTION, id, {
-      lastTestAt: new Date().toISOString(),
-      lastTestOk: result.ok,
+    // Driver errors (IMAP / Graph auth details) can embed hosts, tenant IDs, or
+    // token fragments — persist a redacted copy and never return raw details.
+    const redactedMessage = safeErrorMessage(result.message, 'Connection test failed');
+    await updateEmailChannelStatus(id, {
       status: result.ok ? 'verified' : 'failed',
-      lastError: result.ok ? null : result.message,
-      updatedAt: new Date().toISOString(),
+      lastTestOk: result.ok,
+      lastTestAt: new Date().toISOString(),
+      lastError: result.ok ? null : redactedMessage,
     });
 
-    res.json({ success: result.ok, message: result.message, ok: result.ok });
+    res.json({ success: result.ok, message: redactedMessage, ok: result.ok });
   } catch (err: any) {
-    res.status(500).json({ success: false, ok: false, error: err?.message || 'Connection test failed' });
+    const message = safeErrorMessage(err, 'Connection test failed');
+    res.status(500).json({ success: false, ok: false, error: message });
   }
 });
 

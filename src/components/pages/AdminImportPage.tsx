@@ -255,11 +255,11 @@ export default function AdminImportPage() {
     const endpoint =
       kind === 'tickets' ? '/api/admin/import/tickets' : '/api/admin/import/kb';
 
-    try {
-      const progressTimer = window.setInterval(() => {
-        setProgress((p) => (p >= 88 ? p : p + 4));
-      }, 180);
+    const progressTimer = window.setInterval(() => {
+      setProgress((p) => (p >= 88 ? p : p + 4));
+    }, 180);
 
+    try {
       const res = await axios.post<ImportApiResult>(endpoint, form, {
         withCredentials: true,
         headers: { 'Content-Type': 'multipart/form-data' },
@@ -277,6 +277,7 @@ export default function AdminImportPage() {
       if (res.data.errorCount > 0) toast.warning(msg);
       else toast.success(msg);
     } catch (err: unknown) {
+      window.clearInterval(progressTimer);
       setPhase('ready');
       setProgress(0);
       const message =
@@ -291,6 +292,8 @@ export default function AdminImportPage() {
         errorCount: 1,
         errors: [message],
       });
+    } finally {
+      window.clearInterval(progressTimer);
     }
   };
 
