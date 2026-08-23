@@ -10,6 +10,7 @@ export interface OnboardingStatus {
   requiresOnboarding: boolean;
   needsResume?: boolean;
   modules: PlatformModules;
+  forwardingDomain: string;
   defaults: {
     ollamaEndpoint: string;
     chatModel: string;
@@ -67,6 +68,7 @@ export function useOnboardingStatus() {
             chatModel: 'llama3.1',
             embeddingModel: 'nomic-embed-text',
           },
+          forwardingDomain: detail.forwardingDomain ?? prev?.forwardingDomain ?? '',
           health: detail.health ?? prev?.health ?? { database: 'ok', pgvector: false },
         }));
         setLoading(false);

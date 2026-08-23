@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
+  Building2,
   CheckCircle2,
   Copy,
   Globe2,
+  KeyRound,
   Loader2,
   Mail,
   Plus,
@@ -25,13 +27,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '../ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../ui/select';
 import { Switch } from '../ui/switch';
 import { cn } from '../../lib/utils';
 import {
@@ -39,31 +34,46 @@ import {
   type EmailChannelConfig,
   type EmailConnectionType,
 } from '../../services/emailChannelApi';
+import {
+  azureAppRegistrationUrl,
+  runMicrosoftDeviceFlow,
+} from '../../lib/oauth-device-flow';
 
-const CONNECTION_OPTIONS: { id: EmailConnectionType; label: string; hint: string }[] = [
+const CONNECTION_OPTIONS: {
+  id: EmailConnectionType;
+  label: string;
+  icon: typeof Zap;
+  recommended?: boolean;
+  hint: string;
+}[] = [
   {
     id: 'webhook',
-    label: 'E-Mail-Weiterleitung (Webhook)',
-    hint: 'Passive push via Postal / SendGrid / Mailgun / custom gateway',
+    label: 'E-Mail-Weiterleitung',
+    icon: Zap,
+    recommended: true,
+    hint: 'Empfohlen — passives Push über eine eindeutige help-{slug}@domain Adresse.',
   },
   {
     id: 'imap_basic',
     label: 'IMAP (Standard)',
-    hint: 'Classic username + password over SSL/TLS',
+    icon: Mail,
+    hint: 'Klassischer Benutzername + Passwort über SSL/TLS.',
   },
   {
     id: 'imap_oauth2',
     label: 'IMAP (OAuth2)',
-    hint: 'XOAUTH2 for modern Microsoft / Google mailboxes',
+    icon: KeyRound,
+    hint: 'XOAUTH2 für moderne Microsoft / Google Postfächer.',
   },
   {
     id: 'microsoft_graph',
     label: 'Microsoft Graph API',
-    hint: 'Active pull via Graph client-credentials',
+    icon: Building2,
+    hint: 'Aktives Pull über Graph Client-Credentials.',
   },
 ];
 
-function emptyDraft(): Partial<EmailChannelConfig> {
+function emptyDraft(forwardingDomain?: string): Partial<EmailChannelConfig> {
   return {
     name: '',
     email: '',
@@ -71,6 +81,7 @@ function emptyDraft(): Partial<EmailChannelConfig> {
     connectionType: 'webhook',
     enabled: true,
     status: 'pending',
+    forwardingDomain,
   };
 }
 
@@ -177,12 +188,21 @@ export default function EmailChannelsPage() {
   const [dnsCheckMessage, setDnsCheckMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState<Partial<EmailChannelConfig> | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [forwardingDomain, setForwardingDomain] = useState('');
+  const [oauthFlow, setOauthFlow] = useState<{
+    userCode: string;
+    verificationUri: string;
+    message: string;
+    pending: boolean;
+  } | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const list = await emailChannelApi.list();
       setChannels(list);
+      const domain = list.find((c) => c.forwardingDomain)?.forwardingDomain || '';
+      if (domain) setForwardingDomain(domain);
     } catch (err: any) {
       toast.error(err?.response?.data?.error || err?.message || 'Failed to load email channels');
     } finally {
@@ -193,6 +213,28 @@ export default function EmailChannelsPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  // Auto-refresh listener: when a forwarding channel receives a verification
+  // ping or inbound test payload, the server flips its status to "connected".
+  // Poll quietly in the background while the modal is open so the status badge
+  // updates without a manual refresh.
+  useEffect(() => {
+    if (!editing?.id || editing.connectionType !== 'webhook') return;
+    const interval = window.setInterval(() => {
+      emailChannelApi
+        .list()
+        .then((list) => {
+          setChannels(list);
+          setEditing((prev) => {
+            if (!prev?.id) return prev;
+            const fresh = list.find((c) => c.id === prev.id);
+            return fresh ? { ...prev, ...fresh } : prev;
+          });
+        })
+        .catch(() => undefined);
+    }, 15_000);
+    return () => window.clearInterval(interval);
+  }, [editing?.id, editing?.connectionType]);
 
   const filtered = useMemo(
     () =>
@@ -218,12 +260,14 @@ export default function EmailChannelsPage() {
   const openCreate = () => {
     setTestResult(null);
     setDnsCheckMessage(null);
-    setEditing(emptyDraft());
+    setOauthFlow(null);
+    setEditing(emptyDraft(forwardingDomain));
   };
 
   const openEdit = (channel: EmailChannelConfig) => {
     setTestResult(null);
     setDnsCheckMessage(null);
+    setOauthFlow(null);
     setEditing({ ...channel });
   };
 
@@ -235,16 +279,40 @@ export default function EmailChannelsPage() {
     setSaving(true);
     try {
       const payload = buildSavePayload(editing);
+      let saved: EmailChannelConfig;
       if (editing.id) {
         const updated = await emailChannelApi.update(editing.id, payload);
         setChannels((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
         setEditing(updated);
+        saved = updated;
         toast.success('Channel saved');
       } else {
         const created = await emailChannelApi.create(payload);
         setChannels((prev) => [created, ...prev]);
         setEditing(created);
+        saved = created;
         toast.success('Channel created');
+      }
+
+      // Advanced direct connections (IMAP/Graph) run a background test on save
+      // and report connected / auth_error / pending.
+      const type = saved.connectionType;
+      if (type === 'imap_basic' || type === 'imap_oauth2' || type === 'microsoft_graph') {
+        try {
+          const result = await emailChannelApi.test(saved.id, buildSavePayload(editing));
+          setTestResult(result);
+          const list = await emailChannelApi.list();
+          setChannels(list);
+          const fresh = list.find((c) => c.id === saved.id);
+          if (fresh) setEditing(fresh);
+          if (result.ok) toast.success(result.message || 'Verbindung erfolgreich');
+          else toast.error(result.message || 'Verbindungs-Test fehlgeschlagen');
+        } catch (err: any) {
+          const message =
+            err?.response?.data?.error || err?.response?.data?.message || err?.message || 'Verbindungs-Test fehlgeschlagen';
+          setTestResult({ ok: false, message });
+          toast.error(message);
+        }
       }
     } catch (err: any) {
       toast.error(err?.response?.data?.error || err?.message || 'Save failed');
@@ -267,6 +335,16 @@ export default function EmailChannelsPage() {
 
   const handleTest = async () => {
     if (!editing) return;
+    const type = connectionType;
+    if (type === 'webhook') {
+      setTestResult({
+        ok: true,
+        message:
+          'Weiterleitungskanäle sind passiv — kein aktiver Test. Sende eine Testmail an die help-Adresse; der Status wird automatisch auf „connected" gesetzt.',
+      });
+      toast.success('Weiterleitung ist passiv — Testmail an die help-Adresse senden');
+      return;
+    }
     setTesting(true);
     setTestResult(null);
     try {
@@ -351,6 +429,56 @@ export default function EmailChannelsPage() {
     setEditing((prev) => (prev ? { ...prev, [key]: value } : prev));
   };
 
+  const handleOAuthConnect = async () => {
+    if (!editing) return;
+    setOauthFlow({ userCode: '', verificationUri: '', message: 'OAuth-Verbindung wird vorbereitet…', pending: true });
+    try {
+      // IMAP OAuth2 stores credentials differently than Graph: tenant lives in
+      // the token endpoint URL (login.microsoftonline.com/{tenant}/...).
+      let tenantId = editing.tenantId?.trim() || '';
+      const clientId =
+        editing.clientId?.trim() || editing.oauthClientId?.trim() || '';
+      if (!tenantId) {
+        const tokenUrl = editing.oauthTokenUrl?.trim() || '';
+        const match = tokenUrl.match(/login\.microsoftonline\.com\/([^/]+)/i);
+        if (match?.[1]) tenantId = match[1].trim();
+      }
+      if (!tenantId || !clientId) {
+        throw new Error(
+          connectionType === 'imap_oauth2'
+            ? 'Client ID und Tenant (Token-URL oder Tenant-ID) angeben, um OAuth zu verbinden.'
+            : 'Tenant ID und Client ID angeben, um OAuth zu verbinden.',
+        );
+      }
+      const refreshToken = await runMicrosoftDeviceFlow({
+        tenantId,
+        clientId,
+        onUserCode: (userCode, verificationUri, message) =>
+          setOauthFlow({ userCode, verificationUri, message, pending: true }),
+      });
+
+      if (connectionType === 'imap_oauth2') {
+        setField('oauthRefreshToken', refreshToken);
+        setOauthFlow((prev) =>
+          prev ? { ...prev, pending: false, message: 'OAuth verbunden — Refresh Token gespeichert. Kanal jetzt speichern.' } : prev,
+        );
+        toast.success('Microsoft OAuth verbunden — Refresh Token gespeichert');
+      } else {
+        // Graph driver uses client_credentials; the device flow validated the
+        // app registration. Persist nothing sensitive beyond what's already set.
+        setOauthFlow((prev) =>
+          prev ? { ...prev, pending: false, message: 'Microsoft App-Registrierung validiert. Kanal jetzt speichern & testen.' } : prev,
+        );
+        toast.success('Microsoft App-Registrierung validiert');
+      }
+    } catch (err: any) {
+      setOauthFlow((prev) =>
+        prev ? { ...prev, pending: false, message: err?.message || 'OAuth-Verbindung fehlgeschlagen' } : prev,
+      );
+      toast.error(err?.message || 'OAuth-Verbindung fehlgeschlagen');
+    }
+  };
+
   return (
     <div className="p-6 md:p-8 max-w-6xl mx-auto space-y-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -417,9 +545,11 @@ export default function EmailChannelsPage() {
                       <Badge
                         className={cn(
                           'text-[10px] font-bold uppercase',
-                          channel.status === 'verified' || channel.status === 'active'
+                          channel.status === 'verified' ||
+                            channel.status === 'active' ||
+                            channel.status === 'connected'
                             ? 'bg-emerald-50 text-emerald-700 border-emerald-100'
-                            : channel.status === 'failed'
+                            : channel.status === 'failed' || channel.status === 'auth_error'
                               ? 'bg-rose-50 text-rose-700 border-rose-100'
                               : 'bg-amber-50 text-amber-700 border-amber-100',
                         )}
@@ -492,59 +622,84 @@ export default function EmailChannelsPage() {
                 <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
                   Verbindungstyp
                 </Label>
-                <Select
-                  value={connectionType}
-                  onValueChange={(v) => {
-                    const next = v as EmailConnectionType;
-                    setEditing((prev) => {
-                      if (!prev) return prev;
-                      const base: Partial<EmailChannelConfig> = {
-                        ...prev,
-                        connectionType: next,
-                      };
-                      if (next === 'webhook') {
-                        return {
-                          ...base,
-                          imapHost: undefined,
-                          imapPort: undefined,
-                          imapUser: undefined,
-                          imapPassword: undefined,
-                          imapTls: undefined,
-                          oauthClientId: undefined,
-                          oauthClientSecret: undefined,
-                          oauthTokenUrl: undefined,
-                          tenantId: undefined,
-                          clientId: undefined,
-                          clientSecret: undefined,
-                          mailbox: undefined,
-                        };
-                      }
-                      if (next === 'imap_basic' || next === 'imap_oauth2') {
-                        return {
-                          ...base,
-                          imapPort: prev.imapPort ?? 993,
-                          imapTls: prev.imapTls !== false,
-                          imapUser: prev.imapUser || prev.email || '',
-                        };
-                      }
-                      return {
-                        ...base,
-                        mailbox: prev.mailbox || prev.email || '',
-                      };
-                    });
-                  }}
-                >
-                  <SelectTrigger className="h-10">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONNECTION_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.id} value={opt.id}>
-                        {opt.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                <div className="grid grid-cols-2 gap-2">
+                  {CONNECTION_OPTIONS.map((opt) => {
+                    const Icon = opt.icon;
+                    const active = connectionType === opt.id;
+                    return (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => {
+                          const next = opt.id;
+                          setTestResult(null);
+                          setOauthFlow(null);
+                          setEditing((prev) => {
+                            if (!prev) return prev;
+                            const base: Partial<EmailChannelConfig> = {
+                              ...prev,
+                              connectionType: next,
+                            };
+                            if (next === 'webhook') {
+                              return {
+                                ...base,
+                                imapHost: undefined,
+                                imapPort: undefined,
+                                imapUser: undefined,
+                                imapPassword: undefined,
+                                imapTls: undefined,
+                                oauthClientId: undefined,
+                                oauthClientSecret: undefined,
+                                oauthTokenUrl: undefined,
+                                oauthRefreshToken: undefined,
+                                oauthScope: undefined,
+                                tenantId: undefined,
+                                clientId: undefined,
+                                clientSecret: undefined,
+                                mailbox: undefined,
+                              };
+                            }
+                            if (next === 'imap_basic' || next === 'imap_oauth2') {
+                              return {
+                                ...base,
+                                imapPort: prev.imapPort ?? 993,
+                                imapTls: prev.imapTls !== false,
+                                imapUser: prev.imapUser || prev.email || '',
+                              };
+                            }
+                            return {
+                              ...base,
+                              mailbox: prev.mailbox || prev.email || '',
+                            };
+                          });
+                        }}
+                        className={cn(
+                          'rounded-xl border px-3 py-2.5 text-left transition',
+                          active
+                            ? 'border-blue-500 bg-blue-50/60 ring-1 ring-blue-500/30'
+                            : 'border-slate-200 hover:border-slate-300',
+                        )}
+                      >
+                        <div className="flex items-center gap-1.5">
+                          <Icon className={cn('w-3.5 h-3.5', active ? 'text-blue-600' : 'text-slate-400')} />
+                          <span
+                            className={cn(
+                              'text-[11px] font-bold leading-tight',
+                              active ? 'text-blue-800' : 'text-slate-600',
+                            )}
+                          >
+                            {opt.label}
+                          </span>
+                          {opt.recommended ? (
+                            <Badge className="ml-auto text-[8px] font-black uppercase bg-emerald-50 text-emerald-700 border-emerald-100">
+                              Empfohlen
+                            </Badge>
+                          ) : null}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
                 <p className="text-[11px] text-slate-400">
                   {CONNECTION_OPTIONS.find((o) => o.id === connectionType)?.hint}
                 </p>
@@ -555,8 +710,8 @@ export default function EmailChannelsPage() {
                   <p className="text-xs font-bold text-slate-800">Aktiv</p>
                   <p className="text-[10px] text-slate-400">
                     {connectionType === 'webhook'
-                      ? 'Webhook channels never poll — they wait for push.'
-                      : 'Active pull drivers are polled every 60 seconds.'}
+                      ? 'Weiterleitungskanäle pollen nicht — sie warten auf eingehende Mails (automatische Verifizierung).'
+                      : 'Aktive Pull-Treiber werden alle 60 Sekunden abgefragt.'}
                   </p>
                 </div>
                 <Switch
@@ -581,8 +736,8 @@ export default function EmailChannelsPage() {
                         value={
                           editing.forwardingAddress ||
                           (editing.id
-                            ? `ticket-${editing.id.slice(0, 12)}@app.premtonx.cloud`
-                            : 'Save channel to generate address')
+                            ? `help-${editing.id.replace(/[^a-zA-Z0-9]/g, '').slice(0, 16).toLowerCase()}@${forwardingDomain || 'app.premtonx.cloud'}`
+                            : 'Speichern, um die Adresse zu generieren')
                         }
                         className="font-mono text-xs bg-white"
                       />
@@ -623,6 +778,32 @@ export default function EmailChannelsPage() {
                       Send header <code className="font-mono">x-geistdesk-webhook-secret</code> from
                       Postal / SendGrid / Mailgun to <code className="font-mono">/api/webhooks/inbound-mail</code>.
                     </p>
+                  </div>
+
+                  <div
+                    className={cn(
+                      'flex items-center gap-2 rounded-lg border px-2.5 py-2 text-[11px] font-semibold',
+                      editing.status === 'connected' || editing.status === 'verified'
+                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                        : editing.status === 'auth_error'
+                          ? 'border-rose-200 bg-rose-50 text-rose-800'
+                          : 'border-amber-200 bg-amber-50 text-amber-800',
+                    )}
+                  >
+                    {editing.status === 'connected' || editing.status === 'verified' ? (
+                      <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
+                    ) : editing.status === 'auth_error' ? (
+                      <Shield className="w-3.5 h-3.5 shrink-0" />
+                    ) : (
+                      <Loader2 className="w-3.5 h-3.5 shrink-0 animate-pulse" />
+                    )}
+                    <span>
+                      {editing.status === 'connected' || editing.status === 'verified'
+                        ? 'Verbindung aktiv — erste Weiterleitung bestätigt.'
+                        : editing.status === 'auth_error'
+                          ? 'Authentifizierungsfehler — bitte Secret prüfen.'
+                          : 'Wartet auf erste eingehende Mail an die Weiterleitungsadresse (Verifizierung automatisch).'}
+                    </span>
                   </div>
 
                   <details open className="rounded-xl border border-slate-200 bg-white overflow-hidden">
@@ -803,6 +984,79 @@ export default function EmailChannelsPage() {
                           placeholder="https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
                         />
                       </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1.5 text-indigo-600"
+                          disabled={oauthFlow?.pending || false}
+                          onClick={() => void handleOAuthConnect()}
+                        >
+                          {oauthFlow?.pending ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <KeyRound className="w-3.5 h-3.5" />
+                          )}
+                          Mit Microsoft verbinden
+                        </Button>
+                        <a
+                          href={azureAppRegistrationUrl(editing.tenantId)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] font-semibold text-slate-400 underline hover:text-slate-600"
+                        >
+                          App-Registrierung öffnen
+                        </a>
+                      </div>
+                      {oauthFlow ? (
+                        <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 space-y-1.5">
+                          {oauthFlow.userCode ? (
+                            <>
+                              <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">
+                                Schritt 1 — Code eingeben
+                              </p>
+                              <div className="flex items-center gap-2">
+                                <code className="font-mono text-sm font-black text-indigo-800 tracking-widest bg-white border border-indigo-200 rounded px-2 py-1">
+                                  {oauthFlow.userCode}
+                                </code>
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-7 px-2"
+                                  onClick={() => void copyText(oauthFlow.userCode, 'Code')}
+                                >
+                                  <Copy className="w-3 h-3" />
+                                </Button>
+                              </div>
+                              <p className="text-[10px] text-indigo-600">
+                                Öffne{' '}
+                                <a
+                                  href={oauthFlow.verificationUri}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="font-bold underline"
+                                >
+                                  {oauthFlow.verificationUri}
+                                </a>{' '}
+                                und melde dich an.
+                              </p>
+                            </>
+                          ) : (
+                            <p className="text-[11px] text-indigo-700">{oauthFlow.message}</p>
+                          )}
+                          {oauthFlow.pending && oauthFlow.userCode ? (
+                            <p className="text-[10px] text-indigo-500 flex items-center gap-1.5">
+                              <Loader2 className="w-3 h-3 animate-spin" /> Warte auf Anmeldung im
+                              Browser…
+                            </p>
+                          ) : null}
+                          {!oauthFlow.pending && !oauthFlow.userCode ? (
+                            <p className="text-[11px] font-semibold text-indigo-700">{oauthFlow.message}</p>
+                          ) : null}
+                        </div>
+                      ) : null}
                     </>
                   )}
                   <div className="flex items-center justify-between">
@@ -854,6 +1108,79 @@ export default function EmailChannelsPage() {
                       placeholder="••••••••"
                     />
                   </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5 text-indigo-600"
+                      disabled={oauthFlow?.pending || false}
+                      onClick={() => void handleOAuthConnect()}
+                    >
+                      {oauthFlow?.pending ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Building2 className="w-3.5 h-3.5" />
+                      )}
+                      App verbinden & validieren
+                    </Button>
+                    <a
+                      href={azureAppRegistrationUrl(editing.tenantId)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-[10px] font-semibold text-slate-400 underline hover:text-slate-600"
+                    >
+                      App-Registrierung öffnen
+                    </a>
+                  </div>
+                  {oauthFlow ? (
+                    <div className="rounded-lg border border-indigo-100 bg-indigo-50/60 px-3 py-2.5 space-y-1.5">
+                      {oauthFlow.userCode ? (
+                        <>
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-indigo-500">
+                            Schritt 1 — Code eingeben
+                          </p>
+                          <div className="flex items-center gap-2">
+                            <code className="font-mono text-sm font-black text-indigo-800 tracking-widest bg-white border border-indigo-200 rounded px-2 py-1">
+                              {oauthFlow.userCode}
+                            </code>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-7 px-2"
+                              onClick={() => void copyText(oauthFlow.userCode, 'Code')}
+                            >
+                              <Copy className="w-3 h-3" />
+                            </Button>
+                          </div>
+                          <p className="text-[10px] text-indigo-600">
+                            Öffne{' '}
+                            <a
+                              href={oauthFlow.verificationUri}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="font-bold underline"
+                            >
+                              {oauthFlow.verificationUri}
+                            </a>{' '}
+                            und melde dich mit einem berechtigten Konto an.
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-[11px] text-indigo-700">{oauthFlow.message}</p>
+                      )}
+                      {oauthFlow.pending && oauthFlow.userCode ? (
+                        <p className="text-[10px] text-indigo-500 flex items-center gap-1.5">
+                          <Loader2 className="w-3 h-3 animate-spin" /> Warte auf Anmeldung im
+                          Browser…
+                        </p>
+                      ) : null}
+                      {!oauthFlow.pending && !oauthFlow.userCode ? (
+                        <p className="text-[11px] font-semibold text-indigo-700">{oauthFlow.message}</p>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -889,7 +1216,7 @@ export default function EmailChannelsPage() {
               className="gap-1.5"
             >
               {testing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-              Verbindung testen
+              {connectionType === 'webhook' ? 'Hinweis anzeigen' : 'Verbindung testen'}
             </Button>
             <Button type="button" disabled={saving} onClick={() => void handleSave()}>
               {saving ? 'Saving…' : 'Speichern'}

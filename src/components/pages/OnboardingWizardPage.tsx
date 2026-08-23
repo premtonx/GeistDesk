@@ -9,8 +9,10 @@ import {
   ArrowLeft,
   ArrowRight,
   BookOpen,
+  Building2,
   CheckCircle2,
   Cloud,
+  Copy,
   KeyRound,
   Loader2,
   Lock,
@@ -22,6 +24,7 @@ import {
   Ticket,
   UploadCloud,
   XCircle,
+  Zap,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { GeistDeskLogo } from '../ui/GeistDeskLogo';
@@ -41,7 +44,7 @@ import { applyAuthenticatedSession } from '../../lib/firebase-custom-client';
 
 type AiMode = 'sovereign' | 'cloud' | 'disabled';
 type CloudProvider = 'openai' | 'azure' | 'anthropic' | 'groq';
-type IngestChannel = 'webhook' | 'microsoft_graph' | 'imap';
+type IngestChannel = 'webhook' | 'imap_basic' | 'imap_oauth2' | 'microsoft_graph';
 
 const STEPS = [
   { id: 1, title: 'Administrator-Konto erstellen', subtitle: 'Name, E-Mail, Passwort' },
@@ -92,8 +95,13 @@ export default function OnboardingWizardPage() {
   const [ingestChannel, setIngestChannel] = useState<IngestChannel>('webhook');
   const [supportEmail, setSupportEmail] = useState('');
   const [imapHost, setImapHost] = useState('');
+  const [imapPort, setImapPort] = useState('993');
+  const [imapTls, setImapTls] = useState(true);
   const [imapUser, setImapUser] = useState('');
   const [imapPassword, setImapPassword] = useState('');
+  const [imapOauthClientId, setImapOauthClientId] = useState('');
+  const [imapOauthClientSecret, setImapOauthClientSecret] = useState('');
+  const [imapOauthTokenUrl, setImapOauthTokenUrl] = useState('');
   const [graphTenantId, setGraphTenantId] = useState('');
   const [graphClientId, setGraphClientId] = useState('');
   const [graphClientSecret, setGraphClientSecret] = useState('');
@@ -250,8 +258,13 @@ export default function OnboardingWizardPage() {
                 channel: ingestChannel,
                 supportEmail: supportEmail.trim() || adminEmail.trim(),
                 imapHost,
+                imapPort: imapPort.trim() || '993',
+                imapTls,
                 imapUser,
                 imapPassword,
+                imapOauthClientId,
+                imapOauthClientSecret,
+                imapOauthTokenUrl,
                 graphTenantId,
                 graphClientId,
                 graphClientSecret,
@@ -660,33 +673,78 @@ export default function OnboardingWizardPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="grid gap-3">
+              <div className="grid gap-2 sm:grid-cols-2">
                 {(
                   [
-                    { id: 'webhook' as const, title: 'E-Mail-Weiterleitung (Webhook)', body: 'Forward mail to a unique GeistDesk address.' },
-                    { id: 'microsoft_graph' as const, title: 'Microsoft Graph API', body: 'Connect Microsoft 365 mailbox via Graph.' },
-                    { id: 'imap' as const, title: 'IMAP (OAuth2 / Basic)', body: 'Poll a mailbox over IMAP.' },
+                    {
+                      id: 'webhook' as const,
+                      icon: Zap,
+                      title: 'E-Mail-Weiterleitung',
+                      body: 'Empfohlen — Weiterleitung an eine eindeutige help-@ Adresse.',
+                      recommended: true,
+                    },
+                    {
+                      id: 'imap_basic' as const,
+                      icon: Mail,
+                      title: 'IMAP (Standard)',
+                      body: 'Benutzername + Passwort über SSL/TLS.',
+                      recommended: false,
+                    },
+                    {
+                      id: 'imap_oauth2' as const,
+                      icon: KeyRound,
+                      title: 'IMAP (OAuth2)',
+                      body: 'XOAUTH2 für Microsoft / Google Postfächer.',
+                      recommended: false,
+                    },
+                    {
+                      id: 'microsoft_graph' as const,
+                      icon: Building2,
+                      title: 'Microsoft Graph API',
+                      body: 'Microsoft 365 Postfach über Graph.',
+                      recommended: false,
+                    },
                   ] as const
-                ).map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => setIngestChannel(opt.id)}
-                    className={cn(
-                      'rounded-xl border p-4 text-left transition hover:border-primary/50',
-                      ingestChannel === opt.id && 'border-primary bg-primary/5 ring-1 ring-primary/30',
-                    )}
-                  >
-                    <div className="font-medium">{opt.title}</div>
-                    <div className="text-xs text-muted-foreground">{opt.body}</div>
-                  </button>
-                ))}
+                ).map((opt) => {
+                  const Icon = opt.icon;
+                  return (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      onClick={() => setIngestChannel(opt.id)}
+                      className={cn(
+                        'rounded-xl border p-4 text-left transition hover:border-primary/50',
+                        ingestChannel === opt.id &&
+                          'border-primary bg-primary/5 ring-1 ring-primary/30',
+                      )}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Icon className="h-4 w-4" />
+                        <span className="font-medium text-sm">{opt.title}</span>
+                        {opt.recommended ? (
+                          <Badge className="ml-auto text-[8px] font-black uppercase bg-emerald-50 text-emerald-700 border-emerald-100">
+                            Empfohlen
+                          </Badge>
+                        ) : null}
+                      </div>
+                      <div className="text-xs text-muted-foreground">{opt.body}</div>
+                    </button>
+                  );
+                })}
               </div>
               <div className="space-y-2">
                 <Label>Support email</Label>
-                <Input value={supportEmail} onChange={(e) => setSupportEmail(e.target.value)} />
+                <Input value={supportEmail} onChange={(e) => setSupportEmail(e.target.value)} placeholder="support@domain.com" />
               </div>
-              {ingestChannel === 'imap' && (
+              {ingestChannel === 'webhook' ? (
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 text-xs text-emerald-800">
+                  Nach der Einrichtung erhältst du im Admin Hub eine eindeutige{' '}
+                  <code className="font-mono">help-…@&lt;domain&gt;</code> Adresse. Richte dort eine
+                  Weiterleitung ein — der Kanal wird nach der ersten eingehenden Mail automatisch
+                  als verbunden markiert.
+                </div>
+              ) : null}
+              {(ingestChannel === 'imap_basic' || ingestChannel === 'imap_oauth2') && (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <div className="space-y-2 sm:col-span-2">
                     <Label>IMAP host</Label>
@@ -696,10 +754,51 @@ export default function OnboardingWizardPage() {
                     <Label>IMAP user</Label>
                     <Input value={imapUser} onChange={(e) => setImapUser(e.target.value)} />
                   </div>
-                  <div className="space-y-2">
-                    <Label>IMAP password</Label>
-                    <Input type="password" value={imapPassword} onChange={(e) => setImapPassword(e.target.value)} />
+                  {ingestChannel === 'imap_basic' ? (
+                    <div className="space-y-2">
+                      <Label>IMAP password</Label>
+                      <Input type="password" value={imapPassword} onChange={(e) => setImapPassword(e.target.value)} />
+                    </div>
+                  ) : (
+                    <>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label>OAuth Client ID</Label>
+                        <Input value={imapOauthClientId} onChange={(e) => setImapOauthClientId(e.target.value)} />
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label>Client Secret</Label>
+                        <Input
+                          type="password"
+                          value={imapOauthClientSecret}
+                          onChange={(e) => setImapOauthClientSecret(e.target.value)}
+                        />
+                      </div>
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label>Token Endpoint URL</Label>
+                        <Input
+                          value={imapOauthTokenUrl}
+                          onChange={(e) => setImapOauthTokenUrl(e.target.value)}
+                          placeholder="https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
+                        />
+                      </div>
+                    </>
+                  )}
+                  <div className="flex items-center justify-between sm:col-span-2">
+                    <Label className="text-xs">Port</Label>
+                    <Input
+                      className="w-24"
+                      value={imapPort}
+                      onChange={(e) => setImapPort(e.target.value)}
+                      placeholder="993"
+                    />
                   </div>
+                  <label className="flex items-center gap-2 sm:col-span-2">
+                    <Checkbox
+                      checked={imapTls}
+                      onCheckedChange={(c) => setImapTls(c === true)}
+                    />
+                    <span className="text-xs">SSL/TLS</span>
+                  </label>
                 </div>
               )}
               {ingestChannel === 'microsoft_graph' && (

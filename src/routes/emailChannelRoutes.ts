@@ -52,7 +52,9 @@ const channelSchema = z
     name: optionalText(200),
     email: optionalText(320),
     group: optionalText(200),
-    status: z.enum(['verified', 'pending', 'failed', 'active', 'disabled']).optional(),
+    status: z
+      .enum(['verified', 'pending', 'failed', 'active', 'disabled', 'connected', 'auth_error'])
+      .optional(),
     connectionType: connectionTypes.optional(),
     enabled: optionalBool,
     isPrimary: optionalBool,
@@ -229,8 +231,9 @@ router.post('/:id/test', authenticate, requireRole(['SYSTEM_ADMIN']), async (req
     // Driver errors (IMAP / Graph auth details) can embed hosts, tenant IDs, or
     // token fragments — persist a redacted copy and never return raw details.
     const redactedMessage = safeErrorMessage(result.message, 'Connection test failed');
+    const isAuthFailure = !result.ok && /auth|credential|token|401|403|denied|password/i.test(redactedMessage);
     await updateEmailChannelStatus(id, {
-      status: result.ok ? 'verified' : 'failed',
+      status: result.ok ? 'connected' : isAuthFailure ? 'auth_error' : 'failed',
       lastTestOk: result.ok,
       lastTestAt: new Date().toISOString(),
       lastError: result.ok ? null : redactedMessage,

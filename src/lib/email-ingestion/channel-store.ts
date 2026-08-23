@@ -28,15 +28,21 @@ const SECRET_FIELDS = [
 
 function forwardingDomain(): string {
   return (
+    process.env.INBOUND_EMAIL_DOMAIN ||
     process.env.INBOUND_MAIL_FORWARD_DOMAIN ||
     process.env.MAIL_FORWARD_DOMAIN ||
     'app.premtonx.cloud'
   ).trim();
 }
 
+/** Publicly-renderable forwarding domain (help-{slug}@domain) for the admin UI. */
+export function getForwardingDomain(): string {
+  return forwardingDomain();
+}
+
 export function buildForwardingAddress(channelId: string): string {
   const slug = channelId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 16).toLowerCase() || 'channel';
-  return `ticket-${slug}@${forwardingDomain()}`;
+  return `help-${slug}@${forwardingDomain()}`;
 }
 
 export function generateWebhookSecret(): string {
@@ -105,8 +111,9 @@ async function backfillDomainVerificationIfNeeded(
 export async function listEmailChannels(): Promise<EmailChannelConfig[]> {
   const docs = await getDocsDirect(EMAIL_CHANNELS_COLLECTION, []);
   const channels: EmailChannelConfig[] = [];
+  const domain = getForwardingDomain();
   for (const doc of docs) {
-    const base = { id: doc.id, ...doc } as EmailChannelConfig;
+    const base = { id: doc.id, ...doc, forwardingDomain: domain } as EmailChannelConfig;
     const ensured = await backfillDomainVerificationIfNeeded(base);
     channels.push(redactChannelSecrets(ensured));
   }
@@ -122,6 +129,7 @@ export async function getEmailChannel(
   const ensured = await backfillDomainVerificationIfNeeded({
     id: doc.id,
     ...doc,
+    forwardingDomain: getForwardingDomain(),
   } as EmailChannelConfig);
   return opts?.includeSecrets ? ensured : redactChannelSecrets(ensured);
 }
@@ -204,6 +212,7 @@ export async function createEmailChannel(
     ...created.data,
     webhookSecret,
     forwardingAddress,
+    forwardingDomain: getForwardingDomain(),
     ...domainFields,
     dnsVerified: false,
     dnsVerifiedAt: null,
@@ -262,7 +271,10 @@ export async function updateEmailChannel(
   }
 
   await setDocDirect(EMAIL_CHANNELS_COLLECTION, id, next);
-  return redactChannelSecrets(next);
+  return redactChannelSecrets({
+    ...next,
+    forwardingDomain: getForwardingDomain(),
+  });
 }
 
 export async function deleteEmailChannel(id: string): Promise<boolean> {
@@ -280,7 +292,14 @@ export async function deleteEmailChannel(id: string): Promise<boolean> {
 export async function updateEmailChannelStatus(
   id: string,
   patch: {
-    status: 'verified' | 'failed' | 'pending' | 'active' | 'disabled';
+    status:
+      | 'verified'
+      | 'failed'
+      | 'pending'
+      | 'active'
+      | 'disabled'
+      | 'connected'
+      | 'auth_error';
     lastTestOk: boolean;
     lastTestAt: string;
     lastError?: string | null;
@@ -300,7 +319,10 @@ export async function updateEmailChannelStatus(
   };
 
   await setDocDirect(EMAIL_CHANNELS_COLLECTION, id, merged);
-  return redactChannelSecrets(merged);
+  return redactChannelSecrets({
+    ...merged,
+    forwardingDomain: getForwardingDomain(),
+  });
 }
 
 /** Resolve a channel for outbound From: selection (mailbox / support email / forwarding). */

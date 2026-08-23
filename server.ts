@@ -1345,6 +1345,22 @@ async function startServer() {
           source: "webhook",
         });
 
+        // A successfully received inbound payload is a live verification ping —
+        // flip the forwarding channel to "connected" so the admin UI reflects it.
+        if (channel?.id && channel.connectionType === "webhook") {
+          try {
+            await updateDocDirect("email_channels", channel.id, {
+              status: result.blocked ? channel.status : "connected",
+              lastTestOk: true,
+              lastTestAt: new Date().toISOString(),
+              lastError: null,
+              updatedAt: new Date().toISOString(),
+            });
+          } catch (statusErr) {
+            console.warn("[inbound-mail] failed to update channel status:", statusErr);
+          }
+        }
+
         if (result.blocked) {
           return res.json({
             success: true,

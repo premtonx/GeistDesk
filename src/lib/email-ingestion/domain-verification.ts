@@ -12,6 +12,7 @@ export const DEFAULT_DKIM_SELECTOR = 'geist';
 
 export function mailForwardDomain(): string {
   return (
+    process.env.INBOUND_EMAIL_DOMAIN ||
     process.env.INBOUND_MAIL_FORWARD_DOMAIN ||
     process.env.MAIL_FORWARD_DOMAIN ||
     'app.premtonx.cloud'

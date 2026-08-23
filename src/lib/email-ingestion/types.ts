@@ -49,7 +49,14 @@ export interface EmailChannelConfig {
   name: string;
   email: string;
   group?: string;
-  status: 'verified' | 'pending' | 'failed' | 'active' | 'disabled';
+  status:
+    | 'verified'
+    | 'pending'
+    | 'failed'
+    | 'active'
+    | 'disabled'
+    | 'connected'
+    | 'auth_error';
   connectionType: EmailConnectionType;
   enabled: boolean;
   isPrimary?: boolean;
@@ -58,6 +65,8 @@ export interface EmailChannelConfig {
   // Webhook / forwarding
   webhookSecret?: string | null;
   forwardingAddress?: string | null;
+  /** Public inbound-forwarding domain for the help-{slug}@<domain> copy box. */
+  forwardingDomain?: string | null;
 
   /**
    * Domain ownership verification (support alias From: header).

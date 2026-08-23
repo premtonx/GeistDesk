@@ -26,7 +26,11 @@ import {
   getOrchestratorConfig,
 } from './ai-orchestrator-store.js';
 import { detectLocalModels } from './ai-orchestrator-service.js';
-import { createEmailChannel, listEmailChannels } from './email-ingestion/channel-store.js';
+import {
+  createEmailChannel,
+  getForwardingDomain,
+  listEmailChannels,
+} from './email-ingestion/channel-store.js';
 import { setPersonalVaultInitialized } from './personal-vault-store.js';
 import { purgeSeededVaultFolders } from './vault-demo-purge.js';
 import { seedDemoSimulation } from './demo-simulation-seed.js';
@@ -57,7 +61,12 @@ export type OnboardingAiMode = (typeof AI_MODES)[number];
 export const CLOUD_PROVIDERS = ['openai', 'azure', 'anthropic', 'groq'] as const;
 export type OnboardingCloudProvider = (typeof CLOUD_PROVIDERS)[number];
 
-export const INGEST_CHANNELS = ['webhook', 'microsoft_graph', 'imap'] as const;
+export const INGEST_CHANNELS = [
+  'webhook',
+  'microsoft_graph',
+  'imap_basic',
+  'imap_oauth2',
+] as const;
 export type OnboardingIngestChannel = (typeof INGEST_CHANNELS)[number];
 
 const passwordSchema = z
@@ -98,8 +107,13 @@ export const completeOnboardingSchema = z.object({
       channel: z.enum(INGEST_CHANNELS).optional().default('webhook'),
       supportEmail: z.string().email().max(320).optional(),
       imapHost: z.string().max(255).optional(),
+      imapPort: z.union([z.string(), z.number()]).optional(),
+      imapTls: z.boolean().optional(),
       imapUser: z.string().max(320).optional(),
       imapPassword: z.string().max(500).optional(),
+      imapOauthClientId: z.string().max(255).optional(),
+      imapOauthClientSecret: z.string().max(500).optional(),
+      imapOauthTokenUrl: z.string().max(500).optional(),
       graphTenantId: z.string().max(255).optional(),
       graphClientId: z.string().max(255).optional(),
       graphClientSecret: z.string().max(500).optional(),
@@ -136,6 +150,8 @@ export interface OnboardingStatus {
     chatModel: string;
     embeddingModel: string;
   };
+  /** Public inbound-forwarding domain used for help-{slug}@<domain> addresses. */
+  forwardingDomain: string;
   health: {
     database: 'ok' | 'error';
     pgvector: boolean;
@@ -287,6 +303,7 @@ function toStatus(config: ModuleConfig, hasAdmin: boolean, isAuthenticatedAdmin:
     // that state dead-ended: no path to finish AI/Modules/Ingestion config.
     needsResume: hasAdmin && !complete,
     modules: config.platformModules || DEFAULT_PLATFORM_MODULES,
+    forwardingDomain: getForwardingDomain(),
     defaults: {
       ollamaEndpoint: '',
       chatModel: '',
@@ -618,7 +635,8 @@ function mapAiToOrchestrator(ai: TestAiInput): {
 
 function mapIngestChannel(channel: OnboardingIngestChannel): EmailConnectionType {
   if (channel === 'microsoft_graph') return 'microsoft_graph';
-  if (channel === 'imap') return 'imap_basic';
+  if (channel === 'imap_basic') return 'imap_basic';
+  if (channel === 'imap_oauth2') return 'imap_oauth2';
   return 'webhook';
 }
 
@@ -1057,8 +1075,14 @@ async function resumeOnboardingSteps(
           status: 'pending',
           provider: connectionType === 'microsoft_graph' ? 'microsoft' : 'custom',
           imapHost: ingest.imapHost,
+          imapPort: ingest.imapPort ?? 993,
+          imapTls: ingest.imapTls !== false,
           imapUser: ingest.imapUser,
           imapPassword: ingest.imapPassword,
+          oauthClientId: connectionType === 'imap_oauth2' ? ingest.imapOauthClientId : undefined,
+          oauthClientSecret:
+            connectionType === 'imap_oauth2' ? ingest.imapOauthClientSecret : undefined,
+          oauthTokenUrl: connectionType === 'imap_oauth2' ? ingest.imapOauthTokenUrl : undefined,
           tenantId: ingest.graphTenantId,
           clientId: ingest.graphClientId,
           clientSecret: ingest.graphClientSecret,
