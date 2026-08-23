@@ -718,10 +718,14 @@ export async function addDocDirect(collectionName: string, data: any): Promise<a
  * semantics of `{ ...existing, ...patch }`).
  */
 function buildAtomicJsonbPatch(data: Record<string, unknown>) {
-  let expr = 'data';
+  // The patch is applied in the ON CONFLICT DO UPDATE SET clause, where a bare
+  // `data` reference is ambiguous (target row vs EXCLUDED), so the target
+  // table's column must be explicitly qualified.
+  let expr = 'geistdesk_documents.data';
   const params: unknown[] = [];
-  // $1 (collection) and $2 (id) are reserved by the INSERT statement.
-  let paramIndex = 3;
+  // $1 (collection), $2 (id) and $3 (insert fallback JSON) are reserved by
+  // the INSERT statement, so patch params start at $4.
+  let paramIndex = 4;
 
   for (const key of Object.keys(data)) {
     if (key === 'id') continue;
@@ -760,10 +764,14 @@ export async function updateDocDirect(collectionName: string, id: string, data: 
   const pool = requirePool();
   const { expr, params } = buildAtomicJsonbPatch(data || {});
 
+  // Atomic upsert: on a fresh row the raw (marker-resolved) JSON is inserted;
+  // on an existing row the patch is applied to the live data column so
+  // concurrent writers never clobber each other's fields.
+  const insertJson = toJsonbParam(processValueMutations(data || {}, {}));
   await pool.query(
-    `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, ${expr})
-     ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-    [collectionName, id, ...params],
+    `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, $3::jsonb)
+     ON CONFLICT (collection, id) DO UPDATE SET data = ${expr}, updated_at = NOW()`,
+    [collectionName, id, insertJson, ...params],
   );
 }
 
