@@ -119,6 +119,7 @@ export const ticketService = {
 
       const docRef = await addDoc(collection(db, TICKETS_COLLECTION), {
         ...finalTicket,
+        include_in_rag: true,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp()
       });

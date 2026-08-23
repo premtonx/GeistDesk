@@ -14,6 +14,10 @@ import {
   redactForRag,
 } from './resolution-extractor.js';
 import { getRagPipelineConfig } from '../rag-pipeline-config.js';
+import {
+  deduplicateTicketVector,
+  TICKET_RAG_DEDUP_THRESHOLD,
+} from './ticket-rag-dedup.js';
 
 export type VectorJobType = 'INDEX_KB_ARTICLE' | 'INDEX_RESOLVED_TICKET' | 'DELETE_EMBEDDINGS';
 export type KnowledgeSourceType = 'KB_ARTICLE' | 'RESOLVED_TICKET';
@@ -171,6 +175,15 @@ async function indexKbArticle(tenantId: string, sourceId: string): Promise<void>
     return;
   }
 
+  // Selective RAG: exclude articles opted out via index_in_rag.
+  if (doc.index_in_rag === false) {
+    await deleteEmbeddingsForSource(tenantId, 'KB_ARTICLE', sourceId);
+    console.log(
+      `[RAG] Skipped indexing KB article ${sourceId}: index_in_rag=false (removed existing vectors)`,
+    );
+    return;
+  }
+
   const title = String(doc.title || 'Untitled');
   const body = await redactForRag(
     stripHtmlToPlainText(String(doc.content || doc.body || '')),
@@ -198,6 +211,39 @@ async function indexKbArticle(tenantId: string, sourceId: string): Promise<void>
   });
 }
 
+/**
+ * Deduplicate a resolved-ticket vector before insert.
+ * Runs a cosine-similarity search against existing RESOLVED_TICKET embeddings
+ * for the same tenant and returns the max similarity (1 - distance). When it
+ * meets or exceeds the threshold, callers skip inserting a duplicate chunk.
+ *
+ * Pure decision helper lives in ticket-rag-dedup.ts — exported for testability.
+ */
+
+/** Query the closest existing RESOLVED_TICKET vectors for the given tenant (excluding self). */
+async function findSimilarResolvedTickets(
+  tenantId: string,
+  sourceId: string,
+  body: string,
+  limit = 5,
+): Promise<Array<{ vector_distance: number | null }>> {
+  const [vector] = await embedTexts([body]);
+  if (!vector) return [];
+  const literal = vectorToSqlLiteral(vector);
+  const res = await queryDb(
+    `SELECT (embedding <=> $4::vector) AS vector_distance
+     FROM "KnowledgeEmbedding"
+     WHERE tenant_id = $1
+       AND source_type = 'RESOLVED_TICKET'::"KnowledgeSourceType"
+       AND source_id <> $2
+       AND embedding IS NOT NULL
+     ORDER BY embedding <=> $4::vector
+     LIMIT $3`,
+    [tenantId, sourceId, limit, literal],
+  );
+  return res.rows.map((row) => ({ vector_distance: row.vector_distance == null ? null : Number(row.vector_distance) }));
+}
+
 async function indexResolvedTicket(tenantId: string, sourceId: string): Promise<void> {
   const doc = await getDocDirect('tickets', sourceId);
   if (!doc) {
@@ -208,6 +254,15 @@ async function indexResolvedTicket(tenantId: string, sourceId: string): Promise<
   if (!documentBelongsToTenant(doc, tenantId)) {
     console.warn(
       `[vector-queue] refusing to index ticket ${sourceId}: tenant mismatch (job=${tenantId})`,
+    );
+    return;
+  }
+
+  // Selective RAG: exclude tickets opted out via include_in_rag.
+  if (doc.include_in_rag === false) {
+    await deleteEmbeddingsForSource(tenantId, 'RESOLVED_TICKET', sourceId);
+    console.log(
+      `[RAG] Skipped indexing ticket ${sourceId}: include_in_rag=false (removed existing vectors)`,
     );
     return;
   }
@@ -234,6 +289,30 @@ async function indexResolvedTicket(tenantId: string, sourceId: string): Promise<
   );
 
   const ragConfig = await getRagPipelineConfig(tenantId);
+
+  // Semantic dedup: skip when a near-identical resolved ticket already exists (>= 0.90).
+  try {
+    const similar = await findSimilarResolvedTickets(tenantId, sourceId, body);
+    const { shouldSkip, maxSimilarity } = deduplicateTicketVector({
+      tenantId,
+      sourceId,
+      body,
+      existing: similar,
+      threshold: TICKET_RAG_DEDUP_THRESHOLD,
+    });
+    if (shouldSkip) {
+      console.log(
+        `[RAG] Skipped duplicate ticket vector for ${sourceId} (similarity >= 0.90, max=${maxSimilarity.toFixed(3)})`,
+      );
+      return;
+    }
+  } catch (err: any) {
+    console.warn(
+      `[RAG] dedup search failed for ${sourceId} — proceeding with upsert:`,
+      err?.message || err,
+    );
+  }
+
   await upsertChunks({
     tenantId,
     sourceType: 'RESOLVED_TICKET',
@@ -331,7 +410,10 @@ export function handleKnowledgeDocumentMutation(params: {
       }
       if ((action === 'update_doc' || action === 'set_doc') && id) {
         const status = String(params.data?.status || '').toLowerCase();
-        if (status === 'resolved' || status === 'closed') {
+        if (params.data?.include_in_rag === false) {
+          // Selective RAG: opting a ticket out purges existing vectors immediately.
+          enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);
+        } else if (status === 'resolved' || status === 'closed') {
           enqueueResolvedTicketIndex(id, tenantId);
         } else if (status === 'trash' || status === 'deleted') {
           enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);

@@ -93,6 +93,7 @@ import {
 import { cn } from '../../lib/utils';
 import { Button } from '../../components/ui/button';
 import { Badge } from '../../components/ui/badge';
+import { Switch } from '../../components/ui/switch';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { Avatar, AvatarFallback, AvatarImage } from '../../components/ui/avatar';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '../../components/ui/tabs';
@@ -379,6 +380,8 @@ export default function TicketsPage() {
   });
   const [topStatusFilter, setTopStatusFilter] = useState<TopStatusFilterId>('all');
   const [drawerTicketId, setDrawerTicketId] = useState<string | null>(null);
+  const [pendingResolveStatus, setPendingResolveStatus] = useState<string | null>(null);
+  const [pendingResolveIncludeRag, setPendingResolveIncludeRag] = useState(true);
   const [layoutMode, setLayoutMode] = useState<TicketsLayoutMode>('list');
   const [listSort, setListSort] = useState<'newest' | 'oldest' | 'priority'>('newest');
 
@@ -1143,32 +1146,9 @@ export default function TicketsPage() {
       toggleTicketSelection(id);
       return;
     }
-    if (selectedTicketId) {
-      ticketService.setPresence(selectedTicketId, false);
-    }
-    if (id) {
-      ticketService.setPresence(id, true);
-    }
 
-    setHoveredTicketId(null);
-    setPeekMessages([]);
-    setReplyText('');
-    setLegalViolation(null);
-    setGhostDraft('');
-    setAiSources([]);
-
-    if (id && !isMobile) {
-      setDrawerTicketId(id);
-      setActiveDetailTab('conversation');
-      autoGenerateZeroDraft(id);
-      return;
-    }
-
-    if (id) {
-      openFullTicketView(id);
-    } else {
-      closeFullTicketView();
-    }
+    // Direct navigation: single click opens the full ticket view (no drawer).
+    openFullTicketView(id);
   };
 
   useEffect(() => {
@@ -1200,6 +1180,32 @@ export default function TicketsPage() {
       });
     }
   }, [ticketId]);
+
+  const requestResolveStatusChange = (status: string) => {
+    if (status !== 'resolved' && status !== 'closed') {
+      void ticketService.updateTicket(selectedTicket.id, { status: status as any });
+      return;
+    }
+    setPendingResolveIncludeRag(selectedTicket.include_in_rag !== false);
+    setPendingResolveStatus(status);
+  };
+
+  const confirmResolveStatusChange = async () => {
+    if (!pendingResolveStatus || !selectedTicket) return;
+    const status = pendingResolveStatus;
+    setPendingResolveStatus(null);
+    try {
+      await ticketService.updateTicket(selectedTicket.id, {
+        status: status as any,
+        include_in_rag: pendingResolveIncludeRag,
+        resolvedAt: status === 'resolved' ? new Date() : undefined,
+      });
+      toast.success(status === 'resolved' ? 'Ticket als gelöst markiert.' : 'Ticket geschlossen.');
+    } catch (error) {
+      toast.error('Status konnte nicht aktualisiert werden.');
+      console.error('[resolve] failed to update ticket', error);
+    }
+  };
 
   const autoGenerateZeroDraft = async (ticketId: string) => {
     if (!isAiReady) {
@@ -2039,6 +2045,7 @@ export default function TicketsPage() {
                           onRefreshSummary={() => updateSummary(true)}
                           isAiDrafting={isAiDrafting}
                           onChecklistUpdated={handleChecklistUpdated}
+                          onAdoptProposedSolution={(text) => setReplyText(text)}
                         />
 
                         {/* 2. Foldable/Collapsible Agent Notes Section */}
@@ -2959,12 +2966,43 @@ export default function TicketsPage() {
                               } />
                               <DropdownMenuContent className="w-56">
                                  {['open', 'pending', 'resolved', 'closed', 'trash'].map(s => (
-                                    <DropdownMenuItem key={s} className="capitalize text-xs" onClick={() => ticketService.updateTicket(selectedTicket.id, { status: s as any })}>
+                                    <DropdownMenuItem key={s} className="capitalize text-xs" onClick={() => requestResolveStatusChange(s)}>
                                        {s}
                                     </DropdownMenuItem>
                                  ))}
                               </DropdownMenuContent>
                            </DropdownMenu>
+                        </div>
+
+                        <div>
+                           <label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-2 block">KI-RAG</label>
+                           <div className="flex items-center justify-between p-3 bg-card border border-border rounded-lg">
+                              <div className="flex flex-col">
+                                 <span className="text-[11px] font-bold text-foreground flex items-center gap-1.5">
+                                    <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+                                    Für KI-RAG indexieren
+                                 </span>
+                                 <span className="text-[9px] text-muted-foreground mt-0.5">
+                                    {selectedTicket.include_in_rag === false
+                                      ? 'Ausgeschlossen — wird beim Lösen nicht indexiert.'
+                                      : 'Wird beim Lösen in die Wissensbasis aufgenommen.'}
+                                 </span>
+                              </div>
+                              <Switch
+                                checked={selectedTicket.include_in_rag !== false}
+                                onCheckedChange={(checked) => {
+                                  const includeInRag = Boolean(checked);
+                                  void ticketService.updateTicket(selectedTicket.id, {
+                                    include_in_rag: includeInRag,
+                                  });
+                                  toast.success(
+                                    includeInRag
+                                      ? 'Ticket wird wieder für KI-RAG indexiert.'
+                                      : 'Ticket wird nicht mehr für KI-RAG indexiert.',
+                                  );
+                                }}
+                              />
+                           </div>
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
@@ -4656,6 +4694,48 @@ export default function TicketsPage() {
               }}
             />
           </div>
+        )}
+
+        {pendingResolveStatus && selectedTicket && (
+          <Dialog open onOpenChange={(open) => { if (!open) setPendingResolveStatus(null); }}>
+            <DialogContent className="max-w-md">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500" />
+                  {pendingResolveStatus === 'resolved'
+                    ? 'Ticket als gelöst markieren?'
+                    : 'Ticket schließen?'}
+                </DialogTitle>
+                <DialogDescription>
+                  Das Ticket wird als <b>{pendingResolveStatus}</b> gespeichert und der Kunde über den Abschluss informiert.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="flex items-center justify-between p-3 bg-violet-50 border border-violet-100 rounded-xl">
+                <div className="flex flex-col">
+                  <span className="text-xs font-bold text-violet-800 flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5 text-violet-500" />
+                    🧠 Für KI-RAG indexieren
+                  </span>
+                  <span className="text-[10px] text-violet-600 mt-0.5">
+                    Erstellt beim Lösen einen KI-Wissenseintrag aus dieser Lösung.
+                  </span>
+                </div>
+                <Switch
+                  checked={pendingResolveIncludeRag}
+                  onCheckedChange={setPendingResolveIncludeRag}
+                />
+              </div>
+              <DialogFooter className="gap-2">
+                <Button variant="ghost" size="sm" onClick={() => setPendingResolveStatus(null)}>
+                  Abbrechen
+                </Button>
+                <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white" onClick={confirmResolveStatusChange}>
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  {pendingResolveStatus === 'resolved' ? 'Als gelöst markieren' : 'Schließen'}
+                </Button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
         )}
       </div>
 

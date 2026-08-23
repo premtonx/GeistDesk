@@ -248,6 +248,7 @@ export default function KBPage() {
         lastEditor: user?.email || '',
         status: 'Draft',
         avgReadTime: '',
+        index_in_rag: true,
       });
       setTagInput('');
       setEditingArticleId(null);
@@ -349,6 +350,7 @@ export default function KBPage() {
     lastEditor: '',
     status: 'Draft',
     avgReadTime: '',
+    index_in_rag: true,
   });
   const [tagInput, setTagInput] = useState('');
 
@@ -581,6 +583,7 @@ export default function KBPage() {
       lastEditor: user?.email || '',
       status: 'Draft',
       avgReadTime: '',
+      index_in_rag: true,
     });
     setTagInput('');
     setEditingArticleId(null);
@@ -604,7 +607,8 @@ export default function KBPage() {
           lastEditor: user.email || 'Admin',
           status: newArticle.status,
           avgReadTime: newArticle.avgReadTime || '4m 00s',
-          language: 'English'
+          language: 'English',
+          index_in_rag: newArticle.index_in_rag !== false,
         };
 
         if (editingArticleId) {
@@ -655,7 +659,8 @@ export default function KBPage() {
           reviewer: '', 
           lastEditor: user?.email || '', 
           status: 'Draft',
-          avgReadTime: '' 
+          avgReadTime: '',
+          index_in_rag: true, 
         });
         setTagInput('');
       } catch (e) {
@@ -679,7 +684,8 @@ export default function KBPage() {
       reviewer: article.reviewer || '',
       lastEditor: article.lastEditor || user?.email || '',
       status: article.status || 'Published',
-      avgReadTime: article.avgReadTime || '3m 15s'
+      avgReadTime: article.avgReadTime || '3m 15s',
+      index_in_rag: article.index_in_rag !== false,
     });
     setTagInput((article.tags || []).join(', '));
     setIsAddingArticle(true);
@@ -1353,7 +1359,8 @@ export default function KBPage() {
                                 reviewer: '',
                                 lastEditor: user?.email || '',
                                 status: 'Draft',
-                                avgReadTime: '3m 00s'
+                                avgReadTime: '3m 00s',
+                                index_in_rag: true
                               });
                               setTagInput('automation-gap');
                               setEditingArticleId(null);
@@ -1448,7 +1455,8 @@ export default function KBPage() {
                           reviewer: '',
                           lastEditor: user?.email || '',
                           status: "Draft",
-                          avgReadTime: "3m 00s"
+                          avgReadTime: "3m 00s",
+                          index_in_rag: true
                         });
                         setTagInput("ai-suggested, critical-gap");
                         setEditingArticleId(null);

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { 
   Sparkles, 
@@ -12,7 +12,11 @@ import {
   ShieldAlert, 
   Clock,
   CheckCircle2,
-  FileText
+  FileText,
+  Wand2,
+  ExternalLink,
+  BookOpen,
+  Ticket as TicketIcon
 } from 'lucide-react';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
@@ -22,6 +26,17 @@ import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { ticketService } from '../../services/ticketService';
 import { normalizeChecklistItems } from '../../lib/ticket-checklist-utils';
+import axios from 'axios';
+
+interface RagReference {
+  id: string;
+  sourceType: 'KB_ARTICLE' | 'RESOLVED_TICKET';
+  sourceId: string;
+  title: string;
+  category?: string | null;
+  similarityPct: number;
+  customId?: string;
+}
 
 interface AiSummaryCardProps {
   ticket: TicketType;
@@ -30,6 +45,7 @@ interface AiSummaryCardProps {
   onRefreshSummary: () => void;
   isAiDrafting: boolean;
   onChecklistUpdated?: (checklist: TicketChecklistItem[]) => void;
+  onAdoptProposedSolution?: (text: string) => void;
 }
 
 export function AiSummaryCard({
@@ -39,11 +55,80 @@ export function AiSummaryCard({
   onRefreshSummary,
   isAiDrafting,
   onChecklistUpdated,
+  onAdoptProposedSolution,
 }: AiSummaryCardProps) {
   const { t } = useTranslation();
   
   // CRITICAL UI STATE requested:
   const [isAiSummaryExpanded, setIsAiSummaryExpanded] = useState(true);
+  const [ragReferences, setRagReferences] = useState<RagReference[] | null>(null);
+
+  // Proposed solution text: prefer the AI draft, fall back to the summary.
+  const proposedSolution = useMemo(() => {
+    const draft = ticket.aiSuggestedDraft || ticket.aiDraftRaw || '';
+    if (draft.trim()) return draft.trim();
+    return (ticket.aiSummary || aiSummary || '').trim();
+  }, [ticket.aiSuggestedDraft, ticket.aiDraftRaw, ticket.aiSummary, aiSummary]);
+
+  // Fetch top-3 RAG references (resolved tickets + KB articles) for this ticket.
+  useEffect(() => {
+    let alive = true;
+    const query = [ticket.subject, ticket.description]
+      .filter(Boolean)
+      .join(' ')
+      .slice(0, 6000);
+    if (!query.trim()) return;
+    axios
+      .post(
+        '/api/vectors/hybrid',
+        { query, limit: 3 },
+        { withCredentials: true },
+      )
+      .then((res) => {
+        if (!alive) return;
+        const hits: any[] = res.data?.hits || [];
+        setRagReferences(
+          hits.map((hit) => {
+            const meta = hit.metadata || {};
+            const vectorDistance = hit.vectorDistance == null ? null : Number(hit.vectorDistance);
+            const similarityPct =
+              vectorDistance == null
+                ? Math.round((Number(hit.hybridScore) || 0) * 100)
+                : Math.round((1 - Math.min(vectorDistance, 1)) * 100);
+            return {
+              id: String(hit.sourceId),
+              sourceType: hit.sourceType as RagReference['sourceType'],
+              sourceId: String(hit.sourceId),
+              title: String(hit.title || meta.title || hit.sourceId),
+              category: meta.category ? String(meta.category) : null,
+              similarityPct,
+              customId: meta.customId ? String(meta.customId) : undefined,
+            };
+          }),
+        );
+      })
+      .catch(() => {
+        if (alive) setRagReferences([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [ticket.id, ticket.subject, ticket.description]);
+
+  const adoptProposedSolution = () => {
+    if (!proposedSolution) return;
+    if (onAdoptProposedSolution) {
+      onAdoptProposedSolution(proposedSolution);
+    }
+  };
+
+  const openReference = (ref: RagReference) => {
+    if (ref.sourceType === 'RESOLVED_TICKET') {
+      window.open(`/tickets/${ref.sourceId}`, '_blank', 'noopener,noreferrer');
+    } else {
+      window.open(`/kb?article=${encodeURIComponent(ref.sourceId)}`, '_blank', 'noopener,noreferrer');
+    }
+  };
 
   // Key Findings maps directly to ticket.aiSummary (or fallback aiSummary helper)
   const findings = useMemo(() => {
@@ -270,6 +355,100 @@ export function AiSummaryCard({
                     </div>
                   </div>
                 </div>
+              </div>
+
+              {/* Vorgeschlagene KI-Lösung & Strategie */}
+              {proposedSolution ? (
+                <div className="space-y-2 border-t border-indigo-100/40 dark:border-slate-800 pt-4">
+                  <div className="flex items-center gap-1.5">
+                    <Wand2 className="w-4 h-4 text-violet-600 dark:text-violet-400 shrink-0" />
+                    <h4 className="text-[10px] uppercase font-bold tracking-wider text-indigo-950 dark:text-indigo-300">
+                      {t('tickets.aiSummaryCard.proposedSolution', 'Vorgeschlagene KI-Lösung & Strategie')}
+                    </h4>
+                  </div>
+                  <div className="rounded-xl border border-violet-200/60 dark:border-violet-900/50 bg-violet-50/40 dark:bg-violet-950/20 p-3">
+                    <p className="text-[11px] font-medium text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                      {proposedSolution}
+                    </p>
+                  </div>
+                  {onAdoptProposedSolution ? (
+                    <Button
+                      size="sm"
+                      className="h-7 text-[10px] font-bold rounded-lg bg-violet-600 hover:bg-violet-700 text-white"
+                      onClick={adoptProposedSolution}
+                    >
+                      <CheckCircle2 className="w-3.5 h-3.5" />
+                      {t('tickets.aiSummaryCard.adoptSolution', 'Lösung in Antwort übernehmen')}
+                    </Button>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {/* Relevante gelöste Tickets & KB-Referenzen */}
+              <div className="space-y-2 border-t border-indigo-100/40 dark:border-slate-800 pt-4">
+                <div className="flex items-center gap-1.5">
+                  <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <h4 className="text-[10px] uppercase font-bold tracking-wider text-indigo-950 dark:text-indigo-300">
+                    {t('tickets.aiSummaryCard.ragReferences', 'Relevante gelöste Tickets & KB-Referenzen')}
+                  </h4>
+                </div>
+                {ragReferences === null ? (
+                  <p className="text-[10px] text-slate-400 italic px-1">
+                    {t('tickets.aiSummaryCard.loadingRefs', 'Suche ähnliche Fälle in der Wissensbasis…')}
+                  </p>
+                ) : ragReferences.length === 0 ? (
+                  <p className="text-[10px] text-slate-400 italic px-1">
+                    {t('tickets.aiSummaryCard.noRefs', 'Keine ähnlichen Tickets oder Artikel gefunden.')}
+                  </p>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 pt-1">
+                    {ragReferences.map((ref, idx) => (
+                      <button
+                        key={`${ref.sourceType}-${ref.sourceId}`}
+                        type="button"
+                        onClick={() => openReference(ref)}
+                        className="flex items-center gap-2 p-2.5 bg-white/70 dark:bg-slate-900/60 rounded-xl border border-slate-200/70 dark:border-slate-800 hover:border-emerald-300 hover:bg-white dark:hover:bg-slate-900 transition-colors text-left group"
+                      >
+                        <span className="text-[11px] font-extrabold text-emerald-600 dark:text-emerald-400 min-w-[14px]">
+                          {idx + 1}.
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5">
+                            <Badge
+                              className={cn(
+                                'text-[8px] font-black uppercase px-1.5 h-4 border-none',
+                                ref.sourceType === 'RESOLVED_TICKET'
+                                  ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300'
+                                  : 'bg-sky-50 text-sky-700 dark:bg-sky-950/50 dark:text-sky-300',
+                              )}
+                            >
+                              {ref.sourceType === 'RESOLVED_TICKET' ? (
+                                <TicketIcon className="w-2.5 h-2.5" />
+                              ) : (
+                                <BookOpen className="w-2.5 h-2.5" />
+                              )}
+                              {ref.sourceType === 'RESOLVED_TICKET' ? 'Ticket' : 'KB'}
+                            </Badge>
+                            {ref.category ? (
+                              <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400 truncate">
+                                {ref.category}
+                              </span>
+                            ) : null}
+                          </div>
+                          <p className="text-[11px] font-bold text-slate-700 dark:text-slate-300 truncate mt-0.5">
+                            {ref.title}
+                          </p>
+                        </div>
+                        <span className="flex items-center gap-1 shrink-0">
+                          <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50 px-1.5 py-0.5 rounded-full whitespace-nowrap">
+                            {ref.similarityPct}% Übereinstimmung
+                          </span>
+                          <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-emerald-500 transition-colors" />
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
             </CardContent>
           </motion.div>

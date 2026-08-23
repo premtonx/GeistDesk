@@ -198,6 +198,7 @@ export async function ingestNormalizedEmail(
         from_email: sender,
         customId,
         channel: 'email',
+        include_in_rag: true,
         tags: ['inbound-email', `source:${email.source}`, ...(email.tags || [])],
         mailbox: email.mailbox || undefined,
         createdAt: now,

@@ -23,6 +23,7 @@ import {
   isDisposableSender,
   shouldDropSpam,
 } from '../src/lib/email-ingestion/spam-guard.js';
+import { deduplicateTicketVector } from '../src/lib/ai/ticket-rag-dedup.js';
 
 let passed = 0;
 let failed = 0;
@@ -127,6 +128,52 @@ console.log('\n[CHECKLIST] 6. Spam classification');
   assert(isDisposableSender('x@mailinator.com'), 'disposable sender detected');
   assert(!isDisposableSender('x@company.com'), 'company sender not disposable');
   assert(typeof shouldDropSpam() === 'boolean', 'shouldDropSpam returns boolean');
+}
+
+console.log('\n[RAG] 7. Selective RAG — include_in_rag / dedup decisions');
+{
+  // A ticket with include_in_rag=false must be skipped (pure decision helper).
+  const excludeDecision = deduplicateTicketVector({
+    tenantId: 'ws-a',
+    sourceId: 'ticket-x',
+    body: 'some resolution body',
+    existing: [], // no existing vectors → similarity 0 → should NOT skip on its own
+  });
+  assert(
+    excludeDecision.shouldSkip === false,
+    'dedup helper does not skip on empty vector set',
+  );
+
+  // Duplicate ticket: existing vector distance 0.05 → similarity 0.95 ≥ 0.90 → skip.
+  const dup = deduplicateTicketVector({
+    tenantId: 'ws-a',
+    sourceId: 'ticket-x',
+    body: 'Resolution about printer driver v4.2',
+    existing: [{ vector_distance: 0.05 }],
+    threshold: 0.9,
+  });
+  assert(dup.shouldSkip === true, 'duplicate ticket vector skipped (similarity 0.95 >= 0.90)');
+  assert(dup.maxSimilarity >= 0.9, `maxSimilarity reported (got ${dup.maxSimilarity.toFixed(3)})`);
+
+  // Non-duplicate: distance 0.35 → similarity 0.65 < 0.90 → index.
+  const distinct = deduplicateTicketVector({
+    tenantId: 'ws-a',
+    sourceId: 'ticket-y',
+    body: 'Refund request for order #8821',
+    existing: [{ vector_distance: 0.35 }],
+    threshold: 0.9,
+  });
+  assert(distinct.shouldSkip === false, 'distinct ticket vector is indexed (similarity 0.65 < 0.90)');
+
+  // Null distances are ignored.
+  const nullDist = deduplicateTicketVector({
+    tenantId: 'ws-a',
+    sourceId: 'ticket-z',
+    body: 'anything',
+    existing: [{ vector_distance: null }],
+    threshold: 0.9,
+  });
+  assert(nullDist.shouldSkip === false && nullDist.maxSimilarity === 0, 'null distances ignored');
 }
 
 console.log('\n[RESULT]');

@@ -256,6 +256,8 @@ export interface Ticket {
   aiDraftRaw?: string | null;
   /** True when this ticket's AI draft was auto-dispatched without a human click. */
   aiAutoDispatched?: boolean;
+  /** When false, the ticket is excluded from RAG indexing (defaults to true). */
+  include_in_rag?: boolean;
   internalNotes?: string;
   activeAgents?: PresenceAgent[];
   agentComments?: AgentComment[];
@@ -336,6 +338,8 @@ export interface KBArticle {
   translations?: Record<string, KBArticleTranslation>;
   linkedTicket?: string;
   trustScore?: number;
+  /** When false, the article is excluded from RAG/vector indexing (defaults to true). */
+  index_in_rag?: boolean;
 }
 
 export type KBArticleAlertType = 'warning' | 'info' | 'success' | 'critical';

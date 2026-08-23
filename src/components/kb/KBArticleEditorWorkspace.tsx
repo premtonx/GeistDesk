@@ -22,6 +22,7 @@ export interface KBArticleDraft {
   lastEditor: string;
   status: string;
   avgReadTime: string;
+  index_in_rag: boolean;
 }
 
 interface EnterpriseUser {
@@ -205,6 +206,29 @@ export function KBArticleEditorWorkspace({
             <Switch
               checked={newArticle.visibility === 'Public'}
               onCheckedChange={(checked) => patchArticle({ visibility: checked ? 'Public' : 'Private' })}
+            />
+          </div>
+        </div>
+
+        <div className="space-y-2">
+          <Label className="text-[9.5px] uppercase font-black text-slate-400 tracking-wider">
+            {t('kb.editor.ragAccess', 'KI-Wissensspeicher (RAG)')}
+          </Label>
+          <div className="flex items-center justify-between p-3 bg-white border rounded-xl shadow-3xs">
+            <div className="flex flex-col">
+              <span className="text-xs font-black text-slate-800">
+                {t('kb.editor.includeInRag', 'In KI-Wissensspeicher (RAG) aufnehmen')}
+              </span>
+              <span className="text-[10px] text-slate-400 font-semibold mt-0.5">
+                {t(
+                  'kb.editor.includeInRagHint',
+                  'Wenn deaktiviert, ist der Artikel öffentlich lesbar, wird aber nicht vom KI-Copilot zitiert.',
+                )}
+              </span>
+            </div>
+            <Switch
+              checked={newArticle.index_in_rag !== false}
+              onCheckedChange={(checked) => patchArticle({ index_in_rag: Boolean(checked) })}
             />
           </div>
         </div>
