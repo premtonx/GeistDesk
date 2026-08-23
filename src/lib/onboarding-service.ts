@@ -78,9 +78,11 @@ export const testAiSchema = z.object({
 });
 
 export const completeOnboardingSchema = z.object({
-  adminEmail: z.string().email().max(320),
-  adminName: z.string().trim().min(1, 'Administrator name is required').max(200),
-  newPassword: passwordSchema,
+  // Optional on resume: when an admin already exists the values are derived
+  // from the authenticated session (req.user) instead of a re-filled form.
+  adminEmail: z.string().email().max(320).optional(),
+  adminName: z.string().trim().max(200).optional(),
+  newPassword: passwordSchema.optional(),
   vaultPassphraseSet: z.boolean().optional().default(false),
   ai: testAiSchema,
   modules: z
@@ -124,7 +126,9 @@ export interface OnboardingStatus {
   initializedAt?: string;
   initializedBy?: string;
   requiresOnboarding: boolean;
-  /** True when is_initialized committed but side effects remain — the wizard should resume. */
+  /** True when the workspace is partially set up — the wizard should resume. Covers both
+   *  `is_initialized=true` with interrupted side effects, and the stuck state where an admin
+   *  exists but `/complete` never ran (is_initialized still false). */
   needsResume: boolean;
   modules: PlatformModules;
   defaults: {
@@ -277,7 +281,11 @@ function toStatus(config: ModuleConfig, hasAdmin: boolean, isAuthenticatedAdmin:
     initializedAt: config.initializedAt,
     initializedBy: config.initializedBy,
     requiresOnboarding: config.is_initialized !== true && !hasAdmin,
-    needsResume: config.is_initialized === true && !complete,
+    // Resume whenever an admin exists but the workspace is not fully set up —
+    // this also covers the stuck state where register-admin succeeded but the
+    // wizard never reached /complete (is_initialized still false). Previously
+    // that state dead-ended: no path to finish AI/Modules/Ingestion config.
+    needsResume: hasAdmin && !complete,
     modules: config.platformModules || DEFAULT_PLATFORM_MODULES,
     defaults: {
       ollamaEndpoint: '',
@@ -843,15 +851,19 @@ export async function completeOnboarding(
     throw new Error('Authenticated administrator is required.');
   }
 
-  const cleanEmail = input.adminEmail.toLowerCase().trim();
-  const adminName = input.adminName.trim();
   const existingUser = ((await getDocDirect('users', userId)) || {}) as Record<string, unknown>;
+  const cleanEmail = (input.adminEmail || String(req.user?.email || '')).toLowerCase().trim();
+  const adminName = input.adminName?.trim() || String(req.user?.name || existingUser.name || 'Administrator').trim();
 
   const tenantId =
     (typeof existingUser.tenantId === 'string' && existingUser.tenantId.trim()) ||
     resolveTenantFromRequest(req) ||
     DEFAULT_TENANT_ID;
-  const passwordHash = await hashPassword(input.newPassword);
+
+  // Resume of the stuck mid-wizard state: the admin row already exists with a
+  // working passwordHash, so never overwrite it with an empty/weak value.
+  // Only the fresh path (no admin row) may set a new password.
+  const passwordHash = input.newPassword ? await hashPassword(input.newPassword) : String(existingUser.passwordHash || '');
   const now = new Date().toISOString();
   const platformModules = normalizePlatformModules({
     tickets: true,
@@ -923,8 +935,8 @@ export async function completeOnboarding(
     ...existingUser,
     name: adminName,
     email: cleanEmail,
-    passwordHash,
-    authMethod: 'password',
+    ...(passwordHash ? { passwordHash } : {}),
+    authMethod: existingUser.authMethod || 'password',
     role: 'admin',
     is_admin: true,
     isDeactivated: false,
@@ -986,8 +998,8 @@ async function resumeOnboardingSteps(
   if (!userId) {
     throw new Error('Authenticated administrator is required.');
   }
-  const cleanEmail = String(req.user?.email || input.adminEmail).toLowerCase().trim();
-  const adminName = input.adminName.trim() || String(req.user?.name || 'Administrator').trim();
+  const cleanEmail = String(req.user?.email || input.adminEmail || '').toLowerCase().trim();
+  const adminName = (input.adminName || '').trim() || String(req.user?.name || 'Administrator').trim();
   const existingUser = ((await getDocDirect('users', userId)) || {}) as Record<string, unknown>;
   const tenantId =
     (typeof existingUser.tenantId === 'string' && existingUser.tenantId.trim()) ||

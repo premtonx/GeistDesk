@@ -111,7 +111,16 @@ export default function OnboardingWizardPage() {
       setAdminRegistered(true);
       setStep(2);
     } else if (status.hasAdminUser) {
+      // Stuck mid-wizard resume: an admin row exists but /complete never ran.
+      // The admin password is already set server-side, so the user must be
+      // signed in before finishing setup — otherwise /complete would 401.
       setAdminRegistered(true);
+      if (!user) {
+        navigate('/login', { replace: true });
+        return;
+      }
+      if (!adminEmail && user.email) setAdminEmail(user.email);
+      if (!adminName && user.displayName) setAdminName(user.displayName);
       setStep(2);
       return;
     }
@@ -140,12 +149,12 @@ export default function OnboardingWizardPage() {
   const progress = (step / STEPS.length) * 100;
 
   const registerAdminAndContinue = async () => {
-    if (!canStep1) {
-      toast.error('Bitte Admin-Name, E-Mail, Passwort und Vault Master Key ausfüllen.');
-      return;
-    }
     if (adminRegistered) {
       setStep(2);
+      return;
+    }
+    if (!canStep1) {
+      toast.error('Bitte Admin-Name, E-Mail, Passwort und Vault Master Key ausfüllen.');
       return;
     }
     setSubmitting(true);
@@ -208,7 +217,9 @@ export default function OnboardingWizardPage() {
   };
 
   const finish = async (skipIngest: boolean) => {
-    if (!canStep1) {
+    // Resume mode: an admin already exists and the wizard jumped past step 1,
+    // so the admin form (password/vault) is not required to finish setup.
+    if (!adminRegistered && !canStep1) {
       toast.error('Complete the administrator account and vault passphrase first.');
       setStep(1);
       return;
@@ -218,9 +229,9 @@ export default function OnboardingWizardPage() {
       const res = await axios.post(
         '/api/admin/onboarding/complete',
         {
-          adminEmail: adminEmail.trim(),
-          adminName: adminName.trim(),
-          newPassword,
+          adminEmail: adminEmail.trim() || undefined,
+          adminName: adminName.trim() || undefined,
+          newPassword: adminRegistered ? undefined : newPassword,
           vaultPassphraseSet: geistVault && vaultPassphrase.length >= 12,
           ai: {
             mode: aiMode,

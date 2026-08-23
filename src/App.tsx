@@ -150,6 +150,7 @@ function AppRoutes() {
                 {firstRun || needsResume ? (
                   <>
                     <Route path="/onboarding" element={<OnboardingWizardPage />} />
+                    <Route path="/login" element={<LoginPage />} />
                     <Route path="*" element={<Navigate to="/onboarding" replace />} />
                   </>
                 ) : !user ? (
