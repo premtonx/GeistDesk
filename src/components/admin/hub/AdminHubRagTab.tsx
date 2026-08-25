@@ -1,13 +1,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { Database, RefreshCw, Search, Settings2, Loader2, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Database, RefreshCw, Search, Settings2, Loader2, CheckCircle2, AlertTriangle, FolderTree, Plus, Trash2, Cloud, HardDrive, Share2, Play, KeyRound } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Badge } from '../../ui/badge';
+import { Switch } from '../../ui/switch';
 import { useTranslation } from '../../../lib/context/I18nContext';
 import { AdminHubSectionGrid } from './AdminHubSectionGrid';
 import { categoriesForTab } from './adminHubConfig';
 import { cn } from '../../../lib/utils';
+import { kbDocumentsApi, type KbExternalSource } from '../../../services/kbDocumentsApi';
 
 type ResolutionMode = 'extract' | 'ai_generated' | 'hybrid';
 
@@ -67,6 +69,45 @@ export function AdminHubRagTab() {
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [backfilling, setBackfilling] = useState<'kb' | 'ticket' | null>(null);
+
+  // External connectors state
+  const [sources, setSources] = useState<KbExternalSource[]>([]);
+  const [sourcesLoading, setSourcesLoading] = useState(true);
+  const [addOpen, setAddOpen] = useState(false);
+  const [syncingId, setSyncingId] = useState<string | null>(null);
+  const [savingSource, setSavingSource] = useState(false);
+  const [form, setForm] = useState<{
+    type: 'local_dir' | 'sharepoint' | 'onedrive';
+    name: string;
+    basePath: string;
+    folderId: string;
+    clientId: string;
+    azureTenantId: string;
+    secret: string;
+  }>({
+    type: 'local_dir',
+    name: '',
+    basePath: '',
+    folderId: '',
+    clientId: '',
+    azureTenantId: '',
+    secret: '',
+  });
+
+  const loadSources = useCallback(async () => {
+    try {
+      const list = await kbDocumentsApi.listSources();
+      setSources(list);
+    } catch (err) {
+      console.warn('Failed to load external sources', err);
+    } finally {
+      setSourcesLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void loadSources();
+  }, [loadSources]);
 
   const loadStatus = useCallback(async () => {
     try {
@@ -128,6 +169,69 @@ export function AdminHubRagTab() {
       console.warn(`RAG backfill (${type}) failed`, err);
     } finally {
       setBackfilling(null);
+    }
+  };
+
+  const createSource = async () => {
+    if (!form.name.trim()) {
+      console.warn('Source name required');
+      return;
+    }
+    setSavingSource(true);
+    try {
+      await kbDocumentsApi.createSource({
+        type: form.type,
+        name: form.name.trim(),
+        basePath: form.type === 'local_dir' ? form.basePath.trim() : undefined,
+        folderId: form.type !== 'local_dir' ? form.folderId.trim() : undefined,
+        clientId: form.type !== 'local_dir' ? form.clientId.trim() : undefined,
+        azureTenantId: form.type !== 'local_dir' ? form.azureTenantId.trim() : undefined,
+        secret: form.type !== 'local_dir' ? form.secret : undefined,
+        enabled: true,
+      });
+      setAddOpen(false);
+      setForm({ type: 'local_dir', name: '', basePath: '', folderId: '', clientId: '', azureTenantId: '', secret: '' });
+      await loadSources();
+    } catch (err) {
+      console.warn('Failed to create source', err);
+    } finally {
+      setSavingSource(false);
+    }
+  };
+
+  const toggleSource = async (source: KbExternalSource, enabled: boolean) => {
+    try {
+      await kbDocumentsApi.patchSource(source.id, { enabled });
+      setSources((prev) => prev.map((s) => (s.id === source.id ? { ...s, enabled } : s)));
+    } catch (err) {
+      console.warn('Failed to toggle source', err);
+    }
+  };
+
+  const runSync = async (sourceId?: string) => {
+    const target = sourceId || null;
+    setSyncingId(target ?? 'all');
+    try {
+      await kbDocumentsApi.syncSource(target ?? undefined);
+      if (target) {
+        setSources((prev) =>
+          prev.map((s) => (s.id === target ? { ...s, status: 'syncing' } : s)),
+        );
+      }
+      window.setTimeout(() => void loadSources(), 2500);
+    } catch (err) {
+      console.warn('Sync enqueue failed', err);
+    } finally {
+      setSyncingId(null);
+    }
+  };
+
+  const removeSource = async (id: string) => {
+    try {
+      await kbDocumentsApi.deleteSource(id);
+      setSources((prev) => prev.filter((s) => s.id !== id));
+    } catch (err) {
+      console.warn('Failed to delete source', err);
     }
   };
 
@@ -282,6 +386,258 @@ export function AdminHubRagTab() {
             )}
           </div>
         ) : null}
+      </div>
+
+      {/* Verknüpfte Datenquellen (external connectors) */}
+      <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-4">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <FolderTree className="w-4 h-4 text-indigo-600" />
+            <div>
+              <h3 className="text-xs font-black text-slate-800">
+                {t('admin.rag.sourcesTitle', 'Verknüpfte Datenquellen')}
+              </h3>
+              <p className="text-[10px] text-slate-400 font-medium mt-0.5">
+                NAS-Ordner, SharePoint & OneDrive — Delta-Hash-Sync in die KI-Wissensbasis
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={() => void runSync()} disabled={syncingId !== null}>
+              {syncingId === 'all' ? (
+                <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              ) : (
+                <Play className="w-3.5 h-3.5" />
+              )}
+              Alle synchronisieren
+            </Button>
+            <Button size="sm" onClick={() => setAddOpen((v) => !v)}>
+              <Plus className="w-3.5 h-3.5" />
+              Quelle hinzufügen
+            </Button>
+          </div>
+        </div>
+
+        {/* Add-connector form */}
+        {addOpen ? (
+          <div className="rounded-xl border border-indigo-100 bg-indigo-50/40 p-4 space-y-3">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-bold uppercase text-slate-400">Typ</label>
+                <select
+                  value={form.type}
+                  onChange={(e) =>
+                    setForm((f) => ({
+                      ...f,
+                      type: e.target.value as 'local_dir' | 'sharepoint' | 'onedrive',
+                    }))
+                  }
+                  className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                >
+                  <option value="local_dir">Lokales Verzeichnis / NAS</option>
+                  <option value="sharepoint">SharePoint</option>
+                  <option value="onedrive">OneDrive</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-bold uppercase text-slate-400">Name</label>
+                <Input
+                  value={form.name}
+                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                  placeholder="z. B. Handbuch-Server"
+                  className="mt-1"
+                />
+              </div>
+              {form.type === 'local_dir' ? (
+                <div className="md:col-span-2">
+                  <label className="text-[10px] font-bold uppercase text-slate-400">
+                    Basis-Ordner (relativ zu /data/sources/)
+                  </label>
+                  <Input
+                    value={form.basePath}
+                    onChange={(e) => setForm((f) => ({ ...f, basePath: e.target.value }))}
+                    placeholder="handbuecher/produkt-x"
+                    className="mt-1 font-mono"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Wird im Sandbox-Pfad <code className="font-mono">/data/sources/…</code> aufgelöst —
+                    Pfad-Traversal ist blockiert.
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-400">
+                      Ordner-ID / Drive-ID
+                    </label>
+                    <Input
+                      value={form.folderId}
+                      onChange={(e) => setForm((f) => ({ ...f, folderId: e.target.value }))}
+                      placeholder="0123456789abcdef"
+                      className="mt-1 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-400">Client ID</label>
+                    <Input
+                      value={form.clientId}
+                      onChange={(e) => setForm((f) => ({ ...f, clientId: e.target.value }))}
+                      placeholder="Client-ID der Entra-App"
+                      className="mt-1 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-400">Tenant ID</label>
+                    <Input
+                      value={form.azureTenantId}
+                      onChange={(e) => setForm((f) => ({ ...f, azureTenantId: e.target.value }))}
+                      placeholder="Azure-Tenant-ID"
+                      className="mt-1 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-400">
+                      Client Secret
+                    </label>
+                    <Input
+                      type="password"
+                      value={form.secret}
+                      onChange={(e) => setForm((f) => ({ ...f, secret: e.target.value }))}
+                      placeholder="Wird via GeistVault verschlüsselt"
+                      className="mt-1 font-mono"
+                    />
+                  </div>
+                  <p className="md:col-span-2 text-[10px] text-slate-400 flex items-center gap-1">
+                    <KeyRound className="w-3 h-3" />
+                    Erfordert eine Entra-App-Registrierung mit <b>Files.Read.All</b> /{' '}
+                    <b>Sites.Read.All</b> und Admin-Zustimmung.
+                  </p>
+                </>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => void createSource()} disabled={savingSource}>
+                {savingSource ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />}
+                Quelle anlegen
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setAddOpen(false)}>
+                Abbrechen
+              </Button>
+            </div>
+          </div>
+        ) : null}
+
+        {/* Connector list */}
+        {sourcesLoading ? (
+          <div className="flex items-center gap-2 text-slate-400 text-xs py-4">
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+            Lade Quellen…
+          </div>
+        ) : sources.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/50 p-6 text-center">
+            <HardDrive className="w-6 h-6 text-slate-300 mx-auto mb-2" />
+            <p className="text-xs font-bold text-slate-500">Noch keine externen Quellen</p>
+            <p className="text-[10px] text-slate-400 mt-1">
+              Verknüpfen Sie ein NAS-Verzeichnis oder SharePoint/OneDrive, um Dateien automatisch in die Wissensbasis zu indexieren.
+            </p>
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-100 border border-slate-100 rounded-xl overflow-hidden">
+            {sources.map((source) => (
+              <div key={source.id} className="flex items-center gap-3 px-4 py-3 bg-white">
+                <span
+                  className={cn(
+                    'shrink-0 w-9 h-9 rounded-lg border flex items-center justify-center',
+                    source.type === 'local_dir'
+                      ? 'bg-blue-50 border-blue-100 text-blue-600'
+                      : source.type === 'sharepoint'
+                        ? 'bg-amber-50 border-amber-100 text-amber-600'
+                        : 'bg-emerald-50 border-emerald-100 text-emerald-600',
+                  )}
+                >
+                  {source.type === 'local_dir' ? (
+                    <HardDrive className="w-4 h-4" />
+                  ) : source.type === 'sharepoint' ? (
+                    <Share2 className="w-4 h-4" />
+                  ) : (
+                    <Cloud className="w-4 h-4" />
+                  )}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <p className="text-xs font-bold text-slate-800 truncate">{source.name}</p>
+                    <Badge className="text-[9px] font-black uppercase border-none">
+                      {source.type === 'local_dir'
+                        ? 'Lokal'
+                        : source.type === 'sharepoint'
+                          ? 'SharePoint'
+                          : 'OneDrive'}
+                    </Badge>
+                    {source.status === 'syncing' ? (
+                      <Badge className="text-[9px] font-black uppercase border-none bg-amber-50 text-amber-700">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin" /> Sync läuft
+                      </Badge>
+                    ) : source.status === 'error' ? (
+                      <Badge className="text-[9px] font-black uppercase border-none bg-rose-50 text-rose-700">
+                        <AlertTriangle className="w-2.5 h-2.5" /> Fehler
+                      </Badge>
+                    ) : null}
+                  </div>
+                  <p className="text-[10px] text-slate-400 font-medium truncate">
+                    {source.type === 'local_dir'
+                      ? `/data/sources/${source.basePath || ''}`
+                      : source.folderId || 'Stammordner'}
+                    {source.lastSyncedAt
+                      ? ` · zuletzt ${new Date(source.lastSyncedAt).toLocaleString()}`
+                      : ''}
+                  </p>
+                  {source.lastSyncSummary ? (
+                    <p className="text-[9px] text-slate-400">
+                      +{source.lastSyncSummary.added} neu · {source.lastSyncSummary.updated} aktualisiert ·{' '}
+                      {source.lastSyncSummary.unchanged} unverändert
+                      {source.lastSyncSummary.failed > 0 ? ` · ${source.lastSyncSummary.failed} fehlgeschlagen` : ''}
+                    </p>
+                  ) : null}
+                  {source.lastError ? (
+                    <p className="text-[9px] text-rose-500 truncate max-w-md" title={source.lastError}>
+                      {source.lastError}
+                    </p>
+                  ) : null}
+                </div>
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <Switch
+                    checked={source.enabled}
+                    onCheckedChange={(checked) => void toggleSource(source, checked)}
+                    aria-label={`Aktivieren: ${source.name}`}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-[10px] font-bold rounded-lg"
+                    onClick={() => void runSync(source.id)}
+                    disabled={syncingId !== null}
+                  >
+                    {syncingId === source.id ? (
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                    ) : (
+                      <Play className="w-3 h-3" />
+                    )}
+                    Sync
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-slate-400 hover:text-rose-600 hover:bg-rose-50"
+                    onClick={() => void removeSource(source.id)}
+                    aria-label={`Löschen: ${source.name}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
       <AdminHubSectionGrid categories={categoriesForTab('rag')} />

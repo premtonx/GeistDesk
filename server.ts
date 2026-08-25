@@ -38,6 +38,7 @@ import ticketSpamRoutes from "./src/routes/ticketSpamRoutes.js";
 import emailChannelRoutes from "./src/routes/emailChannelRoutes.js";
 import mailDomainRoutes from "./src/routes/mailDomainRoutes.js";
 import vectorRoutes from "./src/routes/vectorRoutes.js";
+import kbDocumentRoutes from "./src/routes/kbDocumentRoutes.js";
 import ragAdminRoutes from "./src/routes/ragAdminRoutes.js";
 import importRoutes from "./src/routes/importRoutes.js";
 import onboardingRoutes from "./src/routes/onboardingRoutes.js";
@@ -186,6 +187,12 @@ console.log("Server process starting...");
 async function startServer() {
   console.log("Initializing Express app...");
   await initDb();
+  try {
+    const { ensureStorageDirs } = await import("./src/lib/kb/document-store.js");
+    ensureStorageDirs();
+  } catch (storageErr: any) {
+    console.warn('[Storage] Failed to ensure document storage dirs:', storageErr?.message || storageErr);
+  }
   try {
     const boot = await ensureOnboardingState();
     console.log(
@@ -605,6 +612,7 @@ async function startServer() {
   app.use("/api/kb/categories", kbCategoryRoutes);
   app.use("/api/kb/dashboard", kbDashboardRoutes);
   app.use("/api/kb", kbIngestionRoutes);
+  app.use("/api/kb/documents", kbDocumentRoutes);
   app.use("/api/dashboard", executiveDashboardRoutes);
   app.use("/api/module-config", moduleConfigRoutes);
   app.use("/api/header", headerTelemetryRoutes);
@@ -2112,6 +2120,13 @@ Example output format:
   registerAiTriageHook(processAiTriage);
   startEmailIngestionScheduler(60_000);
   startVectorQueueWorker();
+  // External KB source connectors — periodic delta-hash sync.
+  try {
+    const { startExternalSourceSyncScheduler } = await import("./src/lib/kb/sync-external-source.js");
+    startExternalSourceSyncScheduler(Number(process.env.KB_EXTERNAL_SYNC_INTERVAL_MS) || 30 * 60 * 1000);
+  } catch (syncErr: any) {
+    console.warn('[external-sync] Scheduler failed to start:', syncErr?.message || String(syncErr));
+  }
 
   // 3-Tier Agentic Graph — Tier 3: swarm/outage cluster detector (background).
   try {

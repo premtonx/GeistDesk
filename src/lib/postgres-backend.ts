@@ -297,6 +297,12 @@ export async function initDb() {
         WHEN duplicate_object THEN NULL;
       END $$;
     `);
+    // GeistKB Document Library — extend the enum without recreating the type.
+    try {
+      await pgPool.query(`ALTER TYPE "KnowledgeSourceType" ADD VALUE IF NOT EXISTS 'KB_DOCUMENT'`);
+    } catch (enumErr: any) {
+      console.warn('[DB Engine] KnowledgeSourceType KB_DOCUMENT add skipped:', enumErr?.message || enumErr);
+    }
     await pgPool.query(`
       CREATE TABLE IF NOT EXISTS "KnowledgeEmbedding" (
         "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),

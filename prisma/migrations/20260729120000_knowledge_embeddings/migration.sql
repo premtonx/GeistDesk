@@ -7,6 +7,9 @@ EXCEPTION
   WHEN duplicate_object THEN NULL;
 END $$;
 
+-- GeistKB Document Library — extend the enum without recreating the type.
+ALTER TYPE "KnowledgeSourceType" ADD VALUE IF NOT EXISTS 'KB_DOCUMENT';
+
 CREATE TABLE IF NOT EXISTS "KnowledgeEmbedding" (
   "id" UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   "tenant_id" VARCHAR(255) NOT NULL DEFAULT 'default',

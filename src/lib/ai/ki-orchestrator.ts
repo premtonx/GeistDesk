@@ -9,7 +9,7 @@ import { stripHtmlToPlainText } from './text-chunker.js';
 export interface HybridSearchHit {
   id: string;
   tenantId: string;
-  sourceType: 'KB_ARTICLE' | 'RESOLVED_TICKET';
+  sourceType: 'KB_ARTICLE' | 'RESOLVED_TICKET' | 'KB_DOCUMENT';
   sourceId: string;
   chunkIndex: number;
   chunkContent: string;
@@ -28,17 +28,18 @@ export interface GroundedRagContext {
 }
 
 const DEFAULT_TENANT = 'default';
-const ALLOWED_SOURCE_TYPES = new Set<string>(['KB_ARTICLE', 'RESOLVED_TICKET']);
+export const ALLOWED_SOURCE_TYPES = new Set<string>(['KB_ARTICLE', 'RESOLVED_TICKET', 'KB_DOCUMENT']);
+export type RagSearchSourceType = 'KB_ARTICLE' | 'RESOLVED_TICKET' | 'KB_DOCUMENT';
 
 function normalizeSourceTypes(
-  sourceTypes?: Array<'KB_ARTICLE' | 'RESOLVED_TICKET'>,
-): Array<'KB_ARTICLE' | 'RESOLVED_TICKET'> {
-  const filtered = (sourceTypes || []).filter(
-    (t): t is 'KB_ARTICLE' | 'RESOLVED_TICKET' => ALLOWED_SOURCE_TYPES.has(t),
+  sourceTypes?: RagSearchSourceType[],
+): RagSearchSourceType[] {
+  const filtered = (sourceTypes || []).filter((t): t is RagSearchSourceType =>
+    ALLOWED_SOURCE_TYPES.has(t),
   );
   return filtered.length
     ? filtered
-    : (['KB_ARTICLE', 'RESOLVED_TICKET'] as Array<'KB_ARTICLE' | 'RESOLVED_TICKET'>);
+    : (['KB_ARTICLE', 'RESOLVED_TICKET', 'KB_DOCUMENT'] as RagSearchSourceType[]);
 }
 
 /**
@@ -52,7 +53,7 @@ export async function hybridSearchKnowledge(params: {
   /** Required for isolation — callers must pass session-derived tenantId. */
   tenantId: string;
   limit?: number;
-  sourceTypes?: Array<'KB_ARTICLE' | 'RESOLVED_TICKET'>;
+  sourceTypes?: RagSearchSourceType[];
 }): Promise<HybridSearchHit[]> {
   const tenantId = String(params.tenantId || '').trim() || DEFAULT_TENANT;
   const limit = Math.min(Math.max(params.limit ?? 5, 1), 20);
@@ -167,14 +168,16 @@ export async function buildGroundedRagContext(params: {
   const linkedKbMap = new Map<string, string>();
   const linkedTicketMap = new Map<string, string>();
   for (const hit of snippets) {
-    if (hit.sourceType === 'KB_ARTICLE') linkedKbMap.set(hit.sourceId, hit.title);
+    if (hit.sourceType === 'KB_ARTICLE' || hit.sourceType === 'KB_DOCUMENT') {
+      linkedKbMap.set(hit.sourceId, hit.title);
+    }
     if (hit.sourceType === 'RESOLVED_TICKET') linkedTicketMap.set(hit.sourceId, hit.title);
   }
 
   const promptBlock = snippets
     .map(
       (hit, idx) =>
-        `[${idx + 1}] (${hit.sourceType === 'KB_ARTICLE' ? 'KB' : 'Ticket'} · ${hit.title} · id=${hit.sourceId})\n${hit.chunkContent}`,
+        `[${idx + 1}] (${hit.sourceType === 'RESOLVED_TICKET' ? 'Ticket' : 'KB'} · ${hit.title} · id=${hit.sourceId})\n${hit.chunkContent}`,
     )
     .join('\n\n---\n\n');
 

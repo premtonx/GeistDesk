@@ -53,6 +53,9 @@ services:
       - INBOUND_MAIL_FORWARD_DOMAIN=${INBOUND_MAIL_FORWARD_DOMAIN:-${DOMAIN_NAME:-localhost}}
       - EMAIL_INGESTION_INTERVAL_MS=${EMAIL_INGESTION_INTERVAL_MS:-60000}
       - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - DOCUMENT_STORAGE_DIR=${DOCUMENT_STORAGE_DIR:-/app/storage/documents}
+      - KB_EXTERNAL_SYNC_INTERVAL_MS=${KB_EXTERNAL_SYNC_INTERVAL_MS:-1800000}
+      - KB_SOURCES_ROOT=${KB_SOURCES_ROOT:-/data/sources}
 
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_USER=${SMTP_USER:-}
@@ -91,6 +94,8 @@ services:
     networks:
       - geistdesk-internal
       - traefik
+    volumes:
+      - geistdesk_documents:/app/storage/documents
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik-public}"
@@ -118,6 +123,7 @@ services:
 
 volumes:
   geistdesk_db_data:
+  geistdesk_documents:
 
 networks:
   geistdesk-internal:

@@ -4,6 +4,7 @@ import { authenticate, requireRole } from '../middleware/authMiddleware.js';
 import {
   enqueueDeleteEmbeddings,
   enqueueKbArticleIndex,
+  enqueueKbDocumentIndex,
   enqueueResolvedTicketIndex,
   getVectorQueueDepth,
 } from '../lib/ai/vector-queue.js';
@@ -14,9 +15,9 @@ import { safeErrorMessage } from '../lib/safe-log.js';
 const router = Router();
 
 const enqueueSchema = z.object({
-  type: z.enum(['INDEX_KB_ARTICLE', 'INDEX_RESOLVED_TICKET', 'DELETE_EMBEDDINGS']),
+  type: z.enum(['INDEX_KB_ARTICLE', 'INDEX_RESOLVED_TICKET', 'INDEX_KB_DOCUMENT', 'DELETE_EMBEDDINGS']),
   sourceId: z.string().min(1).max(255),
-  sourceType: z.enum(['KB_ARTICLE', 'RESOLVED_TICKET']).optional(),
+  sourceType: z.enum(['KB_ARTICLE', 'RESOLVED_TICKET', 'KB_DOCUMENT']).optional(),
   // tenantId from body is ignored — session tenant is authoritative
 });
 
@@ -40,6 +41,7 @@ router.post(
     const { type, sourceId, sourceType } = parsed.data;
     let job;
     if (type === 'INDEX_KB_ARTICLE') job = enqueueKbArticleIndex(sourceId, tenantId);
+    else if (type === 'INDEX_KB_DOCUMENT') job = enqueueKbDocumentIndex(sourceId, tenantId);
     else if (type === 'INDEX_RESOLVED_TICKET') job = enqueueResolvedTicketIndex(sourceId, tenantId);
     else {
       job = enqueueDeleteEmbeddings(sourceId, sourceType || 'KB_ARTICLE', tenantId);

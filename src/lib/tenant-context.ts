@@ -12,6 +12,8 @@ export const DEFAULT_TENANT_ID = 'default';
 export const TENANT_SCOPED_COLLECTIONS = new Set([
   'tickets',
   'kb_articles',
+  'kb_documents',
+  'kb_external_sources',
   'kb_relationships',
   'kb_trust_scores',
   'kb_coverage',

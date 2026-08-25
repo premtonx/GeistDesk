@@ -102,6 +102,7 @@ import { KBSearchSection } from '../kb/KBSearchSection';
 import { KBCategoryGrid } from '../kb/KBCategoryGrid';
 import { KBSearchAiOverlay } from '../kb/KBSearchAiOverlay';
 import { KBArticleEditorWorkspace, type KBArticleDraft } from '../kb/KBArticleEditorWorkspace';
+import { KBDocumentsTab } from '../kb/KBDocumentsTab';
 import { KBBulkActionBar } from '../kb/KBBulkActionBar';
 import { truncateRagSnippet } from '../kb/kbSearchUtils';
 import { ragService, type RAGResult } from '../../services/ragService';
@@ -166,6 +167,7 @@ export default function KBPage() {
 
   // AI Knowledge Coverage Map states
   const [viewMode, setViewMode] = useState<'standard' | 'coverage'>('standard');
+  const [kbSection, setKbSection] = useState<'articles' | 'documents'>('articles');
   const [coverageData, setCoverageData] = useState<any>(null);
   const [isLoadingCoverage, setIsLoadingCoverage] = useState<boolean>(false);
   const [selectedCoverageCategory, setSelectedCoverageCategory] = useState<string | null>(null);
@@ -1557,7 +1559,37 @@ export default function KBPage() {
                     onNewCategory={() => setIsCategoryCreateOpen(true)}
                   />
 
-                  {isAiAssistantMode ? (
+                  {/* Artikel / Dokumente segmented control */}
+                  <div className="inline-flex bg-slate-100 p-1 rounded-xl border border-slate-200 gap-1 text-[11px] font-black">
+                    <button
+                      type="button"
+                      onClick={() => setKbSection('articles')}
+                      className={cn(
+                        'px-3.5 py-1.5 rounded-lg transition-all cursor-pointer',
+                        kbSection === 'articles'
+                          ? 'bg-white text-indigo-650 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-600',
+                      )}
+                    >
+                      Artikel
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setKbSection('documents')}
+                      className={cn(
+                        'px-3.5 py-1.5 rounded-lg transition-all cursor-pointer',
+                        kbSection === 'documents'
+                          ? 'bg-white text-indigo-650 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-600',
+                      )}
+                    >
+                      Dokumente
+                    </button>
+                  </div>
+
+                  {kbSection === 'documents' ? (
+                    <KBDocumentsTab />
+                  ) : isAiAssistantMode ? (
                     <KBAutopilotDashboard
                       embedded
                       onBackToKB={() => handleKbNavigate({ type: 'workspace', id: 'overview' })}

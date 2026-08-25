@@ -37,6 +37,7 @@ model KnowledgeEmbedding {
 enum KnowledgeSourceType {
   KB_ARTICLE
   RESOLVED_TICKET
+  KB_DOCUMENT
 }
 
 // module_config lives in geistdesk_documents (collection='module_config', id='global').

@@ -24,6 +24,14 @@ import {
   shouldDropSpam,
 } from '../src/lib/email-ingestion/spam-guard.js';
 import { deduplicateTicketVector } from '../src/lib/ai/ticket-rag-dedup.js';
+import {
+  sha256Buffer,
+  sanitizeFilename,
+  resolveSandboxPath,
+  isAllowedDocumentExtension,
+  isNoText,
+  buildChunkHeader,
+} from '../src/lib/kb/document-store.js';
 
 let passed = 0;
 let failed = 0;
@@ -174,6 +182,65 @@ console.log('\n[RAG] 7. Selective RAG — include_in_rag / dedup decisions');
     threshold: 0.9,
   });
   assert(nullDist.shouldSkip === false && nullDist.maxSimilarity === 0, 'null distances ignored');
+}
+
+console.log('\n[DOCS] 8. GeistKB Document Library — pure logic');
+{
+  // sha256 determinism + content sensitivity
+  const h1 = sha256Buffer(Buffer.from('same content'));
+  const h2 = sha256Buffer(Buffer.from('same content'));
+  const h3 = sha256Buffer(Buffer.from('other content'));
+  assert(h1 === h2, 'sha256 is deterministic for identical buffers');
+  assert(h1 !== h3, 'sha256 differs for different content');
+  assert(/^[a-f0-9]{64}$/.test(h1), `sha256 hex length 64 (got ${h1.length})`);
+
+  // sanitizeFilename blocks path traversal
+  assert(sanitizeFilename('../../../etc/passwd') === 'passwd', 'sanitizeFilename strips traversal');
+  assert(sanitizeFilename('a\\b\\c.pdf') === 'c.pdf', 'sanitizeFilename strips backslash separators');
+  assert(sanitizeFilename('') === 'document.bin', 'empty filename gets safe fallback');
+  assert(sanitizeFilename('.') === 'document.bin', 'dot filename gets safe fallback');
+  assert(!sanitizeFilename('x.pdf').includes('/'), 'sanitized name has no forward slash');
+
+  // resolveSandboxPath rejects escapes
+  const root = 'C:/data/sources';
+  const inside = resolveSandboxPath(root, 'docs/a.pdf');
+  assert(
+    inside.replace(/\\/g, '/') === 'C:/data/sources/docs/a.pdf',
+    `sandbox path resolves inside root (got ${inside})`,
+  );
+  let escaped = false;
+  try {
+    resolveSandboxPath(root, '../outside.pdf');
+  } catch {
+    escaped = true;
+  }
+  assert(escaped, 'resolveSandboxPath rejects ../ traversal');
+  escaped = false;
+  try {
+    resolveSandboxPath(root, '/etc/passwd');
+  } catch {
+    escaped = true;
+  }
+  assert(escaped, 'resolveSandboxPath rejects absolute escape');
+
+  // extension whitelist
+  assert(isAllowedDocumentExtension('manual.pdf'), '.pdf allowed');
+  assert(isAllowedDocumentExtension('notes.md'), '.md allowed');
+  assert(isAllowedDocumentExtension('data.csv'), '.csv allowed');
+  assert(isAllowedDocumentExtension('letter.docx'), '.docx allowed');
+  assert(!isAllowedDocumentExtension('virus.exe'), '.exe rejected');
+  assert(!isAllowedDocumentExtension('photo.png'), '.png rejected');
+
+  // sparse text → no_text decision (< 30 non-whitespace chars)
+  assert(isNoText('short') === true, 'short text marked no_text');
+  assert(isNoText('  \n  ') === true, 'whitespace-only text marked no_text');
+  assert(isNoText('This is a sufficiently long document body with real content.') === false, 'long text passes extraction gate');
+
+  // chunk header stamping
+  const header = buildChunkHeader('handbook.pdf', 'doc-123');
+  assert(header.includes('[Source: handbook.pdf | DocId: doc-123]'), 'chunk header contains source + doc id');
+  const stamped = `${header}\n\nSome chunk body text`;
+  assert(stamped.startsWith('[Source: handbook.pdf | DocId: doc-123]'), 'chunk is prefixed with context header');
 }
 
 console.log('\n[RESULT]');

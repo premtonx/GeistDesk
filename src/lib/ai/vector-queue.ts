@@ -1,6 +1,6 @@
 /**
  * Background vector sync queue for KnowledgeEmbedding (pgvector).
- * Jobs: INDEX_KB_ARTICLE | INDEX_RESOLVED_TICKET | DELETE_EMBEDDINGS
+ * Jobs: INDEX_KB_ARTICLE | INDEX_RESOLVED_TICKET | INDEX_KB_DOCUMENT | DELETE_EMBEDDINGS
  */
 
 import { getDocDirect, queryDb } from '../postgres-backend.js';
@@ -18,9 +18,20 @@ import {
   deduplicateTicketVector,
   TICKET_RAG_DEDUP_THRESHOLD,
 } from './ticket-rag-dedup.js';
+import {
+  extractDocumentText,
+  readRawFile,
+  isNoText,
+  buildChunkHeader,
+} from '../kb/document-store.js';
+import { updateDocDirect } from '../postgres-backend.js';
 
-export type VectorJobType = 'INDEX_KB_ARTICLE' | 'INDEX_RESOLVED_TICKET' | 'DELETE_EMBEDDINGS';
-export type KnowledgeSourceType = 'KB_ARTICLE' | 'RESOLVED_TICKET';
+export type VectorJobType =
+  | 'INDEX_KB_ARTICLE'
+  | 'INDEX_RESOLVED_TICKET'
+  | 'INDEX_KB_DOCUMENT'
+  | 'DELETE_EMBEDDINGS';
+export type KnowledgeSourceType = 'KB_ARTICLE' | 'RESOLVED_TICKET' | 'KB_DOCUMENT';
 
 export interface VectorJob {
   id: string;
@@ -63,6 +74,17 @@ export function enqueueKbArticleIndex(sourceId: string, tenantId = DEFAULT_TENAN
   return enqueueVectorJob('INDEX_KB_ARTICLE', { sourceId, tenantId, sourceType: 'KB_ARTICLE' });
 }
 
+export function enqueueKbDocumentIndex(sourceId: string, tenantId = DEFAULT_TENANT): VectorJob {
+  return enqueueVectorJob('INDEX_KB_DOCUMENT', { sourceId, tenantId, sourceType: 'KB_DOCUMENT' });
+}
+
+export function enqueueDeleteDocumentEmbeddings(
+  sourceId: string,
+  tenantId = DEFAULT_TENANT,
+): VectorJob {
+  return enqueueVectorJob('DELETE_EMBEDDINGS', { sourceId, tenantId, sourceType: 'KB_DOCUMENT' });
+}
+
 export function enqueueResolvedTicketIndex(sourceId: string, tenantId = DEFAULT_TENANT): VectorJob {
   return enqueueVectorJob('INDEX_RESOLVED_TICKET', {
     sourceId,
@@ -100,6 +122,7 @@ async function upsertChunks(params: {
   body: string;
   metadata: Record<string, unknown>;
   overlapTokens?: number;
+  chunkPrefix?: string;
 }): Promise<number> {
   const combined = `${params.title}\n\n${params.body}`.trim();
   const chunks = chunkText(combined, { overlapTokens: params.overlapTokens ?? 100 });
@@ -108,11 +131,16 @@ async function upsertChunks(params: {
     return 0;
   }
 
-  const vectors = await embedTexts(chunks);
+  // Context stamping: prepend a metadata header to each chunk before embedding.
+  const stamped = params.chunkPrefix
+    ? chunks.map((chunk) => `${params.chunkPrefix!}\n\n${chunk}`)
+    : chunks;
+
+  const vectors = await embedTexts(stamped);
   await deleteEmbeddingsForSource(params.tenantId, params.sourceType, params.sourceId);
 
   for (let i = 0; i < chunks.length; i += 1) {
-    const content = chunks[i];
+    const content = stamped[i];
     const embedding = vectors[i];
     if (!embedding) continue;
     const literal = vectorToSqlLiteral(embedding);
@@ -209,6 +237,109 @@ async function indexKbArticle(tenantId: string, sourceId: string): Promise<void>
       tags: doc.tags || [],
     },
   });
+}
+
+/** GeistKB Document Library — chunk + embed an uploaded/synced document. */
+async function indexKbDocument(tenantId: string, sourceId: string): Promise<void> {
+  const doc = await getDocDirect('kb_documents', sourceId);
+  if (!doc) {
+    await deleteEmbeddingsForSource(tenantId, 'KB_DOCUMENT', sourceId);
+    return;
+  }
+
+  if (!documentBelongsToTenant(doc, tenantId)) {
+    console.warn(
+      `[vector-queue] refusing to index KB document ${sourceId}: tenant mismatch (job=${tenantId})`,
+    );
+    return;
+  }
+
+  // Selective RAG: opting a document out purges existing vectors immediately.
+  if (doc.index_in_rag === false) {
+    await deleteEmbeddingsForSource(tenantId, 'KB_DOCUMENT', sourceId);
+    console.log(
+      `[RAG] Skipped indexing KB document ${sourceId}: index_in_rag=false (removed existing vectors)`,
+    );
+    return;
+  }
+
+  const filename = String(doc.filename || 'document.bin');
+  const buffer = await readRawFile(tenantId, sourceId, filename);
+  if (!buffer) {
+    await updateDocDirect('kb_documents', sourceId, {
+      status: 'error',
+      error: 'Raw file missing from storage.',
+      updatedAt: new Date().toISOString(),
+    });
+    return;
+  }
+
+  let text: string;
+  let pages: number | null = null;
+  try {
+    const extracted = await extractDocumentText({
+      filename,
+      buffer,
+      mimetype: doc.mime ? String(doc.mime) : undefined,
+    });
+    text = extracted.text;
+    pages = extracted.pages;
+  } catch (err: any) {
+    console.warn(`[RAG] document text extraction failed for ${sourceId}:`, err?.message || err);
+    await updateDocDirect('kb_documents', sourceId, {
+      status: 'error',
+      error: err?.message || 'Text extraction failed.',
+      updatedAt: new Date().toISOString(),
+    });
+    return;
+  }
+
+  // Sparse / scanned files get flagged instead of polluting the vector store.
+  if (isNoText(text)) {
+    await deleteEmbeddingsForSource(tenantId, 'KB_DOCUMENT', sourceId);
+    await updateDocDirect('kb_documents', sourceId, {
+      status: 'no_text',
+      pages,
+      chunkCount: 0,
+      updatedAt: new Date().toISOString(),
+    });
+    console.log(
+      `[RAG] KB document ${sourceId} has no extractable text (${filename}) — marked no_text`,
+    );
+    return;
+  }
+
+  const ragConfig = await getRagPipelineConfig(tenantId);
+  const body = await redactForRag(text, tenantId);
+  const header = buildChunkHeader(filename, sourceId);
+  const chunkCount = await upsertChunks({
+    tenantId,
+    sourceType: 'KB_DOCUMENT',
+    sourceId,
+    title: String(doc.title || filename),
+    body,
+    overlapTokens: ragConfig.chunkOverlapTokens,
+    chunkPrefix: header,
+    metadata: {
+      workspace_id: tenantId,
+      source: 'kb_doc',
+      document_id: sourceId,
+      filename,
+      index_in_rag: true,
+      pages,
+      updated_at: doc.updatedAt || doc.createdAt || null,
+    },
+  });
+
+  await updateDocDirect('kb_documents', sourceId, {
+    status: 'indexed',
+    pages,
+    chunkCount,
+    error: null,
+    indexedAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  });
+  console.log(`[RAG] KB document ${sourceId} indexed (${chunkCount} chunks)`);
 }
 
 /**
@@ -340,6 +471,9 @@ async function processJob(job: VectorJob): Promise<void> {
     case 'INDEX_KB_ARTICLE':
       await indexKbArticle(job.tenantId, job.sourceId);
       break;
+    case 'INDEX_KB_DOCUMENT':
+      await indexKbDocument(job.tenantId, job.sourceId);
+      break;
     case 'INDEX_RESOLVED_TICKET':
       await indexResolvedTicket(job.tenantId, job.sourceId);
       break;
@@ -399,6 +533,21 @@ export function handleKnowledgeDocumentMutation(params: {
       }
       if ((action === 'add_doc' || action === 'update_doc' || action === 'set_doc') && id) {
         enqueueKbArticleIndex(id, tenantId);
+      }
+      return;
+    }
+
+    if (collection === 'kb_documents') {
+      if (action === 'delete_doc' && id) {
+        enqueueDeleteEmbeddings(id, 'KB_DOCUMENT', tenantId);
+        return;
+      }
+      if ((action === 'add_doc' || action === 'update_doc' || action === 'set_doc') && id) {
+        if (params.data?.index_in_rag === false) {
+          enqueueDeleteEmbeddings(id, 'KB_DOCUMENT', tenantId);
+        } else {
+          enqueueKbDocumentIndex(id, tenantId);
+        }
       }
       return;
     }
