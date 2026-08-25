@@ -48,6 +48,8 @@ interface KBKnowledgeIntelligencePanelProps {
   infrastructureTrust: KBArticleInfrastructureTrust;
   aiSummary?: string | null;
   isSummaryLoading?: boolean;
+  summaryFailed?: boolean;
+  onRetrySummary?: () => void;
   relationships: KBRelationship[];
   onAskAi: (forceRefresh?: boolean) => void;
   /** Explicit RAG opt-in state (undefined hides the toggle). */
@@ -67,6 +69,8 @@ export function KBKnowledgeIntelligencePanel({
   infrastructureTrust,
   aiSummary,
   isSummaryLoading = false,
+  summaryFailed = false,
+  onRetrySummary,
   relationships,
   onAskAi,
   indexInRag,
@@ -148,6 +152,20 @@ export function KBKnowledgeIntelligencePanel({
           <div className="flex items-center gap-2 text-[11px] text-slate-500 py-2">
             <Loader2 className="w-4 h-4 animate-spin" />
             {t('kb.detail.generatingSummary', 'Generating summary…')}
+          </div>
+        ) : summaryFailed ? (
+          <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2.5 text-[11px] text-rose-700">
+            {t('kb.detail.summaryFailed', 'KI-Zusammenfassung konnte nicht erstellt werden')}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full mt-2 h-8 rounded-xl text-[11px] font-semibold border-rose-200 text-rose-700 hover:bg-rose-100"
+              onClick={() => onRetrySummary?.()}
+            >
+              <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
+              {t('kb.detail.retrySummary', 'Zusammenfassung erneut versuchen')}
+            </Button>
           </div>
         ) : summaryBullets.length > 0 ? (
           <ul className="space-y-2 text-[11px] text-slate-600 leading-relaxed">

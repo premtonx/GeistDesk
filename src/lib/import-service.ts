@@ -365,7 +365,7 @@ export async function importTickets(
       result.createdIds.push(doc.id);
 
       if (status === 'resolved' || status === 'closed') {
-        enqueueResolvedTicketIndex(doc.id, scopedTenant);
+        await enqueueResolvedTicketIndex(doc.id, scopedTenant);
         result.enqueuedVectors += 1;
       }
     } catch (err) {
@@ -431,7 +431,7 @@ export async function importKbArticles(
       result.createdIds.push(doc.id);
 
       if (status === 'Published') {
-        enqueueKbArticleIndex(doc.id, scopedTenant);
+        await enqueueKbArticleIndex(doc.id, scopedTenant);
         result.enqueuedVectors += 1;
       }
     } catch (err) {

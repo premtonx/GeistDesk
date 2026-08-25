@@ -7,7 +7,7 @@ import {
   type AiOrchestratorConfig,
   type AiQualityMetrics,
   type AiWorkflowStep,
-} from '../types/aiOrchestrator.js';
+} from '../types/ai-orchestrator';
 import { compileOrchestratorPolicy } from './ai-orchestrator-policies.js';
 import { getOrchestratorConfig, getUsageCostTotals } from './ai-orchestrator-store.js';
 import { queryDb } from './postgres-backend.js';

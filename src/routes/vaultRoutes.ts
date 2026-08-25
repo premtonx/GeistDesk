@@ -18,6 +18,7 @@ import {
   encryptExchangeAtRest,
 } from "../lib/crypto.js";
 import type { AnyEncryptedPayload } from "../lib/crypto-payload.js";
+import { safeLog } from "../lib/safe-log.js";
 import {
   isPreviewOrPrefetchRequest,
   isVaultReadCommit,
@@ -400,7 +401,7 @@ router.post("/secrets", authenticate, async (req: any, res: Response): Promise<a
 
     return res.status(201).json({ id: itemRecord.id });
   } catch (e: any) {
-    console.error("[Vault] Failed to create secret:", e?.message || e, e?.stack);
+    safeLog('error', "[Vault] Failed to create secret:", e?.message || e, e?.stack);
     if (secretRef) {
       await deleteDocDirect(VAULT_SECRETS, secretRef).catch(() => undefined);
     }
@@ -435,7 +436,7 @@ router.get("/history", authenticate, async (req: any, res: Response): Promise<an
       });
     return res.json({ items });
   } catch (e: any) {
-    console.error("[Vault] Failed to list history:", e?.message || e);
+    safeLog('error', "[Vault] Failed to list history:", e?.message || e);
     return res.status(500).json({ error: "Failed to load vault history." });
   }
 });
@@ -536,7 +537,7 @@ router.post("/secrets/:id/reveal", vaultRevealRateLimiter, async (req: Request, 
     const maxViews = getMaxViews(claimedItem);
 
     if (claimedItem.metadata?.notifyOnView) {
-      console.info(
+      safeLog('info', 
         `[Vault] View notification queued for creator ${claimedItem.createdBy} on item ${claimedItem.id} (view ${nextViewCount}/${Number.isFinite(maxViews) ? maxViews : '∞'})`,
       );
     }
@@ -565,7 +566,7 @@ router.post("/secrets/:id/reveal", vaultRevealRateLimiter, async (req: Request, 
       burned: shouldBurnMaterial,
     });
   } catch (e: any) {
-    console.error("[Vault] Reveal failed:", e?.message || e);
+    safeLog('error', "[Vault] Reveal failed:", e?.message || e);
     return res.status(500).json({ error: "Failed to reveal secret." });
   }
 });
@@ -648,7 +649,7 @@ router.post("/secrets/:id/upload", vaultRevealRateLimiter, async (req: Request, 
 
     return res.json({ success: true, fileName });
   } catch (e: any) {
-    console.error("[Vault] Dropzone upload failed:", e?.message || e);
+    safeLog('error', "[Vault] Dropzone upload failed:", e?.message || e);
     return res.status(500).json({ error: "Failed to store encrypted dropzone payload." });
   }
 });
@@ -726,7 +727,7 @@ router.get("/dropzones/download", authenticate, async (req: any, res: Response):
     res.setHeader("Content-Length", String(buffer.length));
     return res.status(200).send(buffer);
   } catch (e: any) {
-    console.error("[Vault] Dropzone download failed:", e?.message || e);
+    safeLog('error', "[Vault] Dropzone download failed:", e?.message || e);
     return res.status(500).json({ error: "Failed to recover dropzone file." });
   }
 });

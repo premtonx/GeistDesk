@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { z } from 'zod';
 import { authenticate, requireRole } from '../middleware/authMiddleware.js';
 import { getEmailChannel } from '../lib/email-ingestion/channel-store.js';
 import {
@@ -13,9 +14,11 @@ import {
 import { EMAIL_CHANNELS_COLLECTION } from '../lib/email-ingestion/types.js';
 import { routeParam } from '../lib/route-params.js';
 import { getDocsDirect, updateDocDirect } from '../lib/postgres-backend.js';
+import { safeErrorMessage, safeLog } from '../lib/safe-log.js';
 
 const router = Router();
 
+const channelIdParamSchema = z.object({ channelId: z.string().min(1).max(200) });
 /**
  * POST /api/mail/verify-domain/:channelId
  * Resolve TXT (geist-verification=…) + DKIM via dns.promises.resolveTxt.
@@ -26,7 +29,11 @@ router.post(
   authenticate,
   requireRole(['SYSTEM_ADMIN']),
   async (req: Request, res: Response) => {
-    const channelId = routeParam(req.params.channelId);
+    const paramParsed = channelIdParamSchema.safeParse({ channelId: req.params.channelId });
+    if (!paramParsed.success) {
+      return res.status(400).json({ success: false, error: 'Invalid channel id.' });
+    }
+    const channelId = routeParam(paramParsed.data.channelId);
     try {
       let channel = await getEmailChannel(channelId, { includeSecrets: true });
       if (!channel) {
@@ -92,10 +99,10 @@ router.post(
         },
       });
     } catch (err: any) {
-      console.error('[mail/verify-domain] failed', err?.message || err);
+      safeLog('error', '[mail/verify-domain] failed', safeErrorMessage(err));
       return res.status(500).json({
         success: false,
-        error: err?.message || 'Domain verification failed',
+        error: safeErrorMessage(err, 'Domain verification failed'),
       });
     }
   },
@@ -164,8 +171,8 @@ router.get(
         note: 'Verify SPF, DKIM, and DMARC at your sending domain DNS provider. dnsVerified reflects the TXT/DKIM/SPF records published for each support alias.',
       });
     } catch (err: any) {
-      console.error('[mail/reputation] failed', err?.message || err);
-      return res.status(500).json({ success: false, error: err?.message || 'Reputation check failed' });
+      safeLog('error', '[mail/reputation] failed', safeErrorMessage(err));
+      return res.status(500).json({ success: false, error: safeErrorMessage(err, 'Reputation check failed') });
     }
   },
 );

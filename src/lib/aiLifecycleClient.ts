@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { AiExecutionContext, AiExecutionResult, AiOperatorLanguage } from '../types/aiOrchestrator';
+import type { AiExecutionContext, AiExecutionResult, AiOperatorLanguage } from '../types/ai-orchestrator';
 
 export function resolveOperatorLanguage(): AiOperatorLanguage {
   if (typeof localStorage !== 'undefined') {

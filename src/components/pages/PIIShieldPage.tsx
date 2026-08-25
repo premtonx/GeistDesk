@@ -14,7 +14,7 @@ import {
   DEFAULT_REDACTION_RULES,
   type AiOrchestratorConfig,
   type RedactionRule,
-} from '../../types/aiOrchestrator';
+} from '../../types/ai-orchestrator';
 import { persistOrchestratorPatch } from '../../lib/persistOrchestratorPatch';
 
 export default function PIIShieldPage() {

@@ -1,4 +1,4 @@
-import type { AiOrchestratorConfig } from '../types/aiOrchestrator.js';
+import type { AiOrchestratorConfig } from '../types/ai-orchestrator';
 
 const USD_TO_EUR = 0.93;
 

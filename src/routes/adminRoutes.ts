@@ -2,6 +2,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import crypto from "crypto";
 import { routeParam } from "../lib/route-params.js";
+import { safeErrorMessage, safeLog } from "../lib/safe-log.js";
 import { authenticate, requireRole } from "../middleware/authMiddleware.js";
 import { 
   getDocDirect, 
@@ -62,7 +63,7 @@ import type {
   AiPersonaSkillProfile,
   AiPromptLibraryFeature,
   AiTrustLevel,
-} from "../types/aiOrchestrator.js";
+} from "../types/ai-orchestrator";
 
 const router = Router();
 
@@ -118,7 +119,7 @@ router.get("/hub-stats", authenticate, requireRole(["SYSTEM_ADMIN"]), async (_re
     });
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error("[Admin Hub Stats] Error:", message);
+    safeLog('error', "[Admin Hub Stats] Error:", message);
     return res.status(500).json({ error: "Failed to load admin hub statistics." });
   }
 });
@@ -204,10 +205,10 @@ router.get("/users", authenticate, requireRole(["SYSTEM_ADMIN"]), async (req: Re
       }
     });
   } catch (error: any) {
-    console.error("[Admin Users API] Error listing users:", error);
+    safeLog('error', "[Admin Users API] Error listing users:", error);
     return res.status(500).json({
       error: "Internal Server Error",
-      details: error.message || String(error)
+      details: safeErrorMessage(error)
     });
   }
 });
@@ -277,7 +278,7 @@ router.post("/users/create-local", authenticate, requireRole(["SYSTEM_ADMIN"]), 
         timestamp: new Date().toISOString()
       });
     } catch (auditErr) {
-      console.error("[Admin Users API] Failed to log creation audit:", auditErr);
+      safeLog('error', "[Admin Users API] Failed to log creation audit:", auditErr);
     }
 
     return res.status(201).json({
@@ -289,10 +290,10 @@ router.post("/users/create-local", authenticate, requireRole(["SYSTEM_ADMIN"]), 
       }
     });
   } catch (error: any) {
-    console.error("[Admin Users API] Error creating local user:", error);
+    safeLog('error', "[Admin Users API] Error creating local user:", error);
     return res.status(500).json({
       error: "Internal Server Error",
-      details: error.message || String(error)
+      details: safeErrorMessage(error)
     });
   }
 });
@@ -355,7 +356,7 @@ router.patch("/users/:id/role", authenticate, requireRole(["SYSTEM_ADMIN"]), asy
         timestamp: new Date().toISOString()
       });
     } catch (auditErr) {
-      console.error("[Admin Users API] Failed logging role update audit:", auditErr);
+      safeLog('error', "[Admin Users API] Failed logging role update audit:", auditErr);
     }
 
     return res.status(200).json({
@@ -370,10 +371,10 @@ router.patch("/users/:id/role", authenticate, requireRole(["SYSTEM_ADMIN"]), asy
       }
     });
   } catch (error: any) {
-    console.error("[Admin Users API] Error updating user role:", error);
+    safeLog('error', "[Admin Users API] Error updating user role:", error);
     return res.status(500).json({
       error: "Internal Server Error",
-      details: error.message || String(error)
+      details: safeErrorMessage(error)
     });
   }
 });
@@ -424,13 +425,13 @@ router.post("/users/:id/set-password", authenticate, requireRole(["SYSTEM_ADMIN"
         timestamp: new Date().toISOString()
       });
     } catch (auditErr) {
-      console.error("[Admin Users API] Failed logging set-password audit:", auditErr);
+      safeLog('error', "[Admin Users API] Failed logging set-password audit:", auditErr);
     }
 
     return res.status(200).json({ success: true, message: "Password set successfully." });
   } catch (error: any) {
-    console.error("[Admin Users API] Error setting user password:", error);
-    return res.status(500).json({ error: "Internal Server Error", details: error.message || String(error) });
+    safeLog('error', "[Admin Users API] Error setting user password:", error);
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -463,7 +464,7 @@ router.post("/users/:id/reset-personal-vault", authenticate, requireRole(["SYSTE
         timestamp: new Date().toISOString(),
       });
     } catch (auditErr) {
-      console.error("[Admin Users API] Failed logging reset-personal-vault audit:", auditErr);
+      safeLog('error', "[Admin Users API] Failed logging reset-personal-vault audit:", auditErr);
     }
 
     return res.status(200).json({
@@ -473,8 +474,8 @@ router.post("/users/:id/reset-personal-vault", authenticate, requireRole(["SYSTE
       initialized: false,
     });
   } catch (error: any) {
-    console.error("[Admin Users API] Error resetting personal vault:", error);
-    return res.status(500).json({ error: "Internal Server Error", details: error.message || String(error) });
+    safeLog('error', "[Admin Users API] Error resetting personal vault:", error);
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -500,10 +501,10 @@ router.get("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]), 
       policyValidation,
     });
   } catch (error: any) {
-    console.error("[Admin Orchestrator GET] Error retrieving config:", error);
+    safeLog('error', "[Admin Orchestrator GET] Error retrieving config:", error);
     return res.status(500).json({
       error: "Internal Server Error",
-      details: error.message || String(error),
+      details: safeErrorMessage(error),
     });
   }
 });
@@ -694,7 +695,7 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
     try {
       await syncLegacyModuleAiFromOrchestrator(saved);
     } catch (syncError) {
-      console.warn("[Admin Orchestrator POST] Legacy module_config.ai sync skipped:", syncError);
+      safeLog('warn', "[Admin Orchestrator POST] Legacy module_config.ai sync skipped:", syncError);
     }
 
     if (payload.secrets && typeof payload.secrets === "object") {
@@ -719,10 +720,10 @@ router.post("/orchestrator/config", authenticate, requireRole(["SYSTEM_ADMIN"]),
     const versions = await listConfigVersions(workspaceId, 10);
     return res.status(200).json({ success: true, config: saved, secretStatus, versions });
   } catch (error: any) {
-    console.error("[Admin Orchestrator POST] Error updating config:", error);
+    safeLog('error', "[Admin Orchestrator POST] Error updating config:", error);
     return res.status(500).json({
       error: "Internal Server Error",
-      details: error.message || String(error),
+      details: safeErrorMessage(error),
     });
   }
 });
@@ -791,10 +792,10 @@ router.put("/orchestrator/agent-skills/:agentId", authenticate, requireRole(["SY
       config: saved,
     });
   } catch (error: any) {
-    console.error("[Admin Orchestrator Agent Skills PUT] Error:", error);
+    safeLog('error', "[Admin Orchestrator Agent Skills PUT] Error:", error);
     return res.status(500).json({
       error: "Internal Server Error",
-      details: error.message || String(error),
+      details: safeErrorMessage(error),
     });
   }
 });
@@ -809,8 +810,8 @@ router.get("/orchestrator/audit", authenticate, requireRole(["SYSTEM_ADMIN"]), a
     const entries = await getOrchestratorAudit(workspaceId, limit);
     return res.status(200).json({ entries });
   } catch (error: any) {
-    console.error("[Admin Orchestrator Audit] Error:", error);
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    safeLog('error', "[Admin Orchestrator Audit] Error:", error);
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -823,8 +824,8 @@ router.post("/orchestrator/test", authenticate, requireRole(["SYSTEM_ADMIN"]), a
     const results = await testOrchestratorConfiguration(workspaceId);
     return res.status(200).json({ results });
   } catch (error: any) {
-    console.error("[Admin Orchestrator Test] Error:", error);
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    safeLog('error', "[Admin Orchestrator Test] Error:", error);
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -837,7 +838,7 @@ router.get("/orchestrator/versions", authenticate, requireRole(["SYSTEM_ADMIN"])
     const versions = await listConfigVersions(workspaceId, Math.min(Number(req.query.limit) || 20, 50));
     return res.status(200).json({ versions });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -854,7 +855,7 @@ router.post("/orchestrator/restore", authenticate, requireRole(["SYSTEM_ADMIN"])
     orchestratorEventBus.emitConfigUpdated(workspaceId, config, config.configVersion);
     return res.status(200).json({ success: true, config });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -871,7 +872,7 @@ router.get("/orchestrator/models", authenticate, requireRole(["SYSTEM_ADMIN"]), 
     const models = await detectLocalModels(endpoint, localKey);
     return res.status(200).json({ models });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -884,7 +885,7 @@ router.get("/orchestrator/analytics", authenticate, requireRole(["SYSTEM_ADMIN"]
     const health = await getOrchestratorHealth(workspaceId);
     return res.status(200).json({ usage: health.usage, metrics: health.metrics });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -905,7 +906,7 @@ router.get("/orchestrator/risk-score", authenticate, requireRole(["SYSTEM_ADMIN"
       policyValidation,
     });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -918,7 +919,7 @@ router.get("/orchestrator/approvals", authenticate, requireRole(["SYSTEM_ADMIN"]
     const approvals = await listPendingApprovals(workspaceId, Math.min(Number(req.query.limit) || 50, 200));
     return res.status(200).json({ approvals });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -954,7 +955,7 @@ router.post("/orchestrator/approvals/:id/resolve", authenticate, requireRole(["S
 
     return res.status(200).json({ success: true, approval: resolved, execution: result });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -967,7 +968,7 @@ router.get("/orchestrator/review-pool", authenticate, requireRole(["SYSTEM_ADMIN
     const reviews = await listHumanReviewPool(workspaceId, Math.min(Number(req.query.limit) || 50, 200));
     return res.status(200).json({ reviews });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -980,7 +981,7 @@ router.get("/orchestrator/explainability", authenticate, requireRole(["SYSTEM_AD
     const logs = await listExplainabilityLogs(workspaceId, Math.min(Number(req.query.limit) || 50, 200));
     return res.status(200).json({ logs });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -993,7 +994,7 @@ router.get("/orchestrator/prompts", authenticate, requireRole(["SYSTEM_ADMIN"]),
     const templates = await listPromptTemplates(workspaceId);
     return res.status(200).json({ templates });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -1009,7 +1010,7 @@ router.get("/orchestrator/prompts/:feature/versions", authenticate, requireRole(
     const current = templates.find((t) => t.feature === feature);
     return res.status(200).json({ feature, current, versions });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -1027,7 +1028,7 @@ router.post("/orchestrator/prompts/:feature", authenticate, requireRole(["SYSTEM
     const versions = await listPromptVersions(feature, workspaceId);
     return res.status(200).json({ success: true, template, versions });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -1045,7 +1046,7 @@ router.post("/orchestrator/prompts/:feature/rollback", authenticate, requireRole
     const versions = await listPromptVersions(feature, workspaceId);
     return res.status(200).json({ success: true, template, versions });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -1058,7 +1059,7 @@ router.get("/orchestrator/benchmark", authenticate, requireRole(["SYSTEM_ADMIN"]
     const rows = await getProviderBenchmarkGrid(workspaceId);
     return res.status(200).json({ rows, refreshedAt: new Date().toISOString() });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -1075,7 +1076,7 @@ router.post("/orchestrator/playground", authenticate, requireRole(["SYSTEM_ADMIN
     const results = await runPlaygroundComparison({ prompt, models, workspaceId });
     return res.status(200).json({ results });
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -1088,7 +1089,7 @@ router.get("/orchestrator/operations-dashboard", authenticate, requireRole(["SYS
     const dashboard = await getOperationsDashboard(workspaceId);
     return res.status(200).json(dashboard);
   } catch (error: any) {
-    return res.status(500).json({ error: "Internal Server Error", details: error.message });
+    return res.status(500).json({ error: "Internal Server Error", details: safeErrorMessage(error) });
   }
 });
 
@@ -1127,10 +1128,10 @@ router.get("/orchestrator/health", authenticate, requireRole(["SYSTEM_ADMIN"]), 
     const health = await getOrchestratorHealth(workspaceId);
     return res.status(200).json(health);
   } catch (error: any) {
-    console.error("[Admin Orchestrator Health] Top level error:", error);
+    safeLog('error', "[Admin Orchestrator Health] Top level error:", error);
     return res.status(500).json({
       error: "Internal Server Error",
-      details: error.message || String(error),
+      details: safeErrorMessage(error),
     });
   }
 });

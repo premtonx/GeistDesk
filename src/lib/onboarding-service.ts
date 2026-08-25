@@ -50,7 +50,7 @@ import {
   ORCHESTRATOR_MODEL_OPTIONS,
   featureRoutingForModel,
   type AiFeatureRouting,
-} from '../types/aiOrchestrator.js';
+} from '../types/ai-orchestrator';
 
 const MODULE_COLLECTION = 'module_config';
 const MODULE_DOC_ID = 'global';

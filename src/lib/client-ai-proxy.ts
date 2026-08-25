@@ -1,4 +1,4 @@
-import type { AiFeatureId } from '../types/aiOrchestrator';
+import type { AiFeatureId } from '../types/ai-orchestrator';
 
 export interface ClientAiExecuteOptions {
   feature: AiFeatureId;

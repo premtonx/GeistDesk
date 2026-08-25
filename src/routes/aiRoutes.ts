@@ -1,7 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { authenticate } from '../middleware/authMiddleware.js';
-import { AI_DECISION_ENGINE_FLOW, type AiExecutionContext, type AiFeatureId } from '../types/aiOrchestrator.js';
+import { AI_DECISION_ENGINE_FLOW, type AiExecutionContext, type AiFeatureId } from '../types/ai-orchestrator';
 import { executeAiFeatureRequest } from '../lib/ai-orchestrator-service.js';
 import { translatePolyglotContent, resolvePolyglotTranslationEngine } from '../lib/polyglot-translate-service.js';
 import { getDocDirect } from '../lib/postgres-backend.js';
@@ -17,7 +17,7 @@ import { runSwarmDetectionOnce } from '../lib/ai/swarm-detector.js';
 import {
   normalizePolyglotBridgeSettings,
 } from '../lib/module-config.js';
-import { safeErrorMessage } from '../lib/safe-log.js';
+import { safeErrorMessage, safeLog } from '../lib/safe-log.js';
 
 const router = Router();
 
@@ -125,7 +125,7 @@ router.post('/execute', authenticate, async (req: Request, res: Response) => {
     return res.status(200).json(result);
   } catch (error: unknown) {
     const message = genericAiError(error, 'AI lifecycle execution failed.');
-    console.error('[AI Execute] Lifecycle error:', message);
+    safeLog('error', '[AI Execute] Lifecycle error:', message);
     return res.status(500).json({ error: 'AI lifecycle execution failed.', details: message });
   }
 });
@@ -187,7 +187,7 @@ router.post('/execute/resume', authenticate, async (req: Request, res: Response)
     return res.status(200).json(result);
   } catch (error: unknown) {
     const message = genericAiError(error, 'AI lifecycle resume failed.');
-    console.error('[AI Execute/Resume]', message);
+    safeLog('error', '[AI Execute/Resume]', message);
     return res.status(500).json({ error: 'AI lifecycle resume failed.', details: message });
   }
 });
@@ -228,7 +228,7 @@ router.post('/polyglot/translate', authenticate, async (req: Request, res: Respo
         };
       }
     } catch (configError) {
-      console.warn('[Polyglot Bridge] Module config lookup skipped:', configError);
+      safeLog('warn', '[Polyglot Bridge] Module config lookup skipped:', configError);
     }
 
     const translation = await translatePolyglotContent(text, targetLanguage, polyglotOptions);
@@ -236,7 +236,7 @@ router.post('/polyglot/translate', authenticate, async (req: Request, res: Respo
     return res.status(200).json({ translation, engine, providerMode });
   } catch (error: unknown) {
     const message = genericAiError(error, 'Polyglot translation failed.');
-    console.error('[Polyglot Translate]', message);
+    safeLog('error', '[Polyglot Translate]', message);
     return res.status(500).json({ error: 'Polyglot translation failed.', details: message });
   }
 });
@@ -275,7 +275,7 @@ router.post('/draft-learning-diffs', authenticate, async (req: Request, res: Res
     return res.status(200).json({ success: true, id });
   } catch (error: unknown) {
     const message = genericAiError(error, 'Learning diff persistence failed.');
-    console.error('[AI Draft Learning Diff]', message);
+    safeLog('error', '[AI Draft Learning Diff]', message);
     return res.status(500).json({ error: 'Learning diff persistence failed.', details: message });
   }
 });
@@ -291,7 +291,7 @@ router.get('/incident-clusters', authenticate, async (_req: Request, res: Respon
     return res.status(200).json({ clusters });
   } catch (error: unknown) {
     const message = genericAiError(error, 'Incident cluster lookup failed.');
-    console.error('[AI Swarm] Cluster lookup:', message);
+    safeLog('error', '[AI Swarm] Cluster lookup:', message);
     return res.status(500).json({ error: 'Incident cluster lookup failed.', details: message });
   }
 });
@@ -307,7 +307,7 @@ router.post('/incident-clusters/scan', authenticate, async (_req: Request, res: 
     return res.status(200).json({ success: true, ...result });
   } catch (error: unknown) {
     const message = genericAiError(error, 'Swarm scan failed.');
-    console.error('[AI Swarm] Scan:', message);
+    safeLog('error', '[AI Swarm] Scan:', message);
     return res.status(500).json({ error: 'Swarm scan failed.', details: message });
   }
 });
@@ -322,7 +322,7 @@ router.post('/incident-clusters/:id/resolve', authenticate, async (req: Request,
     return res.status(200).json({ success: true });
   } catch (error: unknown) {
     const message = genericAiError(error, 'Cluster resolve failed.');
-    console.error('[AI Swarm] Resolve:', message);
+    safeLog('error', '[AI Swarm] Resolve:', message);
     return res.status(500).json({ error: 'Cluster resolve failed.', details: message });
   }
 });

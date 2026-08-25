@@ -36,7 +36,7 @@ import {
   type AiPolicyCompilationResult,
   type AiRiskScoreAssessment,
   type AiPolicyValidationResult,
-} from '../../types/aiOrchestrator';
+} from '../../types/ai-orchestrator';
 import { isCloudProvider } from '../../lib/ai-orchestrator-policies';
 import { persistOrchestratorPatch } from '../../lib/persistOrchestratorPatch';
 

@@ -22,7 +22,7 @@ import type {
   AiFeatureId,
   AiOrchestratorConfig,
   AiTicketExecutionStatus,
-} from '../../types/aiOrchestrator.js';
+} from '../../types/ai-orchestrator';
 
 export interface SelfCritiqueLoopInput {
   feature: AiFeatureId;

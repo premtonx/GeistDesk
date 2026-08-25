@@ -4,8 +4,8 @@
  */
 
 import type { PolyglotLanguage } from '../lib/module-config';
-import type { AiPersonaId, AiPersonaSkillsMap, AiPromptLibraryFeature } from '../types/aiOrchestrator';
-import { DEFAULT_PROMPT_BODIES, PROMPT_LIBRARY_FEATURES } from '../types/aiOrchestrator';
+import type { AiPersonaId, AiPersonaSkillsMap, AiPromptLibraryFeature } from '../types/ai-orchestrator';
+import { DEFAULT_PROMPT_BODIES, PROMPT_LIBRARY_FEATURES } from '../types/ai-orchestrator';
 import { AGENT_SKILL_BLUEPRINT_MANIFESTS } from './agent-skill-manifests';
 
 /** Polyglot Bridge roster — Deutsch first, then EN/ES/JP/FR. */

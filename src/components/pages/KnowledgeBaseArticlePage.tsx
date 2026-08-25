@@ -36,6 +36,7 @@ export function KnowledgeBaseArticlePage({
   const [isTranslating, setIsTranslating] = useState(false);
   const [aiSummary, setAiSummary] = useState<string | null>(article.aiSummary ?? null);
   const [isSummaryLoading, setIsSummaryLoading] = useState(false);
+  const [summaryFailed, setSummaryFailed] = useState(false);
   const [historyEntries, setHistoryEntries] = useState<KBArticleHistoryEntry[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [relationships, setRelationships] = useState<KBRelationship[]>([]);
@@ -236,6 +237,7 @@ export function KnowledgeBaseArticlePage({
         return;
       }
 
+      setSummaryFailed(false);
       setIsSummaryLoading(true);
       try {
         const { aiSummary: summary } = await kbArticleApi.getOrGenerateSummary(liveArticle.id, { forceRefresh });
@@ -245,7 +247,9 @@ export function KnowledgeBaseArticlePage({
         toast.success(forceRefresh ? 'AI summary refreshed.' : 'AI summary loaded.');
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to generate summary.';
-        toast.error(message);
+        setSummaryFailed(true);
+        toast.error('KI-Zusammenfassung konnte nicht erstellt werden');
+        console.warn('KB summary generation failed:', message);
       } finally {
         setIsSummaryLoading(false);
       }
@@ -351,6 +355,8 @@ export function KnowledgeBaseArticlePage({
       infrastructureTrust={infrastructureTrust}
       aiSummary={aiSummary}
       isSummaryLoading={isSummaryLoading}
+      summaryFailed={summaryFailed}
+      onRetrySummary={() => void handleRegenerateSummary(true)}
       relationships={relationships}
       historyEntries={historyEntries}
       isHistoryLoading={isHistoryLoading}

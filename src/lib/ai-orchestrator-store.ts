@@ -30,18 +30,48 @@ import {
   type AiOrchestratorVersion,
   type AiTrustLevel,
   type RedactionRule,
-} from '../types/aiOrchestrator.js';
+} from '../types/ai-orchestrator';
 import { mergeCorporatePolicies, mergeDataResidencyPolicy } from './ai-orchestrator-policies.js';
 
-const SECRET_KEY = process.env.AI_SECRETS_KEY || process.env.JWT_SECRET;
+const SECRET_KEY = process.env.AI_SECRETS_KEY;
 if (!SECRET_KEY) {
   throw new Error(
-    '[AI Secrets] AI_SECRETS_KEY or JWT_SECRET is required to encrypt provider credentials at rest.',
+    '[AI Secrets] AI_SECRETS_KEY is required to encrypt provider credentials at rest. ' +
+      'Generate one with: node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))"',
   );
 }
 
+function normalizeKeyMaterial(raw: string | undefined): string {
+  if (!raw) return '';
+  return raw.trim().replace(/^['"]|['"]$/g, '');
+}
+
+function getSecretsKey(): Buffer {
+  const raw = normalizeKeyMaterial(SECRET_KEY);
+  if (!raw) {
+    throw new Error(
+      '[AI Secrets] AI_SECRETS_KEY is not configured. Refusing to encrypt provider credentials without a 256-bit key.',
+    );
+  }
+  let key: Buffer;
+  if (/^[0-9a-fA-F]{64}$/.test(raw)) {
+    key = Buffer.from(raw, 'hex');
+  } else {
+    key = Buffer.from(raw, 'base64');
+  }
+  if (key.length !== 32) {
+    throw new Error('[AI Secrets] AI_SECRETS_KEY must decode to exactly 32 bytes (256 bits).');
+  }
+  return key;
+}
+
+/** Fail fast at server boot when provider-secret encryption cannot be guaranteed. */
+export function assertOrchestratorSecretsConfigured(): void {
+  getSecretsKey();
+}
+
 function deriveKey(): Buffer {
-  return crypto.scryptSync(SECRET_KEY, 'geistdesk-ai-secrets', 32);
+  return crypto.scryptSync(getSecretsKey(), 'geistdesk-ai-secrets', 32);
 }
 
 export function encryptSecret(plain: string): string {

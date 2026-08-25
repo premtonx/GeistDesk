@@ -15,7 +15,7 @@ import {
   type AiOrchestratorConfig,
   type AiTicketExecutionStatus,
   isAiFeatureEnabled,
-} from '../types/aiOrchestrator.js';
+} from '../types/ai-orchestrator';
 import { compileOrchestratorPolicy, requiresCloudDataAnonymization, validateCorporatePolicyRules } from './ai-orchestrator-policies.js';
 import { isBudgetExceeded, isLocalFallbackForced } from './ai-budget.js';
 import { createProductionModelExecutor } from './ai-lifecycle-executor.js';
@@ -241,7 +241,7 @@ export async function runAiRequestLifecycle(
     const cloudAnonymizationRequired = requiresCloudDataAnonymization(config, projectedModel);
 
     if (config.piiEnabled) {
-      const { PIIShield } = await import('../../pii-shield.js');
+      const { PIIShield } = await import('../server/pii-shield.js');
       const shield = await PIIShield.redact(ctx.prompt);
       redactedPrompt = shield.cleanText;
       policiesChecked.push('pii_shield');
@@ -790,4 +790,4 @@ export async function resumeApprovedAiRequest(
   return runAiRequestLifecycle(ctx, { ...options, approvalAlreadyGranted: true });
 }
 
-export { AI_DECISION_ENGINE_FLOW } from '../types/aiOrchestrator.js';
+export { AI_DECISION_ENGINE_FLOW } from '../types/ai-orchestrator';

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { AiOrchestratorConfig, AiPersonaId, AiPersonaSkillProfile } from '../types/aiOrchestrator';
+import type { AiOrchestratorConfig, AiPersonaId, AiPersonaSkillProfile } from '../types/ai-orchestrator';
 
 /** Persists persona skill scripts to the workspace orchestrator config (global for all team profiles). */
 export async function updateAgentSkills(

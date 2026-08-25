@@ -7,7 +7,7 @@
 import {
   DEFAULT_ORCHESTRATOR_CONFIG,
   DEFAULT_CONFIDENCE_THRESHOLDS,
-} from '../src/types/aiOrchestrator.js';
+} from '../src/types/ai-orchestrator';
 import {
   runAiRequestLifecycle,
   resumeApprovedAiRequest,

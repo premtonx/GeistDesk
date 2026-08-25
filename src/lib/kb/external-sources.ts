@@ -202,7 +202,7 @@ export async function deleteExternalSource(tenantId: string, id: string): Promis
   ]);
   for (const doc of imported) {
     await deleteDocDirect('kb_documents', doc.id);
-    enqueueDeleteDocumentEmbeddings(doc.id, tenantId);
+    await enqueueDeleteDocumentEmbeddings(doc.id, tenantId);
     void deleteDocumentFiles(tenantId, doc.id);
   }
   await deleteDocDirect('kb_external_sources', id);
@@ -271,12 +271,12 @@ export async function recordSyncedDocument(params: {
     data.previousHash = existing.sha256Hash || null;
     data.filename = existing.filename || params.filename;
     await updateDocDirect('kb_documents', existing.id, data);
-    enqueueKbDocumentIndex(existing.id, params.tenantId);
+    await enqueueKbDocumentIndex(existing.id, params.tenantId);
     return { docId: existing.id, changed: true, wasExisting: true };
   }
 
   const created = await addDocDirect('kb_documents', data);
-  enqueueKbDocumentIndex(created.id, params.tenantId);
+  await enqueueKbDocumentIndex(created.id, params.tenantId);
   return { docId: created.id, changed: true, wasExisting: false };
 }
 

@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { authenticate, requireRole } from '../middleware/authMiddleware.js';
+import { safeErrorMessage, safeLog } from '../lib/safe-log.js';
 import {
   getCachedExchangeAnalytics,
   getExchangeActivityFeed,
@@ -26,7 +27,7 @@ router.get('/dashboard', authenticate, async (req: Request, res: Response): Prom
     return res.json(stats);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[exchange] dashboard', message);
+    safeLog('error', '[exchange] dashboard', message);
     return res.status(500).json({ error: 'Failed to load exchange dashboard metrics.' });
   }
 });
@@ -38,7 +39,7 @@ router.get('/storage', authenticate, async (req: Request, res: Response): Promis
     return res.json(breakdown);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[exchange] storage', message);
+    safeLog('error', '[exchange] storage', message);
     return res.status(500).json({ error: 'Failed to load exchange storage breakdown.' });
   }
 });
@@ -51,7 +52,7 @@ router.get('/analytics', authenticate, async (req: Request, res: Response): Prom
     return res.json(analytics);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[exchange] analytics', message);
+    safeLog('error', '[exchange] analytics', message);
     return res.status(500).json({ error: 'Failed to load exchange analytics cache.' });
   }
 });
@@ -63,7 +64,7 @@ router.post('/analytics/refresh', authenticate, async (req: Request, res: Respon
     return res.json(analytics);
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[exchange] analytics refresh', message);
+    safeLog('error', '[exchange] analytics refresh', message);
     return res.status(500).json({ error: 'Failed to refresh exchange analytics.' });
   }
 });
@@ -76,7 +77,7 @@ router.get('/audit-log', authenticate, async (req: Request, res: Response): Prom
     return res.json({ entries });
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error('[exchange] audit-log', message);
+    safeLog('error', '[exchange] audit-log', message);
     return res.status(500).json({ error: 'Failed to load exchange audit log.' });
   }
 });
@@ -87,8 +88,8 @@ router.get('/settings', authenticate, async (_req: Request, res: Response): Prom
     const settings = await getExchangeSettings();
     return res.json({ settings });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return res.status(500).json({ error: 'Failed to load exchange settings.', details: message });
+    safeLog('error', '[exchange] settings', safeErrorMessage(err));
+    return res.status(500).json({ error: 'Failed to load exchange settings.' });
   }
 });
 
@@ -102,8 +103,8 @@ router.patch('/settings', authenticate, requireRole(['SYSTEM_ADMIN']), async (re
     const settings = await saveExchangeSettings(parsed.data);
     return res.json({ settings });
   } catch (err: unknown) {
-    const message = err instanceof Error ? err.message : String(err);
-    return res.status(500).json({ error: 'Failed to save exchange settings.', details: message });
+    safeLog('error', '[exchange] settings save', safeErrorMessage(err));
+    return res.status(500).json({ error: 'Failed to save exchange settings.' });
   }
 });
 

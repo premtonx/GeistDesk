@@ -4,7 +4,7 @@ import {
   type AiExecutionContext,
   type AiFeatureId,
   type AiModuleId,
-} from '../types/aiOrchestrator.js';
+} from '../types/ai-orchestrator';
 import { parseTicketAnalysisOutput, ticketAnalysisPatch } from './ticket-ai-analysis.js';
 
 export interface AiEntityRef {

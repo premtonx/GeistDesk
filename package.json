@@ -81,6 +81,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/cookie-parser": "^1.4.10",
     "@types/dompurify": "^3.0.5",
     "@types/imap-simple": "^4.2.10",
@@ -90,13 +91,16 @@
     "@types/papaparse": "^5.5.2",
     "@types/pg": "^8.20.0",
     "esbuild": "^0.28.0",
+    "eslint": "^10.9.1",
+    "eslint-plugin-react-hooks": "^7.1.1",
     "tsx": "^4.22.3",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.68.0"
   },
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs && esbuild src/db/migrate.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/migrate.cjs && esbuild src/db/seed.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/seed.cjs && esbuild scripts/seed-demo.ts --bundle --platform=node --format=cjs --packages=external --outfile=dist/seed-demo.cjs",
-    "build:strict": "npm run lint && node scripts/verify-no-react-namespace.mjs && npm run build && node scripts/verify-production-build.mjs",
+    "build:strict": "npm run lint && npm run lint:eslint && node scripts/verify-no-react-namespace.mjs && npm run build && node scripts/verify-no-beta-admin.mjs && node scripts/verify-no-raw-error-leak.mjs && node scripts/verify-production-build.mjs",
     "verify:license": "node scripts/verify-license-compliance.mjs",
     "verify:hybrid-crypto": "tsx scripts/verify-hybrid-crypto.mjs",
     "verify:release": "node scripts/verify-license-compliance.mjs && node scripts/verify-no-react-namespace.mjs && node scripts/verify-production-build.mjs && node scripts/verify-server-bundle.mjs && npx tsx scripts/verify-exchange-secret-crypto.mjs && npx tsx scripts/verify-vault-secret-store.mjs && npx tsx scripts/verify-process-value-mutations.mjs",
@@ -116,6 +120,8 @@
     "prod:start": "npm run prod:bootstrap && node dist/server.cjs",
     "start:prod": "npm run prod:start",
     "lint": "tsc --noEmit",
+    "lint:eslint": "eslint . --config eslint.boundary.config.js --max-warnings 0",
+    "lint:eslint:full": "eslint . --max-warnings 0",
     "test:lifecycle": "tsx scripts/test-ai-lifecycle.ts",
     "verify:rag": "tsx scripts/verify-rag-pipeline.ts"
   }

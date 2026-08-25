@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import type { AiOrchestratorConfig } from '../types/aiOrchestrator.js';
+import type { AiOrchestratorConfig } from '../types/ai-orchestrator';
 
 export type OrchestratorEvent =
   | { type: 'config_updated'; workspaceId: string; config: AiOrchestratorConfig; version: number }

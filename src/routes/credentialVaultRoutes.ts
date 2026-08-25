@@ -17,6 +17,7 @@ import {
   PERSONAL_VAULT_ID,
   PERSONAL_VAULT_TYPE,
 } from '../lib/personal-vault-store.js';
+import { safeLog } from '../lib/safe-log.js';
 
 const router = Router();
 const COLLECTION = 'geist_vault_portfolios';
@@ -54,7 +55,7 @@ router.get('/status', authenticate, async (req: Request, res: Response): Promise
     const initialized = await getPersonalVaultInitialized(userId);
     return res.json({ initialized });
   } catch (err: any) {
-    console.error('[credential-vault] status', err);
+    safeLog('error', '[credential-vault] status', err);
     return res.status(500).json({ error: 'Failed to resolve personal vault status' });
   }
 });
@@ -66,7 +67,7 @@ router.post('/initialize', authenticate, async (req: Request, res: Response): Pr
     await setPersonalVaultInitialized(userId, true);
     return res.status(200).json({ success: true, initialized: true });
   } catch (err: any) {
-    console.error('[credential-vault] initialize', err);
+    safeLog('error', '[credential-vault] initialize', err);
     return res.status(500).json({ error: 'Failed to register personal vault initialization' });
   }
 });
@@ -111,7 +112,7 @@ router.get('/folders', authenticate, async (req: Request, res: Response): Promis
     );
     return res.json({ folders });
   } catch (err: any) {
-    console.error('[credential-vault] list folders', err);
+    safeLog('error', '[credential-vault] list folders', err);
     return res.status(500).json({ error: 'Failed to list vault folders' });
   }
 });
@@ -159,7 +160,7 @@ router.post('/folders', authenticate, async (req: Request, res: Response): Promi
     const folder = await getDocDirect(FOLDER_COLLECTION, id);
     return res.status(201).json({ folder });
   } catch (err: any) {
-    console.error('[credential-vault] create folder', err);
+    safeLog('error', '[credential-vault] create folder', err);
     return res.status(500).json({ error: 'Failed to create vault folder' });
   }
 });
@@ -199,7 +200,7 @@ router.put('/folders/:id', authenticate, async (req: Request, res: Response): Pr
     const folder = await getDocDirect(FOLDER_COLLECTION, id);
     return res.json({ folder });
   } catch (err: any) {
-    console.error('[credential-vault] update folder', err);
+    safeLog('error', '[credential-vault] update folder', err);
     return res.status(500).json({ error: 'Failed to update vault folder' });
   }
 });
@@ -220,7 +221,7 @@ router.delete('/folders/:id', authenticate, async (req: Request, res: Response):
     await deleteDocDirect(FOLDER_COLLECTION, id);
     return res.json({ success: true });
   } catch (err: any) {
-    console.error('[credential-vault] delete folder', err);
+    safeLog('error', '[credential-vault] delete folder', err);
     return res.status(500).json({ error: 'Failed to delete vault folder' });
   }
 });
@@ -275,7 +276,7 @@ router.get('/portfolios', authenticate, async (req: Request, res: Response): Pro
 
     return res.json({ portfolios: visible });
   } catch (err: any) {
-    console.error('[credential-vault] list portfolios', err);
+    safeLog('error', '[credential-vault] list portfolios', err);
     return res.status(500).json({ error: 'Failed to list vault portfolios' });
   }
 });
@@ -296,7 +297,7 @@ router.get('/portfolios/mine', authenticate, async (req: Request, res: Response)
 
     return res.json({ portfolios: accessible });
   } catch (err: any) {
-    console.error('[credential-vault] list my portfolios', err);
+    safeLog('error', '[credential-vault] list my portfolios', err);
     return res.status(500).json({ error: 'Failed to list accessible portfolios' });
   }
 });
@@ -330,7 +331,7 @@ router.post('/portfolios', authenticate, async (req: Request, res: Response): Pr
     const record = await getDocDirect(COLLECTION, id);
     return res.status(201).json({ portfolio: record });
   } catch (err: any) {
-    console.error('[credential-vault] create portfolio', err);
+    safeLog('error', '[credential-vault] create portfolio', err);
     return res.status(500).json({ error: 'Failed to create vault portfolio' });
   }
 });
@@ -361,7 +362,7 @@ router.put('/portfolios/:id', authenticate, async (req: Request, res: Response):
     const updated = await getDocDirect(COLLECTION, id);
     return res.json({ portfolio: updated });
   } catch (err: any) {
-    console.error('[credential-vault] update portfolio', err);
+    safeLog('error', '[credential-vault] update portfolio', err);
     return res.status(500).json({ error: 'Failed to update vault portfolio' });
   }
 });
@@ -383,7 +384,7 @@ router.delete('/portfolios/:id', authenticate, async (req: Request, res: Respons
     await deleteDocDirect(COLLECTION, id);
     return res.json({ success: true });
   } catch (err: any) {
-    console.error('[credential-vault] delete portfolio', err);
+    safeLog('error', '[credential-vault] delete portfolio', err);
     return res.status(500).json({ error: 'Failed to delete vault portfolio' });
   }
 });
@@ -505,7 +506,7 @@ router.get('/vaults', authenticate, async (req: Request, res: Response): Promise
     const vaults = await listAccessibleEncryptedVaults(req.user);
     return res.json({ vaults });
   } catch (e: any) {
-    console.error('[credential-vault] list encrypted vaults', e?.message || e);
+    safeLog('error', '[credential-vault] list encrypted vaults', e?.message || e);
     return res.status(500).json({ error: 'Failed to load credential vault folders.' });
   }
 });
@@ -541,7 +542,7 @@ router.put('/public-key', authenticate, async (req: Request, res: Response): Pro
       },
     });
   } catch (e: any) {
-    console.error('[credential-vault] publish public key', e?.message || e);
+    safeLog('error', '[credential-vault] publish public key', e?.message || e);
     return res.status(500).json({ error: 'Failed to publish vault public key.' });
   }
 });
@@ -576,7 +577,7 @@ router.get('/public-keys', authenticate, async (req: Request, res: Response): Pr
 
     return res.json({ keys });
   } catch (e: any) {
-    console.error('[credential-vault] lookup public keys', e?.message || e);
+    safeLog('error', '[credential-vault] lookup public keys', e?.message || e);
     return res.status(500).json({ error: 'Failed to lookup vault public keys.' });
   }
 });
@@ -625,7 +626,7 @@ router.post('/vaults', authenticate, async (req: Request, res: Response): Promis
     const stored = await getDocDirect(ENCRYPTED_VAULT_STORE, record.id);
     return res.status(201).json({ vault: formatEncryptedVaultRow({ id: record.id, ...stored }) });
   } catch (e: any) {
-    console.error('[credential-vault] create encrypted vault', e?.message || e);
+    safeLog('error', '[credential-vault] create encrypted vault', e?.message || e);
     return res.status(500).json({ error: 'Failed to store encrypted vault folder.' });
   }
 });
@@ -667,7 +668,7 @@ router.put('/vaults/:id', authenticate, async (req: Request, res: Response): Pro
     const stored = await getDocDirect(ENCRYPTED_VAULT_STORE, vaultId);
     return res.json({ vault: formatEncryptedVaultRow({ id: vaultId, ...stored }) });
   } catch (e: any) {
-    console.error('[credential-vault] update encrypted vault', e?.message || e);
+    safeLog('error', '[credential-vault] update encrypted vault', e?.message || e);
     return res.status(500).json({ error: 'Failed to update encrypted vault folder.' });
   }
 });
@@ -684,7 +685,7 @@ router.delete('/vaults/:id', authenticate, async (req: Request, res: Response): 
     await deleteDocDirect(ENCRYPTED_VAULT_STORE, vaultId);
     return res.json({ success: true });
   } catch (e: any) {
-    console.error('[credential-vault] delete encrypted vault', e?.message || e);
+    safeLog('error', '[credential-vault] delete encrypted vault', e?.message || e);
     return res.status(500).json({ error: 'Failed to delete vault folder.' });
   }
 });

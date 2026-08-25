@@ -10,6 +10,7 @@
  */
 import { Router, type Request, type Response } from 'express';
 import multer from 'multer';
+import { z } from 'zod';
 import {
   addDocDirect,
   deleteDocDirect,
@@ -52,6 +53,14 @@ const upload = multer({
 
 const DOC_LIST_LIMIT = 1000;
 
+const patchDocumentSchema = z.object({
+  index_in_rag: z.boolean(),
+});
+
+const syncBodySchema = z.object({
+  sourceId: z.string().min(1).max(200).optional(),
+});
+
 // ---------------------------------------------------------------------------
 // Documents
 // ---------------------------------------------------------------------------
@@ -74,9 +83,8 @@ router.post('/upload', authenticate, upload.single('file'), async (req: Request,
 
     // Duplicate detection (same content already uploaded to this workspace).
     const existing = await getDocsDirect('kb_documents', [
-      { type: 'where', field: 'tenantId', op: '==', value: tenantId },
       { type: 'where', field: 'sha256Hash', op: '==', value: hash },
-    ]);
+    ], { tenantId });
     if (existing.length > 0) {
       return res.status(200).json({
         duplicate: true,
@@ -104,7 +112,7 @@ router.post('/upload', authenticate, upload.single('file'), async (req: Request,
     });
 
     await saveRawFile(tenantId, created.id, file.originalname, file.buffer);
-    enqueueKbDocumentIndex(created.id, tenantId);
+    await enqueueKbDocumentIndex(created.id, tenantId);
 
     return res.status(202).json({ documentId: created.id, status: 'queued' });
   } catch (err: unknown) {
@@ -116,9 +124,7 @@ router.post('/upload', authenticate, upload.single('file'), async (req: Request,
 router.get('/', authenticate, async (req: Request, res: Response) => {
   try {
     const tenantId = resolveTenantFromRequest(req);
-    const docs = await getDocsDirect('kb_documents', [
-      { type: 'where', field: 'tenantId', op: '==', value: tenantId },
-    ]);
+    const docs = await getDocsDirect('kb_documents', [], { tenantId });
     const limited = docs.slice(0, DOC_LIST_LIMIT);
     return res.json({
       documents: limited.map((doc) => ({
@@ -149,28 +155,29 @@ router.patch('/:id', authenticate, async (req: Request, res: Response) => {
   try {
     const tenantId = resolveTenantFromRequest(req);
     const id = String(req.params.id || '');
-    const doc = await getDocDirect('kb_documents', id);
-    if (!doc || String(doc.tenantId ?? '') !== tenantId) {
+    const doc = await getDocDirect('kb_documents', id, { tenantId });
+    if (!doc) {
       return res.status(404).json({ error: 'Document not found.' });
     }
 
-    const body = (req.body || {}) as { index_in_rag?: unknown };
-    if (typeof body.index_in_rag !== 'boolean') {
-      return res.status(400).json({ error: 'index_in_rag must be a boolean.' });
+    const bodyParsed = patchDocumentSchema.safeParse(req.body || {});
+    if (!bodyParsed.success) {
+      return res.status(400).json({ error: 'index_in_rag must be a boolean.', details: bodyParsed.error.flatten() });
     }
+    const { index_in_rag } = bodyParsed.data;
 
     await updateDocDirect('kb_documents', id, {
-      index_in_rag: body.index_in_rag,
+      index_in_rag,
       updatedAt: new Date().toISOString(),
-    });
+    }, { tenantId });
 
-    if (body.index_in_rag) {
-      enqueueKbDocumentIndex(id, tenantId);
+    if (index_in_rag) {
+      await enqueueKbDocumentIndex(id, tenantId);
     } else {
       await deleteEmbeddingsForSource(tenantId, 'KB_DOCUMENT', id);
     }
 
-    return res.json({ success: true, documentId: id, index_in_rag: body.index_in_rag });
+    return res.json({ success: true, documentId: id, index_in_rag });
   } catch (err: unknown) {
     return res.status(500).json({ error: safeErrorMessage(err, 'Failed to update document.') });
   }
@@ -181,14 +188,14 @@ router.delete('/:id', authenticate, async (req: Request, res: Response) => {
   try {
     const tenantId = resolveTenantFromRequest(req);
     const id = String(req.params.id || '');
-    const doc = await getDocDirect('kb_documents', id);
-    if (!doc || String(doc.tenantId ?? '') !== tenantId) {
+    const doc = await getDocDirect('kb_documents', id, { tenantId });
+    if (!doc) {
       return res.status(404).json({ error: 'Document not found.' });
     }
 
     await deleteEmbeddingsForSource(tenantId, 'KB_DOCUMENT', id);
     await deleteDocumentFiles(tenantId, id);
-    await deleteDocDirect('kb_documents', id);
+    await deleteDocDirect('kb_documents', id, { tenantId });
 
     return res.json({ success: true, documentId: id });
   } catch (err: unknown) {
@@ -276,8 +283,11 @@ router.delete('/sources/:id', authenticate, requireRole(['SYSTEM_ADMIN']), async
 router.post('/sync', authenticate, requireRole(['SYSTEM_ADMIN']), async (req: Request, res: Response) => {
   try {
     const tenantId = resolveTenantFromRequest(req);
-    const body = (req.body || {}) as { sourceId?: string };
-    const sourceId = String(body.sourceId || '');
+    const bodyParsed = syncBodySchema.safeParse(req.body || {});
+    if (!bodyParsed.success) {
+      return res.status(400).json({ error: 'Invalid sync payload.', details: bodyParsed.error.flatten() });
+    }
+    const sourceId = bodyParsed.data.sourceId || '';
 
     if (sourceId) {
       const source = await getExternalSourceById(tenantId, sourceId);

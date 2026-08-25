@@ -1,6 +1,7 @@
 import { Company, Ticket } from "../types";
 import { getCachedLegacyAiConfig } from "../lib/aiOrchestratorClient";
 import { executeClientAiPrompt } from "../lib/client-ai-proxy";
+import { callLocalModel, resolveLocalEndpoint, resolveLocalModelName } from "../lib/client-ai-local";
 
 export const aiAccountService = {
   generateAccountHealthSummary: async (company: Company, tickets: Ticket[]): Promise<string> => {
@@ -41,36 +42,13 @@ export const aiAccountService = {
         return result.output.trim();
       }
 
-      const endpoint =
-        config.ai.localEndpoint ||
-        (typeof process !== 'undefined' && process.env.OLLAMA_ENDPOINT
-          ? process.env.OLLAMA_ENDPOINT.replace(/\/$/, '').endsWith('/v1')
-            ? process.env.OLLAMA_ENDPOINT.replace(/\/$/, '')
-            : `${process.env.OLLAMA_ENDPOINT.replace(/\/$/, '')}/v1`
-          : '');
-      if (!endpoint) {
-        throw new Error('Local AI endpoint is not configured (set OLLAMA_ENDPOINT or module AI localEndpoint).');
-      }
-      const modelName = config.ai.sentimentModel === 'custom-local'
-        ? (config.ai.customSentimentModelName || "gemma")
-        : (config.ai.sentimentModel === 'local-gemma' ? "gemma" : "llama3");
-
-      const response = await fetch(`${endpoint}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${config.ai.customApiKey || "ollama"}`
-        },
-        body: JSON.stringify({
-          model: modelName,
-          messages: [
-            { role: "system", content: "You are a professional business health auditor." },
-            { role: "user", content: prompt }
-          ]
-        })
+      const output = await callLocalModel(prompt, {
+        endpoint: resolveLocalEndpoint(config.ai.localEndpoint),
+        modelName: resolveLocalModelName(config.ai),
+        apiKey: config.ai.customApiKey,
+        systemPrompt: 'You are a professional business health auditor.',
       });
-      const rdata = await response.json();
-      return rdata.choices[0].message.content.trim();
+      return output.trim();
     } catch (error) {
       console.error("AI Account Summary Error:", error);
       return "AI was unable to generate a summary at this time.";

@@ -1,5 +1,5 @@
 import { getDocDirect, updateDocDirect, setDocDirect } from './postgres-backend.js';
-import { toLegacyAiConfig, type AiOrchestratorConfig } from '../types/aiOrchestrator.js';
+import { toLegacyAiConfig, type AiOrchestratorConfig } from '../types/ai-orchestrator';
 
 /** Keep module_config.ai aligned with workspace orchestrator settings. */
 export async function syncLegacyModuleAiFromOrchestrator(config: AiOrchestratorConfig): Promise<void> {

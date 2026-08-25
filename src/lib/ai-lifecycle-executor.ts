@@ -1,5 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
-import { LOCAL_PROVIDER_IDS, type AiFeatureId } from '../types/aiOrchestrator.js';
+import { LOCAL_PROVIDER_IDS, type AiFeatureId } from '../types/ai-orchestrator';
 import type { AiModelExecutor } from './ai-request-lifecycle.js';
 import { getOrchestratorConfig, getProviderSecret } from './ai-orchestrator-store.js';
 
@@ -12,6 +12,16 @@ const RUNTIME_MODELS: Record<string, { kind: 'google' | 'openai' | 'anthropic' |
   local: { kind: 'local', model: 'llama3' },
   'qwen-36b': { kind: 'local', model: 'qwen:36b' },
 };
+
+/** Ceiling for a single provider call — unreachable endpoints must not hang requests. */
+export const AI_PROVIDER_CALL_TIMEOUT_MS = 15_000;
+
+/** Aborts a fetch after `ms`; clears the timer on completion. */
+function abortableFetch(url: string, init: RequestInit, ms: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), ms);
+  return fetch(url, { ...init, signal: controller.signal }).finally(() => clearTimeout(timer));
+}
 
 function estimateConfidence(output: string, feature: AiFeatureId): number {
   if (!output.trim()) return 0.42;
@@ -47,7 +57,7 @@ async function callGoogle(apiKey: string, model: string, prompt: string): Promis
 }
 
 async function callOpenAI(apiKey: string, model: string, prompt: string): Promise<{ output: string; promptTokens: number; completionTokens: number }> {
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
+  const res = await abortableFetch('https://api.openai.com/v1/chat/completions', {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -58,7 +68,7 @@ async function callOpenAI(apiKey: string, model: string, prompt: string): Promis
       messages: [{ role: 'user', content: prompt }],
       response_format: prompt.toLowerCase().includes('json') ? { type: 'json_object' } : undefined,
     }),
-  });
+  }, AI_PROVIDER_CALL_TIMEOUT_MS);
   if (!res.ok) throw new Error(`OpenAI HTTP ${res.status}`);
   const data = await res.json();
   const output = String(data.choices?.[0]?.message?.content ?? '');
@@ -70,7 +80,7 @@ async function callOpenAI(apiKey: string, model: string, prompt: string): Promis
 }
 
 async function callAnthropic(apiKey: string, model: string, prompt: string): Promise<{ output: string; promptTokens: number; completionTokens: number }> {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
+  const res = await abortableFetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
       'x-api-key': apiKey,
@@ -82,7 +92,7 @@ async function callAnthropic(apiKey: string, model: string, prompt: string): Pro
       max_tokens: 4096,
       messages: [{ role: 'user', content: prompt }],
     }),
-  });
+  }, AI_PROVIDER_CALL_TIMEOUT_MS);
   if (!res.ok) throw new Error(`Anthropic HTTP ${res.status}`);
   const data = await res.json();
   const output = String(data.content?.[0]?.text ?? '');
@@ -95,7 +105,7 @@ async function callAnthropic(apiKey: string, model: string, prompt: string): Pro
 
 async function callLocal(endpointUrl: string, apiKey: string | null, model: string, prompt: string): Promise<{ output: string; promptTokens: number; completionTokens: number }> {
   const base = endpointUrl.endsWith('/v1') ? endpointUrl : `${endpointUrl.replace(/\/$/, '')}/v1`;
-  const res = await fetch(`${base}/chat/completions`, {
+  const res = await abortableFetch(`${base}/chat/completions`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -106,7 +116,7 @@ async function callLocal(endpointUrl: string, apiKey: string | null, model: stri
       messages: [{ role: 'user', content: prompt }],
       response_format: prompt.toLowerCase().includes('json') ? { type: 'json_object' } : undefined,
     }),
-  });
+  }, AI_PROVIDER_CALL_TIMEOUT_MS);
   if (!res.ok) throw new Error(`Local LLM HTTP ${res.status}`);
   const data = await res.json();
   const output = String(data.choices?.[0]?.message?.content ?? '');

@@ -26,7 +26,7 @@ export async function createKbArticle(
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
-  enqueueKbArticleIndex(created.id, tenantId);
+  await enqueueKbArticleIndex(created.id, tenantId);
   return created.id as string;
 }
 
@@ -39,12 +39,12 @@ export async function updateKbArticle(
     ...updates,
     updatedAt: new Date().toISOString(),
   });
-  enqueueKbArticleIndex(id, tenantId);
+  await enqueueKbArticleIndex(id, tenantId);
 }
 
 export async function deleteKbArticle(id: string, tenantId = 'default'): Promise<void> {
   await deleteDocDirect(KB_COLLECTION, id);
-  enqueueDeleteEmbeddings(id, 'KB_ARTICLE', tenantId);
+  await enqueueDeleteEmbeddings(id, 'KB_ARTICLE', tenantId);
 }
 
 export async function getKbArticle(id: string) {

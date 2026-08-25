@@ -11,11 +11,11 @@ import type {
   AiFeatureId,
   AiOrchestratorConfig,
   AiTicketExecutionStatus,
-} from "../../types/aiOrchestrator";
+} from "../../types/ai-orchestrator";
 import {
   getSentimentModel,
   getDeepReasoningModel,
-} from "../../types/aiOrchestrator";
+} from "../../types/ai-orchestrator";
 import type { AIConfig } from "../module-config";
 import { translateSupportContent } from "../polyglot-bridge";
 

@@ -49,7 +49,7 @@ import {
   type AiProviderHealth,
   type AiPlaygroundRunResult,
   type DetectedLocalModel,
-} from '../../../types/aiOrchestrator';
+} from '../../../types/ai-orchestrator';
 import { cn } from '../../../lib/utils';
 import { AdminHubSectionGrid } from './AdminHubSectionGrid';
 import { categoriesForTab } from './adminHubConfig';

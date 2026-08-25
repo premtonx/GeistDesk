@@ -5,6 +5,7 @@
 
 import pg from 'pg';
 import { randomUUID } from 'crypto';
+import { safeLog } from './safe-log.js';
 
 const { Pool } = pg;
 
@@ -23,7 +24,7 @@ function safeParseJson(data: any): any {
     try {
       return JSON.parse(data);
     } catch (e) {
-      console.error("[DB Engine] JSONB safe payload parsing failed:", e);
+      safeLog('error', "[DB Engine] JSONB safe payload parsing failed:", e);
       return {};
     }
   }
@@ -41,7 +42,7 @@ export async function initDb() {
     );
   }
 
-  console.log("[DB Engine] Connecting to PostgreSQL...");
+  safeLog('info', "[DB Engine] Connecting to PostgreSQL...");
 
   // TLS policy: only disable TLS for explicitly-local connections. For all
   // remote connections we require a verified certificate chain (set
@@ -60,7 +61,7 @@ export async function initDb() {
   // Ping check — surface failures instead of falling back.
   await pgPool.query('SELECT NOW()');
   isPostgres = true;
-  console.log("[DB Engine] PostgreSQL Connection Successful!");
+  safeLog('info', "[DB Engine] PostgreSQL Connection Successful!");
 
   // DDL: document-oriented store plus indexes for JSONB lookups.
   await pgPool.query(`
@@ -278,6 +279,23 @@ export async function initDb() {
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
     CREATE INDEX IF NOT EXISTS idx_ai_incident_clusters_status ON ai_incident_clusters(status, created_at DESC);
+    ALTER TABLE ai_incident_clusters ADD COLUMN IF NOT EXISTS workspace_id VARCHAR(255) NOT NULL DEFAULT 'default';
+    CREATE INDEX IF NOT EXISTS idx_ai_incident_clusters_workspace ON ai_incident_clusters(workspace_id, created_at DESC);
+    CREATE TABLE IF NOT EXISTS background_jobs (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      job_type VARCHAR(64) NOT NULL,
+      payload JSONB,
+      status VARCHAR(16) NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      run_after TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_error TEXT,
+      worker_id VARCHAR(128),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_background_jobs_status ON background_jobs(status, run_after, created_at);
+    CREATE INDEX IF NOT EXISTS idx_background_jobs_type ON background_jobs(job_type, status);
   `);
 
   // Global email/domain blacklist for inbound spam rejection (pre-filter).
@@ -307,7 +325,7 @@ export async function initDb() {
     try {
       await pgPool.query(`ALTER TYPE "KnowledgeSourceType" ADD VALUE IF NOT EXISTS 'KB_DOCUMENT'`);
     } catch (enumErr: any) {
-      console.warn('[DB Engine] KnowledgeSourceType KB_DOCUMENT add skipped:', enumErr?.message || enumErr);
+      safeLog('warn', '[DB Engine] KnowledgeSourceType KB_DOCUMENT add skipped:', enumErr?.message || enumErr);
     }
     await pgPool.query(`
       CREATE TABLE IF NOT EXISTS "KnowledgeEmbedding" (
@@ -338,14 +356,14 @@ export async function initDb() {
           USING hnsw ("embedding" vector_cosine_ops);
       `);
     } catch (hnswErr: any) {
-      console.warn(
+      safeLog('warn', 
         '[DB Engine] HNSW index skipped (pgvector HNSW unavailable):',
         hnswErr?.message || hnswErr,
       );
     }
-    console.log('[DB Engine] KnowledgeEmbedding (pgvector) verified.');
+    safeLog('info', '[DB Engine] KnowledgeEmbedding (pgvector) verified.');
   } catch (vectorErr: any) {
-    console.warn(
+    safeLog('warn', 
       '[DB Engine] pgvector / KnowledgeEmbedding unavailable — RAG indexing disabled until extension is installed:',
       vectorErr?.message || vectorErr,
     );
@@ -376,13 +394,13 @@ export async function initDb() {
          )
     `);
   } catch (initFlagErr: any) {
-    console.warn(
+    safeLog('warn', 
       '[DB Engine] module_config.is_initialized default skipped:',
       initFlagErr?.message || initFlagErr,
     );
   }
 
-  console.log("[DB Engine] PostgreSQL Tables Verified.");
+  safeLog('info', "[DB Engine] PostgreSQL Tables Verified.");
 }
 
 /** Guard that returns a live pool or throws — never silently no-ops. */
@@ -570,11 +588,21 @@ function processValueMutations(obj: any, existingDocData: any = {}): any {
 // PUBLIC DIRECT ACCESORS (USED BY CLIENT ENDPOINT HOOKS)
 // -----------------------------------------------------------------------------
 
-export async function getDocDirect(collectionName: string, id: string): Promise<any | null> {
+export async function getDocDirect(
+  collectionName: string,
+  id: string,
+  options: { tenantId?: string } = {},
+): Promise<any | null> {
   const pool = requirePool();
+  const params: unknown[] = [collectionName, id];
+  let tenantClause = '';
+  if (options.tenantId) {
+    tenantClause = ` AND COALESCE(data->>'tenantId', data->>'tenant_id', 'default') = $3`;
+    params.push(options.tenantId);
+  }
   const res = await pool.query(
-    'SELECT data FROM geistdesk_documents WHERE collection = $1 AND id = $2',
-    [collectionName, id]
+    `SELECT data FROM geistdesk_documents WHERE collection = $1 AND id = $2${tenantClause}`,
+    params,
   );
   if (res.rowCount && res.rows[0]) {
     const parsed = safeParseJson(res.rows[0].data);
@@ -583,12 +611,20 @@ export async function getDocDirect(collectionName: string, id: string): Promise<
   return null;
 }
 
-export async function getDocsDirect(collectionName: string, constraints: any[]): Promise<any[]> {
+export async function getDocsDirect(
+  collectionName: string,
+  constraints: any[],
+  options: { tenantId?: string } = {},
+): Promise<any[]> {
   const pool = requirePool();
   {
     try {
       let queryStr = `SELECT id, data FROM geistdesk_documents WHERE collection = $1`;
       const queryParams: any[] = [collectionName];
+      if (options.tenantId) {
+        queryStr += ` AND COALESCE(data->>'tenantId', data->>'tenant_id', 'default') = $2`;
+        queryParams.push(options.tenantId);
+      }
       const ALLOWED_OPS = new Set(['==', '===', '!=', '>', '>=', '<', '<=']);
 
       // Safe JSONB constraint compilation to guarantee alignment of unassigned accounts
@@ -701,7 +737,7 @@ export async function getDocsDirect(collectionName: string, constraints: any[]):
       // Post-process with sorting/limits using existing in-memory constraints
       return applyQueryConstraints(docs, constraints.filter(c => c && c.type !== 'where'));
     } catch (error) {
-      console.error(`[DB Error] Native SQL constraint query failed for ${collectionName}:`, error instanceof Error ? error.message : 'unknown');
+      safeLog('error', `[DB Error] Native SQL constraint query failed for ${collectionName}:`, error instanceof Error ? error.message : 'unknown');
       throw error;
     }
   }
@@ -785,9 +821,22 @@ function buildAtomicJsonbPatch(data: Record<string, unknown>) {
   return { expr, params };
 }
 
-export async function updateDocDirect(collectionName: string, id: string, data: any): Promise<void> {
+export async function updateDocDirect(
+  collectionName: string,
+  id: string,
+  data: any,
+  options: { tenantId?: string } = {},
+): Promise<void> {
   const pool = requirePool();
   const { expr, params } = buildAtomicJsonbPatch(data || {});
+
+  // When tenant-scoped, only touch rows that belong to the caller's tenant.
+  // Without this guard the UPSERT could otherwise create a fresh row for a
+  // tenantless id or clobber a foreign-tenant document.
+  const paramsForWhere: unknown[] = options.tenantId ? [options.tenantId] : [];
+  const whereClause = options.tenantId
+    ? ` AND COALESCE(data->>'tenantId', data->>'tenant_id', 'default') = $${4 + params.length}`
+    : '';
 
   // Atomic upsert: on a fresh row the raw (marker-resolved) JSON is inserted;
   // on an existing row the patch is applied to the live data column so
@@ -795,28 +844,50 @@ export async function updateDocDirect(collectionName: string, id: string, data: 
   const insertJson = toJsonbParam(processValueMutations(data || {}, {}));
   await pool.query(
     `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, $3::jsonb)
-     ON CONFLICT (collection, id) DO UPDATE SET data = ${expr}, updated_at = NOW()`,
-    [collectionName, id, insertJson, ...params],
+     ON CONFLICT (collection, id) DO UPDATE SET data = ${expr}, updated_at = NOW()
+     WHERE ${whereClause.trim() ? whereClause.slice(5) : 'TRUE'}`,
+    [collectionName, id, insertJson, ...params, ...paramsForWhere],
   );
 }
 
-export async function setDocDirect(collectionName: string, id: string, data: any): Promise<void> {
+export async function setDocDirect(
+  collectionName: string,
+  id: string,
+  data: any,
+  options: { tenantId?: string } = {},
+): Promise<void> {
   const pool = requirePool();
   const processed = processValueMutations(data);
   delete processed.id;
 
+  const params: unknown[] = [collectionName, id, toJsonbParam(processed)];
+  const whereClause = options.tenantId
+    ? ` AND COALESCE(data->>'tenantId', data->>'tenant_id', 'default') = $4`
+    : '';
+  if (options.tenantId) params.push(options.tenantId);
+
   await pool.query(
     `INSERT INTO geistdesk_documents (collection, id, data) VALUES ($1, $2, $3::jsonb)
-     ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()`,
-    [collectionName, id, toJsonbParam(processed)]
+     ON CONFLICT (collection, id) DO UPDATE SET data = EXCLUDED.data, updated_at = NOW()${whereClause}`,
+    params,
   );
 }
 
-export async function deleteDocDirect(collectionName: string, id: string): Promise<void> {
+export async function deleteDocDirect(
+  collectionName: string,
+  id: string,
+  options: { tenantId?: string } = {},
+): Promise<void> {
   const pool = requirePool();
+  const params: unknown[] = [collectionName, id];
+  let tenantClause = '';
+  if (options.tenantId) {
+    tenantClause = ` AND COALESCE(data->>'tenantId', data->>'tenant_id', 'default') = $3`;
+    params.push(options.tenantId);
+  }
   await pool.query(
-    'DELETE FROM geistdesk_documents WHERE collection = $1 AND id = $2',
-    [collectionName, id]
+    `DELETE FROM geistdesk_documents WHERE collection = $1 AND id = $2${tenantClause}`,
+    params,
   );
 }
 

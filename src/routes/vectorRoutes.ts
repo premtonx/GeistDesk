@@ -10,7 +10,7 @@ import {
 } from '../lib/ai/vector-queue.js';
 import { buildGroundedRagContext, hybridSearchKnowledge } from '../lib/ai/ki-orchestrator.js';
 import { resolveTenantFromRequest } from '../lib/tenant-context.js';
-import { safeErrorMessage } from '../lib/safe-log.js';
+import { safeErrorMessage, safeLog } from '../lib/safe-log.js';
 
 const router = Router();
 
@@ -40,13 +40,13 @@ router.post(
     const tenantId = resolveTenantFromRequest(req);
     const { type, sourceId, sourceType } = parsed.data;
     let job;
-    if (type === 'INDEX_KB_ARTICLE') job = enqueueKbArticleIndex(sourceId, tenantId);
-    else if (type === 'INDEX_KB_DOCUMENT') job = enqueueKbDocumentIndex(sourceId, tenantId);
-    else if (type === 'INDEX_RESOLVED_TICKET') job = enqueueResolvedTicketIndex(sourceId, tenantId);
+    if (type === 'INDEX_KB_ARTICLE') job = await enqueueKbArticleIndex(sourceId, tenantId);
+    else if (type === 'INDEX_KB_DOCUMENT') job = await enqueueKbDocumentIndex(sourceId, tenantId);
+    else if (type === 'INDEX_RESOLVED_TICKET') job = await enqueueResolvedTicketIndex(sourceId, tenantId);
     else {
-      job = enqueueDeleteEmbeddings(sourceId, sourceType || 'KB_ARTICLE', tenantId);
+      job = await enqueueDeleteEmbeddings(sourceId, sourceType || 'KB_ARTICLE', tenantId);
     }
-    return res.status(202).json({ success: true, job, queueDepth: getVectorQueueDepth(), tenantId });
+    return res.status(202).json({ success: true, job, queueDepth: await getVectorQueueDepth(), tenantId });
   },
 );
 
@@ -70,7 +70,7 @@ router.post('/search', authenticate, async (req: Request, res: Response) => {
     });
   } catch (err: unknown) {
     const message = safeErrorMessage(err, 'Hybrid search failed');
-    console.error('[vectors/search] failed', message);
+    safeLog('error', '[vectors/search] failed', message);
     return res.status(500).json({ error: message });
   }
 });
@@ -86,7 +86,7 @@ router.get('/status', authenticate, requireRole(['SYSTEM_ADMIN']), async (req, r
       resolveEmbeddingProvider(tenantId),
     ]);
     res.json({
-      queueDepth: getVectorQueueDepth(),
+      queueDepth: await getVectorQueueDepth(),
       tenantId,
       activeEmbeddingProvider: active,
       providers,

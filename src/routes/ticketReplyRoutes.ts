@@ -5,6 +5,7 @@ import { addDocDirect, getDocDirect, updateDocDirect } from '../lib/postgres-bac
 import { routeParam } from '../lib/route-params.js';
 import { trySendTicketReplyEmail } from '../lib/outbound-mail.js';
 import { findChannelForOutbound } from '../lib/email-ingestion/channel-store.js';
+import { safeLog } from '../lib/safe-log.js';
 
 const router = Router();
 
@@ -83,7 +84,7 @@ router.post('/:id/replies', authenticate, async (req: Request, res: Response): P
     } catch (mailErr: any) {
       delivered = false;
       deliveryReason = mailErr?.message || 'Outbound mail threw unexpectedly';
-      console.warn('[ticket-replies] outbound mail failed non-fatally', deliveryReason);
+      safeLog('warn', '[ticket-replies] outbound mail failed non-fatally', deliveryReason);
     }
 
     const deliveryStatus = delivered ? 'delivered' : 'saved_locally';
@@ -116,7 +117,7 @@ router.post('/:id/replies', authenticate, async (req: Request, res: Response): P
       },
     });
   } catch (e: any) {
-    console.error('[ticket-replies] failed to persist reply', e?.message || e);
+    safeLog('error', '[ticket-replies] failed to persist reply', e?.message || e);
     return res.status(500).json({ error: 'Failed to save reply to the database.' });
   }
 });

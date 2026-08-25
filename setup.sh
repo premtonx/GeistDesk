@@ -290,6 +290,7 @@ fill_secrets() {
   ensure_secret JWT_SECRET 48
   ensure_secret MASTER_KEY_SALT 24
   ensure_secret VAULT_ENCRYPTION_KEY 32
+  ensure_secret AI_SECRETS_KEY 32
   ensure_secret INBOUND_MAIL_WEBHOOK_SECRET 32
 
   local salt
@@ -433,7 +434,7 @@ run_check() {
     err "Missing .env.example"
     failed=1
   else
-    for key in DOMAIN_NAME ROUTER_NAME TRAEFIK_NETWORK POSTGRES_PASSWORD JWT_SECRET MASTER_KEY_SALT VAULT_ENCRYPTION_KEY INBOUND_MAIL_WEBHOOK_SECRET; do
+    for key in DOMAIN_NAME ROUTER_NAME TRAEFIK_NETWORK POSTGRES_PASSWORD JWT_SECRET MASTER_KEY_SALT VAULT_ENCRYPTION_KEY AI_SECRETS_KEY INBOUND_MAIL_WEBHOOK_SECRET; do
       if ! grep -qE "^${key}=" "$ENV_EXAMPLE"; then
         err ".env.example is missing ${key}"
         failed=1

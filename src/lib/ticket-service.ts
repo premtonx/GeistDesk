@@ -27,15 +27,15 @@ export async function updateTicketStatus(
 
   const status = String(updates.status || '').toLowerCase();
   if (status === 'resolved' || status === 'closed') {
-    enqueueResolvedTicketIndex(id, tenantId);
+    await enqueueResolvedTicketIndex(id, tenantId);
   } else if (status === 'trash' || status === 'deleted') {
-    enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);
+    await enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);
   }
 }
 
 export async function deleteTicket(id: string, tenantId = 'default'): Promise<void> {
   await deleteDocDirect(TICKETS_COLLECTION, id);
-  enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);
+  await enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);
 }
 
 export async function getTicket(id: string) {

@@ -6,7 +6,7 @@ import {
   subscribeAiHealth,
   startOrchestratorConfigSync,
 } from '../../lib/aiOrchestratorClient';
-import type { AiOrchestratorHealth } from '../../types/aiOrchestrator';
+import type { AiOrchestratorHealth } from '../../types/ai-orchestrator';
 import { Activity } from 'lucide-react';
 
 export function AiWorkspaceStatusBanner() {

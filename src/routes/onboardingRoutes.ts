@@ -11,7 +11,7 @@
 
 import { Router, type NextFunction, type Request, type Response } from 'express';
 import { authenticate, optionalAuthenticate, requireRole } from '../middleware/authMiddleware.js';
-import { authRateLimiter } from '../middleware/rate-limiters.js';
+import { authRateLimiter, credentialRateLimiter } from '../middleware/rate-limiters.js';
 import {
   OnboardingAdminExistsError,
   OnboardingAlreadyCompleteError,
@@ -25,7 +25,7 @@ import {
   testAiConnection,
   testAiSchema,
 } from '../lib/onboarding-service.js';
-import { safeErrorMessage } from '../lib/safe-log.js';
+import { safeErrorMessage, safeLog } from '../lib/safe-log.js';
 import { issueSessionToken } from '../lib/session-token.js';
 import { setSessionCookie } from '../lib/session-cookie.js';
 
@@ -80,6 +80,7 @@ router.get('/status', optionalAuthenticate, async (req: Request, res: Response) 
 router.post(
   '/test-ai',
   authRateLimiter,
+  credentialRateLimiter,
   requireWizardAdminSession,
   async (req: Request, res: Response) => {
     const parsed = testAiSchema.safeParse(req.body || {});
@@ -104,6 +105,7 @@ router.post(
 router.post(
   '/register-admin',
   authRateLimiter,
+  credentialRateLimiter,
   allowRegisterAdmin,
   async (req: Request, res: Response) => {
     const parsed = registerAdminSchema.safeParse(req.body || {});
@@ -125,7 +127,7 @@ router.post(
       if (err instanceof OnboardingAlreadyCompleteError) {
         return res.status(403).json({ error: err.message });
       }
-      console.error('[onboarding/register-admin]', safeErrorMessage(err));
+      safeLog('error', '[onboarding/register-admin]', safeErrorMessage(err));
       return res.status(500).json({ error: safeErrorMessage(err, 'Failed to create administrator') });
     }
   },
@@ -134,6 +136,7 @@ router.post(
 router.post(
   '/complete',
   authRateLimiter,
+  credentialRateLimiter,
   requireWizardAdminSession,
   async (req: Request, res: Response) => {
     const parsed = completeOnboardingSchema.safeParse(req.body || {});
@@ -152,7 +155,7 @@ router.post(
       if (err instanceof OnboardingAlreadyCompleteError) {
         return res.status(403).json({ error: err.message });
       }
-      console.error('[onboarding/complete]', safeErrorMessage(err));
+      safeLog('error', '[onboarding/complete]', safeErrorMessage(err));
       return res.status(500).json({ error: safeErrorMessage(err, 'Failed to complete onboarding') });
     }
   },

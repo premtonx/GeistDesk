@@ -1,6 +1,6 @@
 import axios from 'axios';
-import type { AiOrchestratorConfig, AiOrchestratorHealth } from '../types/aiOrchestrator';
-import { DEFAULT_ORCHESTRATOR_CONFIG, toLegacyAiConfig } from '../types/aiOrchestrator';
+import type { AiOrchestratorConfig, AiOrchestratorHealth } from '../types/ai-orchestrator';
+import { DEFAULT_ORCHESTRATOR_CONFIG, toLegacyAiConfig } from '../types/ai-orchestrator';
 import type { AIConfig } from './module-config';
 
 let cachedConfig: AiOrchestratorConfig | null = null;

@@ -55,6 +55,5 @@ export function safeErrorMessage(err: unknown, fallback = 'Unexpected error'): s
 
 export function safeLog(level: 'log' | 'info' | 'warn' | 'error', prefix: string, ...parts: unknown[]): void {
   const cleaned = parts.map((p) => redactSecrets(p));
-  // eslint-disable-next-line no-console
   console[level](prefix, ...cleaned);
 }

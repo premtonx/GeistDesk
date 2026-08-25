@@ -18,7 +18,7 @@ import {
 } from '../lib/import-service.js';
 import { getVectorQueueDepth } from '../lib/ai/vector-queue.js';
 import { resolveTenantFromRequest } from '../lib/tenant-context.js';
-import { safeErrorMessage } from '../lib/safe-log.js';
+import { safeErrorMessage, safeLog } from '../lib/safe-log.js';
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -106,10 +106,10 @@ function extractRecordsFromRequest(req: Request): {
   return { records, headers, format: 'json' };
 }
 
-function enrichResult(result: ImportResult) {
+async function enrichResult(result: ImportResult) {
   return {
     ...result,
-    queueDepth: getVectorQueueDepth(),
+    queueDepth: await getVectorQueueDepth(),
   };
 }
 
@@ -128,7 +128,7 @@ function importErrorStatus(err: unknown): number {
 /** Generic catch handler: safe-redacts the message and picks a proper status. */
 function handleImportError(res: Response, err: unknown, fallback: string) {
   const message = safeErrorMessage(err, fallback);
-  console.error('[import]', message);
+  safeLog('error', '[import]', message);
   return res.status(importErrorStatus(err)).json({ error: message });
 }
 
@@ -173,7 +173,7 @@ router.post('/tickets', upload.single('file'), async (req: Request, res: Respons
     return res.status(result.errorCount && !result.successCount ? 422 : 200).json({
       success: result.successCount > 0,
       tenantId,
-      ...enrichResult(result),
+      ...(await enrichResult(result)),
     });
   } catch (err: unknown) {
     return handleImportError(res, err, 'Ticket import failed');
@@ -199,7 +199,7 @@ router.post('/kb', upload.single('file'), async (req: Request, res: Response) =>
     return res.status(result.errorCount && !result.successCount ? 422 : 200).json({
       success: result.successCount > 0,
       tenantId,
-      ...enrichResult(result),
+      ...(await enrichResult(result)),
     });
   } catch (err: unknown) {
     return handleImportError(res, err, 'KB import failed');
@@ -218,7 +218,7 @@ router.post('/preview', upload.single('file'), async (req: Request, res: Respons
     });
   } catch (err: unknown) {
     const message = safeErrorMessage(err, 'Preview failed');
-    console.error('[import/preview]', message);
+    safeLog('error', '[import/preview]', message);
     return res.status(400).json({ error: message });
   }
 });

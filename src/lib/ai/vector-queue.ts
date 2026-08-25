@@ -7,7 +7,7 @@ import { getDocDirect, queryDb } from '../postgres-backend.js';
 import { chunkText, stripHtmlToPlainText } from './text-chunker.js';
 import { embedTexts, vectorToSqlLiteral } from './embeddings.js';
 import { documentBelongsToTenant, DEFAULT_TENANT_ID } from '../tenant-context.js';
-import { safeErrorMessage } from '../safe-log.js';
+import { safeErrorMessage, safeLog } from '../safe-log.js';
 import {
   buildTicketResolution,
   fetchTicketMessages,
@@ -25,6 +25,14 @@ import {
   buildChunkHeader,
 } from '../kb/document-store.js';
 import { updateDocDirect } from '../postgres-backend.js';
+import {
+  enqueueJob,
+  leaseNextJob,
+  completeJob,
+  failJob,
+  recoverOrphanedJobs,
+  type BackgroundJobRow,
+} from '../job-queue.js';
 
 export type VectorJobType =
   | 'INDEX_KB_ARTICLE'
@@ -44,20 +52,38 @@ export interface VectorJob {
 }
 
 const DEFAULT_TENANT = DEFAULT_TENANT_ID;
-const queue: VectorJob[] = [];
-let draining = false;
 let workerStarted = false;
 
-function jobId(): string {
-  return `vj_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+/** Map a durable job row back to the legacy VectorJob shape. */
+function toVectorJob(row: BackgroundJobRow): VectorJob {
+  const payload = (row.payload ?? {}) as Record<string, unknown>;
+  return {
+    id: row.id,
+    type: (payload.type as VectorJobType) || 'INDEX_KB_ARTICLE',
+    tenantId: String(payload.tenantId || DEFAULT_TENANT),
+    sourceId: String(payload.sourceId || ''),
+    sourceType: payload.sourceType as KnowledgeSourceType | undefined,
+    enqueuedAt: row.created_at,
+    attempts: row.attempts,
+  };
 }
 
-export function enqueueVectorJob(
+/**
+ * Enqueue a vector job on the durable `background_jobs` table. Kept as a thin
+ * wrapper over `enqueueJob` for backwards compatibility with route callers.
+ */
+export async function enqueueVectorJob(
   type: VectorJobType,
   params: { sourceId: string; tenantId?: string; sourceType?: KnowledgeSourceType },
-): VectorJob {
-  const job: VectorJob = {
-    id: jobId(),
+): Promise<VectorJob> {
+  const id = await enqueueJob('VECTOR_INDEX', {
+    type,
+    sourceId: params.sourceId,
+    tenantId: params.tenantId || DEFAULT_TENANT,
+    sourceType: params.sourceType,
+  });
+  return {
+    id,
     type,
     tenantId: params.tenantId || DEFAULT_TENANT,
     sourceId: params.sourceId,
@@ -65,27 +91,24 @@ export function enqueueVectorJob(
     enqueuedAt: new Date().toISOString(),
     attempts: 0,
   };
-  queue.push(job);
-  void drainVectorQueue();
-  return job;
 }
 
-export function enqueueKbArticleIndex(sourceId: string, tenantId = DEFAULT_TENANT): VectorJob {
+export function enqueueKbArticleIndex(sourceId: string, tenantId = DEFAULT_TENANT): Promise<VectorJob> {
   return enqueueVectorJob('INDEX_KB_ARTICLE', { sourceId, tenantId, sourceType: 'KB_ARTICLE' });
 }
 
-export function enqueueKbDocumentIndex(sourceId: string, tenantId = DEFAULT_TENANT): VectorJob {
+export function enqueueKbDocumentIndex(sourceId: string, tenantId = DEFAULT_TENANT): Promise<VectorJob> {
   return enqueueVectorJob('INDEX_KB_DOCUMENT', { sourceId, tenantId, sourceType: 'KB_DOCUMENT' });
 }
 
 export function enqueueDeleteDocumentEmbeddings(
   sourceId: string,
   tenantId = DEFAULT_TENANT,
-): VectorJob {
+): Promise<VectorJob> {
   return enqueueVectorJob('DELETE_EMBEDDINGS', { sourceId, tenantId, sourceType: 'KB_DOCUMENT' });
 }
 
-export function enqueueResolvedTicketIndex(sourceId: string, tenantId = DEFAULT_TENANT): VectorJob {
+export function enqueueResolvedTicketIndex(sourceId: string, tenantId = DEFAULT_TENANT): Promise<VectorJob> {
   return enqueueVectorJob('INDEX_RESOLVED_TICKET', {
     sourceId,
     tenantId,
@@ -97,7 +120,7 @@ export function enqueueDeleteEmbeddings(
   sourceId: string,
   sourceType: KnowledgeSourceType,
   tenantId = DEFAULT_TENANT,
-): VectorJob {
+): Promise<VectorJob> {
   return enqueueVectorJob('DELETE_EMBEDDINGS', { sourceId, tenantId, sourceType });
 }
 
@@ -185,7 +208,7 @@ async function indexKbArticle(tenantId: string, sourceId: string): Promise<void>
   }
 
   if (!documentBelongsToTenant(doc, tenantId)) {
-    console.warn(
+    safeLog('warn', 
       `[vector-queue] refusing to index KB ${sourceId}: tenant mismatch (job=${tenantId})`,
     );
     return;
@@ -206,7 +229,7 @@ async function indexKbArticle(tenantId: string, sourceId: string): Promise<void>
   // Selective RAG: exclude articles opted out via index_in_rag.
   if (doc.index_in_rag === false) {
     await deleteEmbeddingsForSource(tenantId, 'KB_ARTICLE', sourceId);
-    console.log(
+    safeLog('info', 
       `[RAG] Skipped indexing KB article ${sourceId}: index_in_rag=false (removed existing vectors)`,
     );
     return;
@@ -248,7 +271,7 @@ async function indexKbDocument(tenantId: string, sourceId: string): Promise<void
   }
 
   if (!documentBelongsToTenant(doc, tenantId)) {
-    console.warn(
+    safeLog('warn', 
       `[vector-queue] refusing to index KB document ${sourceId}: tenant mismatch (job=${tenantId})`,
     );
     return;
@@ -257,7 +280,7 @@ async function indexKbDocument(tenantId: string, sourceId: string): Promise<void
   // Selective RAG: opting a document out purges existing vectors immediately.
   if (doc.index_in_rag === false) {
     await deleteEmbeddingsForSource(tenantId, 'KB_DOCUMENT', sourceId);
-    console.log(
+    safeLog('info', 
       `[RAG] Skipped indexing KB document ${sourceId}: index_in_rag=false (removed existing vectors)`,
     );
     return;
@@ -285,7 +308,7 @@ async function indexKbDocument(tenantId: string, sourceId: string): Promise<void
     text = extracted.text;
     pages = extracted.pages;
   } catch (err: any) {
-    console.warn(`[RAG] document text extraction failed for ${sourceId}:`, err?.message || err);
+    safeLog('warn', `[RAG] document text extraction failed for ${sourceId}:`, err?.message || err);
     await updateDocDirect('kb_documents', sourceId, {
       status: 'error',
       error: err?.message || 'Text extraction failed.',
@@ -303,7 +326,7 @@ async function indexKbDocument(tenantId: string, sourceId: string): Promise<void
       chunkCount: 0,
       updatedAt: new Date().toISOString(),
     });
-    console.log(
+    safeLog('info', 
       `[RAG] KB document ${sourceId} has no extractable text (${filename}) — marked no_text`,
     );
     return;
@@ -339,7 +362,7 @@ async function indexKbDocument(tenantId: string, sourceId: string): Promise<void
     indexedAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   });
-  console.log(`[RAG] KB document ${sourceId} indexed (${chunkCount} chunks)`);
+  safeLog('info', `[RAG] KB document ${sourceId} indexed (${chunkCount} chunks)`);
 }
 
 /**
@@ -383,7 +406,7 @@ async function indexResolvedTicket(tenantId: string, sourceId: string): Promise<
   }
 
   if (!documentBelongsToTenant(doc, tenantId)) {
-    console.warn(
+    safeLog('warn', 
       `[vector-queue] refusing to index ticket ${sourceId}: tenant mismatch (job=${tenantId})`,
     );
     return;
@@ -392,7 +415,7 @@ async function indexResolvedTicket(tenantId: string, sourceId: string): Promise<
   // Selective RAG: exclude tickets opted out via include_in_rag.
   if (doc.include_in_rag === false) {
     await deleteEmbeddingsForSource(tenantId, 'RESOLVED_TICKET', sourceId);
-    console.log(
+    safeLog('info', 
       `[RAG] Skipped indexing ticket ${sourceId}: include_in_rag=false (removed existing vectors)`,
     );
     return;
@@ -432,13 +455,13 @@ async function indexResolvedTicket(tenantId: string, sourceId: string): Promise<
       threshold: TICKET_RAG_DEDUP_THRESHOLD,
     });
     if (shouldSkip) {
-      console.log(
+      safeLog('info', 
         `[RAG] Skipped duplicate ticket vector for ${sourceId} (similarity >= 0.90, max=${maxSimilarity.toFixed(3)})`,
       );
       return;
     }
   } catch (err: any) {
-    console.warn(
+    safeLog('warn', 
       `[RAG] dedup search failed for ${sourceId} — proceeding with upsert:`,
       err?.message || err,
     );
@@ -487,28 +510,29 @@ async function processJob(job: VectorJob): Promise<void> {
   }
 }
 
+const VECTOR_JOB_TYPES = ['VECTOR_INDEX'] as const;
+
+/**
+ * Drain the durable vector queue, leasing jobs with `SKIP LOCKED` so multiple
+ * processes can share the workload without double-processing. Kept as a thin
+ * wrapper over `leaseNextJob` for backwards compatibility.
+ */
 export async function drainVectorQueue(): Promise<void> {
-  if (draining) return;
-  draining = true;
-  try {
-    while (queue.length > 0) {
-      const job = queue.shift();
-      if (!job) break;
-      try {
-        await processJob(job);
-      } catch (err: any) {
-        console.warn(
-          `[vector-queue] job ${job.type} ${job.sourceId} failed (attempt ${job.attempts}):`,
-          safeErrorMessage(err),
-        );
-        if (job.attempts < 3) {
-          queue.push(job);
-          await new Promise((r) => setTimeout(r, 500 * job.attempts));
-        }
-      }
+  const workerId = `vector-${process.pid}`;
+  for (let leased = 0; leased < 50; leased += 1) {
+    const row = await leaseNextJob(workerId, [...VECTOR_JOB_TYPES]);
+    if (!row) break;
+    const job = toVectorJob(row);
+    try {
+      await processJob(job);
+      await completeJob(row.id);
+    } catch (err: any) {
+      safeLog('warn', 
+        `[vector-queue] job ${job.type} ${job.sourceId} failed (attempt ${job.attempts}):`,
+        safeErrorMessage(err),
+      );
+      await failJob(row.id, err);
     }
-  } finally {
-    draining = false;
   }
 }
 
@@ -528,25 +552,25 @@ export function handleKnowledgeDocumentMutation(params: {
   try {
     if (collection === 'kb_articles') {
       if (action === 'delete_doc' && id) {
-        enqueueDeleteEmbeddings(id, 'KB_ARTICLE', tenantId);
+        void enqueueDeleteEmbeddings(id, 'KB_ARTICLE', tenantId);
         return;
       }
       if ((action === 'add_doc' || action === 'update_doc' || action === 'set_doc') && id) {
-        enqueueKbArticleIndex(id, tenantId);
+        void enqueueKbArticleIndex(id, tenantId);
       }
       return;
     }
 
     if (collection === 'kb_documents') {
       if (action === 'delete_doc' && id) {
-        enqueueDeleteEmbeddings(id, 'KB_DOCUMENT', tenantId);
+        void enqueueDeleteEmbeddings(id, 'KB_DOCUMENT', tenantId);
         return;
       }
       if ((action === 'add_doc' || action === 'update_doc' || action === 'set_doc') && id) {
         if (params.data?.index_in_rag === false) {
-          enqueueDeleteEmbeddings(id, 'KB_DOCUMENT', tenantId);
+          void enqueueDeleteEmbeddings(id, 'KB_DOCUMENT', tenantId);
         } else {
-          enqueueKbDocumentIndex(id, tenantId);
+          void enqueueKbDocumentIndex(id, tenantId);
         }
       }
       return;
@@ -554,35 +578,39 @@ export function handleKnowledgeDocumentMutation(params: {
 
     if (collection === 'tickets') {
       if (action === 'delete_doc' && id) {
-        enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);
+        void enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);
         return;
       }
       if ((action === 'update_doc' || action === 'set_doc') && id) {
         const status = String(params.data?.status || '').toLowerCase();
         if (params.data?.include_in_rag === false) {
           // Selective RAG: opting a ticket out purges existing vectors immediately.
-          enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);
+          void enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);
         } else if (status === 'resolved' || status === 'closed') {
-          enqueueResolvedTicketIndex(id, tenantId);
+          void enqueueResolvedTicketIndex(id, tenantId);
         } else if (status === 'trash' || status === 'deleted') {
-          enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);
+          void enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);
         }
       }
     }
   } catch (err: any) {
-    console.warn('[vector-queue] mutation hook failed:', err?.message || err);
+    safeLog('warn', '[vector-queue] mutation hook failed:', err?.message || err);
   }
 }
 
 export function startVectorQueueWorker(): void {
   if (workerStarted) return;
   workerStarted = true;
+  void recoverOrphanedJobs('vector').then((recovered) => {
+    if (recovered > 0) safeLog('info', `[vector-queue] recovered ${recovered} orphaned job(s)`);
+  });
   setInterval(() => {
     void drainVectorQueue();
   }, 5_000);
-  console.log('[vector-queue] background worker started');
+  safeLog('info', '[vector-queue] background worker started (durable queue)');
 }
 
-export function getVectorQueueDepth(): number {
-  return queue.length;
+export async function getVectorQueueDepth(): Promise<number> {
+  const { getJobQueueDepth } = await import('../job-queue.js');
+  return getJobQueueDepth();
 }

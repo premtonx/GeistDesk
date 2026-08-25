@@ -1,40 +1,14 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { Suspense, lazy, useEffect, useState, type ReactNode } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Toaster } from './components/ui/sonner';
 import { TooltipProvider } from './components/ui/tooltip';
 import MainLayout from './components/layout/MainLayout';
-import DashboardPage from './components/pages/DashboardPage';
-import TicketsPage from './components/pages/TicketsPage';
-import KBPage from './components/pages/KBPage';
-import CustomersPage from './components/pages/CustomersPage';
-import SettingsPage from './components/pages/SettingsPage';
-import VaultPage from './components/pages/VaultPage';
-import CredentialVaultPage from './components/pages/CredentialVaultPage';
-import InsightsPage from './components/pages/InsightsPage';
-import AuditLogPage from './components/pages/AuditLogPage';
-import GeistDeskMigratorPage from './components/pages/GeistDeskMigratorPage';
-import EmailChannelsPage from './components/pages/EmailChannelsPage';
-import LegalSettingsPage from './components/pages/LegalSettingsPage';
-import AdminHubPage from './components/pages/AdminHubPage';
-import PolyglotBridgeAdminPage from './components/pages/PolyglotBridgeAdminPage';
-import NotificationEnginePage from './components/pages/NotificationEnginePage';
-import CompanySchemaPage from './components/pages/CompanySchemaPage';
-import ContactSchemaPage from './components/pages/ContactSchemaPage';
-import PIIShieldPage from './components/pages/PIIShieldPage';
-import SovereigntyCenterPage from './components/pages/SovereigntyCenterPage';
-import IntegrationsPage from './components/pages/IntegrationsPage';
-import GroupsPage from './components/pages/GroupsPage';
-import WorkforcePage from './components/pages/WorkforcePage';
-import RolesPage from './components/pages/RolesPage';
-import VaultPortfolioManagementPage from './components/pages/VaultPortfolioManagementPage';
-import AdminImportPage from './components/pages/AdminImportPage';
-import OnboardingWizardPage from './components/pages/OnboardingWizardPage';
 import LoginPage from './components/pages/LoginPage';
-import HelpCenterPage from './components/pages/HelpCenterPage';
-import SecretViewerPage from './components/pages/SecretViewerPage';
+import OnboardingWizardPage from './components/pages/OnboardingWizardPage';
 import { useAuth, useAdmin } from './lib/hooks';
 import { usePermissions } from './hooks/usePermissions';
 import { isSystemAdminSession } from './lib/beta-admin-bypass';
+import { ErrorBoundary, ModuleCrashFallback } from './components/ErrorBoundary';
 import { useOnboardingStatus } from './hooks/useOnboardingStatus';
 import { getModuleConfig, type PlatformModules } from './lib/module-config';
 import { toast } from 'sonner';
@@ -43,6 +17,46 @@ import { SidebarProvider } from './lib/context/SidebarContext';
 import { WorkspaceProvider } from './lib/context/WorkspaceContext';
 import { ThemeProvider } from './lib/context/ThemeContext';
 import { I18nProvider } from './lib/context/I18nContext';
+
+const DashboardPage = lazy(() => import('./components/pages/DashboardPage'));
+const TicketsPage = lazy(() => import('./components/pages/TicketsPage'));
+const KBPage = lazy(() => import('./components/pages/KBPage'));
+const CustomersPage = lazy(() => import('./components/pages/CustomersPage'));
+const SettingsPage = lazy(() => import('./components/pages/SettingsPage'));
+const VaultPage = lazy(() => import('./components/pages/VaultPage'));
+const CredentialVaultPage = lazy(() => import('./components/pages/CredentialVaultPage'));
+const InsightsPage = lazy(() => import('./components/pages/InsightsPage'));
+const AuditLogPage = lazy(() => import('./components/pages/AuditLogPage'));
+const GeistDeskMigratorPage = lazy(() => import('./components/pages/GeistDeskMigratorPage'));
+const EmailChannelsPage = lazy(() => import('./components/pages/EmailChannelsPage'));
+const LegalSettingsPage = lazy(() => import('./components/pages/LegalSettingsPage'));
+const AdminHubPage = lazy(() => import('./components/pages/AdminHubPage'));
+const PolyglotBridgeAdminPage = lazy(() => import('./components/pages/PolyglotBridgeAdminPage'));
+const NotificationEnginePage = lazy(() => import('./components/pages/NotificationEnginePage'));
+const CompanySchemaPage = lazy(() => import('./components/pages/CompanySchemaPage'));
+const ContactSchemaPage = lazy(() => import('./components/pages/ContactSchemaPage'));
+const PIIShieldPage = lazy(() => import('./components/pages/PIIShieldPage'));
+const SovereigntyCenterPage = lazy(() => import('./components/pages/SovereigntyCenterPage'));
+const IntegrationsPage = lazy(() => import('./components/pages/IntegrationsPage'));
+const GroupsPage = lazy(() => import('./components/pages/GroupsPage'));
+const WorkforcePage = lazy(() => import('./components/pages/WorkforcePage'));
+const RolesPage = lazy(() => import('./components/pages/RolesPage'));
+const VaultPortfolioManagementPage = lazy(() => import('./components/pages/VaultPortfolioManagementPage'));
+const AdminImportPage = lazy(() => import('./components/pages/AdminImportPage'));
+const HelpCenterPage = lazy(() => import('./components/pages/HelpCenterPage'));
+const SecretViewerPage = lazy(() => import('./components/pages/SecretViewerPage'));
+
+function RouteFallback() {
+  return (
+    <div className="h-full w-full flex items-center justify-center p-20 bg-background">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+    </div>
+  );
+}
+
+function LazyPage({ children }: { children: ReactNode }) {
+  return <Suspense fallback={<RouteFallback />}>{children}</Suspense>;
+}
 
 function AdminRoute({ children }: { children: ReactNode }) {
   const { loading: authLoading } = useAuth();
@@ -144,9 +158,10 @@ function AppRoutes() {
           <WorkspaceProvider>
           <TooltipProvider>
             <div className="min-h-screen bg-background font-sans antialiased text-foreground">
+            <ErrorBoundary fallback={<ModuleCrashFallback module="Application" />}>
             <Routes>
-                <Route path="/help" element={<HelpCenterPage />} />
-                <Route path="/v/:id" element={<SecretViewerPage />} />
+                <Route path="/help" element={<LazyPage><HelpCenterPage /></LazyPage>} />
+                <Route path="/v/:id" element={<LazyPage><SecretViewerPage /></LazyPage>} />
                 {firstRun || needsResume ? (
                   <>
                     <Route path="/onboarding" element={<OnboardingWizardPage />} />
@@ -171,40 +186,41 @@ function AppRoutes() {
                       }
                     >
                     <Route index element={<Navigate to="/dashboard" replace />} />
-                    <Route path="dashboard" element={<DashboardPage />} />
-                    <Route path="tickets" element={<TicketsPage />} />
-                    <Route path="tickets/:ticketId" element={<TicketsPage />} />
-                    <Route path="customers" element={<CustomersPage />} />
-                    <Route path="kb" element={<ModuleRoute module="geistKB"><KBPage /></ModuleRoute>} />
-                    <Route path="migrator" element={<GeistDeskMigratorPage />} />
-                    <Route path="vault" element={<ModuleRoute module="geistExchange"><VaultPage /></ModuleRoute>} />
-                    <Route path="credentials" element={<ModuleRoute module="geistVault"><CredentialVaultPage /></ModuleRoute>} />
-                    <Route path="insights" element={<InsightsPage />} />
-                    <Route path="audit" element={<AdminRoute><AuditLogPage /></AdminRoute>} />
-                    <Route path="settings" element={<SettingsPage />} />
-                    <Route path="admin" element={<AdminRoute><AdminHubPage /></AdminRoute>} />
+                    <Route path="dashboard" element={<ErrorBoundary fallback={<ModuleCrashFallback module="Dashboard" />}><LazyPage><DashboardPage /></LazyPage></ErrorBoundary>} />
+                    <Route path="tickets" element={<ErrorBoundary fallback={<ModuleCrashFallback module="Tickets" />}><LazyPage><TicketsPage /></LazyPage></ErrorBoundary>} />
+                    <Route path="tickets/:ticketId" element={<ErrorBoundary fallback={<ModuleCrashFallback module="Tickets" />}><LazyPage><TicketsPage /></LazyPage></ErrorBoundary>} />
+                    <Route path="customers" element={<ErrorBoundary fallback={<ModuleCrashFallback module="Customers" />}><LazyPage><CustomersPage /></LazyPage></ErrorBoundary>} />
+                    <Route path="kb" element={<ModuleRoute module="geistKB"><ErrorBoundary fallback={<ModuleCrashFallback module="GeistKB" />}><LazyPage><KBPage /></LazyPage></ErrorBoundary></ModuleRoute>} />
+                    <Route path="migrator" element={<ErrorBoundary fallback={<ModuleCrashFallback module="Migrator" />}><LazyPage><GeistDeskMigratorPage /></LazyPage></ErrorBoundary>} />
+                    <Route path="vault" element={<ModuleRoute module="geistExchange"><ErrorBoundary fallback={<ModuleCrashFallback module="Geist Exchange" />}><LazyPage><VaultPage /></LazyPage></ErrorBoundary></ModuleRoute>} />
+                    <Route path="credentials" element={<ModuleRoute module="geistVault"><ErrorBoundary fallback={<ModuleCrashFallback module="GeistVault" />}><LazyPage><CredentialVaultPage /></LazyPage></ErrorBoundary></ModuleRoute>} />
+                    <Route path="insights" element={<ErrorBoundary fallback={<ModuleCrashFallback module="Insights" />}><LazyPage><InsightsPage /></LazyPage></ErrorBoundary>} />
+                    <Route path="audit" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Audit Log" />}><LazyPage><AuditLogPage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="settings" element={<ErrorBoundary fallback={<ModuleCrashFallback module="Settings" />}><LazyPage><SettingsPage /></LazyPage></ErrorBoundary>} />
+                    <Route path="admin" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Admin Hub" />}><LazyPage><AdminHubPage /></LazyPage></ErrorBoundary></AdminRoute>} />
                     <Route path="admin/mcp" element={<Navigate to="/admin?tab=ai-engine" replace />} />
                     <Route path="admin/ai" element={<Navigate to="/admin?tab=ai-engine" replace />} />
                     <Route path="ai-orchestrator" element={<Navigate to="/admin?tab=ai-engine" replace />} />
-                    <Route path="admin/legal" element={<AdminRoute><LegalSettingsPage /></AdminRoute>} />
-                    <Route path="admin/notifications" element={<AdminRoute><NotificationEnginePage /></AdminRoute>} />
-                    <Route path="admin/schema" element={<AdminRoute><CompanySchemaPage /></AdminRoute>} />
-                    <Route path="admin/contact-schema" element={<AdminRoute><ContactSchemaPage /></AdminRoute>} />
-                    <Route path="admin/pii" element={<AdminRoute><PIIShieldPage /></AdminRoute>} />
-                    <Route path="admin/sovereignty" element={<AdminRoute><SovereigntyCenterPage /></AdminRoute>} />
-                    <Route path="admin/integrations" element={<AdminRoute><IntegrationsPage /></AdminRoute>} />
-                    <Route path="admin/polyglot" element={<AdminRoute><PolyglotBridgeAdminPage /></AdminRoute>} />
-                    <Route path="admin/groups" element={<AdminRoute><GroupsPage /></AdminRoute>} />
-                    <Route path="admin/workforce" element={<AdminRoute><WorkforcePage /></AdminRoute>} />
-                    <Route path="admin/roles" element={<AdminRoute><RolesPage /></AdminRoute>} />
-                    <Route path="admin/vault-portfolio" element={<AdminRoute><VaultPortfolioManagementPage /></AdminRoute>} />
-                    <Route path="admin/import" element={<AdminRoute><AdminImportPage /></AdminRoute>} />
-                    <Route path="email-channels" element={<EmailChannelsPage />} />
+                    <Route path="admin/legal" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Legal Settings" />}><LazyPage><LegalSettingsPage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="admin/notifications" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Notification Engine" />}><LazyPage><NotificationEnginePage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="admin/schema" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Company Schema" />}><LazyPage><CompanySchemaPage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="admin/contact-schema" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Contact Schema" />}><LazyPage><ContactSchemaPage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="admin/pii" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="PII Shield" />}><LazyPage><PIIShieldPage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="admin/sovereignty" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Sovereignty Center" />}><LazyPage><SovereigntyCenterPage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="admin/integrations" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Integrations" />}><LazyPage><IntegrationsPage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="admin/polyglot" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Polyglot Bridge" />}><LazyPage><PolyglotBridgeAdminPage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="admin/groups" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Groups" />}><LazyPage><GroupsPage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="admin/workforce" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Workforce" />}><LazyPage><WorkforcePage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="admin/roles" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Roles" />}><LazyPage><RolesPage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="admin/vault-portfolio" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Vault Portfolio" />}><LazyPage><VaultPortfolioManagementPage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="admin/import" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Import" />}><LazyPage><AdminImportPage /></LazyPage></ErrorBoundary></AdminRoute>} />
+                    <Route path="email-channels" element={<ErrorBoundary fallback={<ModuleCrashFallback module="Email Channels" />}><LazyPage><EmailChannelsPage /></LazyPage></ErrorBoundary>} />
                     <Route path="*" element={<Navigate to="/tickets" replace />} />
                     </Route>
                   </>
                 )}
               </Routes>
+            </ErrorBoundary>
             <Toaster />
           </div>
           </TooltipProvider>

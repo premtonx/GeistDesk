@@ -3,6 +3,7 @@ import multer from 'multer';
 import axios from 'axios';
 import mammoth from 'mammoth';
 import { createRequire } from 'module';
+import { z } from 'zod';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { addDocDirect } from '../lib/postgres-backend.js';
 import {
@@ -25,6 +26,20 @@ const upload = multer({
 });
 
 const router = Router();
+
+const scrapeBodySchema = z.object({
+  url: z.string().url().max(2000),
+  category: z.string().max(120).optional(),
+  status: z.string().max(40).optional(),
+  save: z.boolean().optional(),
+});
+
+const uploadFormSchema = z.object({
+  category: z.string().max(120).optional(),
+  status: z.string().max(40).optional(),
+  title: z.string().max(500).optional(),
+  save: z.string().optional(),
+});
 
 async function persistKbArticle(payload: {
   title: string;
@@ -69,6 +84,12 @@ router.post('/upload', authenticate, upload.single('file'), async (req: Request,
     const status = typeof req.body?.status === 'string' ? req.body.status : 'draft';
     const titleOverride = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
     const saveToDb = req.body?.save !== 'false';
+
+    // Multipart fields are strings; validate them when present.
+    const formParsed = uploadFormSchema.safeParse(req.body || {});
+    if (!formParsed.success) {
+      return res.status(400).json({ error: 'Invalid upload form fields.', details: formParsed.error.flatten() });
+    }
 
     const parsed = await parseKbIngestBuffer(
       file.buffer,
@@ -146,15 +167,19 @@ router.post('/parse-file', authenticate, upload.single('file'), async (req: Requ
 
 async function handleScrape(req: Request, res: Response) {
   try {
-    const url = typeof req.body?.url === 'string' ? req.body.url.trim() : '';
+    const parsed = scrapeBodySchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'URL is required.', details: parsed.error.flatten() });
+    }
+    const { url, category: categoryRaw, status: statusRaw, save } = parsed.data;
     if (!url) return res.status(400).json({ error: 'URL is required.' });
     if (isPrivateNetworkUrl(url)) {
       return res.status(400).json({ error: 'URL targets a private or disallowed network address.' });
     }
 
-    const category = typeof req.body?.category === 'string' ? req.body.category : 'uncategorized';
-    const status = typeof req.body?.status === 'string' ? req.body.status : 'draft';
-    const saveToDb = req.body?.save !== false;
+    const category = categoryRaw ?? 'uncategorized';
+    const status = statusRaw ?? 'draft';
+    const saveToDb = save !== false;
 
     const response = await axios.get(url, {
       timeout: 20000,

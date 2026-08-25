@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { z } from 'zod';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { routeParam } from '../lib/route-params.js';
 import {
@@ -13,6 +14,30 @@ const router = Router();
 const COLLECTION = 'kb_categories';
 const ARTICLES = 'kb_articles';
 const UNCATEGORIZED = 'uncategorized';
+
+const createCategorySchema = z.object({
+  name: z.string().min(1).max(120),
+  desc: z.string().max(1000).optional(),
+  owner: z.string().max(200).optional(),
+  subCategory: z.string().max(120).optional(),
+  order: z.number().optional(),
+  iconName: z.string().max(60).optional(),
+});
+
+const updateCategorySchema = z
+  .object({
+    name: z.string().min(1).max(120).optional(),
+    desc: z.string().max(1000).optional(),
+    owner: z.string().max(200).optional(),
+    subCategory: z.string().max(120).optional(),
+    order: z.number().optional(),
+    iconName: z.string().max(60).optional(),
+  })
+  .refine((p) => Object.keys(p).length > 0, { message: 'No fields to update.' });
+
+const deleteCategorySchema = z.object({
+  strategy: z.enum(['purge', 'reassign']).optional(),
+});
 
 function slugifyCategoryId(name: string): string {
   return (
@@ -39,8 +64,12 @@ router.get('/', authenticate, async (_req: Request, res: Response) => {
 
 router.post('/', authenticate, async (req: Request, res: Response) => {
   try {
-    const { name, desc, owner, subCategory, order, iconName } = req.body || {};
-    if (!name || typeof name !== 'string' || !name.trim()) {
+    const parsed = createCategorySchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Category name is required.', details: parsed.error.flatten() });
+    }
+    const { name, desc, owner, subCategory, order, iconName } = parsed.data;
+    if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Category name is required.' });
     }
 
@@ -78,7 +107,11 @@ router.patch('/:id', authenticate, async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Category not found.' });
     }
 
-    const { name, desc, owner, subCategory, order, iconName } = req.body || {};
+    const parsed = updateCategorySchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'No fields to update.', details: parsed.error.flatten() });
+    }
+    const { name, desc, owner, subCategory, order, iconName } = parsed.data;
     const patch: Record<string, unknown> = { updatedAt: new Date().toISOString() };
 
     if (typeof name === 'string' && name.trim()) patch.name = name.trim();
@@ -121,7 +154,8 @@ router.delete('/:id', authenticate, async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Category not found.' });
     }
 
-    const strategy = req.body?.strategy === 'purge' ? 'purge' : 'reassign';
+    const parsedDelete = deleteCategorySchema.safeParse(req.body || {});
+    const strategy = parsedDelete.success && parsedDelete.data.strategy === 'purge' ? 'purge' : 'reassign';
     const articles = await getDocsDirect(ARTICLES, []);
     const affected = articles.filter(
       (a) => a.category === id || a.category === existing.name,

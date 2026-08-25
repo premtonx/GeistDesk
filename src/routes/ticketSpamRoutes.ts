@@ -1,13 +1,17 @@
 import { Router, type Request, type Response } from 'express';
+import { z } from 'zod';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { getDocDirect, updateDocDirect } from '../lib/postgres-backend.js';
 import { routeParam } from '../lib/route-params.js';
+import { safeErrorMessage, safeLog } from '../lib/safe-log.js';
 import {
   addToGlobalBlacklist,
   extractEmailAddress,
 } from '../lib/global-blacklist.js';
 
 const router = Router();
+
+const spamParamSchema = z.object({ id: z.string().min(1).max(200) });
 
 /**
  * Resolve the raw sender email from a ticket document.
@@ -33,7 +37,11 @@ export function resolveTicketFromEmail(ticket: Record<string, unknown>): string 
  * Mark ticket as spam and permanently blacklist the sender email.
  */
 router.post('/:id/spam', authenticate, async (req: Request, res: Response): Promise<any> => {
-  const ticketId = routeParam(req.params.id);
+  const paramParsed = spamParamSchema.safeParse({ id: req.params.id });
+  if (!paramParsed.success) {
+    return res.status(400).json({ error: 'Ticket id is required.' });
+  }
+  const ticketId = routeParam(paramParsed.data.id);
   if (!ticketId) {
     return res.status(400).json({ error: 'Ticket id is required.' });
   }
@@ -71,7 +79,7 @@ router.post('/:id/spam', authenticate, async (req: Request, res: Response): Prom
       blockedBy,
     });
 
-    console.info(
+    safeLog('info', 
       `[Spam] ticket=${ticketId} marked spam; blacklisted=${senderEmail} by=${blockedBy}`,
     );
 
@@ -83,9 +91,9 @@ router.post('/:id/spam', authenticate, async (req: Request, res: Response): Prom
       blacklistId: blacklistEntry.id,
     });
   } catch (error: any) {
-    console.error('[Spam] mark-as-spam failed:', error);
+    safeLog('error', '[Spam] mark-as-spam failed:', safeErrorMessage(error));
     return res.status(500).json({
-      error: error?.message || 'Failed to mark ticket as spam.',
+      error: safeErrorMessage(error, 'Failed to mark ticket as spam.'),
     });
   }
 });

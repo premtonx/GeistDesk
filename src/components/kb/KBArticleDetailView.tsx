@@ -24,6 +24,8 @@ export interface KBArticleDetailViewProps {
   infrastructureTrust: KBArticleInfrastructureTrust;
   aiSummary?: string | null;
   isSummaryLoading?: boolean;
+  summaryFailed?: boolean;
+  onRetrySummary?: () => void;
   relationships: KBRelationship[];
   historyEntries?: KBArticleHistoryEntry[];
   isHistoryLoading?: boolean;
@@ -50,6 +52,8 @@ export function KBArticleDetailView({
   infrastructureTrust,
   aiSummary,
   isSummaryLoading = false,
+  summaryFailed = false,
+  onRetrySummary,
   relationships,
   historyEntries = [],
   isHistoryLoading = false,
@@ -264,6 +268,8 @@ export function KBArticleDetailView({
           infrastructureTrust={infrastructureTrust}
           aiSummary={aiSummary}
           isSummaryLoading={isSummaryLoading}
+          summaryFailed={summaryFailed}
+          onRetrySummary={onRetrySummary}
           relationships={relationships}
           onAskAi={(forceRefresh) => void onRegenerateSummary(forceRefresh)}
           indexInRag={indexInRag}

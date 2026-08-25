@@ -144,7 +144,7 @@ async function loadRagStatus(tenantId: string): Promise<RagStatusResult> {
   return {
     success: true,
     tenantId,
-    queueDepth: getVectorQueueDepth(),
+    queueDepth: await getVectorQueueDepth(),
     kb: {
       totalArticles,
       publishedArticles,
@@ -299,7 +299,7 @@ router.get(
         if (type === 'ticket') {
           const status = String(data.status || '').toLowerCase();
           if (status === 'resolved' || status === 'closed') {
-            enqueueResolvedTicketIndex(id, tenantId);
+            await enqueueResolvedTicketIndex(id, tenantId);
             enqueued += 1;
           }
         } else {
@@ -307,7 +307,7 @@ router.get(
           const published =
             status === 'published' || status === 'public' || data.visibility === 'Public' || status === '';
           if (published) {
-            enqueueKbArticleIndex(id, tenantId);
+            await enqueueKbArticleIndex(id, tenantId);
             enqueued += 1;
           }
         }
@@ -317,7 +317,7 @@ router.get(
         tenantId,
         type,
         enqueued,
-        queueDepth: getVectorQueueDepth(),
+        queueDepth: await getVectorQueueDepth(),
       });
     } catch (err: unknown) {
       return res.status(500).json({ error: safeErrorMessage(err, 'RAG backfill enqueue failed') });

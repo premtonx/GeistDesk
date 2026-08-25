@@ -17,7 +17,7 @@ export type TicketStatus =
 export type TicketPriority = "low" | "medium" | "high" | "urgent";
 export type SenderType = "customer" | "agent" | "ai";
 
-import type { AiCritiqueLog, AiTicketExecutionStatus } from './aiOrchestrator';
+import type { AiCritiqueLog, AiTicketExecutionStatus } from './ai-orchestrator';
 
 export interface Permission {
   id: string;

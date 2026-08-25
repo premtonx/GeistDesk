@@ -21,6 +21,24 @@ async function kbFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+/** Hard ceiling for summary generation — unreachable AI providers must not leave the UI spinning. */
+export const KB_SUMMARY_TIMEOUT_MS = 15_000;
+
+async function kbFetchWithTimeout<T>(path: string, init?: RequestInit): Promise<T> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), KB_SUMMARY_TIMEOUT_MS);
+  try {
+    return await kbFetch<T>(path, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('AI summary request timed out after 15s.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export const kbArticleApi = {
   incrementView: (articleId: string) =>
     kbFetch<{ views: number }>(`/api/kb/articles/${encodeURIComponent(articleId)}/view`, {
@@ -45,7 +63,7 @@ export const kbArticleApi = {
     ),
 
   getOrGenerateSummary: (articleId: string, options?: { forceRefresh?: boolean }) =>
-    kbFetch<{ aiSummary: string; cached: boolean }>(
+    kbFetchWithTimeout<{ aiSummary: string; cached: boolean }>(
       `/api/kb/articles/${encodeURIComponent(articleId)}/summary`,
       {
         method: 'POST',

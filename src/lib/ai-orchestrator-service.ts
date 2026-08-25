@@ -16,15 +16,15 @@ import type {
   AiProviderHealth,
   AiUsageAnalytics,
   DetectedLocalModel,
-} from '../types/aiOrchestrator.js';
-import { FEATURE_LABELS as FEATURE_LABELS_CONST } from '../types/aiOrchestrator.js';
+} from '../types/ai-orchestrator';
+import { FEATURE_LABELS as FEATURE_LABELS_CONST } from '../types/ai-orchestrator';
 import { isBudgetExceeded } from './ai-budget.js';
 import {
   runAiRequestLifecycle,
   type AiLifecycleOptions,
 } from './ai-request-lifecycle.js';
 import { createProductionModelExecutor } from './ai-lifecycle-executor.js';
-import type { AiExecutionContext, AiExecutionResult } from '../types/aiOrchestrator.js';
+import type { AiExecutionContext, AiExecutionResult } from '../types/ai-orchestrator';
 
 const PROVIDER_LABELS: Record<string, string> = {
   openai: 'GPT-5',

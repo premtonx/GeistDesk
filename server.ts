@@ -8,6 +8,7 @@ import axios from "axios";
 import * as cheerio from "cheerio";
 import mammoth from "mammoth";
 import multer from "multer";
+import { z } from "zod";
 import { createRequire } from "module";
 import {
   initDb, 
@@ -23,9 +24,10 @@ import {
 import { jsPDF } from "jspdf";
 import { createTeamsBotAdapter, GeistDeskTeamsAgent } from "./src/services/teamsBotService";
 import { graphTranscriptService } from "./src/services/graphTranscriptService";
-import { PIIShield } from "./pii-shield.js";
-import { generateAzureAIAnswer } from "./azure-ai-orchestrator.js";
+import { PIIShield } from "./src/server/pii-shield.js";
+import { generateAzureAIAnswer } from "./src/server/azure-ai-orchestrator.js";
 import { authenticate, requireRole } from "./src/middleware/authMiddleware";
+import { requestLoggingMiddleware } from "./src/middleware/request-logging.js";
 import adminRoutes from "./src/routes/adminRoutes.js";
 import aiRoutes from "./src/routes/aiRoutes.js";
 import moduleConfigRoutes from "./src/routes/moduleConfigRoutes.js";
@@ -54,7 +56,9 @@ import {
   stampTenantId,
   TENANT_SCOPED_COLLECTIONS,
 } from "./src/lib/tenant-context.js";
-import { safeErrorMessage } from "./src/lib/safe-log.js";
+import { safeErrorMessage, safeLog } from "./src/lib/safe-log.js";
+import { AppError, toPublicError, isAppError } from "./src/lib/app-error.js";
+import { isCryptoIntegrityError } from "./src/lib/crypto-integrity.js";
 import {
   extractEmailAddress,
 } from "./src/lib/global-blacklist.js";
@@ -78,6 +82,7 @@ import executiveDashboardRoutes from "./src/routes/executiveDashboardRoutes.js";
 import headerTelemetryRoutes from "./src/routes/headerTelemetryRoutes.js";
 import { orchestratorEventBus } from "./src/lib/ai-orchestrator-events.js";
 import { hashPassword, verifyPassword, assertVaultEncryptionConfigured } from "./src/lib/crypto.js";
+import { assertOrchestratorSecretsConfigured } from "./src/lib/ai-orchestrator-store.js";
 import { calculateCoverage, getDashboardData } from "./src/services/coverageEngine.js";
 import { assertDbCollectionAccess, getOwnerScope, getWriteScope } from "./src/lib/db-access-policy.js";
 import { setSessionCookie, clearSessionCookie } from "./src/lib/session-cookie.js";
@@ -85,6 +90,7 @@ import { issueSessionToken } from "./src/lib/session-token.js";
 import { DEMO_LOGIN_EMAIL, isDemoLoginEnabled } from "./src/lib/runtime-env.js";
 import {
   authRateLimiter,
+  credentialRateLimiter,
   vaultRevealRateLimiter,
   webhookRateLimiter,
   sandboxRateLimiter,
@@ -110,7 +116,7 @@ function requireGraphClientStateSecret(): string {
     if (IS_PROD) {
       throw new Error("[Security] GRAPH_CLIENT_STATE_SECRET is required in production.");
     }
-    console.warn("[Security] GRAPH_CLIENT_STATE_SECRET is not set — Graph webhooks are disabled in non-production.");
+    safeLog('warn', "[Security] GRAPH_CLIENT_STATE_SECRET is not set — Graph webhooks are disabled in non-production.");
     return "";
   }
   return secret;
@@ -182,36 +188,45 @@ const admin = {
   }
 };
 
-console.log("Server process starting...");
+safeLog('info', "Server process starting...");
 
 async function startServer() {
-  console.log("Initializing Express app...");
+  safeLog('info', "Initializing Express app...");
   await initDb();
   try {
     const { ensureStorageDirs } = await import("./src/lib/kb/document-store.js");
     ensureStorageDirs();
   } catch (storageErr: any) {
-    console.warn('[Storage] Failed to ensure document storage dirs:', storageErr?.message || storageErr);
+    safeLog('warn', '[Storage] Failed to ensure document storage dirs:', storageErr?.message || storageErr);
   }
   try {
     const boot = await ensureOnboardingState();
-    console.log(
+    safeLog('info', 
       `[Onboarding] is_initialized=${boot.isInitialized} pgvector_probe_pending modules=${JSON.stringify(boot.modules)}`,
     );
   } catch (onboardingErr: any) {
-    console.warn('[Onboarding] Failed to ensure initialization flag:', onboardingErr?.message || onboardingErr);
+    safeLog('warn', '[Onboarding] Failed to ensure initialization flag:', onboardingErr?.message || onboardingErr);
   }
   if (IS_PROD) {
     try {
       assertVaultEncryptionConfigured();
-      console.log("[Vault] VAULT_ENCRYPTION_KEY validated (256-bit).");
+      safeLog('info', "[Vault] VAULT_ENCRYPTION_KEY validated (256-bit).");
     } catch (vaultKeyError: any) {
-      console.error("[Vault] FATAL:", vaultKeyError?.message || vaultKeyError);
+      safeLog('error', "[Vault] FATAL:", vaultKeyError?.message || vaultKeyError);
       throw vaultKeyError;
+    }
+    try {
+      assertOrchestratorSecretsConfigured();
+      safeLog('info', "[AI Secrets] AI_SECRETS_KEY validated (256-bit, isolated from JWT_SECRET).");
+    } catch (secretsKeyError: any) {
+      safeLog('error', "[AI Secrets] FATAL:", secretsKeyError?.message || secretsKeyError);
+      throw secretsKeyError;
     }
   }
   const app = express();
   const PORT = 3000;
+
+  app.use(requestLoggingMiddleware);
 
   app.use(helmet({
     contentSecurityPolicy: IS_PROD
@@ -244,7 +259,7 @@ async function startServer() {
 
   // Register a new local account. Password is hashed with Argon2id; the
   // plaintext is never persisted and never returned.
-  app.post("/api/auth/register", authRateLimiter, async (req: any, res) => {
+  app.post("/api/auth/register", authRateLimiter, credentialRateLimiter, async (req: any, res) => {
     if (!isPublicRegistrationAllowed()) {
       return res.status(403).json({ error: "Public registration is disabled. Contact an administrator." });
     }
@@ -280,13 +295,13 @@ async function startServer() {
         user: sanitizeUserDoc({ id: created.id, ...created.data }),
       });
     } catch (e: any) {
-      console.error("[Auth/Register] Failed:", e?.message || e);
+      safeLog('error', "[Auth/Register] Failed:", e?.message || e);
       return res.status(500).json({ error: "Registration failed." });
     }
   });
 
   // Authenticate an existing local account using a constant-time hash compare.
-  app.post("/api/auth/login", authRateLimiter, async (req: any, res) => {
+  app.post("/api/auth/login", authRateLimiter, credentialRateLimiter, async (req: any, res) => {
     const { email, password } = req.body || {};
     if (!email || !password) {
       return res.status(400).json({ error: "email and password are required" });
@@ -322,7 +337,7 @@ async function startServer() {
       setSessionCookie(res, token);
       return res.json({ user: sanitizeUserDoc(userDoc) });
     } catch (e: any) {
-      console.error("[Auth/Login] Failed:", e?.message || e);
+      safeLog('error', "[Auth/Login] Failed:", e?.message || e);
       return res.status(500).json({ error: "Login failed." });
     }
   });
@@ -337,12 +352,21 @@ async function startServer() {
   });
 
   // Generic database API router for standard PostgreSQL / fallback execution
+  // This is the single most sensitive write path in the app — every mutation
+  // body is schema-validated before it reaches the query layer.
+  const dbActionSchema = z.object({
+    action: z.enum(['get_doc', 'get_docs', 'add_doc', 'update_doc', 'set_doc', 'delete_doc']),
+    collection: z.string().min(1).max(80),
+    id: z.string().max(200).optional(),
+    data: z.record(z.string(), z.unknown()).optional(),
+    constraints: z.array(z.unknown()).max(200).optional(),
+  });
   app.post("/api/db", authenticate, async (req: any, res) => {
-    let { action, collection, id, data, constraints } = req.body;
-    if (!action || !collection) {
-      return res.status(400).json({ error: "Missing action or collection parameter" });
+    const parsedBody = dbActionSchema.safeParse(req.body || {});
+    if (!parsedBody.success) {
+      return res.status(400).json({ error: "Invalid database operation.", details: parsedBody.error.flatten() });
     }
-
+    let { action, collection, id, data, constraints } = parsedBody.data;
     const access = assertDbCollectionAccess({
       collection,
       action,
@@ -492,7 +516,9 @@ async function startServer() {
 
     try {
       if (action === "get_doc") {
-        const doc = await getDocDirect(collection, id);
+        const doc = await getDocDirect(collection, id, {
+          tenantId: tenantScoped ? tenantId : undefined,
+        });
         if (tenantScoped && doc && !documentBelongsToTenant(doc, tenantId)) {
           return res.status(404).json({ error: "Document not found" });
         }
@@ -500,9 +526,12 @@ async function startServer() {
       }
       if (action === "get_docs") {
         const scopedConstraints = Array.isArray(constraints) ? [...constraints] : [];
-        // Fetch then enforce tenant in-process so legacy docs without tenantId
-        // remain visible to the default tenant, while non-default tenants stay isolated.
-        let docs = await getDocsDirect(collection, scopedConstraints);
+        // Tenant scoping is enforced at query time when the collection is
+        // tenant-scoped; the in-process filter below remains as a belt-and-
+        // braces guard for legacy rows.
+        let docs = await getDocsDirect(collection, scopedConstraints, {
+          tenantId: tenantScoped ? tenantId : undefined,
+        });
         if (tenantScoped) {
           docs = (docs || []).filter((d: any) => documentBelongsToTenant(d, tenantId));
         }
@@ -523,43 +552,49 @@ async function startServer() {
       }
       if (action === "update_doc") {
         if (tenantScoped) {
-          const existing = await getDocDirect(collection, id);
-          if (!existing || !documentBelongsToTenant(existing, tenantId)) {
+          const existing = await getDocDirect(collection, id, { tenantId });
+          if (!existing) {
             return res.status(404).json({ error: "Document not found" });
           }
         }
         const payload = tenantScoped ? stampTenantId(data || {}, tenantId) : data;
-        await updateDocDirect(collection, id, payload);
+        await updateDocDirect(collection, id, payload, {
+          tenantId: tenantScoped ? tenantId : undefined,
+        });
         handleKnowledgeDocumentMutation({ collection, action, id, data: payload, tenantId });
         return res.json({ result: { success: true } });
       }
       if (action === "set_doc") {
         if (tenantScoped) {
-          const existing = await getDocDirect(collection, id);
+          const existing = await getDocDirect(collection, id, { tenantId });
           if (existing && !documentBelongsToTenant(existing, tenantId)) {
             return res.status(404).json({ error: "Document not found" });
           }
         }
         const payload = tenantScoped ? stampTenantId(data || {}, tenantId) : data;
-        await setDocDirect(collection, id, payload);
+        await setDocDirect(collection, id, payload, {
+          tenantId: tenantScoped ? tenantId : undefined,
+        });
         handleKnowledgeDocumentMutation({ collection, action, id, data: payload, tenantId });
         return res.json({ result: { success: true } });
       }
       if (action === "delete_doc") {
         if (tenantScoped) {
-          const existing = await getDocDirect(collection, id);
-          if (!existing || !documentBelongsToTenant(existing, tenantId)) {
+          const existing = await getDocDirect(collection, id, { tenantId });
+          if (!existing) {
             return res.status(404).json({ error: "Document not found" });
           }
         }
-        await deleteDocDirect(collection, id);
+        await deleteDocDirect(collection, id, {
+          tenantId: tenantScoped ? tenantId : undefined,
+        });
         handleKnowledgeDocumentMutation({ collection, action, id, tenantId });
         return res.json({ result: { success: true } });
       }
       
       return res.status(400).json({ error: `Unknown database action: ${action}` });
     } catch (e: any) {
-      console.error(
+      safeLog('error', 
         `[DB Router Error] Failed on ${action} for ${collection}:`,
         safeErrorMessage(e),
       );
@@ -568,7 +603,7 @@ async function startServer() {
   });
 
   // Change the authenticated user's own password (hashed server-side).
-  app.post("/api/auth/change-password", authenticate, async (req: any, res) => {
+  app.post("/api/auth/change-password", authenticate, credentialRateLimiter, async (req: any, res) => {
     const { newPassword } = req.body || {};
     if (!newPassword || typeof newPassword !== "string" || newPassword.length < 8) {
       return res.status(400).json({ error: "newPassword must be at least 8 characters." });
@@ -578,13 +613,13 @@ async function startServer() {
       await updateDocDirect("users", req.user.id, { passwordHash, authMethod: "password", updatedAt: new Date().toISOString() });
       return res.json({ success: true });
     } catch (e: any) {
-      console.error("[Auth/ChangePassword] Failed:", e?.message || e);
+      safeLog('error', "[Auth/ChangePassword] Failed:", e?.message || e);
       return res.status(500).json({ error: "Failed to update password." });
     }
   });
 
   // Change the authenticated user's own email address.
-  app.post("/api/auth/change-email", authenticate, async (req: any, res) => {
+  app.post("/api/auth/change-email", authenticate, credentialRateLimiter, async (req: any, res) => {
     const newEmail = typeof req.body?.newEmail === "string" ? req.body.newEmail.toLowerCase().trim() : "";
     if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
       return res.status(400).json({ error: "A valid newEmail is required." });
@@ -598,7 +633,7 @@ async function startServer() {
       await updateDocDirect("users", req.user.id, { email: newEmail, updatedAt: new Date().toISOString() });
       return res.json({ success: true, email: newEmail });
     } catch (e: any) {
-      console.error("[Auth/ChangeEmail] Failed:", e?.message || e);
+      safeLog('error', "[Auth/ChangeEmail] Failed:", e?.message || e);
       return res.status(500).json({ error: "Failed to update email." });
     }
   });
@@ -621,13 +656,13 @@ async function startServer() {
   app.get("/api/ai/config", authenticate, async (req: any, res) => {
     try {
       const { getOrchestratorConfig } = await import("./src/lib/ai-orchestrator-store.js");
-      const { toPublicOrchestratorConfig } = await import("./src/types/aiOrchestrator.js");
+      const { toPublicOrchestratorConfig } = await import("./src/types/ai-orchestrator");
       const workspaceId = String(req.query.workspaceId || "default");
       const config = await getOrchestratorConfig(workspaceId);
       const isAdmin = req.user?.role === "SYSTEM_ADMIN";
       return res.json(isAdmin ? config : toPublicOrchestratorConfig(config));
     } catch (e: any) {
-      console.error("[AI Config] Failed:", e?.message || e);
+      safeLog('error', "[AI Config] Failed:", e?.message || e);
       return res.status(500).json({ error: "Failed to load AI configuration." });
     }
   });
@@ -639,7 +674,7 @@ async function startServer() {
       const health = await getOrchestratorHealth(workspaceId);
       return res.json(health);
     } catch (e: any) {
-      console.error("[AI Status] Failed:", e?.message || e);
+      safeLog('error', "[AI Status] Failed:", e?.message || e);
       return res.status(500).json({ error: "Failed to load AI status." });
     }
   });
@@ -706,7 +741,7 @@ async function startServer() {
       const stats = await getTicketStats();
       return res.json(stats);
     } catch (e: any) {
-      console.error("[Stats] Failed to compute ticket stats:", e?.message || e);
+      safeLog('error', "[Stats] Failed to compute ticket stats:", e?.message || e);
       return res.status(500).json({ error: "Failed to compute ticket statistics." });
     }
   });
@@ -740,7 +775,7 @@ async function startServer() {
     // Microsoft Graph sends a POST with a validationToken query param to verify the endpoint is active.
     const validationToken = req.query.validationToken;
     if (validationToken) {
-      console.log("[Graph Webhook] Verification handshake received (token redacted).");
+      safeLog('info', "[Graph Webhook] Verification handshake received (token redacted).");
       res.setHeader("Content-Type", "text/plain");
       // Microsoft requires echoing the validationToken; do not log it.
       return res.status(200).send(String(validationToken));
@@ -759,7 +794,7 @@ async function startServer() {
       }
       return res.status(400).json({ status: "ignored", error: "Missing value key in Graph payload" });
     } catch (error: any) {
-      console.error("[Graph Webhook Error] Failed to process notification:", error);
+      safeLog('error', "[Graph Webhook Error] Failed to process notification:", error);
       // Fail gracefully & drop context to safeguard platform security
       return res.status(202).json({ status: "dropped", reason: error.message });
     }
@@ -784,7 +819,7 @@ async function startServer() {
 
     if (!accessToken) {
       // Graceful sovereign preview/simulation mode with detailed setup instructions
-      console.warn("[Graph Sub Setup] Missing Access Token, operating in simulation preview mode...");
+      safeLog('warn', "[Graph Sub Setup] Missing Access Token, operating in simulation preview mode...");
       return res.json({
         success: true,
         simulated: true,
@@ -812,9 +847,10 @@ async function startServer() {
         subscriptionResult
       });
     } catch (error: any) {
+      safeLog('error', "[Graph Sub Setup] Error:", safeErrorMessage(error));
       return res.status(500).json({
         success: false,
-        error: error.message
+        error: safeErrorMessage(error, "Graph subscription setup failed"),
       });
     }
   });
@@ -834,13 +870,13 @@ async function startServer() {
       }));
       res.json(articles);
     } catch (error) {
-      console.error('Error fetching public articles:', error);
+      safeLog('error', 'Error fetching public articles:', error);
       res.status(500).json({ error: 'Failed to fetch public articles' });
     }
   });
 
   // API Routes
-  console.log("Registering API routes...");
+  safeLog('info', "Registering API routes...");
 
   // -----------------------------------------------------------------------------
   // SECURE AD-HOC SIMULATOR & TEST SANDBOX ROUTE
@@ -872,7 +908,7 @@ async function startServer() {
       const { answer, metrics, deployment, id } = azureResult as any;
 
       // 3. Assemble Teams Adaptive Card payload JSON
-      const { createAdaptiveCard } = await import("./teams-adaptive-cards.js");
+      const { createAdaptiveCard } = await import("./src/server/teams-adaptive-cards.js");
       const adaptiveCard = createAdaptiveCard(answer, wasScrubbed);
 
       return res.json({
@@ -886,8 +922,8 @@ async function startServer() {
         adaptiveCard
       });
     } catch (err: any) {
-      console.error("[Test Sandbox Endpoint Exception]:", err);
-      return res.status(500).json({ error: err.message });
+      safeLog('error', "[Test Sandbox Endpoint Exception]:", safeErrorMessage(err));
+      return res.status(500).json({ error: safeErrorMessage(err, "Sandbox processing failed") });
     }
   });
 
@@ -1300,7 +1336,7 @@ async function startServer() {
       if (ct.includes("multipart/form-data")) {
         return upload.any()(req, res, (err: any) => {
           if (err) {
-            console.warn("[inbound-mail] upload rejected:", err?.message || err);
+            safeLog('warn', "[inbound-mail] upload rejected:", err?.message || err);
             const tooLarge =
               err?.code === "LIMIT_FILE_SIZE" ||
               err?.code === "LIMIT_FIELD_SIZE" ||
@@ -1387,7 +1423,7 @@ async function startServer() {
               updatedAt: new Date().toISOString(),
             });
           } catch (statusErr) {
-            console.warn("[inbound-mail] failed to update channel status:", statusErr);
+            safeLog('warn', "[inbound-mail] failed to update channel status:", statusErr);
           }
         }
 
@@ -1412,7 +1448,7 @@ async function startServer() {
           channelId: channel?.id || null,
         });
       } catch (error) {
-        console.error("Webhook error:", error);
+        safeLog('error', "Webhook error:", error);
         return res.status(500).json({ error: "Failed to process inbound mail" });
       }
     },
@@ -1424,7 +1460,7 @@ async function startServer() {
     const { startTime, endTime, employeeId } = req.body;
     
     try {
-      console.log(`Syncing attendance to Personio for ${employeeId}: ${startTime} - ${endTime}`);
+      safeLog('info', `Syncing attendance to Personio for ${employeeId}: ${startTime} - ${endTime}`);
       
       // In a real implementation, we would:
       // 1. Fetch Client ID/Secret from secure vault (Firestore)
@@ -1440,7 +1476,7 @@ async function startServer() {
         trackingId: `per_${Math.random().toString(36).substr(2, 9)}`
       });
     } catch (error) {
-      console.error("Personio Sync Error:", error);
+      safeLog('error', "Personio Sync Error:", error);
       res.status(500).json({ error: "Failed to sync attendance to Personio" });
     }
   });
@@ -1618,7 +1654,7 @@ async function startServer() {
 
       // Condition A (Cache Hit): check if retrieved ticket record already has populated fields for aiSummary
       if (!forceRefresh && ticket.aiSummary) {
-        console.log(`[Cache Hit] Serving cached AI Analysis for Ticket: ${id}`);
+        safeLog('info', `[Cache Hit] Serving cached AI Analysis for Ticket: ${id}`);
         return res.json({
           aiSummary: ticket.aiSummary,
           aiInsights: ticket.aiInsights,
@@ -1628,7 +1664,7 @@ async function startServer() {
         });
       }
 
-      console.log(`[Cache Miss] Computing AI Analysis for Ticket: ${id}...`);
+      safeLog('info', `[Cache Miss] Computing AI Analysis for Ticket: ${id}...`);
 
       // Retrieve messages context for the AI prompt
       const messagesSnap = await db.collection("tickets").doc(id).collection("messages").orderBy("createdAt", "asc").get();
@@ -1670,7 +1706,7 @@ Respond only with the raw valid JSON payload.`;
           throw new Error(lifecycle.error ?? `Lifecycle status: ${lifecycle.status}`);
         }
       } catch (lifecycleErr) {
-        console.warn(`[AI Lifecycle] Ticket analysis fallback for ${id}:`, lifecycleErr);
+        safeLog('warn', `[AI Lifecycle] Ticket analysis fallback for ${id}:`, lifecycleErr);
         aiSummary = `Summary of the incident regarding: ${ticket.subject}. The system detected configuration issues and identity providers are awaiting handshake.`;
         aiInsights = [
           "Microsoft Entra handshake delay identified.",
@@ -1698,7 +1734,7 @@ Respond only with the raw valid JSON payload.`;
         updatedAt: admin.firestore.FieldValue.serverTimestamp()
       });
 
-      console.log(`[Cache Updated] Successfully saved computed AI Analysis variables in ticket: ${id}`);
+      safeLog('info', `[Cache Updated] Successfully saved computed AI Analysis variables in ticket: ${id}`);
 
       return res.json({
         aiSummary,
@@ -1708,7 +1744,7 @@ Respond only with the raw valid JSON payload.`;
         aiSentiment
       });
     } catch (error) {
-      console.error(`Error in GET /api/tickets/${id}:`, error);
+      safeLog('error', `Error in GET /api/tickets/${id}:`, error);
       res.status(500).json({ error: "Failed to load/generate ticket AI analysis." });
     }
   });
@@ -1793,7 +1829,7 @@ Respond only with the raw valid JSON payload.`;
       res.setHeader("Content-Disposition", `attachment; filename=GeistDesk_Archive_${ticket.customId || ticketId}.pdf`);
       res.send(buffer);
     } catch (error) {
-      console.error("Export Error:", error);
+      safeLog('error', "Export Error:", error);
       res.status(500).json({ error: "Export failed" });
     }
   });
@@ -1809,7 +1845,7 @@ Respond only with the raw valid JSON payload.`;
       const dashboard = await getDashboardData(apiKey);
       res.json(dashboard);
     } catch (error) {
-      console.error("Coverage fetch error:", error);
+      safeLog('error', "Coverage fetch error:", error);
       res.status(500).json({ error: "Failed to load coverage dashboard" });
     }
   };
@@ -1834,7 +1870,7 @@ Respond only with the raw valid JSON payload.`;
         }
       }
     } catch (error) {
-      console.error("Category coverage fetch error:", error);
+      safeLog('error', "Category coverage fetch error:", error);
       res.status(500).json({ error: "Failed to load category coverage" });
     }
   };
@@ -1853,7 +1889,7 @@ Respond only with the raw valid JSON payload.`;
       const dashboard = await getDashboardData(apiKey);
       res.json({ success: true, coverages, dashboard });
     } catch (error) {
-      console.error("Recalculate error:", error);
+      safeLog('error', "Recalculate error:", error);
       res.status(500).json({ error: "Failed to recalculate knowledge coverage" });
     }
   };
@@ -1900,7 +1936,7 @@ Respond only with the raw valid JSON payload.`;
       const data = JSON.parse(lifecycle.output);
       res.json(data);
     } catch (error) {
-      console.error("Handoff Summary Error:", error);
+      safeLog('error', "Handoff Summary Error:", error);
       res.status(500).json({ error: "Failed to generate handoff summary" });
     }
   });
@@ -1956,7 +1992,7 @@ Respond only with the raw valid JSON payload.`;
       const data = JSON.parse(lifecycle.output);
       res.json(data);
     } catch (error) {
-      console.error("AI Draft Error:", error);
+      safeLog('error', "AI Draft Error:", error);
       res.status(500).json({ error: "AI Draft failed" });
     }
   });
@@ -1985,7 +2021,7 @@ Respond only with the raw valid JSON payload.`;
       const data = JSON.parse(lifecycle.output);
       res.json(data);
     } catch (error) {
-      console.error("Tone Critique Error:", error);
+      safeLog('error', "Tone Critique Error:", error);
       res.status(500).json({ error: "Tone check failed" });
     }
   });
@@ -2059,14 +2095,14 @@ Example output format:
 
       res.json({ success: true, relationships: rdata });
     } catch (error: any) {
-      console.error("[Graph Extract API Error] failed:", error);
-      res.status(500).json({ error: error.message || "Failed to extract relationships via AI" });
+      safeLog('error', "[Graph Extract API Error] failed:", safeErrorMessage(error));
+      res.status(500).json({ error: safeErrorMessage(error, "Failed to extract relationships via AI") });
     }
   });
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
-    console.log("Configuring Vite middleware...");
+    safeLog('info', "Configuring Vite middleware...");
     try {
       const vite = await createViteServer({
         server: { 
@@ -2090,12 +2126,12 @@ Example output format:
         }
       });
       
-      console.log("Vite middleware attached.");
+      safeLog('info', "Vite middleware attached.");
     } catch (viteErr) {
-      console.error("ERROR INITIALIZING VITE:", viteErr);
+      safeLog('error', "ERROR INITIALIZING VITE:", viteErr);
     }
   } else {
-    console.log("Production mode: serving static files from dist/");
+    safeLog('info', "Production mode: serving static files from dist/");
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath, {
       setHeaders(res, filePath) {
@@ -2116,25 +2152,76 @@ Example output format:
     });
   }
 
+  // ---------------------------------------------------------------------------
+  // GLOBAL ERROR HANDLER — last middleware. Strips stack traces and internal
+  // exception details (SQL/Prisma queries, file paths) from client responses.
+  // Logs the redacted detail server-side only.
+  // ---------------------------------------------------------------------------
+  app.use(
+    (
+      err: any,
+      _req: express.Request,
+      res: express.Response,
+      _next: express.NextFunction,
+    ) => {
+      // Typed AppError carries its own status/code; zod validation errors are
+      // client mistakes (400); crypto integrity failures are tamper signals
+      // (422); everything else falls back to a redacted 500.
+      const mapped = toPublicError(err);
+      let status = mapped.status;
+      let body = mapped.body;
+
+      if (!isAppError(err)) {
+        if (err?.name === 'ZodError') {
+          status = 400;
+          body = {
+            error: 'Validation failed',
+            code: 'VALIDATION_FAILED',
+            details: err.errors?.map((e: any) => ({
+              path: e?.path?.join('.') ?? '',
+              message: e?.message ?? 'Invalid value',
+            })),
+          };
+        } else if (isCryptoIntegrityError(err)) {
+          status = 422;
+          body = { error: 'Payload integrity check failed', code: 'CRYPTO_INTEGRITY_VIOLATION' };
+        } else {
+          status = err?.status && typeof err.status === 'number' ? err.status : 500;
+          body = {
+            error:
+              status >= 500 ? 'Internal server error' : safeErrorMessage(err) || 'Request failed',
+          };
+        }
+      }
+
+      safeLog('error', '[API Error]', safeErrorMessage(err));
+      res.status(status).json(body);
+    },
+  );
+
   // Wire unified ingest pipeline → AI triage, then start 60s active-pull daemon.
   registerAiTriageHook(processAiTriage);
   startEmailIngestionScheduler(60_000);
   startVectorQueueWorker();
   // External KB source connectors — periodic delta-hash sync.
   try {
-    const { startExternalSourceSyncScheduler } = await import("./src/lib/kb/sync-external-source.js");
+    const { startExternalSourceSyncScheduler, drainExternalSourceSyncQueue } = await import(
+      './src/lib/kb/sync-external-source.js'
+    );
     startExternalSourceSyncScheduler(Number(process.env.KB_EXTERNAL_SYNC_INTERVAL_MS) || 30 * 60 * 1000);
+    setInterval(() => void drainExternalSourceSyncQueue().catch(() => undefined), 15_000);
+    safeLog('info', '[external-sync] durable drain worker started (15s)');
   } catch (syncErr: any) {
-    console.warn('[external-sync] Scheduler failed to start:', syncErr?.message || String(syncErr));
+    safeLog('warn', '[external-sync] Scheduler failed to start:', syncErr?.message || String(syncErr));
   }
 
   // 3-Tier Agentic Graph — Tier 3: swarm/outage cluster detector (background).
   try {
     const { startSwarmDetector } = await import('./src/lib/ai/swarm-detector.js');
     startSwarmDetector(5);
-    console.log('[AI Swarm] Outage cluster detector started (interval 5m).');
+    safeLog('info', '[AI Swarm] Outage cluster detector started (interval 5m).');
   } catch (swarmErr: any) {
-    console.warn('[AI Swarm] Detector failed to start:', swarmErr?.message || String(swarmErr));
+    safeLog('warn', '[AI Swarm] Detector failed to start:', swarmErr?.message || String(swarmErr));
   }
 
   app.listen(PORT, "0.0.0.0", () => {
@@ -2142,14 +2229,14 @@ Example output format:
       process.env.PUBLIC_APP_URL ||
       process.env.VITE_PUBLIC_APP_URL ||
       `http://0.0.0.0:${PORT}`;
-    console.log(`Ready: Server listening on 0.0.0.0:${PORT} (PUBLIC_APP_URL=${publicBase})`);
+    safeLog('info', `Ready: Server listening on 0.0.0.0:${PORT} (PUBLIC_APP_URL=${publicBase})`);
   });
 }
 
 async function runServerLifecycleAi(
-  feature: import("./src/types/aiOrchestrator.js").AiFeatureId,
+  feature: import("./src/types/ai-orchestrator").AiFeatureId,
   prompt: string,
-  ctx: Partial<import("./src/types/aiOrchestrator.js").AiExecutionContext> = {},
+  ctx: Partial<import("./src/types/ai-orchestrator").AiExecutionContext> = {},
 ) {
   const { executeAiFeatureRequest } = await import("./src/lib/ai-orchestrator-service.js");
   return executeAiFeatureRequest({
@@ -2183,7 +2270,7 @@ async function processAiTriage(ticketId: string, emailBody: string, subject: str
         ...linkedTickets.map((t) => `Ticket: ${t.title}`),
       ].slice(0, 5);
     } catch (ragErr: any) {
-      console.warn('[AI Triage] hybrid RAG unavailable, falling back to KB sample:', safeErrorMessage(ragErr));
+      safeLog('warn', '[AI Triage] hybrid RAG unavailable, falling back to KB sample:', safeErrorMessage(ragErr));
       const kbSnap = await db.collection("kb_articles").limit(5).get();
       kbContext = kbSnap.docs.map(d => `${d.data().title}: ${d.data().content}`).join("\n---\n");
     }
@@ -2206,7 +2293,7 @@ async function processAiTriage(ticketId: string, emailBody: string, subject: str
 
     const lifecycle = await runServerLifecycleAi('smart_reply', prompt, { ticketId });
     if (!lifecycle.output || lifecycle.status === 'blocked' || lifecycle.status === 'failed') {
-      console.warn("AI Triage skipped:", lifecycle.error ?? lifecycle.status);
+      safeLog('warn', "AI Triage skipped:", lifecycle.error ?? lifecycle.status);
       return;
     }
     const data = JSON.parse(lifecycle.output);
@@ -2236,16 +2323,16 @@ async function processAiTriage(ticketId: string, emailBody: string, subject: str
       createdAt: admin.firestore.FieldValue.serverTimestamp()
     });
 
-    console.log(`AI Triage complete for ticket: ${ticketId}`);
+    safeLog('info', `AI Triage complete for ticket: ${ticketId}`);
   } catch (err) {
-    console.error("AI Analysis Error for ticket:", ticketId, err);
+    safeLog('error', "AI Analysis Error for ticket:", ticketId, err);
   }
 }
 
 async function getServerAiConfig() {
   try {
     const { getOrchestratorConfig, getProviderSecret } = await import("./src/lib/ai-orchestrator-store.js");
-    const { toLegacyAiConfig } = await import("./src/types/aiOrchestrator.js");
+    const { toLegacyAiConfig } = await import("./src/types/ai-orchestrator");
     const orchestrator = await getOrchestratorConfig("default");
     const legacy = toLegacyAiConfig(orchestrator);
     const googleKey =
@@ -2259,7 +2346,7 @@ async function getServerAiConfig() {
       customApiKey: localKey,
     };
   } catch (error) {
-    console.warn("Failed to read orchestrator config, using fallback defaults:", error);
+    safeLog('warn', "Failed to read orchestrator config, using fallback defaults:", error);
     return {
       sentimentModel: "gemini-flash",
       deepThinkingModel: "gemini-pro",
@@ -2277,7 +2364,7 @@ async function getServerAiConfig() {
   }
 }
 
-console.log("Booting startServer...");
+safeLog('info', "Booting startServer...");
 startServer().catch(err => {
-  console.error("FATAL ERROR IN startServer:", err);
+  safeLog('error', "FATAL ERROR IN startServer:", err);
 });

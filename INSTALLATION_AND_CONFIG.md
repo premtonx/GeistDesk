@@ -258,7 +258,7 @@ OIDC_REDIRECT_URI=https://helpdesk.example.com/login
 
 - Admin → KI / AI Orchestrator persists to `ai_orchestrator_config` (Postgres).  
 - Configure primary / reasoning / triage models, feature routing, temperature / reasoning level, PII + content filters.  
-- Provider secrets encrypted at rest with `AI_SECRETS_KEY` (falls back to `JWT_SECRET`).  
+- Provider secrets encrypted at rest with `AI_SECRETS_KEY` (a dedicated 256-bit key — **no longer falls back to `JWT_SECRET`**, which keeps at-rest encryption keys isolated from session signing).  
 - Local models: set `OLLAMA_ENDPOINT` (and optionally `VITE_OLLAMA_ENDPOINT`) — do not rely on hardcoded localhost defaults.  
 - Ticket inbound mail calls `processAiTriage` using these workspace profiles.
 
@@ -271,6 +271,7 @@ OIDC_REDIRECT_URI=https://helpdesk.example.com/login
 | `DATABASE_URL` | Yes | Postgres connection string |
 | `JWT_SECRET` | Yes | Session JWT HS256 secret |
 | `VAULT_ENCRYPTION_KEY` | Yes | 64-hex key for server-side vault crypto |
+| `AI_SECRETS_KEY` | Yes | 64-hex key for orchestrator provider secrets (AES-256-GCM, isolated from `JWT_SECRET`) |
 | `INBOUND_MAIL_WEBHOOK_SECRET` | Yes (mail pilots) | Webhook handshake secret |
 | `MASTER_KEY_SALT` / `VITE_MASTER_KEY_SALT` | Optional | Vault Argon2 pepper (fresh installs) |
 | `PUBLIC_APP_URL` | Recommended | Canonical external URL |

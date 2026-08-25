@@ -32,6 +32,14 @@ import {
   graphDownloadFile,
   graphErrorMessage,
 } from './ms-graph.js';
+import {
+  enqueueJob,
+  leaseNextJob,
+  completeJob,
+  failJob,
+  type BackgroundJobRow,
+} from '../job-queue.js';
+import { withPgTransaction } from '../postgres-backend.js';
 
 export interface SyncResultSummary {
   added: number;
@@ -288,77 +296,114 @@ async function syncSftpSource(
   return summary;
 }
 
-/** Run one sync pass for a source (guarded by status=syncing). */
+/**
+ * Run one sync pass for a source, guarded by (1) a `pg_advisory_xact_lock`
+ * keyed on the source id so concurrent processes never sync the same source
+ * twice, and (2) the `status=syncing` guard for visibility.
+ */
 export async function syncExternalSource(sourceId: string, tenantId: string): Promise<SyncResultSummary> {
   const source = await getExternalSourceById(tenantId, sourceId);
   if (!source) throw new Error('External source not found.');
 
   const { updateDocDirect } = await import('../postgres-backend.js');
-  await updateDocDirect('kb_external_sources', sourceId, {
-    status: 'syncing',
-    lastError: null,
-    updatedAt: new Date().toISOString(),
-  });
 
-  try {
+  // Advisory lock scoped to (tenant, source). Held for the duration of the
+  // transaction, so a second process that leases the same job simply waits
+  // here instead of duplicating the sync pass.
+  return withPgTransaction(async (client) => {
+    await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`ext-sync:${tenantId}:${sourceId}`]);
+
+    await updateDocDirect('kb_external_sources', sourceId, {
+      status: 'syncing',
+      lastError: null,
+      updatedAt: new Date().toISOString(),
+    });
+
     let summary: SyncResultSummary;
-    if (source.type === 'local_dir') {
-      summary = await syncLocalDirectorySource(tenantId, source);
-    } else if (source.type === 'sftp') {
-      summary = await syncSftpSource(tenantId, source);
-    } else if (source.type === 'sharepoint' || source.type === 'onedrive') {
-      summary = await syncGraphSource(tenantId, source);
-    } else {
-      throw new Error(`Unsupported source type: ${source.type}`);
+    try {
+      if (source.type === 'local_dir') {
+        summary = await syncLocalDirectorySource(tenantId, source);
+      } else if (source.type === 'sftp') {
+        summary = await syncSftpSource(tenantId, source);
+      } else if (source.type === 'sharepoint' || source.type === 'onedrive') {
+        summary = await syncGraphSource(tenantId, source);
+      } else {
+        throw new Error(`Unsupported source type: ${source.type}`);
+      }
+      await finalizeSync(tenantId, sourceId, summary);
+      return summary;
+    } catch (err: unknown) {
+      const message = graphErrorMessage(err);
+      await finalizeSync(tenantId, sourceId, { added: 0, updated: 0, unchanged: 0, failed: 0 }, message);
+      throw new Error(message);
     }
-    await finalizeSync(tenantId, sourceId, summary);
-    return summary;
-  } catch (err: unknown) {
-    const message = graphErrorMessage(err);
-    await finalizeSync(tenantId, sourceId, { added: 0, updated: 0, unchanged: 0, failed: 0 }, message);
-    throw new Error(message);
-  }
+  });
 }
 
-/** Enqueue a sync pass without awaiting the result (returns 202 to callers). */
+/** Enqueue a durable EXTERNAL_SOURCE_SYNC job (fire-and-forget → 202 to callers). */
 export function enqueueExternalSourceSync(sourceId: string, tenantId: string): void {
-  void syncExternalSource(sourceId, tenantId)
-    .then((summary) => {
-      console.log(`[external-sync] ${sourceId} finished:`, JSON.stringify(summary));
-    })
+  void enqueueJob('EXTERNAL_SOURCE_SYNC', { sourceId, tenantId }, { maxAttempts: 2 })
     .catch((err) => {
-      console.warn(`[external-sync] ${sourceId} failed:`, err?.message || err);
+      console.warn(`[external-sync] enqueue ${sourceId} failed:`, err?.message || err);
     });
 }
 
-let schedulerStarted = false;
-let syncRunning = false;
+/** Process one leased EXTERNAL_SOURCE_SYNC job. */
+export async function processExternalSourceSyncJob(row: BackgroundJobRow): Promise<SyncResultSummary> {
+  const payload = (row.payload ?? {}) as { sourceId?: string; tenantId?: string };
+  const sourceId = String(payload.sourceId || '');
+  const tenantId = String(payload.tenantId || 'default');
+  if (!sourceId) throw new Error('External source sync job missing sourceId.');
+  const summary = await syncExternalSource(sourceId, tenantId);
+  console.log(`[external-sync] ${sourceId} finished:`, JSON.stringify(summary));
+  return summary;
+}
 
-/** Background scheduler following the email-ingestion setInterval + guard pattern. */
+let schedulerStarted = false;
+
+/** Background scheduler — enqueues one durable job per enabled source. */
 export function startExternalSourceSyncScheduler(intervalMs = 30 * 60 * 1000): void {
   if (schedulerStarted) return;
   schedulerStarted = true;
   const tick = async (): Promise<void> => {
-    if (syncRunning) return;
-    syncRunning = true;
     try {
       const sources = await listExternalSources('default');
       const enabled = sources.filter((s) => s.enabled);
       for (const source of enabled) {
         try {
-          await syncExternalSource(source.id, source.tenantId || 'default');
+          enqueueExternalSourceSync(source.id, source.tenantId || 'default');
         } catch (err) {
-          console.warn(`[external-sync] scheduled ${source.id} failed:`, err?.message || err);
+          console.warn(`[external-sync] enqueue scheduled ${source.id} failed:`, err?.message || err);
         }
+      }
+      if (enabled.length > 0) {
+        console.log(`[external-sync] scheduler enqueued ${enabled.length} source(s)`);
       }
     } catch (err) {
       console.warn('[external-sync] scheduler pass failed:', err?.message || err);
-    } finally {
-      syncRunning = false;
     }
   };
   setInterval(() => void tick(), intervalMs);
   console.log(`[external-sync] scheduler started (interval=${intervalMs}ms)`);
+}
+
+/** Drain the EXTERNAL_SOURCE_SYNC durable queue (started with the other workers). */
+export async function drainExternalSourceSyncQueue(): Promise<void> {
+  const workerId = `ext-sync-${process.pid}`;
+  for (let leased = 0; leased < 10; leased += 1) {
+    const row = await leaseNextJob(workerId, ['EXTERNAL_SOURCE_SYNC']);
+    if (!row) break;
+    try {
+      await processExternalSourceSyncJob(row);
+      await completeJob(row.id);
+    } catch (err: any) {
+      console.warn(
+        `[external-sync] job ${row.id} failed (attempt ${row.attempts + 1}):`,
+        err?.message || err,
+      );
+      await failJob(row.id, err);
+    }
+  }
 }
 
 export { sanitizeFilename };

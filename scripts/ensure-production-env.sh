@@ -38,4 +38,9 @@ if ! grep -q "^VAULT_ENCRYPTION_KEY=" "$ENV_FILE"; then
   exit 1
 fi
 
+if ! grep -q "^AI_SECRETS_KEY=" "$ENV_FILE"; then
+  echo "ERROR: AI_SECRETS_KEY is missing from ${ENV_FILE}" >&2
+  exit 1
+fi
+
 echo "Production env verified: ${ENV_FILE}"

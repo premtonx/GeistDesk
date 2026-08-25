@@ -7,7 +7,7 @@ import {
   type AiPromptLibraryFeature,
   type AiPromptTemplate,
   type AiPromptVersion,
-} from '../types/aiOrchestrator.js';
+} from '../types/ai-orchestrator';
 
 function parseJson<T>(val: unknown, fallback: T): T {
   if (val == null) return fallback;

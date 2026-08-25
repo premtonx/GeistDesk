@@ -13,6 +13,13 @@
 import { queryDb } from '../postgres-backend.js';
 import { getOrchestratorConfig } from '../ai-orchestrator-store.js';
 import { createIncidentCluster } from '../ai-orchestrator-store.js';
+import {
+  enqueueJob,
+  leaseNextJob,
+  completeJob,
+  failJob,
+  recoverOrphanedJobs,
+} from '../job-queue.js';
 
 export const SWARM_WINDOW_MINUTES = 15;
 export const SWARM_MIN_TICKETS = 5;
@@ -142,6 +149,40 @@ let lastRunAt = 0;
 const MIN_INTERVAL_MS = 60_000;
 
 /**
+ * Enqueue one durable SWARM_DETECTION job. Deduped by the background ticker,
+ * so admin-triggered scans (force) stay synchronous while background runs are
+ * lease-guarded against concurrent duplicates.
+ */
+export function enqueueSwarmDetection(workspaceId = 'default'): Promise<void> {
+  return enqueueJob('SWARM_DETECTION', { workspaceId }, { maxAttempts: 2 }).then(() => undefined);
+}
+
+/** Drain leased SWARM_DETECTION jobs — the durable worker body. */
+export async function drainSwarmDetectionQueue(): Promise<void> {
+  const workerId = `swarm-${process.pid}`;
+  for (let leased = 0; leased < 5; leased += 1) {
+    const row = await leaseNextJob(workerId, ['SWARM_DETECTION']);
+    if (!row) break;
+    try {
+      await runSwarmDetectionOnce();
+      await completeJob(row.id);
+    } catch (err: any) {
+      console.warn(
+        `[AI Swarm] job ${row.id} failed (attempt ${row.attempts + 1}):`,
+        err?.message || String(err),
+      );
+      await failJob(row.id, err);
+    }
+  }
+}
+
+/** One scheduled pass: enqueue a detection job, then drain leased jobs. */
+async function runSwarmPass(): Promise<void> {
+  await enqueueSwarmDetection('default');
+  await drainSwarmDetectionQueue();
+}
+
+/**
  * Starts the background swarm detector. Runs immediately once, then every N
  * minutes. Safe to call multiple times (single interval guard).
  */
@@ -151,10 +192,13 @@ export function startSwarmDetector(intervalMinutes = 5): void {
     const now = Date.now();
     if (now - lastRunAt < MIN_INTERVAL_MS) return;
     lastRunAt = now;
-    void runSwarmDetectionOnce().catch((e: unknown) =>
+    void runSwarmPass().catch((e: unknown) =>
       console.warn('[AI Swarm] Background pass failed:', e instanceof Error ? e.message : String(e)),
     );
   };
+  void recoverOrphanedJobs('swarm').then((recovered) => {
+    if (recovered > 0) console.log(`[AI Swarm] recovered ${recovered} orphaned job(s)`);
+  });
   run();
   intervalHandle = setInterval(run, Math.max(intervalMinutes, 1) * 60_000);
   // Keep the process alive-friendly: don't hold the event loop open in tests.

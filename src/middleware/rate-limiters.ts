@@ -11,6 +11,20 @@ export const authRateLimiter = rateLimit({
   message: { error: 'Too many authentication attempts. Please try again later.' },
 });
 
+/**
+ * Phase-1 hardening: tight per-IP limit for auth + onboarding credential
+ * endpoints (max 10 requests per minute per IP). In-memory per-process;
+ * swap to a shared store (Redis) when scaling horizontally.
+ */
+export const credentialRateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => req.ip || 'unknown',
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Too many requests. Please try again in a minute.' },
+});
+
 /** Protect public vault reveal/upload capability endpoints. */
 export const vaultRevealRateLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,

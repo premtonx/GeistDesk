@@ -1,7 +1,13 @@
 import type { User, UserRole } from '../types';
 
-/** Beta-stage auto-admin — disabled by default; set VITE_BETA_AUTO_ADMIN=true to enable. */
+/** Beta-stage auto-admin — disabled by default; set VITE_BETA_AUTO_ADMIN=true to enable.
+ *
+ * Hard-gated in production builds: `import.meta.env.PROD` is inlined by Vite at
+ * build time, so the flag path (and every consumer of these helpers) is tree-
+ * shaken out of the production bundle. A runtime user cannot re-enable it via
+ * the console. */
 export function isBetaAutoAdminEnabled(): boolean {
+  if (import.meta.env?.PROD) return false;
   const env = (import.meta as ImportMeta & { env?: Record<string, string | undefined> }).env;
   return env?.VITE_BETA_AUTO_ADMIN === 'true';
 }

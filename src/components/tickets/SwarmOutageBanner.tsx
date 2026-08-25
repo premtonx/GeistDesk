@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
 import { AlertTriangle, X } from 'lucide-react';
 import { Button } from '../ui/button';
-import type { AiIncidentCluster } from '../../types/aiOrchestrator';
+import type { AiIncidentCluster } from '../../types/ai-orchestrator';
 
 interface SwarmOutageBannerProps {
   ticketId: string;

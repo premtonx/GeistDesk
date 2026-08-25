@@ -3,6 +3,7 @@ import { getCachedLegacyAiConfig } from "../lib/aiOrchestratorClient";
 import { db, auth } from "../lib/firebase";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
 import { executeClientAiPrompt } from "../lib/client-ai-proxy";
+import { callLocalModel, resolveLocalEndpoint, resolveLocalModelName } from "../lib/client-ai-local";
 
 export interface LegalValidationResult {
   isValid: boolean;
@@ -40,37 +41,14 @@ Return JSON with keys isValid (boolean), violationDetail (string), forbiddenText
       });
       result = JSON.parse(lifecycle.output) as LegalValidationResult;
     } else {
-      const endpoint =
-        aiConfig.localEndpoint ||
-        (typeof process !== 'undefined' && process.env.OLLAMA_ENDPOINT
-          ? process.env.OLLAMA_ENDPOINT.replace(/\/$/, '').endsWith('/v1')
-            ? process.env.OLLAMA_ENDPOINT.replace(/\/$/, '')
-            : `${process.env.OLLAMA_ENDPOINT.replace(/\/$/, '')}/v1`
-          : '');
-      if (!endpoint) {
-        throw new Error('Local AI endpoint is not configured (set OLLAMA_ENDPOINT or module AI localEndpoint).');
-      }
-      const modelName = aiConfig.sentimentModel === 'custom-local'
-        ? (aiConfig.customSentimentModelName || "gemma")
-        : (aiConfig.sentimentModel === 'local-gemma' ? "gemma" : "llama3");
-
-      const response = await fetch(`${endpoint}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${aiConfig.customApiKey || "ollama"}`
-        },
-        body: JSON.stringify({
-          model: modelName,
-          messages: [
-            { role: "system", content: "You are a legal guardrail compliance engine. Respond only with JSON." },
-            { role: "user", content: prompt }
-          ],
-          response_format: { type: "json_object" }
-        })
+      const output = await callLocalModel(prompt, {
+        endpoint: resolveLocalEndpoint(aiConfig.localEndpoint),
+        modelName: resolveLocalModelName(aiConfig),
+        apiKey: aiConfig.customApiKey,
+        systemPrompt: 'You are a legal guardrail compliance engine. Respond only with JSON.',
+        jsonMode: true,
       });
-      const rdata = await response.json();
-      result = JSON.parse(rdata.choices[0].message.content) as LegalValidationResult;
+      result = JSON.parse(output) as LegalValidationResult;
     }
 
     if (!result.isValid) {

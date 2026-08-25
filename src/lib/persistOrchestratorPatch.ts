@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { AiOrchestratorConfig } from '../types/aiOrchestrator';
+import type { AiOrchestratorConfig } from '../types/ai-orchestrator';
 import { hydrateOrchestratorConfig } from './aiOrchestratorClient';
 
 export async function persistOrchestratorPatch(

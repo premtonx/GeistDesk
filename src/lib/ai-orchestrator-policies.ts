@@ -12,7 +12,7 @@ import {
   type AiRiskScoreAssessment,
   type AiTrustLevel,
   type AiTrustLevelDefinition,
-} from '../types/aiOrchestrator.js';
+} from '../types/ai-orchestrator';
 
 const CLOUD_PROVIDER_IDS = new Set(['gpt-5', 'claude', 'gemini-flash', 'gemini-pro', 'openai', 'anthropic', 'google']);
 

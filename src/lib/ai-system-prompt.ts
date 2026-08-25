@@ -5,7 +5,7 @@ import {
   type AiOperatorLanguage,
   type AiOrchestratorConfig,
   type AiPersonaId,
-} from '../types/aiOrchestrator.js';
+} from '../types/ai-orchestrator';
 
 export function buildOperatorLanguageBlock(lang: AiOperatorLanguage): string {
   if (lang === 'de') {

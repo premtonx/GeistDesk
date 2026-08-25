@@ -3,6 +3,7 @@ import { collection, query, getDocs, limit, orderBy } from "firebase/firestore";
 import { Ticket } from "../types";
 import { getCachedLegacyAiConfig } from "../lib/aiOrchestratorClient";
 import { executeClientAiPrompt } from "../lib/client-ai-proxy";
+import { callLocalModel, resolveLocalEndpoint, resolveLocalModelName } from "../lib/client-ai-local";
 
 export interface SuggestedLink {
   ticketId: string;
@@ -59,37 +60,15 @@ Return a JSON array of objects with:
       });
       suggestions = JSON.parse(result.output || '[]') as SuggestedLink[];
     } else {
-      const endpoint =
-        config.ai.localEndpoint ||
-        (typeof process !== 'undefined' && process.env.OLLAMA_ENDPOINT
-          ? process.env.OLLAMA_ENDPOINT.replace(/\/$/, '').endsWith('/v1')
-            ? process.env.OLLAMA_ENDPOINT.replace(/\/$/, '')
-            : `${process.env.OLLAMA_ENDPOINT.replace(/\/$/, '')}/v1`
-          : '');
-      if (!endpoint) {
-        throw new Error('Local AI endpoint is not configured (set OLLAMA_ENDPOINT or module AI localEndpoint).');
-      }
-      const modelName = config.ai.sentimentModel === 'custom-local'
-        ? (config.ai.customSentimentModelName || "gemma")
-        : (config.ai.sentimentModel === 'local-gemma' ? "gemma" : "llama3");
-
-      const response = await fetch(`${endpoint}/chat/completions`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${config.ai.customApiKey || "ollama"}`
-        },
-        body: JSON.stringify({
-          model: modelName,
-          messages: [
-            { role: "system", content: "You are a professional support ticketing auditor. Respond only with JSON." },
-            { role: "user", content: prompt + "\nProvide formatted JSON list as array of objects containing ticketId, subject, confidence, reason." }
-          ],
-          response_format: { type: "json_object" }
-        })
+      const output = await callLocalModel(prompt, {
+        endpoint: resolveLocalEndpoint(config.ai.localEndpoint),
+        modelName: resolveLocalModelName(config.ai),
+        apiKey: config.ai.customApiKey,
+        systemPrompt: 'You are a professional support ticketing auditor. Respond only with JSON.',
+        userPromptSuffix: '\nProvide formatted JSON list as array of objects containing ticketId, subject, confidence, reason.',
+        jsonMode: true,
       });
-      const rdata = await response.json();
-      suggestions = JSON.parse(rdata.choices[0].message.content || '[]') as SuggestedLink[];
+      suggestions = JSON.parse(output || '[]') as SuggestedLink[];
     }
 
     return suggestions.filter(s => s.confidence > 0.6);

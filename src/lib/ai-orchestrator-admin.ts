@@ -3,7 +3,7 @@ import {
   type AiCostScale,
   type AiPlaygroundRunResult,
   type AiProviderBenchmarkRow,
-} from '../types/aiOrchestrator.js';
+} from '../types/ai-orchestrator';
 import { buildProviderHealth, getOrchestratorHealth } from './ai-orchestrator-service.js';
 import { getOrchestratorConfig } from './ai-orchestrator-store.js';
 import { runAiRequestLifecycle } from './ai-request-lifecycle.js';

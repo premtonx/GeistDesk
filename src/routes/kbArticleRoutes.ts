@@ -1,4 +1,5 @@
 import { Router, type Request, type Response } from 'express';
+import { z } from 'zod';
 import { authenticate } from '../middleware/authMiddleware.js';
 import { routeParam } from '../lib/route-params.js';
 import {
@@ -13,8 +14,59 @@ import {
   enqueueKbArticleIndex,
   deleteEmbeddingsForSource,
 } from '../lib/ai/vector-queue.js';
+import { safeLog } from '../lib/safe-log.js';
 
 const router = Router();
+
+/** Hard ceiling for an AI summary request — unreachable providers must not hang the UI. */
+const AI_SUMMARY_TIMEOUT_MS = 15_000;
+
+/** Promise-based timeout that rejects once the deadline passes. */
+function withTimeout<T>(promise: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms);
+  });
+  return Promise.race([promise, timeout]).finally(() => {
+    if (timer) clearTimeout(timer);
+  });
+}
+
+const historyBodySchema = z.object({
+  changeSummary: z.string().min(1).max(4000),
+  snapshotTitle: z.string().max(500).optional(),
+  authorName: z.string().max(200).optional(),
+});
+
+const summaryBodySchema = z.object({
+  forceRefresh: z.boolean().optional(),
+});
+
+const translationBodySchema = z.object({
+  language: z.string().min(1).max(40),
+  translation: z
+    .object({
+      title: z.string().min(1).max(500),
+      content: z.string().min(1),
+    })
+    .refine((t) => t.title.length > 0 && t.content.length > 0, {
+      message: 'translation title and content are required',
+    }),
+});
+
+const articlePatchSchema = z
+  .object({
+    content: z.string().max(500_000).optional(),
+    title: z.string().max(500).optional(),
+    alerts: z.unknown().optional(),
+    infrastructureTrust: z.unknown().optional(),
+    aiSummary: z.string().max(20_000).optional(),
+    workflowSteps: z.unknown().optional(),
+    index_in_rag: z.boolean().optional(),
+  })
+  .refine((p) => Object.keys(p).length > 0, {
+    message: 'No supported fields to update.',
+  });
 
 function parseTimestamp(value: unknown): number {
   if (!value) return 0;
@@ -74,10 +126,11 @@ router.post('/:id/history', authenticate, async (req: Request, res: Response) =>
       return res.status(404).json({ error: 'Article not found.' });
     }
 
-    const { changeSummary, snapshotTitle, authorName } = req.body || {};
-    if (!changeSummary || typeof changeSummary !== 'string') {
-      return res.status(400).json({ error: 'changeSummary is required.' });
+    const parsed = historyBodySchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'changeSummary is required.', details: parsed.error.flatten() });
     }
+    const { changeSummary, snapshotTitle, authorName } = parsed.data;
 
     const user = (req as any).user;
     const entry = await addDocDirect('kb_article_history', {
@@ -97,9 +150,10 @@ router.post('/:id/history', authenticate, async (req: Request, res: Response) =>
 });
 
 router.post('/:id/summary', authenticate, async (req: Request, res: Response) => {
+  const id = routeParam(req.params.id);
   try {
-    const id = routeParam(req.params.id);
-    const forceRefresh = Boolean(req.body?.forceRefresh);
+    const parsed = summaryBodySchema.safeParse(req.body || {});
+    const forceRefresh = parsed.success ? parsed.data.forceRefresh === true : false;
     const article = await loadArticle(id);
     if (!article) {
       return res.status(404).json({ error: 'Article not found.' });
@@ -113,6 +167,11 @@ router.post('/:id/summary', authenticate, async (req: Request, res: Response) =>
       .replace(/<[^>]+>/g, ' ')
       .replace(/\s+/g, ' ')
       .trim();
+
+    if (!plain) {
+      safeLog('warn', '[KB Summary]', `Article ${id} has empty content — refusing to call AI.`);
+      return res.status(400).json({ error: 'Article content is empty. Add content before generating a summary.' });
+    }
 
     const prompt = `You are a knowledge base analyst. Write a concise AI summary for support operators reading this article.
 
@@ -128,21 +187,32 @@ Article Title: ${article.title || 'Untitled'}
 Article Content:
 ${plain.slice(0, 12000)}`;
 
-    const lifecycle = await executeAiFeatureRequest({
-      workspaceId: 'default',
-      feature: 'ticket_summarization',
-      prompt,
-      metadata: {
-        entityId: `kb-summary-${id}`,
-        kbArticleId: id,
-      },
-    });
+    try {
+      const lifecycle = await withTimeout(
+        executeAiFeatureRequest({
+          workspaceId: 'default',
+          feature: 'ticket_summarization',
+          prompt,
+          metadata: {
+            entityId: `kb-summary-${id}`,
+            kbArticleId: id,
+          },
+        }),
+        AI_SUMMARY_TIMEOUT_MS,
+        'AI summary request timed out after 15s.',
+      );
 
-    const aiSummary = requireLifecycleOutput(lifecycle);
-    await updateDocDirect('kb_articles', id, { aiSummary });
-    return res.json({ aiSummary, cached: false });
+      const aiSummary = requireLifecycleOutput(lifecycle);
+      await updateDocDirect('kb_articles', id, { aiSummary });
+      return res.json({ aiSummary, cached: false });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to generate summary.';
+      safeLog('error', '[KB Summary]', `Generation failed for article ${id}:`, message);
+      return res.status(500).json({ error: message });
+    }
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to generate summary.';
+    safeLog('error', '[KB Summary]', `Unexpected failure for article ${id}:`, message);
     return res.status(500).json({ error: message });
   }
 });
@@ -155,10 +225,11 @@ router.patch('/:id/translations', authenticate, async (req: Request, res: Respon
       return res.status(404).json({ error: 'Article not found.' });
     }
 
-    const { language, translation } = req.body || {};
-    if (!language || !translation?.title || !translation?.content) {
-      return res.status(400).json({ error: 'language and translation title/content are required.' });
+    const parsed = translationBodySchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'language and translation title/content are required.', details: parsed.error.flatten() });
     }
+    const { language, translation } = parsed.data;
 
     const translations = {
       ...(article.translations || {}),
@@ -182,10 +253,14 @@ router.patch('/:id', authenticate, async (req: Request, res: Response) => {
     }
 
     const allowed = ['content', 'title', 'alerts', 'infrastructureTrust', 'aiSummary', 'workflowSteps', 'index_in_rag'] as const;
+    const parsed = articlePatchSchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: parsed.error.issues[0]?.message || 'No supported fields to update.' });
+    }
     const patch: Record<string, unknown> = {};
     for (const key of allowed) {
-      if (req.body?.[key] !== undefined) {
-        patch[key] = req.body[key];
+      if (parsed.data[key] !== undefined) {
+        patch[key] = parsed.data[key];
       }
     }
 
@@ -201,7 +276,7 @@ router.patch('/:id', authenticate, async (req: Request, res: Response) => {
     if (typeof patch.index_in_rag === 'boolean') {
       const tenantId = resolveTenantFromRequest(req);
       if (patch.index_in_rag) {
-        enqueueKbArticleIndex(id, tenantId);
+        await enqueueKbArticleIndex(id, tenantId);
       } else {
         await deleteEmbeddingsForSource(tenantId, 'KB_ARTICLE', id);
       }
