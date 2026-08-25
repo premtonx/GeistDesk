@@ -108,6 +108,12 @@ export default function OnboardingWizardPage() {
   const [geistExchange, setGeistExchange] = useState(true);
   const [importSampleData, setImportSampleData] = useState(false);
 
+  // RAG pipeline defaults (Step 3) — index resolved tickets / new KB articles
+  // and enable semantic duplicate detection.
+  const [ragIndexResolvedTickets, setRagIndexResolvedTickets] = useState(true);
+  const [ragIndexNewKbArticles, setRagIndexNewKbArticles] = useState(true);
+  const [ragDetectDuplicates, setRagDetectDuplicates] = useState(true);
+
   const [ingestChannel, setIngestChannel] = useState<IngestChannel>('webhook');
   const [supportEmail, setSupportEmail] = useState('');
   const [imapHost, setImapHost] = useState('');
@@ -151,6 +157,11 @@ export default function OnboardingWizardPage() {
     if (status.defaults?.ollamaEndpoint) setEndpointUrl(status.defaults.ollamaEndpoint);
     if (status.defaults?.chatModel) setChatModel(status.defaults.chatModel);
     if (status.defaults?.embeddingModel) setEmbeddingModel(status.defaults.embeddingModel);
+    if (status.ragDefaults) {
+      setRagIndexResolvedTickets(status.ragDefaults.indexResolvedTickets !== false);
+      setRagIndexNewKbArticles(status.ragDefaults.indexNewKbArticles !== false);
+      setRagDetectDuplicates(status.ragDefaults.detectDuplicates !== false);
+    }
   }, [status, navigate, user]);
 
   // Vault Master Key sync: when the admin password is reused for GeistVault,
@@ -324,6 +335,11 @@ export default function OnboardingWizardPage() {
           },
           modules: { geistKB, geistVault, geistExchange },
           importSampleData,
+          ragDefaults: {
+            indexResolvedTickets: ragIndexResolvedTickets,
+            indexNewKbArticles: ragIndexNewKbArticles,
+            detectDuplicates: ragDetectDuplicates,
+          },
           ingestion: skipIngest
             ? { skip: true, channel: ingestChannel }
             : {
@@ -795,6 +811,72 @@ export default function OnboardingWizardPage() {
                   </span>
                 </span>
               </label>
+
+              <div className="sm:col-span-2 rounded-xl border border-indigo-100/80 bg-indigo-50/40 p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-indigo-600" />
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-800">KI-Wissensspeicher (RAG) — Standardeinstellungen</h3>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Steuert, welche Inhalte standardmäßig in die Vektor-Wissensbasis aufgenommen werden.
+                      Sie können dies später im Admin Hub → RAG &amp; Wissensbasis anpassen.
+                    </p>
+                  </div>
+                </div>
+                <div className="grid gap-2 sm:grid-cols-1">
+                  <label
+                    htmlFor="rag-index-resolved-tickets"
+                    className="flex items-start gap-3 rounded-lg border border-white bg-white/70 p-3 cursor-pointer hover:border-primary/40"
+                  >
+                    <Checkbox
+                      id="rag-index-resolved-tickets"
+                      checked={ragIndexResolvedTickets}
+                      onCheckedChange={(checked) => setRagIndexResolvedTickets(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <span className="space-y-0.5">
+                      <span className="block text-sm font-medium">Gelöste Tickets automatisch indexieren</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Lösungen gelöster Tickets werden als Wissen für den KI-Copiloten verfügbar.
+                      </span>
+                    </span>
+                  </label>
+                  <label
+                    htmlFor="rag-index-new-kb-articles"
+                    className="flex items-start gap-3 rounded-lg border border-white bg-white/70 p-3 cursor-pointer hover:border-primary/40"
+                  >
+                    <Checkbox
+                      id="rag-index-new-kb-articles"
+                      checked={ragIndexNewKbArticles}
+                      onCheckedChange={(checked) => setRagIndexNewKbArticles(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <span className="space-y-0.5">
+                      <span className="block text-sm font-medium">Neue Artikel automatisch indexieren</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Neue Wissensdatenbank-Artikel werden ohne manuellen Schritt in den RAG-Speicher aufgenommen.
+                      </span>
+                    </span>
+                  </label>
+                  <label
+                    htmlFor="rag-detect-duplicates"
+                    className="flex items-start gap-3 rounded-lg border border-white bg-white/70 p-3 cursor-pointer hover:border-primary/40"
+                  >
+                    <Checkbox
+                      id="rag-detect-duplicates"
+                      checked={ragDetectDuplicates}
+                      onCheckedChange={(checked) => setRagDetectDuplicates(checked === true)}
+                      className="mt-0.5"
+                    />
+                    <span className="space-y-0.5">
+                      <span className="block text-sm font-medium">Semantische Duplikaterkennung</span>
+                      <span className="block text-xs text-muted-foreground">
+                        Warnt beim Erstellen vor inhaltlich ähnlichen Artikeln oder Lösungen, um Redundanz zu vermeiden.
+                      </span>
+                    </span>
+                  </label>
+                </div>
+              </div>
             </CardContent>
           </Card>
         )}

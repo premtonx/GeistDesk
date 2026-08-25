@@ -16,6 +16,11 @@ export interface OnboardingStatus {
     chatModel: string;
     embeddingModel: string;
   };
+  ragDefaults?: {
+    indexResolvedTickets: boolean;
+    indexNewKbArticles: boolean;
+    detectDuplicates: boolean;
+  };
   health: {
     database: 'ok' | 'error';
     pgvector: boolean;
@@ -69,6 +74,11 @@ export function useOnboardingStatus() {
             embeddingModel: 'nomic-embed-text',
           },
           forwardingDomain: detail.forwardingDomain ?? prev?.forwardingDomain ?? '',
+          ragDefaults: detail.ragDefaults ?? prev?.ragDefaults ?? {
+            indexResolvedTickets: true,
+            indexNewKbArticles: true,
+            detectDuplicates: true,
+          },
           health: detail.health ?? prev?.health ?? { database: 'ok', pgvector: false },
         }));
         setLoading(false);

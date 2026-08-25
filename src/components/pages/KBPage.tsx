@@ -93,6 +93,7 @@ import {
 import { toast } from 'sonner';
 
 import { kbService } from '../../services/kbService';
+import { kbArticleApi } from '../../services/kbArticleApi';
 import { useAuth } from '../../lib/hooks';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { ModuleToolbarSelect } from '../ui/module-page';
@@ -103,6 +104,7 @@ import { KBCategoryGrid } from '../kb/KBCategoryGrid';
 import { KBSearchAiOverlay } from '../kb/KBSearchAiOverlay';
 import { KBArticleEditorWorkspace, type KBArticleDraft } from '../kb/KBArticleEditorWorkspace';
 import { KBDocumentsTab } from '../kb/KBDocumentsTab';
+import { KBExternalSourcesTab } from '../kb/KBExternalSourcesTab';
 import { KBBulkActionBar } from '../kb/KBBulkActionBar';
 import { truncateRagSnippet } from '../kb/kbSearchUtils';
 import { ragService, type RAGResult } from '../../services/ragService';
@@ -167,7 +169,7 @@ export default function KBPage() {
 
   // AI Knowledge Coverage Map states
   const [viewMode, setViewMode] = useState<'standard' | 'coverage'>('standard');
-  const [kbSection, setKbSection] = useState<'articles' | 'documents'>('articles');
+  const [kbSection, setKbSection] = useState<'articles' | 'documents' | 'sources'>('articles');
   const [coverageData, setCoverageData] = useState<any>(null);
   const [isLoadingCoverage, setIsLoadingCoverage] = useState<boolean>(false);
   const [selectedCoverageCategory, setSelectedCoverageCategory] = useState<string | null>(null);
@@ -691,6 +693,38 @@ export default function KBPage() {
     });
     setTagInput((article.tags || []).join(', '));
     setIsAddingArticle(true);
+  };
+
+  const handleToggleArticleIndexInRag = async (articleId: string, checked: boolean) => {
+    const article = articles.find((a) => a.id === articleId);
+    if (!article) return;
+    if (articleId.startsWith('seed-')) {
+      setArticles((prev) => prev.map((a) => (a.id === articleId ? { ...a, index_in_rag: checked } : a)));
+      if (viewingArticle?.id === articleId) {
+        setViewingArticle((prev) => (prev ? { ...prev, index_in_rag: checked } : prev));
+      }
+      toast.success(
+        checked
+          ? 'Artikel wird wieder für KI-RAG indexiert.'
+          : 'Artikel wird nicht mehr für KI-RAG indexiert.',
+      );
+      return;
+    }
+    try {
+      await kbArticleApi.setIndexInRag(articleId, checked);
+      setArticles((prev) => prev.map((a) => (a.id === articleId ? { ...a, index_in_rag: checked } : a)));
+      if (viewingArticle?.id === articleId) {
+        setViewingArticle((prev) => (prev ? { ...prev, index_in_rag: checked } : prev));
+      }
+      toast.success(
+        checked
+          ? 'Artikel wird wieder für KI-RAG indexiert.'
+          : 'Artikel wird nicht mehr für KI-RAG indexiert.',
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'RAG-Toggle fehlgeschlagen.';
+      toast.error(message);
+    }
   };
 
   const handleDuplicateArticle = (article: any) => {
@@ -1543,6 +1577,9 @@ export default function KBPage() {
                   enterpriseUsers={ENTERPRISE_USERS}
                   onClose={closeArticleDraft}
                   onSave={handleSaveArticle}
+                  onToggleIndexInRag={(checked) => {
+                    if (editingArticleId) void handleToggleArticleIndexInRag(editingArticleId, checked);
+                  }}
                   className="flex-1 min-h-0"
                 />
               </div>
@@ -1585,10 +1622,24 @@ export default function KBPage() {
                     >
                       Dokumente
                     </button>
+                    <button
+                      type="button"
+                      onClick={() => setKbSection('sources')}
+                      className={cn(
+                        'px-3.5 py-1.5 rounded-lg transition-all cursor-pointer',
+                        kbSection === 'sources'
+                          ? 'bg-white text-indigo-650 shadow-sm'
+                          : 'text-slate-400 hover:text-slate-600',
+                      )}
+                    >
+                      Datenquellen
+                    </button>
                   </div>
 
                   {kbSection === 'documents' ? (
                     <KBDocumentsTab />
+                  ) : kbSection === 'sources' ? (
+                    <KBExternalSourcesTab />
                   ) : isAiAssistantMode ? (
                     <KBAutopilotDashboard
                       embedded

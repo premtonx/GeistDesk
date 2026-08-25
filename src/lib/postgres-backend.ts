@@ -125,6 +125,9 @@ export async function initDb() {
       resolution_mode VARCHAR(24) NOT NULL DEFAULT 'hybrid',
       redact_pii BOOLEAN NOT NULL DEFAULT true,
       chunk_overlap_tokens INTEGER NOT NULL DEFAULT 100,
+      index_resolved_tickets BOOLEAN NOT NULL DEFAULT true,
+      index_new_kb_articles BOOLEAN NOT NULL DEFAULT true,
+      detect_duplicates BOOLEAN NOT NULL DEFAULT true,
       updated_by VARCHAR(255),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(workspace_id)
@@ -132,6 +135,9 @@ export async function initDb() {
     ALTER TABLE rag_pipeline_config ADD COLUMN IF NOT EXISTS resolution_mode VARCHAR(24) NOT NULL DEFAULT 'hybrid';
     ALTER TABLE rag_pipeline_config ADD COLUMN IF NOT EXISTS redact_pii BOOLEAN NOT NULL DEFAULT true;
     ALTER TABLE rag_pipeline_config ADD COLUMN IF NOT EXISTS chunk_overlap_tokens INTEGER NOT NULL DEFAULT 100;
+    ALTER TABLE rag_pipeline_config ADD COLUMN IF NOT EXISTS index_resolved_tickets BOOLEAN NOT NULL DEFAULT true;
+    ALTER TABLE rag_pipeline_config ADD COLUMN IF NOT EXISTS index_new_kb_articles BOOLEAN NOT NULL DEFAULT true;
+    ALTER TABLE rag_pipeline_config ADD COLUMN IF NOT EXISTS detect_duplicates BOOLEAN NOT NULL DEFAULT true;
     CREATE TABLE IF NOT EXISTS ai_orchestrator_audit (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
       workspace_id VARCHAR(255) NOT NULL DEFAULT 'default',

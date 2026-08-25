@@ -15,6 +15,12 @@ export interface RagPipelineConfig {
   redactPii: boolean;
   /** Token overlap between adjacent chunks when indexing KB articles / tickets. */
   chunkOverlapTokens: number;
+  /** Index resolved/closed tickets into RAG automatically. */
+  indexResolvedTickets: boolean;
+  /** Index newly created KB articles into RAG automatically. */
+  indexNewKbArticles: boolean;
+  /** Semantic duplicate detection on new KB articles / ticket resolutions. */
+  detectDuplicates: boolean;
   updatedBy?: string | null;
   updatedAt?: string;
 }
@@ -24,6 +30,9 @@ export const DEFAULT_RAG_PIPELINE_CONFIG: RagPipelineConfig = {
   resolutionMode: 'hybrid',
   redactPii: true,
   chunkOverlapTokens: 100,
+  indexResolvedTickets: true,
+  indexNewKbArticles: true,
+  detectDuplicates: true,
 };
 
 export function isRagResolutionMode(value: unknown): value is RagResolutionMode {
@@ -34,7 +43,9 @@ export function isRagResolutionMode(value: unknown): value is RagResolutionMode 
 export async function getRagPipelineConfig(workspaceId = 'default'): Promise<RagPipelineConfig> {
   try {
     const res = await queryDb(
-      `SELECT workspace_id, resolution_mode, redact_pii, chunk_overlap_tokens, updated_by, updated_at
+      `SELECT workspace_id, resolution_mode, redact_pii, chunk_overlap_tokens,
+              index_resolved_tickets, index_new_kb_articles, detect_duplicates,
+              updated_by, updated_at
        FROM rag_pipeline_config
        WHERE workspace_id = $1`,
       [workspaceId],
@@ -49,6 +60,9 @@ export async function getRagPipelineConfig(workspaceId = 'default'): Promise<Rag
       chunkOverlapTokens: Number.isFinite(Number(row.chunk_overlap_tokens))
         ? Number(row.chunk_overlap_tokens)
         : 100,
+      indexResolvedTickets: row.index_resolved_tickets !== false,
+      indexNewKbArticles: row.index_new_kb_articles !== false,
+      detectDuplicates: row.detect_duplicates !== false,
       updatedBy: row.updated_by ? String(row.updated_by) : null,
       updatedAt: row.updated_at ? new Date(String(row.updated_at)).toISOString() : undefined,
     };
@@ -60,7 +74,17 @@ export async function getRagPipelineConfig(workspaceId = 'default'): Promise<Rag
 
 /** Upsert the config for a workspace. */
 export async function setRagPipelineConfig(
-  patch: Partial<Pick<RagPipelineConfig, 'resolutionMode' | 'redactPii' | 'chunkOverlapTokens'>>,
+  patch: Partial<
+    Pick<
+      RagPipelineConfig,
+      | 'resolutionMode'
+      | 'redactPii'
+      | 'chunkOverlapTokens'
+      | 'indexResolvedTickets'
+      | 'indexNewKbArticles'
+      | 'detectDuplicates'
+    >
+  >,
   workspaceId = 'default',
   updatedBy?: string | null,
 ): Promise<RagPipelineConfig> {
@@ -70,18 +94,25 @@ export async function setRagPipelineConfig(
     resolutionMode: patch.resolutionMode ?? current.resolutionMode,
     redactPii: patch.redactPii ?? current.redactPii,
     chunkOverlapTokens: patch.chunkOverlapTokens ?? current.chunkOverlapTokens,
+    indexResolvedTickets: patch.indexResolvedTickets ?? current.indexResolvedTickets,
+    indexNewKbArticles: patch.indexNewKbArticles ?? current.indexNewKbArticles,
+    detectDuplicates: patch.detectDuplicates ?? current.detectDuplicates,
     updatedBy: updatedBy ?? current.updatedBy,
   };
 
   await queryDb(
     `INSERT INTO rag_pipeline_config
-       (workspace_id, resolution_mode, redact_pii, chunk_overlap_tokens, updated_by, updated_at)
-     VALUES ($1, $2, $3, $4, $5, CURRENT_TIMESTAMP)
+       (workspace_id, resolution_mode, redact_pii, chunk_overlap_tokens,
+        index_resolved_tickets, index_new_kb_articles, detect_duplicates, updated_by, updated_at)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, CURRENT_TIMESTAMP)
      ON CONFLICT (workspace_id)
      DO UPDATE SET
        resolution_mode = EXCLUDED.resolution_mode,
        redact_pii = EXCLUDED.redact_pii,
        chunk_overlap_tokens = EXCLUDED.chunk_overlap_tokens,
+       index_resolved_tickets = EXCLUDED.index_resolved_tickets,
+       index_new_kb_articles = EXCLUDED.index_new_kb_articles,
+       detect_duplicates = EXCLUDED.detect_duplicates,
        updated_by = EXCLUDED.updated_by,
        updated_at = CURRENT_TIMESTAMP`,
     [
@@ -89,6 +120,9 @@ export async function setRagPipelineConfig(
       next.resolutionMode,
       next.redactPii,
       next.chunkOverlapTokens,
+      next.indexResolvedTickets,
+      next.indexNewKbArticles,
+      next.detectDuplicates,
       updatedBy ?? null,
     ],
   );

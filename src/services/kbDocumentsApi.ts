@@ -26,9 +26,13 @@ export interface KbDocumentRecord {
 
 export interface KbExternalSource {
   id: string;
-  type: 'local_dir' | 'sharepoint' | 'onedrive';
+  type: 'local_dir' | 'sftp' | 'sharepoint' | 'onedrive';
   name: string;
   basePath: string | null;
+  host: string | null;
+  port: number | null;
+  username: string | null;
+  authMode: 'password' | 'privateKey' | null;
   folderId: string | null;
   clientId: string | null;
   azureTenantId: string | null;
@@ -91,9 +95,13 @@ export const kbDocumentsApi = {
   },
 
   async createSource(input: {
-    type: 'local_dir' | 'sharepoint' | 'onedrive';
+    type: 'local_dir' | 'sftp' | 'sharepoint' | 'onedrive';
     name: string;
     basePath?: string;
+    host?: string;
+    port?: number;
+    username?: string;
+    authMode?: 'password' | 'privateKey';
     folderId?: string;
     clientId?: string;
     azureTenantId?: string;
@@ -112,6 +120,10 @@ export const kbDocumentsApi = {
       name: string;
       enabled: boolean;
       basePath: string;
+      host: string;
+      port: number;
+      username: string;
+      authMode: 'password' | 'privateKey';
       folderId: string;
       clientId: string;
       azureTenantId: string;

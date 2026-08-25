@@ -44,6 +44,8 @@ interface KBArticleEditorWorkspaceProps {
   enterpriseUsers: EnterpriseUser[];
   onClose: () => void;
   onSave: () => void;
+  /** Instant-persist RAG opt-in for existing articles (fires on toggle change). */
+  onToggleIndexInRag?: (checked: boolean) => void;
   className?: string;
 }
 
@@ -58,6 +60,7 @@ export function KBArticleEditorWorkspace({
   enterpriseUsers,
   onClose,
   onSave,
+  onToggleIndexInRag,
   className,
 }: KBArticleEditorWorkspaceProps) {
   const { t } = useTranslation();
@@ -228,7 +231,11 @@ export function KBArticleEditorWorkspace({
             </div>
             <Switch
               checked={newArticle.index_in_rag !== false}
-              onCheckedChange={(checked) => patchArticle({ index_in_rag: Boolean(checked) })}
+              onCheckedChange={(checked) => {
+                const value = Boolean(checked);
+                patchArticle({ index_in_rag: value });
+                onToggleIndexInRag?.(value);
+              }}
             />
           </div>
         </div>

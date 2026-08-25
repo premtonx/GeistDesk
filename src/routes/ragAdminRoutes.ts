@@ -23,6 +23,9 @@ const updateConfigSchema = z.object({
   resolutionMode: z.string().optional(),
   redactPii: z.boolean().optional(),
   chunkOverlapTokens: z.number().int().min(20).max(300).optional(),
+  indexResolvedTickets: z.boolean().optional(),
+  indexNewKbArticles: z.boolean().optional(),
+  detectDuplicates: z.boolean().optional(),
 });
 
 interface RagStatusResult {
@@ -205,7 +208,14 @@ router.put(
         return res.status(400).json({ error: 'Invalid RAG config payload', details: parsed.error.flatten() });
       }
       const tenantId = resolveTenantFromRequest(req);
-      const { resolutionMode, redactPii, chunkOverlapTokens } = parsed.data;
+      const {
+        resolutionMode,
+        redactPii,
+        chunkOverlapTokens,
+        indexResolvedTickets,
+        indexNewKbArticles,
+        detectDuplicates,
+      } = parsed.data;
       if (resolutionMode !== undefined && !isRagResolutionMode(resolutionMode)) {
         return res.status(400).json({
           error: "resolutionMode must be one of 'extract' | 'ai_generated' | 'hybrid'",
@@ -216,6 +226,9 @@ router.put(
           resolutionMode: resolutionMode as RagPipelineConfig['resolutionMode'] | undefined,
           redactPii,
           chunkOverlapTokens,
+          indexResolvedTickets,
+          indexNewKbArticles,
+          detectDuplicates,
         },
         tenantId,
         req.user?.email ?? req.user?.id ?? null,

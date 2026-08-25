@@ -15,8 +15,10 @@ import {
   Calendar,
   Loader2,
   RefreshCw,
+  Database,
 } from 'lucide-react';
 import { Button } from '../ui/button';
+import { Switch } from '../ui/switch';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import type {
@@ -48,6 +50,9 @@ interface KBKnowledgeIntelligencePanelProps {
   isSummaryLoading?: boolean;
   relationships: KBRelationship[];
   onAskAi: (forceRefresh?: boolean) => void;
+  /** Explicit RAG opt-in state (undefined hides the toggle). */
+  indexInRag?: boolean;
+  onToggleIndexInRag?: (checked: boolean) => void;
 }
 
 const DEFAULT_WORKFLOW: KBArticleWorkflowStep[] = [
@@ -64,6 +69,8 @@ export function KBKnowledgeIntelligencePanel({
   isSummaryLoading = false,
   relationships,
   onAskAi,
+  indexInRag,
+  onToggleIndexInRag,
 }: KBKnowledgeIntelligencePanelProps) {
   const { t } = useTranslation();
   const [graphOpen, setGraphOpen] = useState(false);
@@ -112,6 +119,29 @@ export function KBKnowledgeIntelligencePanel({
           <p className="text-[10px] text-slate-400 mt-2">{t('kb.detail.noTags', 'No tags')}</p>
         )}
       </PanelCard>
+
+      {typeof indexInRag === 'boolean' && onToggleIndexInRag ? (
+        <PanelCard title={t('kb.editor.ragAccess', 'KI-Wissensspeicher (RAG)')} icon={Database}>
+          <div className="flex items-center justify-between gap-3 p-3 rounded-xl border border-slate-200 bg-slate-50">
+            <div className="flex flex-col">
+              <span className="text-[11px] font-bold text-slate-800 flex items-center gap-1.5">
+                <Database className="w-3.5 h-3.5 text-violet-500" />
+                {t('kb.editor.includeInRag', 'In KI-Wissensspeicher (RAG) aufnehmen')}
+              </span>
+              <span className="text-[10px] text-slate-500 mt-0.5">
+                {indexInRag
+                  ? t('kb.detail.ragIncluded', 'Wird vom KI-Copiloten zitiert.')
+                  : t('kb.detail.ragExcluded', 'Öffentlich lesbar, aber vom KI-Copiloten ausgeschlossen.')}
+              </span>
+            </div>
+            <Switch
+              checked={indexInRag}
+              onCheckedChange={onToggleIndexInRag}
+              aria-label={t('kb.editor.includeInRag', 'In KI-Wissensspeicher (RAG) aufnehmen')}
+            />
+          </div>
+        </PanelCard>
+      ) : null}
 
       <PanelCard title={t('kb.detail.aiSummary', 'AI Summary')} icon={Sparkles}>
         {isSummaryLoading ? (

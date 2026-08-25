@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import axios from 'axios';
-import { Database, RefreshCw, Search, Settings2, Loader2, CheckCircle2, AlertTriangle, FolderTree, Plus, Trash2, Cloud, HardDrive, Share2, Play, KeyRound } from 'lucide-react';
+import { Database, RefreshCw, Search, Settings2, Loader2, CheckCircle2, AlertTriangle, FolderTree, Plus, Trash2, Cloud, HardDrive, Share2, Play, KeyRound, Server } from 'lucide-react';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import { Badge } from '../../ui/badge';
@@ -35,6 +35,9 @@ interface RagStatus {
     resolutionMode: ResolutionMode;
     redactPii: boolean;
     chunkOverlapTokens: number;
+    indexResolvedTickets?: boolean;
+    indexNewKbArticles?: boolean;
+    detectDuplicates?: boolean;
   };
   sampledMissingKb?: string[];
   sampledMissingTickets?: string[];
@@ -64,6 +67,9 @@ export function AdminHubRagTab() {
   const [resolutionMode, setResolutionMode] = useState<ResolutionMode>('hybrid');
   const [redactPii, setRedactPii] = useState(true);
   const [chunkOverlap, setChunkOverlap] = useState(100);
+  const [indexResolvedTickets, setIndexResolvedTickets] = useState(true);
+  const [indexNewKbArticles, setIndexNewKbArticles] = useState(true);
+  const [detectDuplicates, setDetectDuplicates] = useState(true);
   const [savingConfig, setSavingConfig] = useState(false);
   const [query, setQuery] = useState('');
   const [hits, setHits] = useState<SearchHit[] | null>(null);
@@ -77,9 +83,13 @@ export function AdminHubRagTab() {
   const [syncingId, setSyncingId] = useState<string | null>(null);
   const [savingSource, setSavingSource] = useState(false);
   const [form, setForm] = useState<{
-    type: 'local_dir' | 'sharepoint' | 'onedrive';
+    type: 'local_dir' | 'sftp' | 'sharepoint' | 'onedrive';
     name: string;
     basePath: string;
+    host: string;
+    port: string;
+    username: string;
+    authMode: 'password' | 'privateKey';
     folderId: string;
     clientId: string;
     azureTenantId: string;
@@ -88,6 +98,10 @@ export function AdminHubRagTab() {
     type: 'local_dir',
     name: '',
     basePath: '',
+    host: '',
+    port: '22',
+    username: '',
+    authMode: 'password',
     folderId: '',
     clientId: '',
     azureTenantId: '',
@@ -116,6 +130,9 @@ export function AdminHubRagTab() {
       setResolutionMode(res.data.config?.resolutionMode ?? 'hybrid');
       setRedactPii(res.data.config?.redactPii ?? true);
       setChunkOverlap(res.data.config?.chunkOverlapTokens ?? 100);
+      setIndexResolvedTickets(res.data.config?.indexResolvedTickets !== false);
+      setIndexNewKbArticles(res.data.config?.indexNewKbArticles !== false);
+      setDetectDuplicates(res.data.config?.detectDuplicates !== false);
     } catch (err) {
       console.warn('RAG status unavailable', err);
     } finally {
@@ -134,6 +151,9 @@ export function AdminHubRagTab() {
         resolutionMode,
         redactPii,
         chunkOverlapTokens: chunkOverlap,
+        indexResolvedTickets,
+        indexNewKbArticles,
+        detectDuplicates,
       });
       setConfigOpen(false);
       await loadStatus();
@@ -182,15 +202,34 @@ export function AdminHubRagTab() {
       await kbDocumentsApi.createSource({
         type: form.type,
         name: form.name.trim(),
-        basePath: form.type === 'local_dir' ? form.basePath.trim() : undefined,
-        folderId: form.type !== 'local_dir' ? form.folderId.trim() : undefined,
-        clientId: form.type !== 'local_dir' ? form.clientId.trim() : undefined,
-        azureTenantId: form.type !== 'local_dir' ? form.azureTenantId.trim() : undefined,
-        secret: form.type !== 'local_dir' ? form.secret : undefined,
+        basePath: form.type === 'local_dir' || form.type === 'sftp' ? form.basePath.trim() : undefined,
+        host: form.type === 'sftp' ? form.host.trim() : undefined,
+        port: form.type === 'sftp' ? Number(form.port) || 22 : undefined,
+        username: form.type === 'sftp' ? form.username.trim() : undefined,
+        authMode: form.type === 'sftp' ? form.authMode : undefined,
+        folderId: form.type === 'sharepoint' || form.type === 'onedrive' ? form.folderId.trim() : undefined,
+        clientId: form.type === 'sharepoint' || form.type === 'onedrive' ? form.clientId.trim() : undefined,
+        azureTenantId: form.type === 'sharepoint' || form.type === 'onedrive' ? form.azureTenantId.trim() : undefined,
+        secret:
+          form.type === 'sftp' || form.type === 'sharepoint' || form.type === 'onedrive'
+            ? form.secret
+            : undefined,
         enabled: true,
       });
       setAddOpen(false);
-      setForm({ type: 'local_dir', name: '', basePath: '', folderId: '', clientId: '', azureTenantId: '', secret: '' });
+      setForm({
+        type: 'local_dir',
+        name: '',
+        basePath: '',
+        host: '',
+        port: '22',
+        username: '',
+        authMode: 'password',
+        folderId: '',
+        clientId: '',
+        azureTenantId: '',
+        secret: '',
+      });
       await loadSources();
     } catch (err) {
       console.warn('Failed to create source', err);
@@ -298,6 +337,29 @@ export function AdminHubRagTab() {
               className="mt-1 w-32"
             />
           </div>
+          <div className="space-y-2 pt-1 border-t border-slate-100">
+            <p className="text-[10px] font-black uppercase tracking-wider text-slate-400">
+              Automatische Indexierung
+            </p>
+            <ConfigToggle
+              label="Gelöste Tickets indexieren"
+              hint="Lösungen gelöster Tickets automatisch in die Wissensbasis aufnehmen."
+              checked={indexResolvedTickets}
+              onChange={setIndexResolvedTickets}
+            />
+            <ConfigToggle
+              label="Neue Artikel indexieren"
+              hint="Neue Wissensdatenbank-Artikel automatisch in den RAG-Speicher aufnehmen."
+              checked={indexNewKbArticles}
+              onChange={setIndexNewKbArticles}
+            />
+            <ConfigToggle
+              label="Semantische Duplikaterkennung"
+              hint="Beim Erstellen vor inhaltlich ähnlichen Artikeln oder Lösungen warnen."
+              checked={detectDuplicates}
+              onChange={setDetectDuplicates}
+            />
+          </div>
           <div className="flex gap-2">
             <Button size="sm" onClick={() => void saveConfig()} disabled={savingConfig}>
               {savingConfig ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : null}
@@ -398,7 +460,7 @@ export function AdminHubRagTab() {
                 {t('admin.rag.sourcesTitle', 'Verknüpfte Datenquellen')}
               </h3>
               <p className="text-[10px] text-slate-400 font-medium mt-0.5">
-                NAS-Ordner, SharePoint & OneDrive — Delta-Hash-Sync in die KI-Wissensbasis
+                NAS-Ordner, SFTP, SharePoint & OneDrive — Delta-Hash-Sync in die KI-Wissensbasis
               </p>
             </div>
           </div>
@@ -429,12 +491,13 @@ export function AdminHubRagTab() {
                   onChange={(e) =>
                     setForm((f) => ({
                       ...f,
-                      type: e.target.value as 'local_dir' | 'sharepoint' | 'onedrive',
+                      type: e.target.value as 'local_dir' | 'sftp' | 'sharepoint' | 'onedrive',
                     }))
                   }
                   className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
                 >
                   <option value="local_dir">Lokales Verzeichnis / NAS</option>
+                  <option value="sftp">SFTP / SFTP-Server</option>
                   <option value="sharepoint">SharePoint</option>
                   <option value="onedrive">OneDrive</option>
                 </select>
@@ -464,6 +527,81 @@ export function AdminHubRagTab() {
                     Pfad-Traversal ist blockiert.
                   </p>
                 </div>
+              ) : form.type === 'sftp' ? (
+                <>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-400">Host</label>
+                    <Input
+                      value={form.host}
+                      onChange={(e) => setForm((f) => ({ ...f, host: e.target.value }))}
+                      placeholder="sftp.example.com"
+                      className="mt-1 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-400">Port</label>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={65535}
+                      value={form.port}
+                      onChange={(e) => setForm((f) => ({ ...f, port: e.target.value }))}
+                      placeholder="22"
+                      className="mt-1 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-400">Benutzername</label>
+                    <Input
+                      value={form.username}
+                      onChange={(e) => setForm((f) => ({ ...f, username: e.target.value }))}
+                      placeholder="deploy"
+                      className="mt-1 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-400">Authentifizierung</label>
+                    <select
+                      value={form.authMode}
+                      onChange={(e) =>
+                        setForm((f) => ({
+                          ...f,
+                          authMode: e.target.value as 'password' | 'privateKey',
+                        }))
+                      }
+                      className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm"
+                    >
+                      <option value="password">Passwort</option>
+                      <option value="privateKey">Privater SSH-Schlüssel</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-400">Basis-Pfad</label>
+                    <Input
+                      value={form.basePath}
+                      onChange={(e) => setForm((f) => ({ ...f, basePath: e.target.value }))}
+                      placeholder="/mnt/docs"
+                      className="mt-1 font-mono"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-slate-400">
+                      {form.authMode === 'privateKey' ? 'Privater Schlüssel' : 'Passwort'}
+                    </label>
+                    <Input
+                      type="password"
+                      value={form.secret}
+                      onChange={(e) => setForm((f) => ({ ...f, secret: e.target.value }))}
+                      placeholder={form.authMode === 'privateKey' ? '-----BEGIN OPENSSH PRIVATE KEY-----' : 'Wird via GeistVault verschlüsselt'}
+                      className="mt-1 font-mono"
+                    />
+                  </div>
+                  <p className="md:col-span-2 text-[10px] text-slate-400 flex items-center gap-1">
+                    <KeyRound className="w-3 h-3" />
+                    SFTP über SSH — unterstützt Passwort- und Private-Key-Authentifizierung. Zugangsdaten
+                    werden via GeistVault verschlüsselt gespeichert.
+                  </p>
+                </>
               ) : (
                 <>
                   <div>
@@ -550,13 +688,17 @@ export function AdminHubRagTab() {
                     'shrink-0 w-9 h-9 rounded-lg border flex items-center justify-center',
                     source.type === 'local_dir'
                       ? 'bg-blue-50 border-blue-100 text-blue-600'
-                      : source.type === 'sharepoint'
-                        ? 'bg-amber-50 border-amber-100 text-amber-600'
-                        : 'bg-emerald-50 border-emerald-100 text-emerald-600',
+                      : source.type === 'sftp'
+                        ? 'bg-violet-50 border-violet-100 text-violet-600'
+                        : source.type === 'sharepoint'
+                          ? 'bg-amber-50 border-amber-100 text-amber-600'
+                          : 'bg-emerald-50 border-emerald-100 text-emerald-600',
                   )}
                 >
                   {source.type === 'local_dir' ? (
                     <HardDrive className="w-4 h-4" />
+                  ) : source.type === 'sftp' ? (
+                    <Server className="w-4 h-4" />
                   ) : source.type === 'sharepoint' ? (
                     <Share2 className="w-4 h-4" />
                   ) : (
@@ -568,10 +710,12 @@ export function AdminHubRagTab() {
                     <p className="text-xs font-bold text-slate-800 truncate">{source.name}</p>
                     <Badge className="text-[9px] font-black uppercase border-none">
                       {source.type === 'local_dir'
-                        ? 'Lokal'
-                        : source.type === 'sharepoint'
-                          ? 'SharePoint'
-                          : 'OneDrive'}
+                        ? 'NAS / Lokal'
+                        : source.type === 'sftp'
+                          ? 'SFTP'
+                          : source.type === 'sharepoint'
+                            ? 'SharePoint'
+                            : 'OneDrive'}
                     </Badge>
                     {source.status === 'syncing' ? (
                       <Badge className="text-[9px] font-black uppercase border-none bg-amber-50 text-amber-700">
@@ -586,7 +730,9 @@ export function AdminHubRagTab() {
                   <p className="text-[10px] text-slate-400 font-medium truncate">
                     {source.type === 'local_dir'
                       ? `/data/sources/${source.basePath || ''}`
-                      : source.folderId || 'Stammordner'}
+                      : source.type === 'sftp'
+                        ? `${source.username || ''}@${source.host || '?'}:${source.basePath || '/'}`
+                        : source.folderId || 'Stammordner'}
                     {source.lastSyncedAt
                       ? ` · zuletzt ${new Date(source.lastSyncedAt).toLocaleString()}`
                       : ''}
@@ -708,6 +854,28 @@ function Metric({ label, value }: { label: string; value: number }) {
     <div className="rounded-lg bg-slate-50 border border-slate-100 py-2">
       <div className="text-lg font-black text-slate-800">{value}</div>
       <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400">{label}</div>
+    </div>
+  );
+}
+
+function ConfigToggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string;
+  hint: string;
+  checked: boolean;
+  onChange: (value: boolean) => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3 p-3 bg-slate-50 rounded-lg border border-slate-100">
+      <div className="flex flex-col">
+        <span className="text-xs font-bold text-slate-800">{label}</span>
+        <span className="text-[10px] text-slate-500 mt-0.5">{hint}</span>
+      </div>
+      <Switch checked={checked} onCheckedChange={onChange} aria-label={label} />
     </div>
   );
 }

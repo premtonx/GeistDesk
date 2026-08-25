@@ -9,6 +9,7 @@
 import fsp from 'fs/promises';
 import path from 'path';
 import { readFile } from 'fs/promises';
+import { Client as SshClient } from 'ssh2';
 import {
   listExternalSources,
   getExternalSourceById,
@@ -171,6 +172,122 @@ function extractDriveId(folderRef: string): string {
   return m ? m[1] : '';
 }
 
+interface SftpEntry {
+  relPath: string;
+  absPath: string;
+  size: number;
+}
+
+type SftpWrapper = import('ssh2').SFTPWrapper;
+
+/** Recursively walk an SFTP directory (max depth 6). */
+async function walkSftpDirectory(
+  sftp: SftpWrapper,
+  dir: string,
+  relPrefix: string,
+  out: SftpEntry[],
+  depth = 0,
+): Promise<void> {
+  if (depth > 6) return;
+  const entries = await new Promise<Array<import('ssh2').FileEntry>>((resolve, reject) => {
+    sftp.readdir(dir, (err, list) => {
+      if (err) reject(err);
+      else resolve(list || []);
+    });
+  });
+  for (const entry of entries) {
+    if (entry.filename.startsWith('.')) continue;
+    const abs = dir === '/' ? `/${entry.filename}` : `${dir}/${entry.filename}`;
+    const rel = relPrefix ? `${relPrefix}/${entry.filename}` : entry.filename;
+    const mode = Number(entry.attrs.mode) || 0;
+    const isDir = (mode & 0o170000) === 0o040000; // S_IFDIR
+    if (isDir) {
+      await walkSftpDirectory(sftp, abs, rel, out, depth + 1);
+    } else if (isAllowedDocumentExtension(entry.filename)) {
+      out.push({ relPath: rel, absPath: abs, size: Number(entry.attrs.size) || 0 });
+    }
+  }
+}
+
+/** Sync one SFTP source over SSH2 (password or private-key auth). */
+async function syncSftpSource(
+  tenantId: string,
+  source: ExternalSource,
+): Promise<SyncResultSummary> {
+  const summary: SyncResultSummary = { added: 0, updated: 0, unchanged: 0, failed: 0 };
+  const secret = decryptSourceSecret(source.secretEnc);
+  const tmpBase = process.env.TMPDIR || process.env.TEMP || '/tmp';
+
+  const conn = new SshClient();
+  const connected = new Promise<void>((resolve, reject) => {
+    conn.once('ready', () => resolve());
+    conn.once('error', reject);
+    conn.connect({
+      host: source.host || '',
+      port: Number(source.port) || 22,
+      username: source.username || 'root',
+      password: source.authMode === 'privateKey' ? undefined : secret || undefined,
+      privateKey: source.authMode === 'privateKey' ? secret || undefined : undefined,
+      readyTimeout: 15000,
+    });
+  });
+
+  try {
+    await connected;
+    const sftp = await new Promise<SftpWrapper>((resolve, reject) => {
+      conn.sftp((err, sftpStream) => {
+        if (err) reject(err);
+        else resolve(sftpStream);
+      });
+    });
+
+    const base = `/${String(source.basePath || '').replace(/^\/+|\/+$/g, '')}`;
+    const files: SftpEntry[] = [];
+    await walkSftpDirectory(sftp, base || '/', '', files);
+    const targets = files.slice(0, SYNC_LIMIT);
+
+    for (const file of targets) {
+      try {
+        if (file.size > 25 * 1024 * 1024) {
+          summary.failed += 1;
+          continue;
+        }
+        const tmp = path.join(tmpBase, `kb-sftp-${Date.now()}-${Math.random().toString(36).slice(2)}`);
+        await new Promise<void>((resolve, reject) => {
+          sftp.fastGet(file.absPath, tmp, (err) => {
+            if (err) reject(err);
+            else resolve();
+          });
+        });
+        const buf = await readFile(tmp);
+        await fsp.rm(tmp, { force: true }).catch(() => undefined);
+        const hash = sha256Buffer(buf);
+        const recorded = await recordSyncedDocument({
+          tenantId,
+          sourceId: source.id,
+          sourcePath: file.relPath,
+          filename: path.basename(file.relPath),
+          size: file.size,
+          hash,
+          status: 'queued',
+        });
+        if (!recorded.changed) {
+          summary.unchanged += 1;
+          continue;
+        }
+        await saveRawFile(tenantId, recorded.docId, path.basename(file.relPath), buf);
+        if (recorded.wasExisting) summary.updated += 1;
+        else summary.added += 1;
+      } catch {
+        summary.failed += 1;
+      }
+    }
+  } finally {
+    conn.end();
+  }
+  return summary;
+}
+
 /** Run one sync pass for a source (guarded by status=syncing). */
 export async function syncExternalSource(sourceId: string, tenantId: string): Promise<SyncResultSummary> {
   const source = await getExternalSourceById(tenantId, sourceId);
@@ -187,6 +304,8 @@ export async function syncExternalSource(sourceId: string, tenantId: string): Pr
     let summary: SyncResultSummary;
     if (source.type === 'local_dir') {
       summary = await syncLocalDirectorySource(tenantId, source);
+    } else if (source.type === 'sftp') {
+      summary = await syncSftpSource(tenantId, source);
     } else if (source.type === 'sharepoint' || source.type === 'onedrive') {
       summary = await syncGraphSource(tenantId, source);
     } else {

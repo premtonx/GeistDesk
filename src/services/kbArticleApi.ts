@@ -74,6 +74,7 @@ export const kbArticleApi = {
       alerts?: KBArticleAlert[];
       infrastructureTrust?: KBArticleInfrastructureTrust;
       aiSummary?: string;
+      index_in_rag?: boolean;
     },
   ) =>
     kbFetch<{ article: Record<string, unknown> }>(
@@ -81,6 +82,15 @@ export const kbArticleApi = {
       {
         method: 'PATCH',
         body: JSON.stringify(fields),
+      },
+    ),
+
+  setIndexInRag: (articleId: string, indexInRag: boolean) =>
+    kbFetch<{ article: Record<string, unknown> }>(
+      `/api/kb/articles/${encodeURIComponent(articleId)}`,
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ index_in_rag: indexInRag }),
       },
     ),
 };

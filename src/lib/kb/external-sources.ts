@@ -12,7 +12,7 @@ import { safeErrorMessage } from '../safe-log.js';
 import { resolveSandboxPath, KB_SOURCES_ROOT, deleteDocumentFiles } from './document-store.js';
 import { enqueueKbDocumentIndex, enqueueDeleteDocumentEmbeddings } from '../ai/vector-queue.js';
 
-export type ExternalSourceType = 'local_dir' | 'sharepoint' | 'onedrive';
+export type ExternalSourceType = 'local_dir' | 'sftp' | 'sharepoint' | 'onedrive';
 
 export interface ExternalSource {
   id: string;
@@ -20,6 +20,10 @@ export interface ExternalSource {
   type: ExternalSourceType;
   name: string;
   basePath?: string;
+  host?: string;
+  port?: number;
+  username?: string;
+  authMode?: 'password' | 'privateKey';
   folderId?: string;
   clientId?: string;
   azureTenantId?: string;
@@ -37,10 +41,15 @@ export interface ExternalSourceInput {
   type: ExternalSourceType;
   name: string;
   basePath?: string;
+  host?: string;
+  port?: number;
+  username?: string;
+  authMode?: 'password' | 'privateKey';
+  /** Password for SFTP password-auth; also used for Graph client secret. */
+  secret?: string;
   folderId?: string;
   clientId?: string;
   azureTenantId?: string;
-  secret?: string;
   enabled?: boolean;
 }
 
@@ -72,7 +81,13 @@ export async function listExternalSources(tenantId: string): Promise<ExternalSou
   ]);
   return docs
     .map((doc) => ({ ...(doc.data || {}), id: doc.id }) as ExternalSource)
-    .filter((s) => s.type === 'local_dir' || s.type === 'sharepoint' || s.type === 'onedrive')
+    .filter(
+      (s) =>
+        s.type === 'local_dir' ||
+        s.type === 'sftp' ||
+        s.type === 'sharepoint' ||
+        s.type === 'onedrive',
+    )
     .sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
 }
 
@@ -95,11 +110,19 @@ export async function createExternalSource(
   const now = new Date().toISOString();
   const name = sanitizeName(input.name);
   if (!name) throw new Error('Source name is required.');
-  if (input.type !== 'local_dir' && input.type !== 'sharepoint' && input.type !== 'onedrive') {
+  if (
+    input.type !== 'local_dir' &&
+    input.type !== 'sftp' &&
+    input.type !== 'sharepoint' &&
+    input.type !== 'onedrive'
+  ) {
     throw new Error('Invalid source type.');
   }
   if (input.type === 'local_dir' && !input.basePath) {
     throw new Error('Base path is required for local directory sources.');
+  }
+  if (input.type === 'sftp' && !input.host) {
+    throw new Error('SFTP host is required.');
   }
 
   const data: Record<string, unknown> = {
@@ -117,6 +140,13 @@ export async function createExternalSource(
 
   if (input.type === 'local_dir') {
     data.basePath = String(input.basePath || '').replace(/^\/+|\/+$/g, '');
+  } else if (input.type === 'sftp') {
+    data.host = String(input.host || '').trim();
+    data.port = Number(input.port) || 22;
+    data.username = String(input.username || '').trim() || null;
+    data.basePath = String(input.basePath || '').replace(/^\/+|\/+$/g, '');
+    data.authMode = input.authMode === 'privateKey' ? 'privateKey' : 'password';
+    if (input.secret) data.secretEnc = encryptSourceSecret(input.secret);
   } else {
     data.folderId = String(input.folderId || '').trim() || null;
     data.clientId = String(input.clientId || '').trim() || null;
@@ -142,6 +172,13 @@ export async function updateExternalSource(
   if (patch.enabled !== undefined) data.enabled = patch.enabled;
   if (patch.type === 'local_dir') {
     data.basePath = String(patch.basePath || '').replace(/^\/+|\/+$/g, '');
+  } else if (patch.type === 'sftp') {
+    if (patch.host !== undefined) data.host = String(patch.host || '').trim();
+    if (patch.port !== undefined) data.port = Number(patch.port) || 22;
+    if (patch.username !== undefined) data.username = String(patch.username || '').trim() || null;
+    if (patch.basePath !== undefined) data.basePath = String(patch.basePath || '').replace(/^\/+|\/+$/g, '');
+    if (patch.authMode !== undefined) data.authMode = patch.authMode === 'privateKey' ? 'privateKey' : 'password';
+    if (patch.secret) data.secretEnc = encryptSourceSecret(patch.secret);
   } else if (patch.type === 'sharepoint' || patch.type === 'onedrive') {
     if (patch.folderId !== undefined) data.folderId = String(patch.folderId || '').trim() || null;
     if (patch.clientId !== undefined) data.clientId = String(patch.clientId || '').trim() || null;

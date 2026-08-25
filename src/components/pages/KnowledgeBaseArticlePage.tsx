@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import type { KBArticle, KBArticleAlert, KBArticleHistoryEntry } from '../../types';
 import { KBArticleDetailView } from '../kb/KBArticleDetailView';
@@ -39,6 +39,11 @@ export function KnowledgeBaseArticlePage({
   const [historyEntries, setHistoryEntries] = useState<KBArticleHistoryEntry[]>([]);
   const [isHistoryLoading, setIsHistoryLoading] = useState(false);
   const [relationships, setRelationships] = useState<KBRelationship[]>([]);
+  // Strictly-once view-increment guard. Without this, the effect below re-fires
+  // on every render because the parent recreates the `article` object (and the
+  // inline `onArticleUpdated` callback) whenever the optimistic views patch is
+  // applied — resulting in an infinite view-count loop.
+  const viewIncrementedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     setLiveArticle(article);
@@ -53,32 +58,24 @@ export function KnowledgeBaseArticlePage({
 
   useEffect(() => {
     if (isSeedArticle(article.id)) return;
+    if (viewIncrementedRef.current.has(article.id)) return;
+    viewIncrementedRef.current.add(article.id);
+
+    let cancelled = false;
     void kbArticleApi
       .incrementView(article.id)
       .then(({ views }) => {
+        if (cancelled) return;
         setLiveArticle((prev) => ({ ...prev, views }));
         onArticleUpdated(article.id, { views });
       })
       .catch((error) => {
         console.warn('Failed to increment article views:', error);
       });
-  }, [article.id, onArticleUpdated]);
-
-  useEffect(() => {
-    if (isSeedArticle(article.id)) return;
-    setIsSummaryLoading(true);
-    void kbArticleApi
-      .getOrGenerateSummary(article.id)
-      .then(({ aiSummary: summary }) => {
-        setAiSummary(summary);
-        setLiveArticle((prev) => ({ ...prev, aiSummary: summary }));
-        onArticleUpdated(article.id, { aiSummary: summary });
-      })
-      .catch((error) => {
-        console.warn('Failed to load AI summary:', error);
-      })
-      .finally(() => setIsSummaryLoading(false));
-  }, [article.id, onArticleUpdated]);
+    return () => {
+      cancelled = true;
+    };
+  }, [article.id]);
 
   const loadHistory = useCallback(async () => {
     if (isSeedArticle(article.id)) {
@@ -256,6 +253,35 @@ export function KnowledgeBaseArticlePage({
     [liveArticle.id, onArticleUpdated],
   );
 
+  const handleToggleIndexInRag = useCallback(
+    async (checked: boolean) => {
+      if (isSeedArticle(liveArticle.id)) {
+        setLiveArticle((prev) => ({ ...prev, index_in_rag: checked }));
+        onArticleUpdated(liveArticle.id, { index_in_rag: checked });
+        toast.success(
+          checked
+            ? 'Artikel wird wieder für KI-RAG indexiert.'
+            : 'Artikel wird nicht mehr für KI-RAG indexiert.',
+        );
+        return;
+      }
+      try {
+        await kbArticleApi.setIndexInRag(liveArticle.id, checked);
+        setLiveArticle((prev) => ({ ...prev, index_in_rag: checked }));
+        onArticleUpdated(liveArticle.id, { index_in_rag: checked });
+        toast.success(
+          checked
+            ? 'Artikel wird wieder für KI-RAG indexiert.'
+            : 'Artikel wird nicht mehr für KI-RAG indexiert.',
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'RAG-Toggle fehlgeschlagen.';
+        toast.error(message);
+      }
+    },
+    [liveArticle.id, onArticleUpdated],
+  );
+
   const handleAiExplain = useCallback(async () => {
     if (!isAiSearchReady) {
       throw new Error('Geist AI is not configured. Connect a model in AI Orchestrator settings.');
@@ -337,6 +363,8 @@ export function KnowledgeBaseArticlePage({
       onSaveContent={handleSaveContent}
       onHelpful={handleHelpful}
       onUnhelpful={handleUnhelpful}
+      indexInRag={liveArticle.index_in_rag !== false}
+      onToggleIndexInRag={(checked) => void handleToggleIndexInRag(checked)}
     />
   );
 }

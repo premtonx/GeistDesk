@@ -36,6 +36,8 @@ export interface KBArticleDetailViewProps {
   onSaveContent: (content: string) => Promise<void>;
   onHelpful: () => Promise<void>;
   onUnhelpful: () => Promise<void>;
+  indexInRag?: boolean;
+  onToggleIndexInRag?: (checked: boolean) => void;
 }
 
 export function KBArticleDetailView({
@@ -60,6 +62,8 @@ export function KBArticleDetailView({
   onSaveContent,
   onHelpful,
   onUnhelpful,
+  indexInRag,
+  onToggleIndexInRag,
 }: KBArticleDetailViewProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -262,6 +266,8 @@ export function KBArticleDetailView({
           isSummaryLoading={isSummaryLoading}
           relationships={relationships}
           onAskAi={(forceRefresh) => void onRegenerateSummary(forceRefresh)}
+          indexInRag={indexInRag}
+          onToggleIndexInRag={onToggleIndexInRag}
         />
       </aside>
 

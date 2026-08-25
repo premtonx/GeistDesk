@@ -8,6 +8,11 @@ import {
   updateDocDirect,
 } from '../lib/postgres-backend.js';
 import { executeAiFeatureRequest, requireLifecycleOutput } from '../lib/ai-orchestrator-service.js';
+import { resolveTenantFromRequest } from '../lib/tenant-context.js';
+import {
+  enqueueKbArticleIndex,
+  deleteEmbeddingsForSource,
+} from '../lib/ai/vector-queue.js';
 
 const router = Router();
 
@@ -176,7 +181,7 @@ router.patch('/:id', authenticate, async (req: Request, res: Response) => {
       return res.status(404).json({ error: 'Article not found.' });
     }
 
-    const allowed = ['content', 'title', 'alerts', 'infrastructureTrust', 'aiSummary', 'workflowSteps'] as const;
+    const allowed = ['content', 'title', 'alerts', 'infrastructureTrust', 'aiSummary', 'workflowSteps', 'index_in_rag'] as const;
     const patch: Record<string, unknown> = {};
     for (const key of allowed) {
       if (req.body?.[key] !== undefined) {
@@ -190,6 +195,17 @@ router.patch('/:id', authenticate, async (req: Request, res: Response) => {
 
     patch.updatedAt = new Date().toISOString();
     await updateDocDirect('kb_articles', id, patch);
+
+    // Selective RAG: toggling index_in_rag enqueues a re-index (or purges the
+    // existing vectors immediately when the article is opted out).
+    if (typeof patch.index_in_rag === 'boolean') {
+      const tenantId = resolveTenantFromRequest(req);
+      if (patch.index_in_rag) {
+        enqueueKbArticleIndex(id, tenantId);
+      } else {
+        await deleteEmbeddingsForSource(tenantId, 'KB_ARTICLE', id);
+      }
+    }
 
     const user = (req as any).user;
     if (patch.content || patch.title) {

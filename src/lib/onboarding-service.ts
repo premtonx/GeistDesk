@@ -43,6 +43,7 @@ import {
 import { getOllamaEndpoint } from './runtime-env.js';
 import { resolveTenantFromRequest, DEFAULT_TENANT_ID } from './tenant-context.js';
 import { safeErrorMessage } from './safe-log.js';
+import { setRagPipelineConfig } from './rag-pipeline-config.js';
 import type { EmailConnectionType } from './email-ingestion/types.js';
 import type { Request } from 'express';
 import {
@@ -121,6 +122,14 @@ export const completeOnboardingSchema = z.object({
     .optional()
     .default({ skip: true, channel: 'webhook' }),
   importSampleData: z.boolean().optional().default(false),
+  ragDefaults: z
+    .object({
+      indexResolvedTickets: z.boolean().optional().default(true),
+      indexNewKbArticles: z.boolean().optional().default(true),
+      detectDuplicates: z.boolean().optional().default(true),
+    })
+    .optional()
+    .default({ indexResolvedTickets: true, indexNewKbArticles: true, detectDuplicates: true }),
 });
 
 export const registerAdminSchema = z.object({
@@ -149,6 +158,12 @@ export interface OnboardingStatus {
     ollamaEndpoint: string;
     chatModel: string;
     embeddingModel: string;
+  };
+  /** Day-0 RAG pipeline defaults (indexing + duplicate detection). */
+  ragDefaults: {
+    indexResolvedTickets: boolean;
+    indexNewKbArticles: boolean;
+    detectDuplicates: boolean;
   };
   /** Public inbound-forwarding domain used for help-{slug}@<domain> addresses. */
   forwardingDomain: string;
@@ -308,6 +323,11 @@ function toStatus(config: ModuleConfig, hasAdmin: boolean, isAuthenticatedAdmin:
       ollamaEndpoint: '',
       chatModel: '',
       embeddingModel: '',
+    },
+    ragDefaults: {
+      indexResolvedTickets: true,
+      indexNewKbArticles: true,
+      detectDuplicates: true,
     },
     health: {
       database: 'ok',
@@ -991,6 +1011,21 @@ export async function completeOnboarding(
     );
   });
 
+  // Day-0 RAG pipeline defaults (idempotent upsert, safe to re-run on resume).
+  try {
+    await setRagPipelineConfig(
+      {
+        indexResolvedTickets: input.ragDefaults?.indexResolvedTickets,
+        indexNewKbArticles: input.ragDefaults?.indexNewKbArticles,
+        detectDuplicates: input.ragDefaults?.detectDuplicates,
+      },
+      tenantId,
+      cleanEmail,
+    );
+  } catch (err: unknown) {
+    console.warn('[Onboarding] Failed to persist RAG defaults:', (err as Error)?.message || err);
+  }
+
   return resumeOnboardingSteps(req, input, normalizeModuleConfig(nextConfig));
 }
 
@@ -1129,6 +1164,21 @@ async function resumeOnboardingSteps(
     }
     await persistOnboardingSteps({ ...steps, sampleImported: true });
     steps.sampleImported = true;
+  }
+
+  // 6. RAG pipeline defaults (idempotent upsert).
+  try {
+    await setRagPipelineConfig(
+      {
+        indexResolvedTickets: input.ragDefaults?.indexResolvedTickets,
+        indexNewKbArticles: input.ragDefaults?.indexNewKbArticles,
+        detectDuplicates: input.ragDefaults?.detectDuplicates,
+      },
+      tenantId,
+      cleanEmail,
+    );
+  } catch (err: unknown) {
+    console.warn('[Onboarding] Failed to persist RAG defaults:', (err as Error)?.message || err);
   }
 
   return {
