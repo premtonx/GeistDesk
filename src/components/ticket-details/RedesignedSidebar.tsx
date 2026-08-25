@@ -30,6 +30,7 @@ import {
   BookOpen,
   Send,
   UserCheck,
+  UserPlus,
   X,
   Check,
   RotateCcw,
@@ -232,10 +233,11 @@ export function RedesignedSidebar({
               onChange={(e) => {
                 const val = e.target.value;
                 if (val === '') {
+                  // Direct unassignment — no AI involvement.
                   onUpdateTicketField({ agentId: undefined, agentName: undefined });
-                } else if (onInitiateHandoff) {
-                  onInitiateHandoff({ agentName: val });
                 } else {
+                  // Direct assignment — persist immediately so the ticket is
+                  // never blocked on AI summary generation.
                   onUpdateTicketField({ agentName: val });
                 }
               }}
@@ -246,6 +248,19 @@ export function RedesignedSidebar({
               ))}
             </select>
           </div>
+
+          {ticket.agentName && onInitiateHandoff && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full text-xs font-semibold py-2 rounded-xl flex items-center justify-center gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50 transition-all cursor-pointer"
+              onClick={() => onInitiateHandoff({ agentName: ticket.agentName, agentId: ticket.agentId })}
+            >
+              <UserPlus className="w-3.5 h-3.5" />
+              {t('tickets.sidebar.transferTicket', 'Ticket übergeben')}
+            </Button>
+          )}
 
           <div className="space-y-1 pt-1">
             <label className="text-[9.5px] font-black text-muted-foreground uppercase block">{t('tickets.sidebar.dispatchCaseStatus', 'Dispatch case status')}</label>

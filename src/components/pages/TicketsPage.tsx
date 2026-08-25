@@ -728,24 +728,23 @@ export default function TicketsPage() {
   }, [selectedTicketId]);
 
   const initiateHandoff = async (id: string, data: any) => {
-    // Only trigger handoff if agentId or agentName is being updated
-    if (data.agentId !== undefined || data.agentName !== undefined) {
-      setPendingAgentUpdate({ id, data });
-      setIsHandoffOpen(true);
-      setIsGeneratingHandoff(true);
-      try {
-        const response = await axios.post(`/api/tickets/${id}/handoff-summary`);
-        setHandoffSummary(response.data);
-      } catch (e) {
-        toast.error("Failed to generate handoff summary");
-        setIsHandoffOpen(false);
-        // Fallback: update anyway if AI fails? User requirement says high-priority briefing, 
-        // so maybe we just allow manual update if AI fails, but let's keep it simple for now.
-      } finally {
-        setIsGeneratingHandoff(false);
-      }
-    } else {
-      ticketService.updateTicket(id, data);
+    // Store the pending assignment (only agent-related fields), open the modal,
+    // then try to enrich it with an AI briefing. The AI summary is optional:
+    // if it fails, the agent can still confirm the transfer.
+    setPendingAgentUpdate({ id, data });
+    setIsHandoffOpen(true);
+    setIsGeneratingHandoff(true);
+    setHandoffSummary(null);
+    try {
+      const response = await axios.post(`/api/tickets/${id}/handoff-summary`);
+      setHandoffSummary(response.data);
+    } catch (e) {
+      // Non-blocking: keep the modal open so the transfer can still be
+      // confirmed. The dialog already shows a fallback hint when there is
+      // no summary.
+      console.warn('Handoff summary generation failed — proceeding without briefing.', e);
+    } finally {
+      setIsGeneratingHandoff(false);
     }
   };
 
@@ -753,22 +752,41 @@ export default function TicketsPage() {
     if (!pendingAgentUpdate || !selectedTicketId) return;
 
     try {
-      // 1. Update the ticket assignee
-      await ticketService.updateTicket(pendingAgentUpdate.id, pendingAgentUpdate.data);
-      
-      // 2. Save the Golden Note if we have a summary
-      if (handoffSummary) {
-        const content = `[NEXUS HANDOFF BRIEFING]\n\nCUSTOMER GOAL: ${handoffSummary.customerGoal}\n\nEFFORT SO FAR:\n${handoffSummary.effortSoFar.map(e => `• ${e}`).join('\n')}`;
-        await axios.post(`/api/tickets/${selectedTicketId}/golden-note`, {
-          content,
-          authorId: user?.uid,
-          authorName: user?.email || 'System'
+      // 1. Update the ticket assignee — always the primary action.
+      const { data } = pendingAgentUpdate;
+      if (data && (data.agentName !== undefined || data.agentId !== undefined)) {
+        await ticketService.updateTicket(pendingAgentUpdate.id, {
+          agentName: data.agentName,
+          agentId: data.agentId,
         });
-        toast.success("Handoff successful and Golden Note saved.");
+        setAllTickets(prev =>
+          prev.map(t =>
+            t.id === pendingAgentUpdate.id
+              ? { ...t, agentName: data.agentName, agentId: data.agentId }
+              : t,
+          ),
+        );
+      }
+
+      // 2. Best-effort: save the Golden Note briefing if we have a summary.
+      if (handoffSummary) {
+        try {
+          const content = `[NEXUS HANDOFF BRIEFING]\n\nCUSTOMER GOAL: ${handoffSummary.customerGoal}\n\nEFFORT SO FAR:\n${handoffSummary.effortSoFar.map(e => `• ${e}`).join('\n')}`;
+          await axios.post(`/api/tickets/${selectedTicketId}/golden-note`, {
+            content,
+            authorId: user?.uid,
+            authorName: user?.email || 'System'
+          });
+          toast.success("Handoff successful and Golden Note saved.");
+        } catch (e) {
+          console.warn('Golden Note could not be saved, but the handoff completed.', e);
+          toast.success("Handoff successful. (Golden Note could not be saved.)");
+        }
       } else {
         toast.success("Handoff successful.");
       }
     } catch (e) {
+      console.error('Handoff assignment failed:', e);
       toast.error("Handoff failed.");
     } finally {
       setIsHandoffOpen(false);

@@ -811,6 +811,7 @@
       "responsibleAgent": "Responsible agent",
       "clickToAssign": "Click below to assign this ticket",
       "selectDispatchAgent": "Select dispatch agent",
+      "transferTicket": "Transfer ticket",
       "dispatchCaseStatus": "Dispatch case status",
       "slaHelpEscalation": "SLA help escalation",
       "supportAccountContext": "Support & account",
