@@ -48,6 +48,23 @@ export function TicketDetailContextPane(props: TicketDetailContextPaneProps) {
     handleInlineUpdate,
   } = props;
 
+  // Defensive: if the selected ticket disappears from the master list (e.g.
+  // an assignment moved it out of the active filter), render a placeholder
+  // instead of crashing on nested property access.
+  if (!selectedTicket) {
+    return (
+      <aside className="shrink-0 w-[325px] border-l border-border bg-muted xl:flex xl:relative xl:sticky xl:top-6 xl:h-[calc(100vh-5rem)]">
+        <div className="flex flex-1 items-center justify-center p-6 text-center">
+          <p className="text-xs text-muted-foreground font-medium">
+            Kein Ticket ausgewählt. Bitte ein Ticket aus der Liste öffnen.
+          </p>
+        </div>
+      </aside>
+    );
+  }
+
+  const tags = selectedTicket.tags ?? [];
+
   return (
                 <aside className={cn(
                   "shrink-0 border-l border-border overflow-y-auto custom-scrollbar z-30 transition-all",
@@ -58,35 +75,35 @@ export function TicketDetailContextPane(props: TicketDetailContextPaneProps) {
                     ? "flex absolute inset-y-0 right-0 h-full w-[min(22rem,92vw)] shadow-2xl bg-white dark:bg-slate-900"
                     : "hidden bg-muted"
                 )}>
-                     <RedesignedSidebar 
-                      ticket={selectedTicket}
-                      contact={ticketContact}
-                      company={ticketCompany}
-                      onUpdateTicketField={(data) => {
-                        handleInlineUpdate(selectedTicket.id, data);
+                    <RedesignedSidebar 
+                     ticket={selectedTicket}
+                     contact={ticketContact}
+                     company={ticketCompany}
+                     onUpdateTicketField={(data) => {
+                       handleInlineUpdate(selectedTicket.id, data);
+                     }}
+                      isAiReady={isAiReady}
+                      isAiDrafting={isAiDrafting}
+                      onDraftWithAI={generateAiReply}
+                      onConvertToKB={handleConvertToKB}
+                      suggestedNeuralLinks={suggestedNeuralLinks}
+                      onLinkTicket={linkTicket}
+                      onUnlinkTicket={unlinkTicket}
+                      tagsInput={newTagInput}
+                      onChangeTagsInput={setNewTagInput}
+                      onInitiateHandoff={(data) => initiateHandoff(selectedTicket.id, data)}
+                      onCloseMobile={() => setIsMobilePropertiesOpen(false)}
+                      onAddTag={() => {
+                        if (newTagInput.trim() && selectedTicket) {
+                          handleInlineUpdate(selectedTicket.id, { tags: [...tags, newTagInput.trim()] });
+                          setNewTagInput('');
+                        }
                       }}
-                       isAiReady={isAiReady}
-                       isAiDrafting={isAiDrafting}
-                       onDraftWithAI={generateAiReply}
-                       onConvertToKB={handleConvertToKB}
-                       suggestedNeuralLinks={suggestedNeuralLinks}
-                       onLinkTicket={linkTicket}
-                       onUnlinkTicket={unlinkTicket}
-                       tagsInput={newTagInput}
-                       onChangeTagsInput={setNewTagInput}
-                       onInitiateHandoff={(data) => initiateHandoff(selectedTicket.id, data)}
-                       onCloseMobile={() => setIsMobilePropertiesOpen(false)}
-                       onAddTag={() => {
-                         if (newTagInput.trim() && selectedTicket) {
-                           handleInlineUpdate(selectedTicket.id, { tags: [...selectedTicket.tags, newTagInput.trim()] });
-                           setNewTagInput('');
-                         }
-                       }}
-                       
-                        suggestedTags={suggestedTags}
-                       allTickets={allTickets}
-                       
-                     />
-            </aside>
+                      
+                       suggestedTags={suggestedTags}
+                      allTickets={allTickets}
+                      
+                    />
+           </aside>
   );
 }

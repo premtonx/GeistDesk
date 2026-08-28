@@ -305,8 +305,12 @@ export default function TicketsPage() {
         )
       : data;
 
+    // Snapshot the pre-update ticket so a failed write can be rolled back.
+    const original = allTickets.find(t => t.id === ticketId);
+
     // Optimistic UI Update — selectedTicket is derived from allTickets,
-    // so updating allTickets also refreshes the detail view.
+    // so updating allTickets also refreshes the detail view. Shallow-spread
+    // preserves nested structures (tags, messages, customFields, aiMetadata).
     setAllTickets(prev => prev.map(t => (t.id === ticketId ? { ...t, ...payload } : t)));
 
     try {
@@ -315,6 +319,11 @@ export default function TicketsPage() {
         ? t('tickets.assignedToast', 'Ticket erfolgreich zugewiesen')
         : t('tickets.updatedToast', 'Ticket updated'));
     } catch (error) {
+      // Roll back the optimistic merge on failure so the UI never shows a
+      // phantom assignment/status.
+      if (original) {
+        setAllTickets(prev => prev.map(t => (t.id === ticketId ? original : t)));
+      }
       toast.error(t('tickets.failedToast', 'Failed to update ticket'));
     }
   };
@@ -608,7 +617,15 @@ export default function TicketsPage() {
     setCurrentPage(1);
   }, [totalTicketsCount, pageSize]);
 
-  const selectedTicket = allTickets.find(t => t.id === selectedTicketId) as any;
+  // Derive the selected ticket from the MASTER list (allTickets), not from the
+  // filtered subset. Assigning a ticket can move it out of the active view
+  // (e.g. "Nicht zugewiesen"), so the detail pane must keep resolving the
+  // selection against the full list or it would crash with a null dereference
+  // the moment the ticket disappears from the filter.
+  const selectedTicket = useMemo(() => {
+    if (!selectedTicketId) return null;
+    return allTickets.find((t) => t.id === selectedTicketId) || null;
+  }, [allTickets, selectedTicketId]) as TicketType | null;
 
   const handleChecklistUpdated = useCallback(
     (aiChecklist: TicketChecklistItem[]) => {

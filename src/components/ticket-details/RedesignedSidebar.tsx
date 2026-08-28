@@ -588,11 +588,11 @@ export function RedesignedSidebar({
                     <Sparkles className="w-3 h-3" /> {t('tickets.sidebar.aiTagSuggestions', 'AI tag suggestions')}
                   </span>
                   <div className="flex flex-wrap gap-1 pt-1">
-                    {suggestedTags.filter(st => !ticket.tags.includes(st)).map(st => (
+                    {suggestedTags.filter(st => !(ticket.tags ?? []).includes(st)).map(st => (
                       <button 
                         key={st}
                         className="text-[9px] font-black bg-white hover:bg-purple-100 border border-purple-200 text-purple-700 px-2 py-0.5 rounded-full transition-all"
-                        onClick={() => onUpdateTicketField({ tags: [...ticket.tags, st] })}
+                        onClick={() => onUpdateTicketField({ tags: [...(ticket.tags ?? []), st] })}
                       >
                         +#{st}
                       </button>

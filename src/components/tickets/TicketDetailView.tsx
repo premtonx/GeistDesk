@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { toast } from 'sonner';
 import {
   BookOpen, ChevronDown, ChevronLeft, Mail, MessageSquare,
-  RefreshCw, SlidersHorizontal, Sparkles,
+  RefreshCw, SlidersHorizontal, Sparkles, Ticket,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
@@ -144,6 +144,32 @@ export function TicketDetailView(props: TicketDetailViewProps) {
     onConvertToKB,
     isKbDrafting,
   } = props;
+
+  // Defensive guard: never crash the ticket workspace when the selected
+  // ticket is temporarily unavailable (e.g. removed from the master list
+  // after an assignment in a filtered view). Render an empty state instead.
+  if (!selectedTicket) {
+    return (
+      <div className="flex-1 flex flex-col items-center justify-center text-center p-8 bg-white dark:bg-slate-900 min-h-0">
+        <Ticket className="w-10 h-10 text-muted-foreground opacity-40" />
+        <h2 className="text-xl font-bold mt-4 text-foreground">
+          {t('tickets.detail.notFound', 'Ticket nicht gefunden')}
+        </h2>
+        <p className="text-sm text-muted-foreground mt-2 max-w-sm">
+          {t('tickets.detail.notFoundDesc', 'Das Ticket ist nicht mehr in der aktuellen Ansicht. Bitte zurück zur Liste und ein anderes Ticket wählen.')}
+        </p>
+        <Button
+          variant="outline"
+          size="sm"
+          className="mt-6"
+          onClick={closeFullTicketView}
+        >
+          <ChevronLeft className="w-4 h-4 mr-1" />
+          {t('tickets.detail.backToList', 'Back to tickets')}
+        </Button>
+      </div>
+    );
+  }
 
   return (
     <>
