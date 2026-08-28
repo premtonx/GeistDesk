@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { getInitials } from '../../lib/utils';
 import { 
   ShieldCheck, 
   AlertCircle, 
@@ -129,9 +130,11 @@ export function ConversationTimeline({
             timeDisplay = dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
           }
 
-          // Initials calculation for avatar
-          const initials = item.senderName
-            ? item.senderName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
+          // Initials calculation for avatar — senderName may be a non-string
+          // value persisted by the generic DB layer, so never call string
+          // methods on it directly.
+          const initials = typeof item.senderName === 'string' && item.senderName.trim()
+            ? getInitials(item.senderName)
             : isCustomer ? 'C' : isBot ? 'GE' : 'A';
 
           return (

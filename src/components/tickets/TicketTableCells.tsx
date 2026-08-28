@@ -10,6 +10,7 @@ import {
 } from '../ui/dropdown-menu';
 import { TicketPriority, TicketStatus } from '../../types';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { getInitials } from '../../lib/utils';
 
 const STATUS_STYLES: Record<string, { pill: string; dot: string }> = {
   open: { pill: 'bg-blue-50 text-blue-700 border-blue-100', dot: 'bg-blue-500' },
@@ -149,7 +150,7 @@ export function TicketAssigneeChip({
 }: TicketAssigneeChipProps) {
   const { t } = useTranslation();
   const display = agentName ?? t('tickets.unassigned', 'Unassigned');
-  const initial = display.charAt(0).toUpperCase();
+  const initial = getInitials(display);
 
   return (
     <DropdownMenu>

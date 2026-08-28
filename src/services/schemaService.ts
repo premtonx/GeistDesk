@@ -17,14 +17,21 @@ export interface CustomField {
 
 export const schemaService = {
   async getCompanySchema(): Promise<CustomField[]> {
-    const docRef = doc(db, 'settings', 'company_schema');
-    const snapshot = await getDoc(docRef);
-    
-    if (!snapshot.exists()) {
+    try {
+      const docRef = doc(db, 'settings', 'company_schema');
+      const snapshot = await getDoc(docRef);
+
+      if (!snapshot.exists()) {
+        return [];
+      }
+
+      return (snapshot.data().fields || []) as CustomField[];
+    } catch (e) {
+      // A 403 from the generic /api/db router (or any transient read error)
+      // must never block the ticket workspace — fall back to an empty schema.
+      console.warn('[schemaService] getCompanySchema failed, falling back to empty schema.', e);
       return [];
     }
-    
-    return (snapshot.data().fields || []) as CustomField[];
   },
 
   async saveCompanySchema(fields: CustomField[]) {
@@ -33,14 +40,21 @@ export const schemaService = {
   },
 
   async getContactSchema(): Promise<CustomField[]> {
-    const docRef = doc(db, 'settings', 'contact_schema');
-    const snapshot = await getDoc(docRef);
-    
-    if (!snapshot.exists()) {
+    try {
+      const docRef = doc(db, 'settings', 'contact_schema');
+      const snapshot = await getDoc(docRef);
+
+      if (!snapshot.exists()) {
+        return [];
+      }
+
+      return (snapshot.data().fields || []) as CustomField[];
+    } catch (e) {
+      // A 403 from the generic /api/db router (or any transient read error)
+      // must never block the ticket workspace — fall back to an empty schema.
+      console.warn('[schemaService] getContactSchema failed, falling back to empty schema.', e);
       return [];
     }
-    
-    return (snapshot.data().fields || []) as CustomField[];
   },
 
   async saveContactSchema(fields: CustomField[]) {

@@ -8,6 +8,7 @@ import {
 import { toast } from 'sonner';
 import { AnimatePresence, motion } from 'motion/react';
 import { cn } from '../../lib/utils';
+import { getInitials } from '../../lib/utils';
 import { redactPII } from '../../lib/ai/pii-shield';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -844,7 +845,7 @@ export function TicketListView(props: TicketListViewProps) {
                                viewDensity === 'comfortable' ? "h-8 w-8" : "h-7 w-7"
                              )}>
                                 <AvatarFallback className="bg-accent text-primary font-bold text-xs uppercase">
-                                   {ticket.customerName?.charAt(0) || 'U'}
+                                   {getInitials(ticket.customerName) || 'U'}
                                 </AvatarFallback>
                              </Avatar>
                              <div className="flex flex-col min-w-0">
@@ -929,7 +930,7 @@ export function TicketListView(props: TicketListViewProps) {
                                       <Avatar key={agent.uid} className="h-4 w-4 border border-background shrink-0">
                                         <AvatarImage src={agent.avatar} alt={agent.name} />
                                         <AvatarFallback className="text-[6px] bg-primary/10 text-primary font-bold">
-                                          {agent.name.charAt(0)}
+                                          {getInitials(agent.name)}
                                         </AvatarFallback>
                                       </Avatar>
                                     ))
@@ -1045,7 +1046,7 @@ export function TicketListView(props: TicketListViewProps) {
                           <div className="flex items-center gap-2.5 min-w-0">
                             <Avatar className="h-8 w-8 border border-border shrink-0 shadow-xs">
                               <AvatarFallback className="bg-accent text-primary font-bold text-xs uppercase">
-                                 {ticket.customerName?.charAt(0)}
+                                 {getInitials(ticket.customerName)}
                               </AvatarFallback>
                             </Avatar>
                             <div className="flex flex-col min-w-0">
@@ -1123,7 +1124,7 @@ export function TicketListView(props: TicketListViewProps) {
                             <div className="flex items-center gap-1 bg-muted/60 px-2 py-0.5 rounded-full border border-border/50">
                               <Avatar className="h-4.5 w-4.5 border shrink-0">
                                 <AvatarFallback className="text-[7.5px] bg-[#E8F0FE] text-primary font-bold">
-                                  {ticket.agentName?.charAt(0) || '?'}
+                                  {getInitials(ticket.agentName) || '?'}
                                 </AvatarFallback>
                               </Avatar>
                               <span className="max-w-[70px] truncate text-[9.5px] font-extrabold text-slate-700 dark:text-slate-300">

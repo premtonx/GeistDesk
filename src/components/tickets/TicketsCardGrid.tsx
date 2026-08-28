@@ -2,6 +2,7 @@ import React from 'react';
 import { Mail, MessageSquare } from 'lucide-react';
 import { Ticket as TicketType } from '../../types';
 import { cn } from '../../lib/utils';
+import { getInitials } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { TicketStatusChip, TicketPriorityChip, TicketAssigneeChip } from './TicketTableCells';
@@ -51,7 +52,7 @@ export function TicketsCardGrid({
             <div className="flex items-center gap-2.5 mb-2">
               <Avatar className="h-7 w-7 border border-slate-200 shrink-0">
                 <AvatarFallback className="text-[10px] font-bold bg-slate-100 uppercase">
-                  {ticket.customerName?.charAt(0) ?? 'U'}
+                  {getInitials(ticket.customerName) || 'U'}
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1">

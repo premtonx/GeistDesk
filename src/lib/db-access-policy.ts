@@ -46,6 +46,9 @@ export const DB_AUTHENTICATED_COLLECTIONS = new Set([
   'kb_categories',
   'kb_settings',
   'platform_analytics',
+  // Workspace defaults read by schemaService (contact/company field schemas).
+  'settings',
+  'contact_schemas',
 ]);
 
 /**

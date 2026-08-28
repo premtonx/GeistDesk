@@ -11,6 +11,7 @@ import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { getInitials } from '../../lib/utils';
 
 interface CustomerTabContentProps {
   ticket: TicketType;
@@ -41,7 +42,7 @@ export function CustomerTabContent({
             <CardContent className="p-6 space-y-5">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary text-lg font-black shrink-0 shadow-sm border">
-                  {(contact?.name || ticket.customerName).charAt(0)}
+                  {getInitials(contact?.name || ticket.customerName)}
                 </div>
                 <div>
                   <h3 className="text-base font-bold text-foreground">{contact?.name || ticket.customerName}</h3>

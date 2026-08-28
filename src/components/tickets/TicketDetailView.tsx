@@ -5,6 +5,7 @@ import {
   RefreshCw, SlidersHorizontal, Sparkles, Ticket,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
+import { getInitials } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { ScrollArea } from '../ui/scroll-area';
@@ -371,7 +372,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                                           className="p-3 bg-amber-50/90 dark:bg-slate-900 border border-amber-200/50 dark:border-slate-800 rounded-xl shadow-sm text-slate-900 dark:text-slate-100 flex items-start gap-3"
                                         >
                                           <div className="w-6.5 h-6.5 rounded-full bg-amber-100/80 dark:bg-slate-800 border border-amber-200 dark:border-slate-700 text-amber-800/80 dark:text-slate-200 flex items-center justify-center shrink-0 text-[10px] font-black uppercase">
-                                            {comment.agentName ? comment.agentName.substring(0, 2) : 'AG'}
+                                            {comment.agentName ? getInitials(comment.agentName) : 'AG'}
                                           </div>
                                           <div className="flex-1 min-w-0 space-y-0.5">
                                             <div className="flex items-center justify-between">

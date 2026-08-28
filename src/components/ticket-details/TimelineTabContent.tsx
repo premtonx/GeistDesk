@@ -58,7 +58,9 @@ export function TimelineTabContent({
         id: `event-msg-${m.id}`,
         type: m.senderType === 'customer' ? 'incoming' : 'reply',
         title,
-        desc: m.content.substring(0, 100) + (m.content.length > 100 ? '...' : ''),
+        desc: typeof m.content === 'string'
+          ? m.content.substring(0, 100) + (m.content.length > 100 ? '...' : '')
+          : String(m.content ?? '').substring(0, 100),
         time: msgTime,
         actor: m.senderName || t('tickets.timelineTab.anonymous', 'Anonymous')
       });

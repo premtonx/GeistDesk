@@ -45,6 +45,7 @@ import { SuggestedLink } from '../../services/neuralLinkService';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { getTicketKind } from '../../lib/ticketWorkspace';
 import { deriveAccountHealth } from '../../lib/account-health';
+import { getInitials } from '../../lib/utils';
 import { AccountHealthSmiley, accountHealthAriaLabel } from './AccountHealthSmiley';
 
 const STATUS_KEYS = ['open', 'pending', 'resolved', 'closed', 'qs', 'merged', 'trash'] as const;
@@ -209,7 +210,7 @@ export function RedesignedSidebar({
                 ? "bg-primary/10 text-primary border-primary/20" 
                 : "bg-slate-100 text-slate-400 border-slate-200"
             }`}>
-              {ticket.agentName ? ticket.agentName.substring(0, 2).toUpperCase() : "?"}
+              {ticket.agentName ? getInitials(ticket.agentName) : "?"}
             </div>
             
             <div className="flex-1 min-w-0">
@@ -514,7 +515,7 @@ export function RedesignedSidebar({
               <div className="flex items-center gap-2">
                 <Avatar className="h-7 w-7 border">
                   <AvatarFallback className="bg-teal-50 text-teal-700 text-[10px] font-bold">
-                    {(contact?.name || ticket.customerName).charAt(0)}
+                    {getInitials(contact?.name || ticket.customerName)}
                   </AvatarFallback>
                 </Avatar>
                 <div>
@@ -543,16 +544,19 @@ export function RedesignedSidebar({
             <div className="space-y-3.5 pt-1">
               <div className="flex flex-wrap gap-1">
                 {ticket.tags && ticket.tags.length > 0 ? (
-                  ticket.tags.map(tag => (
+                  ticket.tags.map(tag => {
+                    const tagLabel = typeof tag === 'string' ? tag : String(tag ?? '');
+                    return (
                     <Badge 
-                      key={tag} 
+                      key={tagLabel} 
                       className="bg-purple-100 text-purple-800 hover:bg-purple-100/90 hover:text-red-500 border-none text-[9px] font-bold px-2 py-0.5 gap-1 shrink-0 cursor-pointer"
                       onClick={() => onUpdateTicketField({ tags: ticket.tags.filter(t => t !== tag) })}
                     >
-                      <span>#{tag}</span>
+                      <span>#{tagLabel}</span>
                       <span className="font-bold text-[8px] opacity-70">x</span>
                     </Badge>
-                  ))
+                    );
+                  })
                 ) : (
                   <span className="text-[10px] text-muted-foreground italic">{t('tickets.sidebar.noTagsDefined', 'No manual tags defined.')}</span>
                 )}
