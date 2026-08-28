@@ -14,7 +14,7 @@ import {
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Ticket as TicketType, Company, Contact } from '../../types';
-import { cn } from '../../lib/utils';
+import { cn, safeString } from '../../lib/utils';
 
 interface SmartContextPanelProps {
   ticket: TicketType;
@@ -88,8 +88,8 @@ export function SmartContextPanel({
             <User className="w-3.5 h-3.5 text-blue-500" />
           </div>
           <div className="space-y-1">
-            <h4 className="text-xs font-black truncate text-foreground">{contact?.name || ticket.customerName}</h4>
-            <p className="text-[10px] text-muted-foreground truncate">{contact?.email || `${ticket.customerId}@domain.com`}</p>
+            <h4 className="text-xs font-black truncate text-foreground">{safeString(contact?.name ?? ticket.customerName)}</h4>
+            <p className="text-[10px] text-muted-foreground truncate">{safeString(contact?.email) || `${ticket.customerId}@domain.com`}</p>
           </div>
           <div className="flex items-center gap-1.5 pt-1 border-t border-border/60">
             <Badge className="bg-blue-100 text-blue-700 hover:bg-blue-100/80 text-[8px] h-4 font-black">

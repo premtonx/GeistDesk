@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useTranslation } from '../../lib/context/I18nContext';
-import { getInitials } from '../../lib/utils';
+import { getInitials, safeString } from '../../lib/utils';
 import { 
   ShieldCheck, 
   AlertCircle, 
@@ -62,7 +62,7 @@ export function ConversationTimeline({
     }> = [
       {
         id: 'opening-post',
-        senderName: ticket.customerName || 'Customer',
+        senderName: safeString(ticket.customerName, 'Customer'),
         senderType: 'customer',
         createdAt: ticket.createdAt,
         content: translatedTicket?.description || ticket.description,
@@ -76,13 +76,14 @@ export function ConversationTimeline({
     messages.forEach(msg => {
       // Determine senderType classification based on name or system classifications
       let isBot = msg.senderType === 'ai';
-      if (msg.senderName && (msg.senderName.toLowerCase().includes('geist') || msg.senderName.toLowerCase().includes('shield') || msg.senderName.toLowerCase().includes('dropzone') || msg.senderName.toLowerCase().includes('bot'))) {
+      const senderName = safeString(msg.senderName);
+      if (senderName && (senderName.toLowerCase().includes('geist') || senderName.toLowerCase().includes('shield') || senderName.toLowerCase().includes('dropzone') || senderName.toLowerCase().includes('bot'))) {
         isBot = true;
       }
 
       items.push({
         id: msg.id,
-        senderName: msg.senderName || (msg.senderType === 'customer' ? 'Customer' : 'Agent'),
+        senderName: senderName || (msg.senderType === 'customer' ? 'Customer' : 'Agent'),
         senderType: isBot ? 'bot' : (msg.senderType === 'customer' ? 'customer' : 'agent'),
         createdAt: msg.createdAt,
         content: msg.content,

@@ -15,3 +15,21 @@ export function getInitials(val: unknown): string {
   if (typeof val !== 'string' || !val.trim()) return '?';
   return val.trim().charAt(0).toUpperCase();
 }
+
+/**
+ * Safely coerce any value into a string suitable for rendering as a JSX child.
+ * React throws "Objects are not valid as a React child" when an object lands
+ * directly inside JSX — this can happen when assignee/customer fields are
+ * persisted as `{ name, id }` objects instead of primitives. Objects are
+ * flattened to their most display-friendly scalar property.
+ */
+export function safeString(val: unknown, fallback = ''): string {
+  if (val === null || val === undefined) return fallback;
+  if (typeof val === 'string') return val;
+  if (typeof val === 'object') {
+    const obj = val as Record<string, unknown>;
+    const scalar = obj.name ?? obj.displayName ?? obj.label ?? obj.email ?? obj.id ?? fallback;
+    return scalar === null || scalar === undefined ? fallback : String(scalar);
+  }
+  return String(val);
+}

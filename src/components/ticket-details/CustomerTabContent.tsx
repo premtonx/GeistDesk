@@ -11,7 +11,7 @@ import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Separator } from '../ui/separator';
 import { useTranslation } from '../../lib/context/I18nContext';
-import { getInitials } from '../../lib/utils';
+import { getInitials, safeString } from '../../lib/utils';
 
 interface CustomerTabContentProps {
   ticket: TicketType;
@@ -45,8 +45,8 @@ export function CustomerTabContent({
                   {getInitials(contact?.name || ticket.customerName)}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-foreground">{contact?.name || ticket.customerName}</h3>
-                  <p className="text-xs text-muted-foreground">{contact?.email || `${ticket.customerId}@domain.com`}</p>
+                  <h3 className="text-base font-bold text-foreground">{safeString(contact?.name ?? ticket.customerName)}</h3>
+                  <p className="text-xs text-muted-foreground">{safeString(contact?.email) || `${ticket.customerId}@domain.com`}</p>
                   <p className="text-[10px] text-muted-foreground mt-1">{t('tickets.customerTab.customerId', 'Customer ID')}: <span className="font-mono font-bold">{ticket.customerId}</span></p>
                 </div>
               </div>

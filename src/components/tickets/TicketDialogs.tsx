@@ -4,7 +4,7 @@ import {
   Trash2, UserPlus, Zap,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { cn } from '../../lib/utils';
+import { cn, safeString } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -280,10 +280,10 @@ export function TicketDialogs(props: TicketDialogsProps) {
                    >
                      <div className="flex flex-col gap-1 overflow-hidden">
                        <span className="text-xs font-black text-indigo-600 uppercase tracking-tighter">#{mergeTicket.id.slice(-5).toUpperCase()}</span>
-                       <span className="text-sm font-bold text-foreground truncate">{mergeTicket.subject}</span>
+                       <span className="text-sm font-bold text-foreground truncate">{safeString(mergeTicket.subject)}</span>
                        <div className="flex items-center gap-2 mt-1">
                           <Badge className="text-[9px] font-bold h-4 uppercase">{t(`tickets.status.${(mergeTicket.status || 'open').toLowerCase()}`, mergeTicket.status || 'Offen')}</Badge>
-                          <span className="text-[10px] text-muted-foreground">{mergeTicket.customerName}</span>
+                          <span className="text-[10px] text-muted-foreground">{safeString(mergeTicket.customerName)}</span>
                        </div>
                      </div>
                      <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />

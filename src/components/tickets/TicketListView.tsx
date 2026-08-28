@@ -8,7 +8,7 @@ import {
 import { toast } from 'sonner';
 import { AnimatePresence, motion } from 'motion/react';
 import { cn } from '../../lib/utils';
-import { getInitials } from '../../lib/utils';
+import { getInitials, safeString } from '../../lib/utils';
 import { redactPII } from '../../lib/ai/pii-shield';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -852,9 +852,9 @@ export function TicketListView(props: TicketListViewProps) {
                                 <span className={cn(
                                   "font-bold text-foreground truncate",
                                   viewDensity === 'comfortable' ? "text-xs" : "text-[11px]"
-                                )}>{ticket.customerName}</span>
+                                )}>{safeString(ticket.customerName)}</span>
                                 <div className="flex items-center gap-1 mt-0.5">
-                                  <span className="text-[10px] text-slate-500 truncate">{ticket.company || t('tickets.privateCustomer', 'Private')}</span>
+                                  <span className="text-[10px] text-slate-500 truncate">{safeString(ticket.company) || t('tickets.privateCustomer', 'Private')}</span>
                                 </div>
                              </div>
                           </div>
@@ -874,7 +874,7 @@ export function TicketListView(props: TicketListViewProps) {
                                "font-bold text-slate-900 dark:text-slate-100 truncate group-hover:text-primary transition-colors",
                                viewDensity === 'comfortable' ? "text-xs" : "text-[11px]"
                              )}>
-                               {ticket.subject}
+                              {safeString(ticket.subject)}
                              </h3>
                             <div className="flex items-center gap-1.5 flex-wrap">
                                <span className="text-[10px] text-slate-400 font-medium font-mono shrink-0">
@@ -940,7 +940,7 @@ export function TicketListView(props: TicketListViewProps) {
 
                              {viewDensity === 'comfortable' && (
                                <p className="text-[11px] text-muted-foreground truncate opacity-75 font-medium">
-                                  {redactPII(stripHtml(ticket.description))}
+                                  {redactPII(stripHtml(safeString(ticket.description)))}
                                 </p>
                              )}
                           </div>
@@ -1013,10 +1013,12 @@ export function TicketListView(props: TicketListViewProps) {
                 ) : (
                   tickets.map(ticket => {
                     const tier = (() => {
-                      if (ticket.priority === 'urgent' || ticket.tags?.includes('VIP') || ticket.customerName?.toLowerCase().includes('sarah')) {
+                      const customerName = safeString(ticket.customerName).toLowerCase();
+                      const company = safeString(ticket.company).toLowerCase();
+                      if (ticket.priority === 'urgent' || ticket.tags?.includes('VIP') || customerName.includes('sarah')) {
                         return { label: t('tickets.tiers.vip', 'VIP'), style: 'bg-amber-500/10 text-amber-600 border-amber-500/20' };
                       }
-                      if (ticket.company?.toLowerCase().includes('advanced') || ticket.company?.toLowerCase().includes('global') || ticket.tags?.includes('Enterprise')) {
+                      if (company.includes('advanced') || company.includes('global') || ticket.tags?.includes('Enterprise')) {
                         return { label: t('tickets.tiers.enterprise', 'Enterprise'), style: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' };
                       }
                       return { label: t('tickets.tiers.standard', 'Standard'), style: 'bg-slate-100 text-slate-500 border-slate-200' };
@@ -1050,9 +1052,9 @@ export function TicketListView(props: TicketListViewProps) {
                               </AvatarFallback>
                             </Avatar>
                             <div className="flex flex-col min-w-0">
-                              <span className="font-extrabold text-xs text-foreground truncate">{ticket.customerName}</span>
+                              <span className="font-extrabold text-xs text-foreground truncate">{safeString(ticket.customerName)}</span>
                               <div className="flex items-center gap-1">
-                                <span className="text-[10px] text-muted-foreground truncate">{ticket.company || t('tickets.privateCustomer', 'Private')}</span>
+                                <span className="text-[10px] text-muted-foreground truncate">{safeString(ticket.company) || t('tickets.privateCustomer', 'Private')}</span>
                                 <Badge variant="outline" className={cn("text-[8px] h-3.5 px-1.5 pb-0 scale-90 select-none font-bold", tier.style)}>
                                   {tier.label}
                                 </Badge>
@@ -1088,10 +1090,10 @@ export function TicketListView(props: TicketListViewProps) {
                             )}
                           </div>
                           <h4 className="font-extrabold text-xs text-foreground leading-snug line-clamp-2">
-                            {ticket.subject}
+                            {safeString(ticket.subject)}
                           </h4>
                           <p className="text-[11px] text-muted-foreground line-clamp-2 leading-normal select-none font-medium mt-0.5">
-                            {redactPII(stripHtml(ticket.description))}
+                            {redactPII(stripHtml(safeString(ticket.description)))}
                           </p>
                         </div>
 
@@ -1115,7 +1117,7 @@ export function TicketListView(props: TicketListViewProps) {
                                  ticket.priority === 'high' ? "bg-amber-500" :
                                  ticket.priority === 'medium' ? "bg-blue-500" : "bg-slate-400"
                               )} />
-                              <span>{t(`tickets.priority.${ticket.priority || 'medium'}`, ticket.priority || 'Mittel')}</span>
+                              <span>{t(`tickets.priority.${safeString(ticket.priority) || 'medium'}`, safeString(ticket.priority, 'Mittel'))}</span>
                             </span>
                           </div>
 
@@ -1128,7 +1130,7 @@ export function TicketListView(props: TicketListViewProps) {
                                 </AvatarFallback>
                               </Avatar>
                               <span className="max-w-[70px] truncate text-[9.5px] font-extrabold text-slate-700 dark:text-slate-300">
-                                {ticket.agentId === user?.uid ? t('tickets.assigneeMeShort', 'Ich') : (ticket.agentName || t('tickets.unassigned', 'Nicht zugewiesen'))}
+                                {ticket.agentId === user?.uid ? t('tickets.assigneeMeShort', 'Ich') : (safeString(ticket.agentName, t('tickets.unassigned', 'Nicht zugewiesen')))}
                               </span>
                             </div>
                             <span className="text-[9.5px]">

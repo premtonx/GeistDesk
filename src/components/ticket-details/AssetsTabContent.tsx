@@ -17,7 +17,7 @@ import { Textarea } from '../ui/textarea';
 import { vaultService } from '../../services/vaultService';
 import { ticketService } from '../../services/ticketService';
 import { toast } from 'sonner';
-import { cn } from '../../lib/utils';
+import { cn, safeString } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 
 interface AssetsTabContentProps {
@@ -92,7 +92,7 @@ export function AssetsTabContent({ ticket }: AssetsTabContentProps) {
           pqcLevel: 3,
           secretType,
           relatedTicketId: ticket.id,
-          targetRecipient: ticket.customerName || 'client'
+          targetRecipient: safeString(ticket.customerName, 'client')
         }
       });
 

@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { X, Sparkles, ExternalLink } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { cn } from '../../lib/utils';
+import { cn, safeString } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
@@ -52,7 +52,7 @@ export function TicketDetailDrawer({
     if (linked.length > 0) {
       return linked.slice(0, 5).map((l) => ({ id: l.id, title: l.title } as KBArticle));
     }
-    const query = `${ticket.subject} ${ticket.description ?? ''}`.toLowerCase();
+    const query = `${safeString(ticket.subject)} ${safeString(ticket.description)}`.toLowerCase();
     return kbArticles
       .filter((a) => a.title.toLowerCase().split(' ').some((w) => query.includes(w)))
       .slice(0, 3);
@@ -111,9 +111,9 @@ export function TicketDetailDrawer({
                     </Badge>
                     <span className="text-[10px] font-mono text-slate-400">#{ticket.id.slice(-6).toUpperCase()}</span>
                   </div>
-                  <h2 className="text-base font-bold text-slate-900 leading-snug break-words">{ticket.subject}</h2>
+                  <h2 className="text-base font-bold text-slate-900 leading-snug break-words">{safeString(ticket.subject)}</h2>
                   <p className="text-[11px] text-slate-500 mt-1 truncate">
-                    {ticket.customerName} · {ticket.company || t('tickets.privateCustomer', 'Private')}
+                    {safeString(ticket.customerName)} · {safeString(ticket.company, t('tickets.privateCustomer', 'Private'))}
                   </p>
                 </div>
                 <button
@@ -138,20 +138,20 @@ export function TicketDetailDrawer({
                       {t('tickets.table.assignee', 'Assignee')}
                     </p>
                     <p className="font-semibold text-slate-800 truncate">
-                      {ticket.agentName || t('tickets.unassigned', 'Unassigned')}
+                      {safeString(ticket.agentName, t('tickets.unassigned', 'Unassigned'))}
                     </p>
                   </div>
                   <div>
                     <p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">
                       {t('tickets.table.priority', 'Priority')}
                     </p>
-                    <p className="font-semibold text-slate-800 capitalize">{ticket.priority ?? 'medium'}</p>
+                    <p className="font-semibold text-slate-800 capitalize">{safeString(ticket.priority, 'medium')}</p>
                   </div>
                   <div>
                     <p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">
                       {t('tickets.table.customer', 'Customer')}
                     </p>
-                    <p className="font-semibold text-slate-800 truncate">{ticket.customerName}</p>
+                    <p className="font-semibold text-slate-800 truncate">{safeString(ticket.customerName)}</p>
                   </div>
                   <div>
                     <p className="text-[10px] text-slate-400 font-semibold uppercase mb-0.5">SLA</p>
@@ -216,7 +216,7 @@ export function TicketDetailDrawer({
                     {t('tickets.drawer.description', 'Description')}
                   </h3>
                   <p className="text-xs text-slate-600 leading-relaxed line-clamp-6">
-                    {ticket.description.replace(/<[^>]*>/g, '')}
+                    {safeString(ticket.description).replace(/<[^>]*>/g, '')}
                   </p>
                 </section>
               )}

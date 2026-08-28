@@ -2,7 +2,7 @@ import React from 'react';
 import { Mail, MessageSquare } from 'lucide-react';
 import { Ticket as TicketType } from '../../types';
 import { cn } from '../../lib/utils';
-import { getInitials } from '../../lib/utils';
+import { getInitials, safeString } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { TicketStatusChip, TicketPriorityChip, TicketAssigneeChip } from './TicketTableCells';
@@ -56,12 +56,12 @@ export function TicketsCardGrid({
                 </AvatarFallback>
               </Avatar>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold text-slate-900 truncate">{ticket.customerName}</p>
-                <p className="text-[10px] text-slate-500 truncate">{ticket.company ?? t('tickets.privateCustomer', 'Private')}</p>
+                <p className="text-xs font-bold text-slate-900 truncate">{safeString(ticket.customerName)}</p>
+                <p className="text-[10px] text-slate-500 truncate">{safeString(ticket.company, t('tickets.privateCustomer', 'Private'))}</p>
               </div>
             </div>
 
-            <p className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug">{ticket.subject}</p>
+            <p className="text-sm font-bold text-slate-900 line-clamp-2 leading-snug">{safeString(ticket.subject)}</p>
             <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
               <span className="text-[10px] text-slate-400 font-medium font-mono">{formatTicketRef(ticket.id)}</span>
               {ticket.slaDueAt || ticket.firstResponseDue ? (

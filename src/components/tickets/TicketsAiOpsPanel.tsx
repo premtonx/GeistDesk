@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
 import { AlertTriangle, Sparkles, TrendingUp, ChevronRight } from 'lucide-react';
-import { cn } from '../../lib/utils';
+import { cn, safeString } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Ticket } from '../../types';
 import { Button } from '../ui/button';
@@ -15,8 +15,13 @@ interface TicketsAiOpsPanelProps {
 function clusterTickets(tickets: Ticket[]): { label: string; count: number; severity: 'critical' | 'high' | 'medium' }[] {
   const map = new Map<string, number>();
   for (const t of tickets) {
-    const tag = t.tags?.[0] ?? t.subject.split(' ').slice(0, 2).join(' ');
-    const key = tag || 'General';
+    const firstTag = t.tags?.[0];
+    const tag = typeof firstTag === 'string'
+      ? firstTag
+      : (firstTag && typeof firstTag === 'object'
+        ? safeString((firstTag as Record<string, unknown>).name ?? firstTag)
+        : '');
+    const key = tag || safeString(t.subject).split(' ').slice(0, 2).join(' ') || 'General';
     map.set(key, (map.get(key) ?? 0) + 1);
   }
   return Array.from(map.entries())

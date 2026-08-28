@@ -24,7 +24,7 @@ import { Separator } from '../ui/separator';
 import { RichTextEditor } from '../RichTextEditor';
 import { LegalValidationResult } from '../../services/legalService';
 import { Ticket as TicketType } from '../../types';
-import { cn } from '../../lib/utils';
+import { cn, safeString } from '../../lib/utils';
 import { toast } from 'sonner';
 import { useTranslation } from '../../lib/context/I18nContext';
 
@@ -137,7 +137,7 @@ export function EmailComposer({
         <div className="flex items-center gap-2">
           <span className="w-12 font-bold text-foreground">{t('tickets.emailComposer.to', 'To:')}</span>
           <span className="font-mono bg-muted/60 px-2 py-0.5 rounded text-foreground border border-border/40">
-            {ticket.customerName} &lt;{ticket.customerId}@client.com&gt;
+            {safeString(ticket.customerName)} &lt;{safeString(ticket.customerId)}@client.com&gt;
           </span>
         </div>
 

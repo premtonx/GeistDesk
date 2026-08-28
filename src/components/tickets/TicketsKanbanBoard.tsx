@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Ticket as TicketType } from '../../types';
-import { cn } from '../../lib/utils';
+import { cn, safeString } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { TicketStatusChip, TicketPriorityChip } from './TicketTableCells';
 import {
@@ -112,14 +112,14 @@ export function TicketsKanbanBoard({
                     draggingId === ticket.id && 'opacity-50',
                   )}
                 >
-                  <p className="text-xs font-semibold text-slate-900 line-clamp-2">{ticket.subject}</p>
+                  <p className="text-xs font-semibold text-slate-900 line-clamp-2">{safeString(ticket.subject)}</p>
                   <p className="text-[10px] text-slate-400 mt-1 font-mono">
                     {t('tickets.ticketIdShort', '#{{id}}').replace(
                       '{{id}}',
                       ticket.id.slice(0, 8).toUpperCase(),
                     )}
                   </p>
-                  <p className="text-[10px] text-slate-500 mt-1 truncate">{ticket.customerName}</p>
+                  <p className="text-[10px] text-slate-500 mt-1 truncate">{safeString(ticket.customerName)}</p>
                   <div
                     className="flex flex-wrap items-center gap-2 mt-2"
                     onClick={(e) => e.stopPropagation()}

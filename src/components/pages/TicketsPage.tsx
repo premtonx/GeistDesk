@@ -13,7 +13,7 @@ import {
   ticketAnalysisPatch,
 } from '../../lib/ticket-ai-analysis';
 import { suggestNeuralLinks, SuggestedLink } from '../../services/neuralLinkService';
-import { cn } from '../../lib/utils';
+import { cn, safeString } from '../../lib/utils';
 import { ScrollArea } from '../../components/ui/scroll-area';
 import { toast } from 'sonner';
 import { Ticket as TicketType, Message, KBArticle, Company, Contact, TicketChecklistItem } from '../../types';
@@ -72,12 +72,12 @@ import { TICKETS_SIDEBAR_GROUPS } from '../tickets/ticketsSidebarConfig';
 import { TicketsLayoutMode } from '../tickets/TicketsViewModeSelector';
 const matchStatus = (status: string | undefined, target: string): boolean => {
   if (!status) return false;
-  return status.toLowerCase().trim() === target.toLowerCase().trim();
+  return String(status).toLowerCase().trim() === target.toLowerCase().trim();
 };
 
 const hasTagCaseInsensitive = (tags: string[] | undefined, target: string): boolean => {
   if (!tags) return false;
-  return tags.some(tag => tag.toLowerCase().trim() === target.toLowerCase().trim());
+  return tags.some(tag => String(tag).toLowerCase().trim() === target.toLowerCase().trim());
 };
 
 /**
@@ -345,8 +345,8 @@ export default function TicketsPage() {
     if (!mergeSearchQuery.trim()) return [];
     return allTickets.filter(t => 
       t.id !== selectedTicketId && (
-        t.subject.toLowerCase().includes(mergeSearchQuery.toLowerCase()) ||
-        t.id.toLowerCase().includes(mergeSearchQuery.toLowerCase())
+        String(t.subject ?? '').toLowerCase().includes(mergeSearchQuery.toLowerCase()) ||
+        String(t.id ?? '').toLowerCase().includes(mergeSearchQuery.toLowerCase())
       )
     ).slice(0, 5);
   }, [mergeSearchQuery, allTickets, selectedTicketId]);
@@ -465,12 +465,12 @@ export default function TicketsPage() {
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       result = result.filter(t => 
-        t.subject.toLowerCase().includes(query) ||
-        t.id.toLowerCase().includes(query) ||
-        (t.customerName && t.customerName.toLowerCase().includes(query)) ||
-        (t.company && t.company.toLowerCase().includes(query)) ||
-        (t.tags && t.tags.some(tag => tag.toLowerCase().includes(query))) ||
-        (t.description && t.description.toLowerCase().includes(query))
+        String(t.subject ?? '').toLowerCase().includes(query) ||
+        String(t.id ?? '').toLowerCase().includes(query) ||
+        (t.customerName && String(t.customerName).toLowerCase().includes(query)) ||
+        (t.company && String(t.company).toLowerCase().includes(query)) ||
+        (t.tags && t.tags.some(tag => String(tag).toLowerCase().includes(query))) ||
+        (t.description && String(t.description).toLowerCase().includes(query))
       );
     }
 
@@ -582,8 +582,8 @@ export default function TicketsPage() {
     if (filters.sourceInfo) {
       const info = filters.sourceInfo.toLowerCase();
       result = result.filter(t => 
-        (t as any).sourceInfo?.toLowerCase().includes(info) ||
-        t.subject.toLowerCase().includes(info)
+        ((t as any).sourceInfo && String((t as any).sourceInfo).toLowerCase().includes(info)) ||
+        String(t.subject ?? '').toLowerCase().includes(info)
       );
     }
 
@@ -1186,7 +1186,7 @@ export default function TicketsPage() {
       const fullContent = [
         '## Problem',
         '',
-        stripHtml(selectedTicket.description || 'Keine Beschreibung vorhanden.'),
+        stripHtml(safeString(selectedTicket.description) || 'Keine Beschreibung vorhanden.'),
         '',
         draft.content,
         '',
@@ -1196,7 +1196,7 @@ export default function TicketsPage() {
       ].join('\n').trim();
 
       setKbDraft({
-        title: draft.title || `KB: ${selectedTicket.subject}`,
+        title: draft.title || `KB: ${safeString(selectedTicket.subject)}`,
         content: fullContent,
         tags: (selectedTicket.tags || []).slice(0, 6),
       });

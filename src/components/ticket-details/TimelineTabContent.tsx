@@ -10,6 +10,7 @@ import { Ticket as TicketType, Message, AgentComment } from '../../types';
 import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { safeString } from '../../lib/utils';
 
 interface TimelineTabContentProps {
   ticket: TicketType;
@@ -43,7 +44,7 @@ export function TimelineTabContent({
         channel: ticket.channel || t('tickets.timelineTab.portal', 'portal'),
       }),
       time: createdTime,
-      actor: ticket.customerName
+      actor: safeString(ticket.customerName, t('tickets.timelineTab.anonymous', 'Anonymous'))
     });
 
     messages.forEach(m => {
@@ -62,7 +63,7 @@ export function TimelineTabContent({
           ? m.content.substring(0, 100) + (m.content.length > 100 ? '...' : '')
           : String(m.content ?? '').substring(0, 100),
         time: msgTime,
-        actor: m.senderName || t('tickets.timelineTab.anonymous', 'Anonymous')
+        actor: safeString(m.senderName, t('tickets.timelineTab.anonymous', 'Anonymous'))
       });
     });
 
@@ -74,7 +75,7 @@ export function TimelineTabContent({
         title: t('tickets.timelineTab.internalNoteRecorded', 'Internal agent note recorded'),
         desc: c.content,
         time: comTime,
-        actor: c.agentName
+        actor: safeString(c.agentName, t('tickets.timelineTab.anonymous', 'Anonymous'))
       });
     });
 

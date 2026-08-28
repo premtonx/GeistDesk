@@ -5,7 +5,7 @@ import {
   RefreshCw, SlidersHorizontal, Sparkles, Ticket,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
-import { getInitials } from '../../lib/utils';
+import { getInitials, safeString } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { ScrollArea } from '../ui/scroll-area';
@@ -188,7 +188,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                       </button>
                       <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
                         <div className="flex items-center gap-2 md:gap-3 overflow-hidden min-w-0 flex-1">
-                          <h2 className="text-xl font-extrabold text-slate-950 dark:text-slate-50 truncate tracking-tight">{selectedTicket.subject}</h2>
+                          <h2 className="text-xl font-extrabold text-slate-950 dark:text-slate-50 truncate tracking-tight">{safeString(selectedTicket.subject)}</h2>
                           <span className="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300 px-3 py-1 rounded-md text-[11px] font-extrabold select-none shrink-0 capitalize">
                             {t(`tickets.status.${(selectedTicket.status || 'open').toLowerCase()}`, selectedTicket.status || 'Offen')}
                           </span>
@@ -277,7 +277,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                         </div>
                       </div>
                       <div className="text-[11px] text-slate-400 font-bold mt-1 tracking-wide uppercase select-none">
-                        {selectedTicket.company || 'Enterprise Corp'} &bull; {selectedTicket.customerName || 'PremtonXhafa'}
+                        {safeString(selectedTicket.company, 'Enterprise Corp')} &bull; {safeString(selectedTicket.customerName, 'PremtonXhafa')}
                       </div>
                     </div>
     
@@ -376,7 +376,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                                           </div>
                                           <div className="flex-1 min-w-0 space-y-0.5">
                                             <div className="flex items-center justify-between">
-                                              <span className="font-bold text-[11px] text-amber-950 dark:text-amber-100">{comment.agentName}</span>
+                                              <span className="font-bold text-[11px] text-amber-950 dark:text-amber-100">{safeString(comment.agentName)}</span>
                                               <span className="text-[9px] text-amber-800/60 dark:text-slate-400 font-medium">
                                                 {comment.createdAt ? new Date(comment.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Recent'}
                                               </span>

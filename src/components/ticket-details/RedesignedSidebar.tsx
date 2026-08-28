@@ -45,7 +45,7 @@ import { SuggestedLink } from '../../services/neuralLinkService';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { getTicketKind } from '../../lib/ticketWorkspace';
 import { deriveAccountHealth } from '../../lib/account-health';
-import { getInitials } from '../../lib/utils';
+import { getInitials, safeString } from '../../lib/utils';
 import { AccountHealthSmiley, accountHealthAriaLabel } from './AccountHealthSmiley';
 
 const STATUS_KEYS = ['open', 'pending', 'resolved', 'closed', 'qs', 'merged', 'trash'] as const;
@@ -215,7 +215,7 @@ export function RedesignedSidebar({
             
             <div className="flex-1 min-w-0">
               <div className="text-[12px] font-extrabold text-foreground truncate">
-                {ticket.agentName || t('tickets.unassigned', 'Unassigned')}
+                {safeString(ticket.agentName, t('tickets.unassigned', 'Unassigned'))}
               </div>
               <div className="text-[10px] text-muted-foreground truncate">
                 {ticket.agentName
@@ -230,7 +230,7 @@ export function RedesignedSidebar({
             <select 
               id="dispatch-agent-select"
               className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer text-slate-700 dark:text-slate-200"
-              value={ticket.agentId ? `${ticket.agentId}::${ticket.agentName || ''}` : ''}
+              value={ticket.agentId ? `${ticket.agentId}::${safeString(ticket.agentName)}` : ''}
               onChange={(e) => {
                 const val = e.target.value;
                 if (val === '') {
@@ -258,7 +258,7 @@ export function RedesignedSidebar({
               variant="outline"
               size="sm"
               className="w-full text-xs font-semibold py-2 rounded-xl flex items-center justify-center gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50 transition-all cursor-pointer"
-              onClick={() => onInitiateHandoff({ agentName: ticket.agentName, agentId: ticket.agentId })}
+              onClick={() => onInitiateHandoff({ agentName: safeString(ticket.agentName, 'Agent'), agentId: ticket.agentId })}
             >
               <UserPlus className="w-3.5 h-3.5" />
               {t('tickets.sidebar.transferTicket', 'Ticket übergeben')}
@@ -519,8 +519,8 @@ export function RedesignedSidebar({
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <h6 className="text-xs font-black text-foreground">{contact?.name || ticket.customerName}</h6>
-                  <p className="text-[9px] text-muted-foreground truncate max-w-[180px]">{contact?.email || `${ticket.customerId}@mail.com`}</p>
+                  <h6 className="text-xs font-black text-foreground">{safeString(contact?.name ?? ticket.customerName)}</h6>
+                  <p className="text-[9px] text-muted-foreground truncate max-w-[180px]">{safeString(contact?.email) || `${ticket.customerId}@mail.com`}</p>
                 </div>
               </div>
             </div>
@@ -545,14 +545,19 @@ export function RedesignedSidebar({
               <div className="flex flex-wrap gap-1">
                 {ticket.tags && ticket.tags.length > 0 ? (
                   ticket.tags.map(tag => {
-                    const tagLabel = typeof tag === 'string' ? tag : String(tag ?? '');
+                    const tagText = typeof tag === 'string'
+                      ? tag
+                      : (tag && typeof tag === 'object'
+                        ? (safeString((tag as Record<string, unknown>).name) || safeString((tag as Record<string, unknown>).label) || String(tag))
+                        : String(tag ?? ''));
+                    if (!tagText || typeof tagText === 'object') return null;
                     return (
                     <Badge 
-                      key={tagLabel} 
+                      key={String(tagText)} 
                       className="bg-purple-100 text-purple-800 hover:bg-purple-100/90 hover:text-red-500 border-none text-[9px] font-bold px-2 py-0.5 gap-1 shrink-0 cursor-pointer"
                       onClick={() => onUpdateTicketField({ tags: ticket.tags.filter(t => t !== tag) })}
                     >
-                      <span>#{tagLabel}</span>
+                      <span>#{String(tagText)}</span>
                       <span className="font-bold text-[8px] opacity-70">x</span>
                     </Badge>
                     );

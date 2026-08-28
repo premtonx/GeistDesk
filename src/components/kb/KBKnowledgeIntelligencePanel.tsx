@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { Button } from '../ui/button';
 import { Switch } from '../ui/switch';
-import { cn } from '../../lib/utils';
+import { cn, safeString } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import type {
   KBArticleAlert,
@@ -109,15 +109,23 @@ export function KBKnowledgeIntelligencePanel({
         </div>
         {article.tags?.length ? (
           <div className="mt-3 flex flex-wrap gap-1.5">
-            {article.tags.map((tag) => (
+            {article.tags.map((tag) => {
+              const tagText = typeof tag === 'string'
+                ? tag
+                : (tag && typeof tag === 'object'
+                  ? (safeString((tag as Record<string, unknown>).name) || safeString((tag as Record<string, unknown>).label) || String(tag))
+                  : String(tag ?? ''));
+              if (!tagText || typeof tagText === 'object') return null;
+              return (
               <span
-                key={tag}
+                key={String(tagText)}
                 className="inline-flex items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-600"
               >
                 <Tag className="w-3 h-3" />
-                {tag}
+                {String(tagText)}
               </span>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <p className="text-[10px] text-slate-400 mt-2">{t('kb.detail.noTags', 'No tags')}</p>
