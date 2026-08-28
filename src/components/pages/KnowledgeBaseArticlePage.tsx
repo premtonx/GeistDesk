@@ -4,6 +4,7 @@ import type { KBArticle, KBArticleAlert, KBArticleHistoryEntry } from '../../typ
 import { KBArticleDetailView } from '../kb/KBArticleDetailView';
 import type { KBTranslateLanguage } from '../kb/KBArticleDetailToolbar';
 import { kbArticleApi } from '../../services/kbArticleApi';
+import { stripHtml } from '../kb/kb-utils';
 import { AIAdapter } from '../../lib/ai/provider-adapter';
 import { DEFAULT_KB_ALERTS, resolveInfrastructureTrust } from '../../lib/kb-article-defaults';
 import { kbRelationshipService, type KBRelationship } from '../../services/kbRelationshipService';
@@ -237,6 +238,17 @@ export function KnowledgeBaseArticlePage({
         return;
       }
 
+      // Fail fast on empty content — the backend refuses anyway, and this
+      // avoids a 15s spinner for an article that can never be summarized.
+      const plainContent = stripHtml(liveArticle.content || '').trim();
+      if (!plainContent) {
+        setSummaryFailed(true);
+        setIsSummaryLoading(false);
+        toast.error('KI-Zusammenfassung konnte nicht erstellt werden');
+        console.warn('KB summary generation skipped: article content is empty.');
+        return;
+      }
+
       setSummaryFailed(false);
       setIsSummaryLoading(true);
       try {
@@ -254,7 +266,7 @@ export function KnowledgeBaseArticlePage({
         setIsSummaryLoading(false);
       }
     },
-    [liveArticle.id, onArticleUpdated],
+    [liveArticle.id, liveArticle.content, onArticleUpdated],
   );
 
   const handleToggleIndexInRag = useCallback(
