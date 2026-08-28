@@ -376,7 +376,7 @@ export async function initDb() {
       UPDATE geistdesk_documents
          SET data = jsonb_set(
                jsonb_set(
-                 jsonb_set(COALESCE(data, '{}'::jsonb), '{is_initialized}', 'false'::jsonb, true),
+                 jsonb_set(COALESCE(geistdesk_documents.data, '{}'::jsonb), '{is_initialized}', 'false'::jsonb, true),
                  '{initializedBy}',
                  'null'::jsonb,
                  true
@@ -386,12 +386,12 @@ export async function initDb() {
                true
              ),
              updated_at = NOW()
-       WHERE collection = 'module_config'
-         AND id = 'global'
-         AND (
-           COALESCE(data->>'is_initialized', '') NOT IN ('true', 'false')
-           OR data->>'initializedBy' = 'legacy-migration'
-         )
+      WHERE collection = 'module_config'
+        AND id = 'global'
+        AND (
+          COALESCE(geistdesk_documents.data->>'is_initialized', '') NOT IN ('true', 'false')
+          OR geistdesk_documents.data->>'initializedBy' = 'legacy-migration'
+        )
     `);
   } catch (initFlagErr: any) {
     safeLog('warn', 
@@ -534,9 +534,9 @@ function applyQueryConstraints(docs: any[], constraints: any[]): any[] {
 function sqlRangeCast(value: unknown, paramIndex: number): string {
   const raw = String(value ?? '').trim();
   if (raw !== '' && /^-?\d+(\.\d+)?$/.test(raw)) {
-    return `CASE WHEN data->>$${paramIndex} ~ '^-?\\d+(\\.\\d+)?$' THEN (data->>$${paramIndex})::numeric END`;
+    return `CASE WHEN geistdesk_documents.data->>$${paramIndex} ~ '^-?\\d+(\\.\\d+)?$' THEN (geistdesk_documents.data->>$${paramIndex})::numeric END`;
   }
-  return `data->>$${paramIndex}`;
+  return `geistdesk_documents.data->>$${paramIndex}`;
 }
 
 // Deep process dynamic insert object (replacing Firestore types with native formats)
@@ -597,7 +597,7 @@ export async function getDocDirect(
   const params: unknown[] = [collectionName, id];
   let tenantClause = '';
   if (options.tenantId) {
-    tenantClause = ` AND COALESCE(data->>'tenantId', data->>'tenant_id', 'default') = $3`;
+    tenantClause = ` AND COALESCE(geistdesk_documents.data->>'tenantId', geistdesk_documents.data->>'tenant_id', 'default') = $3`;
     params.push(options.tenantId);
   }
   const res = await pool.query(
@@ -622,7 +622,7 @@ export async function getDocsDirect(
       let queryStr = `SELECT id, data FROM geistdesk_documents WHERE collection = $1`;
       const queryParams: any[] = [collectionName];
       if (options.tenantId) {
-        queryStr += ` AND COALESCE(data->>'tenantId', data->>'tenant_id', 'default') = $2`;
+        queryStr += ` AND COALESCE(geistdesk_documents.data->>'tenantId', geistdesk_documents.data->>'tenant_id', 'default') = $2`;
         queryParams.push(options.tenantId);
       }
       const ALLOWED_OPS = new Set(['==', '===', '!=', '>', '>=', '<', '<=']);
@@ -644,21 +644,21 @@ export async function getDocsDirect(
           if (value === null || value === undefined || value === '' || value === 'unassigned') {
             if (op === '==' || op === '===') {
               queryStr += ` AND (
-                data->>'agentId' IS NULL 
-                OR data->>'agentId' = '' 
-                OR data->>'agentId' = 'unassigned'
-                OR data->>'assignedTo' IS NULL 
-                OR data->>'assignedTo' = ''
-                OR data->>'assignedTo' = 'unassigned'
+                geistdesk_documents.data->>'agentId' IS NULL 
+                OR geistdesk_documents.data->>'agentId' = '' 
+                OR geistdesk_documents.data->>'agentId' = 'unassigned'
+                OR geistdesk_documents.data->>'assignedTo' IS NULL 
+                OR geistdesk_documents.data->>'assignedTo' = ''
+                OR geistdesk_documents.data->>'assignedTo' = 'unassigned'
               )`;
             } else if (op === '!=') {
               queryStr += ` AND (
-                data->>'agentId' IS NOT NULL 
-                AND data->>'agentId' != '' 
-                AND data->>'agentId' != 'unassigned'
-                AND data->>'assignedTo' IS NOT NULL 
-                AND data->>'assignedTo' != ''
-                AND data->>'assignedTo' != 'unassigned'
+                geistdesk_documents.data->>'agentId' IS NOT NULL 
+                AND geistdesk_documents.data->>'agentId' != '' 
+                AND geistdesk_documents.data->>'agentId' != 'unassigned'
+                AND geistdesk_documents.data->>'assignedTo' IS NOT NULL 
+                AND geistdesk_documents.data->>'assignedTo' != ''
+                AND geistdesk_documents.data->>'assignedTo' != 'unassigned'
               )`;
             } else {
               throw new Error(`Unsupported query operator for ${field}: ${op}`);
@@ -673,19 +673,19 @@ export async function getDocsDirect(
           if (valStr === 'unassigned' || valStr === 'nicht-zugewiesen' || valStr === 'nicht zugewiesen' || valStr === 'nicht_zugewiesen') {
             if (op === '==' || op === '===') {
               queryStr += ` AND (
-                LOWER(data->>'status') = 'unassigned' 
-                OR LOWER(data->>'status') = 'nicht-zugewiesen' 
-                OR LOWER(data->>'status') = 'nicht zugewiesen'
-                OR LOWER(data->>'status') = 'nicht_zugewiesen'
-                OR data->>'status' IS NULL
+                LOWER(geistdesk_documents.data->>'status') = 'unassigned' 
+                OR LOWER(geistdesk_documents.data->>'status') = 'nicht-zugewiesen' 
+                OR LOWER(geistdesk_documents.data->>'status') = 'nicht zugewiesen'
+                OR LOWER(geistdesk_documents.data->>'status') = 'nicht_zugewiesen'
+                OR geistdesk_documents.data->>'status' IS NULL
               )`;
             } else if (op === '!=') {
               queryStr += ` AND (
-                LOWER(data->>'status') != 'unassigned' 
-                AND LOWER(data->>'status') != 'nicht-zugewiesen' 
-                AND LOWER(data->>'status') != 'nicht zugewiesen'
-                AND LOWER(data->>'status') != 'nicht_zugewiesen'
-                AND data->>'status' IS NOT NULL
+                LOWER(geistdesk_documents.data->>'status') != 'unassigned' 
+                AND LOWER(geistdesk_documents.data->>'status') != 'nicht-zugewiesen' 
+                AND LOWER(geistdesk_documents.data->>'status') != 'nicht zugewiesen'
+                AND LOWER(geistdesk_documents.data->>'status') != 'nicht_zugewiesen'
+                AND geistdesk_documents.data->>'status' IS NOT NULL
               )`;
             } else {
               throw new Error(`Unsupported query operator for status: ${op}`);
@@ -703,12 +703,12 @@ export async function getDocsDirect(
         // numeric or ISO-timestamp field is cast so SQL matches the JS value
         // semantics of the in-memory fallback filter (applyQueryConstraints).
         const isRange = op === '>' || op === '>=' || op === '<' || op === '<=';
-        const castExpr = isRange ? sqlRangeCast(value, paramIndex) : `data->>$${paramIndex}`;
+        const castExpr = isRange ? sqlRangeCast(value, paramIndex) : `geistdesk_documents.data->>$${paramIndex}`;
         if (op === '==' || op === '===') {
-          queryStr += ` AND data->>$${paramIndex} = $${paramIndex + 1}`;
+          queryStr += ` AND geistdesk_documents.data->>$${paramIndex} = $${paramIndex + 1}`;
           queryParams.push(field, String(value));
         } else if (op === '!=') {
-          queryStr += ` AND data->>$${paramIndex} != $${paramIndex + 1}`;
+          queryStr += ` AND geistdesk_documents.data->>$${paramIndex} != $${paramIndex + 1}`;
           queryParams.push(field, String(value));
         } else if (op === '>') {
           queryStr += ` AND ${castExpr} > $${paramIndex + 1}`;
@@ -832,10 +832,12 @@ export async function updateDocDirect(
 
   // When tenant-scoped, only touch rows that belong to the caller's tenant.
   // Without this guard the UPSERT could otherwise create a fresh row for a
-  // tenantless id or clobber a foreign-tenant document.
+  // tenantless id or clobber a foreign-tenant document. The `data` reference
+  // must be fully qualified: inside ON CONFLICT DO UPDATE the bare column is
+  // ambiguous between the target row and EXCLUDED (PG error 42702).
   const paramsForWhere: unknown[] = options.tenantId ? [options.tenantId] : [];
   const whereClause = options.tenantId
-    ? ` AND COALESCE(data->>'tenantId', data->>'tenant_id', 'default') = $${4 + params.length}`
+    ? ` AND COALESCE(geistdesk_documents.data->>'tenantId', geistdesk_documents.data->>'tenant_id', 'default') = $${4 + params.length}`
     : '';
 
   // Atomic upsert: on a fresh row the raw (marker-resolved) JSON is inserted;
@@ -861,8 +863,10 @@ export async function setDocDirect(
   delete processed.id;
 
   const params: unknown[] = [collectionName, id, toJsonbParam(processed)];
+  // Fully-qualify `data` — inside ON CONFLICT DO UPDATE the bare column is
+  // ambiguous between the target row and EXCLUDED (PG error 42702).
   const whereClause = options.tenantId
-    ? ` AND COALESCE(data->>'tenantId', data->>'tenant_id', 'default') = $4`
+    ? ` AND COALESCE(geistdesk_documents.data->>'tenantId', geistdesk_documents.data->>'tenant_id', 'default') = $4`
     : '';
   if (options.tenantId) params.push(options.tenantId);
 
@@ -882,7 +886,7 @@ export async function deleteDocDirect(
   const params: unknown[] = [collectionName, id];
   let tenantClause = '';
   if (options.tenantId) {
-    tenantClause = ` AND COALESCE(data->>'tenantId', data->>'tenant_id', 'default') = $3`;
+    tenantClause = ` AND COALESCE(geistdesk_documents.data->>'tenantId', geistdesk_documents.data->>'tenant_id', 'default') = $3`;
     params.push(options.tenantId);
   }
   await pool.query(
@@ -914,12 +918,12 @@ export async function getTicketStats(): Promise<TicketStats> {
   const res = await pool.query(`
     SELECT
       COUNT(*)::int AS total,
-      COUNT(*) FILTER (WHERE LOWER(data->>'status') = 'open')::int AS open,
-      COUNT(*) FILTER (WHERE LOWER(data->>'status') = 'pending')::int AS pending,
-      COUNT(*) FILTER (WHERE LOWER(data->>'status') = 'resolved')::int AS resolved,
-      COUNT(*) FILTER (WHERE LOWER(data->>'status') = 'closed')::int AS closed,
-      COUNT(*) FILTER (WHERE COALESCE(data->>'agentId', '') = '')::int AS unassigned,
-      COUNT(*) FILTER (WHERE LOWER(data->>'priority') = 'urgent')::int AS urgent
+      COUNT(*) FILTER (WHERE LOWER(geistdesk_documents.data->>'status') = 'open')::int AS open,
+      COUNT(*) FILTER (WHERE LOWER(geistdesk_documents.data->>'status') = 'pending')::int AS pending,
+      COUNT(*) FILTER (WHERE LOWER(geistdesk_documents.data->>'status') = 'resolved')::int AS resolved,
+      COUNT(*) FILTER (WHERE LOWER(geistdesk_documents.data->>'status') = 'closed')::int AS closed,
+      COUNT(*) FILTER (WHERE COALESCE(geistdesk_documents.data->>'agentId', '') = '')::int AS unassigned,
+      COUNT(*) FILTER (WHERE LOWER(geistdesk_documents.data->>'priority') = 'urgent')::int AS urgent
     FROM geistdesk_documents
     WHERE collection = 'tickets'
   `);

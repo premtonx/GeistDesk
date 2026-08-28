@@ -66,7 +66,7 @@ export async function seedModuleConfig(client: pg.PoolClient): Promise<boolean> 
     if (parsed.is_initialized === false) return false;
     await client.query(
       `UPDATE geistdesk_documents
-          SET data = jsonb_set(COALESCE(data, '{}'::jsonb), '{is_initialized}', 'false'::jsonb, true),
+          SET data = jsonb_set(COALESCE(geistdesk_documents.data, '{}'::jsonb), '{is_initialized}', 'false'::jsonb, true),
               updated_at = NOW()
         WHERE collection = 'module_config' AND id = 'global'`,
     );
