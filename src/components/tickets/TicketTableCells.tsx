@@ -127,11 +127,11 @@ export function TicketPriorityChip({ priority, onChange }: TicketPriorityChipPro
 }
 
 interface TicketAssigneeChipProps {
-  agentId?: string;
-  agentName?: string;
+  agentId?: string | null;
+  agentName?: string | null;
   currentUserId?: string;
   currentUserLabel?: string;
-  onChange: (agentId: string | undefined, agentName: string | undefined) => void;
+  onChange: (agentId: string | null | undefined, agentName: string | null | undefined) => void;
 }
 
 const AGENT_OPTIONS = [
@@ -168,7 +168,7 @@ export function TicketAssigneeChip({
         }
       />
       <DropdownMenuContent align="start" className="w-44 rounded-lg">
-        <DropdownMenuItem className="text-xs" onClick={() => onChange(undefined, undefined)}>
+        <DropdownMenuItem className="text-xs" onClick={() => onChange(null, null)}>
           {t('tickets.unassigned', 'Unassigned')}
         </DropdownMenuItem>
         {currentUserId ? (

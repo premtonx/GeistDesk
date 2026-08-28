@@ -245,6 +245,9 @@
       "chat": "Live-Chat",
       "email": "E-Mail-Kanal"
     },
+    "assignedToast": "Ticket erfolgreich zugewiesen",
+    "updatedToast": "Ticket aktualisiert",
+    "failedToast": "Ticket konnte nicht aktualisiert werden",
     "bulk": {
       "assign": "Massen-Zuweisung",
       "assignToMe": "Mir zuweisen",
@@ -254,7 +257,11 @@
       "updateStatus": "Status aktualisieren",
       "statusUpdated": "Status aktualisiert auf: {{status}}",
       "modifyPriority": "Priorität ändern",
-      "priorityUpdated": "Priorität geändert auf: {{priority}}"
+      "priorityUpdated": "Priorität geändert auf: {{priority}}",
+      "updating": "Aktualisiere {{count}} Tickets...",
+      "assignedSuccess": "Tickets erfolgreich zugewiesen",
+      "updatedSuccess": "Erfolgreich aktualisiert",
+      "failedToast": "Sammelaktualisierung fehlgeschlagen"
     },
     "filters": {
       "masterFilterList": "Master-Filterliste",
@@ -368,7 +375,11 @@
       "goldenNoteFor": "für den nächsten Agenten angeheftet.",
       "failed": "Briefing konnte nicht erstellt werden. Sie können die Übergabe trotzdem bestätigen.",
       "cancelTransfer": "Übergabe abbrechen",
-      "confirmTransfer": "Übergabe bestätigen"
+      "confirmTransfer": "Übergabe bestätigen",
+      "success": "Übergabe erfolgreich",
+      "successWithNote": "Übergabe erfolgreich, Golden Note gespeichert.",
+      "successNoNote": "Übergabe erfolgreich, Briefing konnte nicht gespeichert werden",
+      "failedToast": "Übergabe fehlgeschlagen."
     },
     "aiCopilotActive": "KI-Copilot Aktiv",
     "aiOperationalSummary": "KI-Betriebszusammenfassung",

@@ -201,8 +201,12 @@ export interface Ticket {
   mentions?: string[];
   creatorId?: string;
   isUndelivered?: boolean;
-  agentId?: string;
-  agentName?: string;
+  agentId?: string | null;
+  agentName?: string | null;
+  /** Alias fields persisted alongside agentId/agentName for cross-system compatibility. */
+  assignedTo?: string | null;
+  assigneeId?: string | null;
+  assignedToEmail?: string | null;
   groupId?: string;
   groupName?: string;
   parentId?: string;

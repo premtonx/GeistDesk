@@ -1,4 +1,3 @@
-import type { Dispatch, SetStateAction } from 'react';
 import { cn } from '../../lib/utils';
 import { Avatar, AvatarFallback } from '../ui/avatar';
 import { Building2, Globe, Mail, PlusCircle, Sparkles, Tag, XCircle } from 'lucide-react';
@@ -24,10 +23,7 @@ export interface TicketDetailContextPaneProps {
   initiateHandoff: (ticketId: string, data: unknown) => void;
   suggestedTags: string[];
   allTickets: TicketType[];
-  ticketService: {
-    updateTicket: (id: string, data: Partial<TicketType>) => Promise<void> | void;
-  };
-  setAllTickets: Dispatch<SetStateAction<TicketType[]>>;
+  handleInlineUpdate: (ticketId: string, data: Partial<TicketType>) => Promise<void> | void;
 }
 
 export function TicketDetailContextPane(props: TicketDetailContextPaneProps) {
@@ -49,8 +45,7 @@ export function TicketDetailContextPane(props: TicketDetailContextPaneProps) {
     initiateHandoff,
     suggestedTags,
     allTickets,
-    ticketService,
-    setAllTickets,
+    handleInlineUpdate,
   } = props;
 
   return (
@@ -64,13 +59,12 @@ export function TicketDetailContextPane(props: TicketDetailContextPaneProps) {
                     : "hidden bg-muted"
                 )}>
                      <RedesignedSidebar 
-                       ticket={selectedTicket}
-                       contact={ticketContact}
-                       company={ticketCompany}
-                       onUpdateTicketField={(data) => {
-                         ticketService.updateTicket(selectedTicket.id, data);
-                         setAllTickets(prev => prev.map(t => t.id === selectedTicket.id ? { ...t, ...data } : t));
-                       }}
+                      ticket={selectedTicket}
+                      contact={ticketContact}
+                      company={ticketCompany}
+                      onUpdateTicketField={(data) => {
+                        handleInlineUpdate(selectedTicket.id, data);
+                      }}
                        isAiReady={isAiReady}
                        isAiDrafting={isAiDrafting}
                        onDraftWithAI={generateAiReply}
@@ -84,7 +78,7 @@ export function TicketDetailContextPane(props: TicketDetailContextPaneProps) {
                        onCloseMobile={() => setIsMobilePropertiesOpen(false)}
                        onAddTag={() => {
                          if (newTagInput.trim() && selectedTicket) {
-                           ticketService.updateTicket(selectedTicket.id, { tags: [...selectedTicket.tags, newTagInput.trim()] });
+                           handleInlineUpdate(selectedTicket.id, { tags: [...selectedTicket.tags, newTagInput.trim()] });
                            setNewTagInput('');
                          }
                        }}

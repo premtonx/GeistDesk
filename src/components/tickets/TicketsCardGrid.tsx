@@ -11,7 +11,7 @@ interface TicketsCardGridProps {
   onSelect: (id: string) => void;
   onStatusChange: (id: string, status: TicketType['status']) => void;
   onPriorityChange: (id: string, priority: TicketType['priority']) => void;
-  onAssigneeChange: (id: string, agentId: string | undefined, agentName: string | undefined) => void;
+  onAssigneeChange: (id: string, agentId: string | null | undefined, agentName: string | null | undefined) => void;
   currentUserId?: string;
   currentUserLabel?: string;
   formatTicketRef: (id: string) => string;

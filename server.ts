@@ -37,6 +37,7 @@ import credentialVaultRoutes from "./src/routes/credentialVaultRoutes.js";
 import exchangeRoutes from "./src/routes/exchangeRoutes.js";
 import ticketReplyRoutes from "./src/routes/ticketReplyRoutes.js";
 import ticketSpamRoutes from "./src/routes/ticketSpamRoutes.js";
+import ticketRoutes from "./src/routes/ticketRoutes.js";
 import emailChannelRoutes from "./src/routes/emailChannelRoutes.js";
 import mailDomainRoutes from "./src/routes/mailDomainRoutes.js";
 import vectorRoutes from "./src/routes/vectorRoutes.js";
@@ -730,6 +731,7 @@ async function startServer() {
   app.use("/api/exchange", exchangeRoutes);
   app.use("/api/tickets", ticketReplyRoutes);
   app.use("/api/tickets", ticketSpamRoutes);
+  app.use("/api/tickets", ticketRoutes);
   app.use("/api/email-channels", emailChannelRoutes);
   app.use("/api/mail", mailDomainRoutes);
   app.use("/api/vectors", vectorRoutes);

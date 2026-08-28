@@ -245,6 +245,9 @@
       "chat": "Live Chat",
       "email": "Email Channel"
     },
+    "assignedToast": "Ticket successfully assigned",
+    "updatedToast": "Ticket updated",
+    "failedToast": "Failed to update ticket",
     "bulk": {
       "assign": "Bulk Assign",
       "assignToMe": "Assign to Me",
@@ -254,7 +257,11 @@
       "updateStatus": "Update Status",
       "statusUpdated": "Status updated to: {{status}}",
       "modifyPriority": "Modify Priority",
-      "priorityUpdated": "Priority changed to: {{priority}}"
+      "priorityUpdated": "Priority changed to: {{priority}}",
+      "updating": "Updating {{count}} tickets...",
+      "assignedSuccess": "Tickets successfully assigned",
+      "updatedSuccess": "Successfully updated",
+      "failedToast": "Bulk update failed"
     },
     "filters": {
       "masterFilterList": "Master Filter List",
@@ -368,7 +375,11 @@
       "goldenNoteFor": "for the next agent.",
       "failed": "Failed to generate briefing. You can still confirm the transfer.",
       "cancelTransfer": "Cancel Transfer",
-      "confirmTransfer": "Confirm Transfer"
+      "confirmTransfer": "Confirm Transfer",
+      "success": "Transfer successful",
+      "successWithNote": "Transfer successful, Golden Note saved.",
+      "successNoNote": "Transfer successful, briefing could not be saved",
+      "failedToast": "Transfer failed."
     },
     "aiCopilotActive": "AI Copilot Active",
     "aiOperationalSummary": "AI Operational Summary",

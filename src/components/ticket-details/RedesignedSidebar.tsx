@@ -229,22 +229,24 @@ export function RedesignedSidebar({
             <select 
               id="dispatch-agent-select"
               className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer text-slate-700 dark:text-slate-200"
-              value={ticket.agentName || ''}
+              value={ticket.agentId ? `${ticket.agentId}::${ticket.agentName || ''}` : ''}
               onChange={(e) => {
                 const val = e.target.value;
                 if (val === '') {
-                  // Direct unassignment — no AI involvement.
-                  onUpdateTicketField({ agentId: undefined, agentName: undefined });
+                  // Direct unassignment — no AI involvement. `null` (not
+                  // undefined) so JSON serialization persists the clearing.
+                  onUpdateTicketField({ agentId: null, agentName: null, assignedTo: null, assigneeId: null });
                 } else {
                   // Direct assignment — persist immediately so the ticket is
                   // never blocked on AI summary generation.
-                  onUpdateTicketField({ agentName: val });
+                  const [agentId, agentName] = val.split('::');
+                  onUpdateTicketField({ agentId: agentId || undefined, agentName: agentName || val });
                 }
               }}
             >
               <option value="">{t('tickets.unassigned', 'Unassigned')}</option>
-              {['Sarah Agent', 'Mike Lead', 'Dev Team'].map(a => (
-                <option key={a} value={a}>{a}</option>
+              {[{ id: 'agent-sarah', name: 'Sarah Agent' }, { id: 'agent-mike', name: 'Mike Lead' }, { id: 'agent-dev', name: 'Dev Team' }].map(a => (
+                <option key={a.id} value={`${a.id}::${a.name}`}>{a.name}</option>
               ))}
             </select>
           </div>

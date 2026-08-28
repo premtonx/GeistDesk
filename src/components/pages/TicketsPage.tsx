@@ -80,6 +80,29 @@ const hasTagCaseInsensitive = (tags: string[] | undefined, target: string): bool
   return tags.some(tag => tag.toLowerCase().trim() === target.toLowerCase().trim());
 };
 
+/**
+ * Normalize an assignee change into the full set of fields the ticket stores.
+ * Writes agentId/agentName plus alias fields so every consumer (list, detail,
+ * backend mirror, RAG) sees the same assignee regardless of which screen set it.
+ * - `null`  → explicit unassignment (persisted as NULL)
+ * - `undefined` → field not provided; preserved server-side (omitted)
+ */
+const buildAssigneePayload = (
+  agentId: string | undefined | null,
+  agentName: string | undefined | null,
+  assignedToEmail?: string,
+): Partial<TicketType> => {
+  const payload: Partial<TicketType> = {};
+  if (agentId !== undefined) {
+    payload.agentId = agentId;
+    payload.assignedTo = agentId;
+    payload.assigneeId = agentId;
+  }
+  if (agentName !== undefined) payload.agentName = agentName;
+  if (assignedToEmail !== undefined) payload.assignedToEmail = assignedToEmail;
+  return payload;
+};
+
 export default function TicketsPage() {
   const { t } = useTranslation();
   const { user } = useAuth();
@@ -267,14 +290,32 @@ export default function TicketsPage() {
   };
 
   const handleInlineUpdate = async (ticketId: string, data: Partial<TicketType>) => {
-    // Optimistic UI Update
-    setAllTickets(prev => prev.map(t => t.id === ticketId ? { ...t, ...data } : t));
-    
+    // Normalize assignee changes so agentId/agentName plus alias fields are
+    // persisted together (list + detail screens use the same payload shape).
+    const isAssigneeChange =
+      data.agentId !== undefined ||
+      data.agentName !== undefined ||
+      data.assignedTo !== undefined ||
+      data.assigneeId !== undefined;
+    const payload: Partial<TicketType> = isAssigneeChange
+      ? buildAssigneePayload(
+          (data.agentId ?? data.assignedTo ?? data.assigneeId) as string | null | undefined,
+          data.agentName,
+          data.assignedToEmail,
+        )
+      : data;
+
+    // Optimistic UI Update — selectedTicket is derived from allTickets,
+    // so updating allTickets also refreshes the detail view.
+    setAllTickets(prev => prev.map(t => (t.id === ticketId ? { ...t, ...payload } : t)));
+
     try {
-      await ticketService.updateTicket(ticketId, data);
-      toast.success("Ticket updated");
+      await ticketService.updateTicket(ticketId, payload);
+      toast.success(isAssigneeChange
+        ? t('tickets.assignedToast', 'Ticket erfolgreich zugewiesen')
+        : t('tickets.updatedToast', 'Ticket updated'));
     } catch (error) {
-      toast.error("Failed to update ticket");
+      toast.error(t('tickets.failedToast', 'Failed to update ticket'));
     }
   };
 
@@ -751,43 +792,43 @@ export default function TicketsPage() {
   const confirmHandoff = async () => {
     if (!pendingAgentUpdate || !selectedTicketId) return;
 
+    const { id: targetTicketId, data } = pendingAgentUpdate;
+    const isAssigneeChange = data && (data.agentName !== undefined || data.agentId !== undefined);
+    const assigneePayload = isAssigneeChange
+      ? buildAssigneePayload(data.agentId, data.agentName, data.assignedToEmail)
+      : {};
+
     try {
-      // 1. Update the ticket assignee — always the primary action.
-      const { data } = pendingAgentUpdate;
-      if (data && (data.agentName !== undefined || data.agentId !== undefined)) {
-        await ticketService.updateTicket(pendingAgentUpdate.id, {
-          agentName: data.agentName,
-          agentId: data.agentId,
-        });
+      // 1. Update the ticket assignee — always the primary action, awaited first.
+      if (isAssigneeChange) {
+        await ticketService.updateTicket(targetTicketId, assigneePayload);
+        // Update React state immediately so the new assignee displays in the UI.
         setAllTickets(prev =>
-          prev.map(t =>
-            t.id === pendingAgentUpdate.id
-              ? { ...t, agentName: data.agentName, agentId: data.agentId }
-              : t,
-          ),
+          prev.map(t => (t.id === targetTicketId ? { ...t, ...assigneePayload } : t)),
         );
       }
 
       // 2. Best-effort: save the Golden Note briefing if we have a summary.
+      //    A failure here must never block or fail the handoff.
       if (handoffSummary) {
         try {
           const content = `[NEXUS HANDOFF BRIEFING]\n\nCUSTOMER GOAL: ${handoffSummary.customerGoal}\n\nEFFORT SO FAR:\n${handoffSummary.effortSoFar.map(e => `• ${e}`).join('\n')}`;
-          await axios.post(`/api/tickets/${selectedTicketId}/golden-note`, {
+          await axios.post(`/api/tickets/${targetTicketId}/golden-note`, {
             content,
             authorId: user?.uid,
             authorName: user?.email || 'System'
           });
-          toast.success("Handoff successful and Golden Note saved.");
+          toast.success(t('tickets.handoff.successWithNote', 'Übergabe erfolgreich, Golden Note gespeichert.'));
         } catch (e) {
           console.warn('Golden Note could not be saved, but the handoff completed.', e);
-          toast.success("Handoff successful. (Golden Note could not be saved.)");
+          toast.warning(t('tickets.handoff.successNoNote', 'Übergabe erfolgreich, Briefing konnte nicht gespeichert werden'));
         }
       } else {
-        toast.success("Handoff successful.");
+        toast.success(t('tickets.handoff.success', 'Übergabe erfolgreich'));
       }
     } catch (e) {
       console.error('Handoff assignment failed:', e);
-      toast.error("Handoff failed.");
+      toast.error(t('tickets.handoff.failedToast', 'Handoff failed.'));
     } finally {
       setIsHandoffOpen(false);
       setPendingAgentUpdate(null);
@@ -1369,14 +1410,51 @@ export default function TicketsPage() {
 
   const handleBulkUpdate = async (updates: Partial<TicketType>) => {
     if (selectedTicketIds.length === 0) return;
-    
-    const loadingToast = toast.loading(`Updating ${selectedTicketIds.length} tickets...`);
+
+    // Normalize assignee payload (agentId/agentName + alias fields).
+    const isAssigneeChange =
+      updates.agentId !== undefined ||
+      updates.agentName !== undefined ||
+      updates.assignedTo !== undefined ||
+      updates.assigneeId !== undefined;
+    const payload: Partial<TicketType> = isAssigneeChange
+      ? buildAssigneePayload(
+          (updates.agentId ?? updates.assignedTo ?? updates.assigneeId) as string | null | undefined,
+          updates.agentName,
+          updates.assignedToEmail,
+        )
+      : updates;
+
+    // Snapshot the original state for rollback.
+    const ids = [...selectedTicketIds];
+    const originals = new Map<string, TicketType>();
+    for (const ticket of allTickets) {
+      if (ids.includes(ticket.id)) originals.set(ticket.id, ticket);
+    }
+
+    // Optimistic UI update.
+    setAllTickets(prev => prev.map(t => (ids.includes(t.id) ? { ...t, ...payload } : t)));
+
+    const loadingToast = toast.loading(
+      t('tickets.bulk.updating', 'Aktualisiere {{count}} Tickets...').replace('{{count}}', String(ids.length)),
+    );
     try {
-      await Promise.all(selectedTicketIds.map(id => ticketService.updateTicket(id, updates)));
-      toast.success(`Successfully updated ${selectedTicketIds.length} tickets`, { id: loadingToast });
+      const result = await ticketService.bulkUpdate(ids, payload);
+      if (result.failed > 0 && result.updated === 0) {
+        throw new Error(`Bulk update failed for ${result.failed} tickets`);
+      }
+      toast.success(
+        isAssigneeChange
+          ? t('tickets.bulk.assignedSuccess', 'Tickets erfolgreich zugewiesen')
+          : t('tickets.bulk.updatedSuccess', 'Erfolgreich aktualisiert'),
+        { id: loadingToast },
+      );
       setSelectedTicketIds([]);
     } catch (e) {
-      toast.error("Failed to perform bulk update", { id: loadingToast });
+      console.error('Bulk update failed:', e);
+      toast.error(t('tickets.bulk.failedToast', 'Sammelaktualisierung fehlgeschlagen'), { id: loadingToast });
+      // Revert optimistic state on total failure.
+      setAllTickets(prev => prev.map(t => (originals.has(t.id) ? (originals.get(t.id) as TicketType) : t)));
     }
   };
 
@@ -1550,8 +1628,7 @@ export default function TicketsPage() {
               initiateHandoff={initiateHandoff}
               suggestedTags={suggestedTags}
               allTickets={allTickets}
-              ticketService={ticketService}
-              setAllTickets={setAllTickets}
+              handleInlineUpdate={handleInlineUpdate}
             />
           </div>
         ) : (

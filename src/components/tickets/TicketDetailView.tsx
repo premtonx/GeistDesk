@@ -58,7 +58,7 @@ export interface TicketDetailViewProps {
   setAreNotesExpanded: (v: boolean) => void;
   user: { uid?: string; displayName?: string | null; email?: string | null } | null;
   ticketService: {
-    updateTicket: (id: string, data: Partial<TicketType>) => Promise<void> | void;
+    updateTicket: (id: string, data: Partial<TicketType>) => Promise<{ success: boolean; ticket?: TicketType }> | void;
     addAgentComment: (id: string, comment: { content: string; agentId?: string; agentName?: string }) => Promise<void> | void;
     getTicket: (id: string) => Promise<TicketType | null>;
   };

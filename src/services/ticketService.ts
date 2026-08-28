@@ -154,25 +154,28 @@ export const ticketService = {
     }
   },
 
-  updateTicket: async (id: string, updates: Partial<Ticket>) => {
+  updateTicket: async (id: string, updates: Partial<Ticket>): Promise<{ success: boolean; ticket?: Ticket }> => {
     try {
-      const docRef = doc(db, TICKETS_COLLECTION, id);
-      
-      // Fetch ticket snapshot to get its subject before update
-      const ticketSnap = await getDoc(docRef);
-      const ticketData = ticketSnap.data();
-      const ticketSubject = ticketData?.subject || 'Ticket';
-
-      await updateDoc(docRef, {
-        ...updates,
-        updatedAt: serverTimestamp()
+      // REST-first update against the PostgreSQL backend.
+      const res = await fetch(`/api/tickets/${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error((data as { error?: string })?.error || `Ticket update failed (${res.status})`);
+      }
+
+      const ticketSubject = (data as { ticket?: Ticket })?.ticket?.subject || 'Ticket';
+      const ticketDescription = (data as { ticket?: Ticket })?.ticket?.description || '';
 
       // Hook newly solved tickets into autopilot + vector RAG index
       if (updates.status === 'resolved' || updates.status === 'closed') {
         try {
           if (updates.status === 'resolved') {
-            await autopilotService.processNewlySolvedTicket(id, ticketSubject, ticketData?.description || '');
+            await autopilotService.processNewlySolvedTicket(id, ticketSubject, ticketDescription);
           }
         } catch (e) {
           console.warn("Autopilot processing failed silently:", e);
@@ -210,9 +213,38 @@ export const ticketService = {
           link: `/tickets/${id}`
         });
       }
+
+      return { success: true, ticket: (data as { ticket?: Ticket }).ticket };
     } catch (error) {
       handleFirestoreError(error, OperationType.UPDATE, `${TICKETS_COLLECTION}/${id}`);
+      throw error;
     }
+  },
+
+  /**
+   * Bulk update via POST /api/tickets/bulk-update (PostgreSQL backend).
+   * Returns the updated tickets.
+   */
+  bulkUpdate: async (
+    ids: string[],
+    updates: Partial<Ticket>,
+  ): Promise<{ success: boolean; updated: number; failed: number; tickets?: (Ticket & { id: string })[] }> => {
+    const res = await fetch('/api/tickets/bulk-update', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids, updates }),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error((data as { error?: string })?.error || `Bulk update failed (${res.status})`);
+    }
+    return data as {
+      success: boolean;
+      updated: number;
+      failed: number;
+      tickets?: (Ticket & { id: string })[];
+    };
   },
 
   subscribeToMessages: (ticketId: string, callback: (messages: Message[]) => void) => {
