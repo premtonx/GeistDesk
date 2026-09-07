@@ -90,7 +90,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT }}
           source: dist
-          target: /home/sovereign/GeistDesk
+          target: /home/sovereign/desk.geistai.eu
           overwrite: true
 
       - name: Execute Remote SSH Deployment Loop
@@ -108,7 +108,7 @@ jobs:
           script: |
             set -euo pipefail
 
-            cd ~/GeistDesk
+            cd ~/desk.geistai.eu
             git fetch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/premtonx/GeistDesk.git main
             git reset --hard FETCH_HEAD
 
@@ -143,9 +143,9 @@ jobs:
             set_env_default ENABLE_SANDBOX false
             # Compose Traefik labels now read from .env. Pin the live host so
             # Host(`${DOMAIN_NAME:-localhost}`) does not fall back to localhost.
-            set_env_default DOMAIN_NAME app.premtonx.cloud
-            set_env_default PUBLIC_HOSTNAME app.premtonx.cloud
-            set_env_default PUBLIC_APP_URL https://app.premtonx.cloud
+            set_env_default DOMAIN_NAME desk.geistai.eu
+            set_env_default PUBLIC_HOSTNAME desk.geistai.eu
+            set_env_default PUBLIC_APP_URL https://desk.geistai.eu
             set_env_default ROUTER_NAME geistdesk-sso
             set_env_default TRAEFIK_NETWORK traefik-public
             set_env_default INBOUND_EMAIL_DOMAIN inbound.geistai.eu
@@ -153,11 +153,11 @@ jobs:
             set_env_if_missing INBOUND_MAIL_WEBHOOK_SECRET
 
             if ! grep -q "^JWT_SECRET=" .env; then
-              echo "FATAL: JWT_SECRET must be set in ~/GeistDesk/.env before deploy"
+              echo "FATAL: JWT_SECRET must be set in ~/desk.geistai.eu/.env before deploy"
               exit 1
             fi
             if ! grep -q "^VAULT_ENCRYPTION_KEY=" .env; then
-              echo "FATAL: VAULT_ENCRYPTION_KEY must be set in ~/GeistDesk/.env before deploy"
+              echo "FATAL: VAULT_ENCRYPTION_KEY must be set in ~/desk.geistai.eu/.env before deploy"
               exit 1
             fi
 
@@ -205,8 +205,8 @@ jobs:
 
             echo "Verifying public health endpoint..."
             for i in 1 2 3 4 5 6 7 8 9 10; do
-              if curl -fsS "https://app.premtonx.cloud/api/health" >/dev/null; then
-                echo "Health check OK (https://app.premtonx.cloud/api/health)"
+              if curl -fsS "https://desk.geistai.eu/api/health" >/dev/null; then
+                echo "Health check OK (https://desk.geistai.eu/api/health)"
                 break
               fi
               if [ "$i" -eq 10 ]; then
