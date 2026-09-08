@@ -198,7 +198,10 @@ export default function TicketsPage() {
     const custom = sidebarPrefs.customViews.map((v) => customViewId(v));
     const visibleViewIds = [...builtIn, ...custom];
     if (!visibleViewIds.includes(activeView)) {
-      setActiveView(defaultViewSetting);
+      const fallback = visibleViewIds.includes(defaultViewSetting)
+        ? defaultViewSetting
+        : 'team_all_open';
+      setActiveView(fallback);
     }
   }, [sidebarPrefs.customViews, activeView, defaultViewSetting]);
 

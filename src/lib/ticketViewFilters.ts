@@ -85,15 +85,6 @@ export function isHelpRequestedTicket(ticket: Ticket): boolean {
   return ticket.isHelpRequested === true && isActiveSupportTicket(ticket);
 }
 
-export function isVipCustomerTicket(ticket: Ticket): boolean {
-  return (
-    (ticket as { customerTier?: string }).customerTier === 'VIP' ||
-    ticket.priority === 'urgent' ||
-    hasTagCaseInsensitive(ticket.tags, 'VIP') ||
-    ticket.customerName?.toLowerCase().includes('sarah') === true
-  );
-}
-
 export function isEscalationTicket(ticket: Ticket): boolean {
   return (
     matchStatus(ticket.status, 'open') &&
@@ -196,10 +187,6 @@ export function isKbSuggestionTicket(ticket: Ticket): boolean {
   );
 }
 
-export function isVipRequestTicket(ticket: Ticket): boolean {
-  return isVipCustomerTicket(ticket) && isTeamAllOpenTicket(ticket);
-}
-
 function filterByStatusValue(tickets: Ticket[], status: string): Ticket[] {
   switch (status) {
     case 'open':
@@ -251,8 +238,6 @@ export function filterTicketsByView(
     case 'help_requested':
     case 'agent_seeking_help':
       return tickets.filter(isHelpRequestedTicket);
-    case 'vip_customers':
-      return tickets.filter(isVipCustomerTicket);
     case 'escalations':
       return tickets.filter(isEscalationTicket);
     case 'sla_risk':
@@ -300,8 +285,6 @@ export function filterTicketsByView(
       return tickets.filter((t) => isDuplicateTicket(t, allTickets));
     case 'kb_suggestion':
       return tickets.filter(isKbSuggestionTicket);
-    case 'vip_requests':
-      return tickets.filter(isVipRequestTicket);
     case 'my_queue':
       return tickets.filter(
         (t) =>
@@ -499,7 +482,6 @@ export interface TicketQueueStats {
   onhold: number;
   urgent: number;
   unassigned: number;
-  vip: number;
   critical: number;
   slaRisk: number;
   bugs: number;
@@ -514,7 +496,6 @@ export function computeTicketQueueStats(pool: Ticket[]): TicketQueueStats {
     onhold: activePool.filter(isOnHoldTicket).length,
     urgent: activePool.filter(isUrgentPriorityTicket).length,
     unassigned: activePool.filter(isUnassignedTicket).length,
-    vip: activePool.filter(isVipCustomerTicket).length,
     critical: activePool.filter(isUrgentPriorityTicket).length,
     slaRisk: activePool.filter(isSlaRiskTicket).length,
     bugs: activePool.filter((t) => isBugTicket(t)).length,

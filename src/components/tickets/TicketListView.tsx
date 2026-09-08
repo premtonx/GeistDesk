@@ -233,7 +233,6 @@ export function TicketListView(props: TicketListViewProps) {
               id="tickets-ai-chip"
               ticketCount={tickets.length}
               criticalCount={ticketQueueStats.critical}
-              vipCount={ticketQueueStats.vip}
               className="mb-1 mt-1"
             />
 
@@ -1013,11 +1012,7 @@ export function TicketListView(props: TicketListViewProps) {
                 ) : (
                   tickets.map(ticket => {
                     const tier = (() => {
-                      const customerName = safeString(ticket.customerName).toLowerCase();
                       const company = safeString(ticket.company).toLowerCase();
-                      if (ticket.priority === 'urgent' || ticket.tags?.includes('VIP') || customerName.includes('sarah')) {
-                        return { label: t('tickets.tiers.vip', 'VIP'), style: 'bg-amber-500/10 text-amber-600 border-amber-500/20' };
-                      }
                       if (company.includes('advanced') || company.includes('global') || ticket.tags?.includes('Enterprise')) {
                         return { label: t('tickets.tiers.enterprise', 'Enterprise'), style: 'bg-indigo-500/10 text-indigo-600 border-indigo-500/20' };
                       }

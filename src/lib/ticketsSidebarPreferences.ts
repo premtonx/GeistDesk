@@ -29,8 +29,14 @@ export const DEFAULT_FAVORITE_VIEW_IDS = [
   'assigned_me',
   'help_requested',
   'sla_risk',
-  'vip_customers',
 ];
+
+const REMOVED_VIEW_IDS = new Set(['vip_customers', 'vip_requests']);
+
+function sanitizeFavoriteViewIds(ids: string[]): string[] {
+  const cleaned = ids.filter((id) => !REMOVED_VIEW_IDS.has(id));
+  return cleaned.length > 0 ? cleaned : [...DEFAULT_FAVORITE_VIEW_IDS];
+}
 
 export const DEFAULT_GROUP_ORDER = [
   'my_work',
@@ -74,7 +80,7 @@ function loadPreferences(userId: string): TicketsSidebarPreferences {
     }
     const parsed = JSON.parse(raw) as Partial<TicketsSidebarPreferences>;
     return {
-      favoriteViewIds: parsed.favoriteViewIds ?? [...DEFAULT_FAVORITE_VIEW_IDS],
+      favoriteViewIds: sanitizeFavoriteViewIds(parsed.favoriteViewIds ?? [...DEFAULT_FAVORITE_VIEW_IDS]),
       hiddenGroupIds: parsed.hiddenGroupIds ?? [],
       groupOrder: parsed.groupOrder ?? [...DEFAULT_GROUP_ORDER],
       collapsedGroups: { ...DEFAULT_COLLAPSED_GROUPS, ...parsed.collapsedGroups },
@@ -92,7 +98,13 @@ function loadPreferences(userId: string): TicketsSidebarPreferences {
 }
 
 function savePreferences(userId: string, prefs: TicketsSidebarPreferences) {
-  localStorage.setItem(storageKey(userId), JSON.stringify(prefs));
+  localStorage.setItem(
+    storageKey(userId),
+    JSON.stringify({
+      ...prefs,
+      favoriteViewIds: sanitizeFavoriteViewIds(prefs.favoriteViewIds),
+    }),
+  );
 }
 
 export function customViewId(view: CustomTicketView) {

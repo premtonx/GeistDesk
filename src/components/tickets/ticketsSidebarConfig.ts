@@ -16,7 +16,6 @@ import {
   Building2,
   CheckCircle2,
   Archive,
-  GraduationCap,
   AlertTriangle,
   AlertCircle,
   HelpCircle,
@@ -24,7 +23,6 @@ import {
   TrendingUp,
   Copy,
   BookOpen,
-  Crown,
   MailWarning,
   type LucideIcon,
 } from 'lucide-react';
@@ -71,7 +69,6 @@ export const ALL_TICKETS_VIEW_ITEMS: SidebarItemConfig[] = [
   { id: 'status_resolved', label: 'Resolved', icon: CheckCircle2 },
   { id: 'status_closed', label: 'Closed', icon: Archive },
   { id: 'spam', label: 'Spam', icon: MailWarning },
-  { id: 'vip_customers', label: 'VIP Customers', icon: GraduationCap },
   { id: 'escalations', label: 'Escalations', icon: AlertTriangle },
   { id: 'sla_risk', label: 'SLA Risk', icon: AlertCircle, indicator: { label: 'urgent', color: 'bg-amber-500 text-black font-extrabold animate-pulse' } },
   {
@@ -85,7 +82,6 @@ export const ALL_TICKETS_VIEW_ITEMS: SidebarItemConfig[] = [
   { id: 'potential_escalations', label: 'Potential Escalations', icon: TrendingUp },
   { id: 'duplicates_detected', label: 'Duplicates Detected', icon: Copy },
   { id: 'kb_suggestion', label: 'KB Suggestion Available', icon: BookOpen },
-  { id: 'vip_requests', label: 'VIP Requests', icon: Crown },
 ];
 
 const viewMap = new Map(ALL_TICKETS_VIEW_ITEMS.map((item) => [item.id, item]));
@@ -140,7 +136,6 @@ export const TICKETS_SIDEBAR_GROUPS: SidebarGroupConfig[] = [
     id: 'customers_sla',
     label: 'Customers / SLA',
     items: [
-      { id: 'vip_customers', label: 'VIP Customers', icon: GraduationCap },
       { id: 'escalations', label: 'Escalations', icon: AlertTriangle },
       { id: 'sla_risk', label: 'SLA Risk', icon: AlertCircle, indicator: { label: 'urgent', color: 'bg-amber-500 text-black font-extrabold animate-pulse' } },
     ],
@@ -160,7 +155,6 @@ export const TICKETS_SIDEBAR_GROUPS: SidebarGroupConfig[] = [
       { id: 'potential_escalations', label: 'Potential Escalations', icon: TrendingUp },
       { id: 'duplicates_detected', label: 'Duplicates Detected', icon: Copy },
       { id: 'kb_suggestion', label: 'KB Suggestion Available', icon: BookOpen },
-      { id: 'vip_requests', label: 'VIP Requests', icon: Crown },
     ],
   },
 ];

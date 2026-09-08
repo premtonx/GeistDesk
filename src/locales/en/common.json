@@ -214,12 +214,11 @@
     "aiChip": {
       "label": "AI Summary",
       "critical": "Critical Issue",
-      "vip": "VIP Requests",
       "sentiment": "Sentiment",
       "sentimentPositive": "Positive",
       "expand": "Expand",
       "collapse": "Collapse",
-      "expandedBody": "Queue analysis based on {{count}} tickets. Prioritize critical and VIP items; review SLA-risk tickets next."
+      "expandedBody": "Queue analysis based on {{count}} tickets. Prioritize critical items; review SLA-risk tickets next."
     },
     "assigneeMe": "Me ({{name}})",
     "ticketCount": "{{count}} tickets",
@@ -390,7 +389,6 @@
     "detected": " Detected ",
     "highCriticalIssues": "high-critical issues",
     "and": " and ",
-    "vipInquiries": "VIP inquiries",
     "recommendations": " Operational recommendations: priority response on billing escalations and automated macro resolution.",
     "summarizeQueue": "Summarize Queue",
     "prioritizeSla": "Prioritize SLA Risks",
@@ -515,7 +513,6 @@
       "potential_escalations": "Potential Escalations",
       "duplicates_detected": "Duplicates Detected",
       "kb_suggestion": "KB Suggestion Available",
-      "vip_requests": "VIP Requests",
       "my_queue": "My Queue",
       "waiting_review": "Waiting Review",
       "linked_bugs": "Linked Bugs",
@@ -545,7 +542,6 @@
       "closed_week": "Closed This Week",
       "urgent_priority": "Urgent",
       "high_priority": "High Priority",
-      "vip_customers": "VIP Customers",
       "enterprise_accounts": "Enterprise Accounts",
       "escalated_tickets": "Escalated Tickets",
       "ai_actions": "AI Suggested Actions",
@@ -722,7 +718,6 @@
       "escalating": "ESCALATING"
     },
     "tiers": {
-      "vip": "VIP",
       "enterprise": "Enterprise",
       "standard": "Standard"
     },

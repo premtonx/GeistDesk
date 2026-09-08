@@ -9,7 +9,6 @@ interface TicketsQueueAiChipProps {
   id?: string;
   ticketCount: number;
   criticalCount: number;
-  vipCount: number;
   sentimentLabel?: string;
   className?: string;
 }
@@ -18,7 +17,6 @@ export function TicketsQueueAiChip({
   id,
   ticketCount,
   criticalCount,
-  vipCount,
   sentimentLabel,
   className,
 }: TicketsQueueAiChipProps) {
@@ -40,10 +38,6 @@ export function TicketsQueueAiChip({
           {t('tickets.aiChip.label', 'AI Summary')}:{' '}
           <span className="text-amber-600 font-semibold">
             {criticalCount} {t('tickets.aiChip.critical', 'Critical')}
-          </span>
-          {' | '}
-          <span className="text-blue-600 font-semibold">
-            {vipCount} {t('tickets.aiChip.vip', 'VIP Requests')}
           </span>
           {' | '}
           {t('tickets.aiChip.sentiment', 'Sentiment')}:{' '}
@@ -70,7 +64,7 @@ export function TicketsQueueAiChip({
             className="overflow-hidden mx-6"
           >
             <div className="mt-1 p-3 bg-white border border-slate-200/80 rounded-lg shadow-sm text-xs text-slate-600 leading-relaxed">
-              {t('tickets.aiChip.expandedBody', 'Queue analysis based on {{count}} tickets. Prioritize critical and VIP items; review SLA-risk tickets next.')
+              {t('tickets.aiChip.expandedBody', 'Queue analysis based on {{count}} tickets. Prioritize critical items; review SLA-risk tickets next.')
                 .replace('{{count}}', String(ticketCount))}
             </div>
           </motion.div>

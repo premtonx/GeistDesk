@@ -214,12 +214,11 @@
     "aiChip": {
       "label": "KI-Zusammenfassung",
       "critical": "Kritisches Problem",
-      "vip": "VIP-Anfragen",
       "sentiment": "Stimmung",
       "sentimentPositive": "Positiv",
       "expand": "Erweitern",
       "collapse": "Einklappen",
-      "expandedBody": "Warteschlangenanalyse basierend auf {{count}} Tickets. Priorisieren Sie kritische und VIP-Einträge; prüfen Sie als Nächstes SLA-Risiko-Tickets."
+      "expandedBody": "Warteschlangenanalyse basierend auf {{count}} Tickets. Priorisieren Sie kritische Einträge; prüfen Sie als Nächstes SLA-Risiko-Tickets."
     },
     "assigneeMe": "Ich ({{name}})",
     "ticketCount": "{{count}} Tickets",
@@ -390,7 +389,6 @@
     "detected": " Erkannt: ",
     "highCriticalIssues": "kritische Probleme",
     "and": " und ",
-    "vipInquiries": "VIP-Anfragen",
     "recommendations": " Betriebliche Empfehlungen: Priorisierte Bearbeitung der Abrechnungs-Eskalationen und automatisierte Makro-Lösung.",
     "summarizeQueue": "Warteschlange zusammenfassen",
     "prioritizeSla": "SLA-Risiken priorisieren",
@@ -515,7 +513,6 @@
       "potential_escalations": "Potenzielle Eskalationen",
       "duplicates_detected": "Duplikate erkannt",
       "kb_suggestion": "KB-Vorschlag verfügbar",
-      "vip_requests": "VIP-Anfragen",
       "my_queue": "Meine Warteschlange",
       "waiting_review": "Wartet auf Prüfung",
       "linked_bugs": "Verknüpfte Bugs",
@@ -545,7 +542,6 @@
       "closed_week": "Diese Woche geschlossen",
       "urgent_priority": "Dringend",
       "high_priority": "Hohe Priorität",
-      "vip_customers": "VIP-Kunden",
       "enterprise_accounts": "Unternehmenskonten",
       "escalated_tickets": "Eskalierte Tickets",
       "ai_actions": "KI-Vorschläge",
@@ -722,7 +718,6 @@
       "escalating": "ESKALIEREND"
     },
     "tiers": {
-      "vip": "VIP",
       "enterprise": "Enterprise",
       "standard": "Standard"
     },
