@@ -46,9 +46,55 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import { getTicketKind } from '../../lib/ticketWorkspace';
 import { deriveAccountHealth } from '../../lib/account-health';
 import { getInitials, safeString } from '../../lib/utils';
+import { TICKET_DISPATCH_AGENTS } from '../../lib/ticketDispatchAgents';
 import { AccountHealthSmiley, accountHealthAriaLabel } from './AccountHealthSmiley';
 
 const STATUS_KEYS = ['open', 'pending', 'resolved', 'closed', 'qs', 'merged', 'trash'] as const;
+
+const UNASSIGNED_SENTINELS = new Set(['', 'unassigned', 'nicht-zugewiesen', 'nicht zugewiesen']);
+
+/** Pull a primitive id from a string or `{ id, uid, agentId }` object. */
+function scalarAssigneeId(val: unknown): string {
+  if (val === null || val === undefined) return '';
+  if (typeof val === 'object') {
+    const obj = val as Record<string, unknown>;
+    const nested = obj.id ?? obj.uid ?? obj.agentId ?? obj.assigneeId;
+    return scalarAssigneeId(nested);
+  }
+  const id = String(val).trim();
+  return UNASSIGNED_SENTINELS.has(id.toLowerCase()) ? '' : id;
+}
+
+function resolveTicketAssignee(ticket: TicketType): { id: string; name: string } | null {
+  const id =
+    scalarAssigneeId(ticket.agentId) ||
+    scalarAssigneeId(ticket.assignedTo) ||
+    scalarAssigneeId(ticket.assigneeId);
+  const name =
+    safeString(ticket.agentName).trim() ||
+    (ticket.assignedTo !== null && typeof ticket.assignedTo === 'object'
+      ? safeString(ticket.assignedTo).trim()
+      : '');
+  if (!id && !name) return null;
+  return { id, name };
+}
+
+function matchDispatchAgentId(
+  assignee: { id: string; name: string } | null,
+  agents: { id: string; name: string }[],
+): string {
+  if (!assignee) return '';
+  if (assignee.id) {
+    const byId = agents.find((a) => a.id === assignee.id);
+    if (byId) return byId.id;
+  }
+  const label = (assignee.name || assignee.id).trim().toLowerCase();
+  if (label) {
+    const byName = agents.find((a) => a.name.toLowerCase() === label);
+    if (byName) return byName.id;
+  }
+  return assignee.id || '';
+}
 
 interface RedesignedSidebarProps {
   ticket: TicketType;
@@ -96,9 +142,41 @@ export function RedesignedSidebar({
   const [slaTierDraft, setSlaTierDraft] = useState(ticket.slaTier ?? '');
   const syncedHealthTicketId = useRef<string | null>(null);
 
+  const ticketAssignee = useMemo(
+    () => resolveTicketAssignee(ticket),
+    [ticket.agentId, ticket.assignedTo, ticket.assigneeId, ticket.agentName],
+  );
+
+  const dispatchAgents = useMemo(() => {
+    const agents = TICKET_DISPATCH_AGENTS.map((a) => ({ ...a }));
+    if (!ticketAssignee) return agents;
+    const knownById = Boolean(ticketAssignee.id && agents.some((a) => a.id === ticketAssignee.id));
+    const knownByName = Boolean(
+      ticketAssignee.name && agents.some((a) => a.name.toLowerCase() === ticketAssignee.name.toLowerCase()),
+    );
+    if (!knownById && !knownByName && (ticketAssignee.id || ticketAssignee.name)) {
+      agents.unshift({
+        id: ticketAssignee.id || ticketAssignee.name,
+        name: ticketAssignee.name || ticketAssignee.id,
+      });
+    }
+    return agents;
+  }, [ticketAssignee]);
+
+  const syncedDispatchAgentId = useMemo(
+    () => matchDispatchAgentId(ticketAssignee, dispatchAgents),
+    [ticketAssignee, dispatchAgents],
+  );
+
+  const [dispatchAgentId, setDispatchAgentId] = useState(syncedDispatchAgentId);
+
   useEffect(() => {
     setSlaTierDraft(ticket.slaTier ?? '');
   }, [ticket.id, ticket.slaTier]);
+
+  useEffect(() => {
+    setDispatchAgentId(syncedDispatchAgentId);
+  }, [ticket.id, syncedDispatchAgentId]);
 
   const companyOpenTickets = useMemo(() => {
     if (!ticket.companyId && !ticket.company) return 0;
@@ -193,7 +271,7 @@ export function RedesignedSidebar({
               <UserCheck className="w-3.5 h-3.5 text-primary" />
               <span>{t('tickets.sidebar.agentAssignment', 'Agent assignment')}</span>
             </span>
-            {ticket.agentName ? (
+            {ticketAssignee ? (
               <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[8.5px] font-bold py-0.5 px-2">
                 {t('tickets.sidebar.activelyAssigned', 'Actively assigned')}
               </Badge>
@@ -206,19 +284,19 @@ export function RedesignedSidebar({
 
           <div className="flex items-center gap-3 bg-muted/40 p-2.5 rounded-xl border border-dashed border-border/80">
             <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm shrink-0 border ${
-              ticket.agentName 
+              ticketAssignee
                 ? "bg-primary/10 text-primary border-primary/20" 
                 : "bg-slate-100 text-slate-400 border-slate-200"
             }`}>
-              {ticket.agentName ? getInitials(ticket.agentName) : "?"}
+              {ticketAssignee ? getInitials(ticketAssignee.name || ticketAssignee.id) : "?"}
             </div>
             
             <div className="flex-1 min-w-0">
               <div className="text-[12px] font-extrabold text-foreground truncate">
-                {safeString(ticket.agentName, t('tickets.unassigned', 'Unassigned'))}
+                {safeString(ticketAssignee?.name || ticketAssignee?.id, t('tickets.unassigned', 'Unassigned'))}
               </div>
               <div className="text-[10px] text-muted-foreground truncate">
-                {ticket.agentName
+                {ticketAssignee
                   ? t('tickets.sidebar.responsibleAgent', 'Responsible agent')
                   : t('tickets.sidebar.clickToAssign', 'Click below to assign this ticket')}
               </div>
@@ -230,35 +308,49 @@ export function RedesignedSidebar({
             <select 
               id="dispatch-agent-select"
               className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer text-slate-700 dark:text-slate-200"
-              value={ticket.agentId ? `${ticket.agentId}::${safeString(ticket.agentName)}` : ''}
+              value={dispatchAgentId}
               onChange={(e) => {
                 const val = e.target.value;
+                setDispatchAgentId(val);
                 if (val === '') {
                   // Direct unassignment — no AI involvement. `null` (not
                   // undefined) so JSON serialization persists the clearing.
                   onUpdateTicketField({ agentId: null, agentName: null, assignedTo: null, assigneeId: null });
                 } else {
                   // Direct assignment — persist immediately so the ticket is
-                  // never blocked on AI summary generation.
-                  const [agentId, agentName] = val.split('::');
-                  onUpdateTicketField({ agentId: agentId || undefined, agentName: agentName || val });
+                  // never blocked on AI summary generation. Option `value`
+                  // is always the agent id so it matches `<option value>`.
+                  const agent = dispatchAgents.find((a) => a.id === val);
+                  const agentName = agent?.name || val;
+                  onUpdateTicketField({
+                    agentId: val,
+                    agentName,
+                    assignedTo: val,
+                    assigneeId: val,
+                  });
                 }
               }}
             >
               <option value="">{t('tickets.unassigned', 'Unassigned')}</option>
-              {[{ id: 'agent-sarah', name: 'Sarah Agent' }, { id: 'agent-mike', name: 'Mike Lead' }, { id: 'agent-dev', name: 'Dev Team' }].map(a => (
-                <option key={a.id} value={`${a.id}::${a.name}`}>{a.name}</option>
+              {dispatchAgents.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
               ))}
             </select>
           </div>
 
-          {ticket.agentName && onInitiateHandoff && (
+          {ticketAssignee && onInitiateHandoff && (
             <Button
               type="button"
               variant="outline"
               size="sm"
               className="w-full text-xs font-semibold py-2 rounded-xl flex items-center justify-center gap-1.5 border-amber-200 text-amber-700 hover:bg-amber-50 transition-all cursor-pointer"
-              onClick={() => onInitiateHandoff({ agentName: safeString(ticket.agentName, 'Agent'), agentId: ticket.agentId })}
+              onClick={() => {
+                const selected = dispatchAgents.find((a) => a.id === dispatchAgentId);
+                onInitiateHandoff({
+                  agentName: selected?.name || safeString(ticket.agentName, 'Agent'),
+                  agentId: dispatchAgentId || ticketAssignee?.id || ticket.agentId || undefined,
+                });
+              }}
             >
               <UserPlus className="w-3.5 h-3.5" />
               {t('tickets.sidebar.transferTicket', 'Ticket übergeben')}

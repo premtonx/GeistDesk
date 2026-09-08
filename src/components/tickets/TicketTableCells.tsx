@@ -11,6 +11,7 @@ import {
 import { TicketPriority, TicketStatus } from '../../types';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { getInitials, safeString } from '../../lib/utils';
+import { TICKET_DISPATCH_AGENTS } from '../../lib/ticketDispatchAgents';
 
 const STATUS_STYLES: Record<string, { pill: string; dot: string }> = {
   open: { pill: 'bg-blue-50 text-blue-700 border-blue-100', dot: 'bg-blue-500' },
@@ -135,11 +136,7 @@ interface TicketAssigneeChipProps {
   onChange: (agentId: string | null | undefined, agentName: string | null | undefined) => void;
 }
 
-const AGENT_OPTIONS = [
-  { id: 'agent-sarah-james', name: 'Sarah James' },
-  { id: 'agent-mike-chen', name: 'Mike Chen' },
-  { id: 'agent-sarah-connor', name: 'Sarah Connor' },
-];
+const AGENT_OPTIONS = TICKET_DISPATCH_AGENTS;
 
 export function TicketAssigneeChip({
   agentId,
