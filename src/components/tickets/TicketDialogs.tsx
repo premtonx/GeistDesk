@@ -1,10 +1,10 @@
 import {
-  AlertCircle, Angry, ArrowRight, BookOpen, CheckCircle2, ChevronDown, Frown, GitMerge,
-  Info, Meh, MessageSquare, Search, SearchCheck, ShieldCheck, Smile, Sparkles,
+  AlertCircle, Angry, BookOpen, CheckCircle2, ChevronDown, Frown, GitMerge,
+  Info, Meh, MessageSquare, ShieldCheck, Smile, Sparkles,
   Trash2, UserPlus, Zap,
 } from 'lucide-react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { cn, safeString } from '../../lib/utils';
+import { cn } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '../ui/dialog';
@@ -29,15 +29,11 @@ export interface TicketDialogsProps {
   hoveredTicket: TicketType | null;
   peekOffset: { x: number; y: number };
   peekMessages: Message[];
-  isMergeDialogOpen: boolean;
-  setIsMergeDialogOpen: (v: boolean) => void;
-  mergeSearchQuery: string;
-  setMergeSearchQuery: (v: string) => void;
-  mergeSearchSuggestions: TicketType[];
-  handleMerge: (destinationId: string) => void;
   selectedTicketIds: string[];
   setSelectedTicketIds: (v: string[]) => void;
   handleBulkUpdate: (updates: Partial<TicketType>) => Promise<void>;
+  canBulkMerge?: boolean;
+  onOpenBulkMerge?: () => void;
   user: { uid?: string; displayName?: string | null; email?: string | null } | null;
   isSentimentBreakdownOpen: boolean;
   setIsSentimentBreakdownOpen: (v: boolean) => void;
@@ -68,15 +64,11 @@ export function TicketDialogs(props: TicketDialogsProps) {
     hoveredTicket,
     peekOffset,
     peekMessages,
-    isMergeDialogOpen,
-    setIsMergeDialogOpen,
-    mergeSearchQuery,
-    setMergeSearchQuery,
-    mergeSearchSuggestions,
-    handleMerge,
     selectedTicketIds,
     setSelectedTicketIds,
     handleBulkUpdate,
+    canBulkMerge,
+    onOpenBulkMerge,
     user,
     isSentimentBreakdownOpen,
     setIsSentimentBreakdownOpen,
@@ -239,83 +231,6 @@ export function TicketDialogs(props: TicketDialogsProps) {
         )}
       </AnimatePresence>
 
-      {/* The Unifier: Merge Tickets Dialog */}
-      <Dialog open={isMergeDialogOpen} onOpenChange={setIsMergeDialogOpen}>
-        <DialogContent className="sm:max-w-[500px] border-border bg-card">
-          <DialogHeader>
-            <div className="flex items-center gap-3 mb-2">
-              <div className="p-2 bg-indigo-50 rounded-xl border border-indigo-100">
-                <GitMerge className="w-5 h-5 text-indigo-600" />
-              </div>
-              <DialogTitle className="text-xl font-bold text-foreground">{t('tickets.merge.title', 'The Unifier')}</DialogTitle>
-            </div>
-            <DialogDescription className="text-sm text-muted-foreground">
-              {t('tickets.merge.desc', 'Select the original ticket to merge this current duplicate into.')}
-              <br/>
-              <span className="font-bold text-destructive">{t('tickets.merge.warning', 'Warning:')}</span> {t('tickets.merge.warningDesc', 'All messages from this ticket will be moved, and this ticket will be marked as merged.')}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-6 py-4">
-            <div className="space-y-3">
-              <label className="text-xs font-bold text-foreground uppercase tracking-widest px-1">{t('tickets.merge.searchLabel', 'Original Ticket Search')}</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input 
-                  placeholder={t('tickets.merge.searchPlaceholder', 'Search by ID or Subject...')} 
-                  className="pl-10 h-12 bg-muted/30 border-border rounded-xl"
-                  value={mergeSearchQuery}
-                  onChange={(e) => setMergeSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-               {mergeSearchSuggestions.length > 0 ? (
-                 mergeSearchSuggestions.map((mergeTicket) => (
-                   <button 
-                     key={mergeTicket.id}
-                     onClick={() => handleMerge(mergeTicket.id)}
-                     className="w-full text-left p-4 rounded-xl border border-border bg-card hover:border-indigo-300 hover:bg-indigo-50/30 transition-all group flex items-center justify-between"
-                   >
-                     <div className="flex flex-col gap-1 overflow-hidden">
-                       <span className="text-xs font-black text-indigo-600 uppercase tracking-tighter">#{mergeTicket.id.slice(-5).toUpperCase()}</span>
-                       <span className="text-sm font-bold text-foreground truncate">{safeString(mergeTicket.subject)}</span>
-                       <div className="flex items-center gap-2 mt-1">
-                          <Badge className="text-[9px] font-bold h-4 uppercase">{t(`tickets.status.${(mergeTicket.status || 'open').toLowerCase()}`, mergeTicket.status || 'Offen')}</Badge>
-                          <span className="text-[10px] text-muted-foreground">{safeString(mergeTicket.customerName)}</span>
-                       </div>
-                     </div>
-                     <ArrowRight className="w-4 h-4 text-muted-foreground group-hover:text-indigo-600 group-hover:translate-x-1 transition-all" />
-                   </button>
-                 ))
-               ) : mergeSearchQuery.trim() ? (
-                 <div className="py-8 text-center text-muted-foreground space-y-2">
-                    <SearchCheck className="w-8 h-8 mx-auto opacity-20" />
-                    <p className="text-xs font-medium">{t('tickets.merge.notFound', 'Kein Original-Ticket für "{{query}}" gefunden').replace('{{query}}', mergeSearchQuery)}</p>
-                 </div>
-               ) : (
-                 <div className="py-8 text-center text-muted-foreground bg-muted/20 rounded-2xl border border-dashed border-border">
-                    <Info className="w-8 h-8 mx-auto opacity-20 mb-2" />
-                    <p className="text-xs font-medium">{t('tickets.merge.hint', 'Ticket-ID oder Betreff eingeben, um den Original-Thread zu finden.')}</p>
-                 </div>
-               )}
-            </div>
-          </div>
-
-          <DialogFooter className="sm:justify-start">
-            <Button 
-              variant="ghost" 
-              className="text-xs font-bold uppercase text-muted-foreground"
-              onClick={() => setIsMergeDialogOpen(false)}
-            >
-              {t('actions.cancel', 'Cancel')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      
-
       <Dialog open={isSentimentBreakdownOpen} onOpenChange={setIsSentimentBreakdownOpen}>
         <DialogContent className="max-w-md bg-card border-border shadow-2xl overflow-hidden">
           <DialogHeader>
@@ -458,9 +373,9 @@ export function TicketDialogs(props: TicketDialogsProps) {
                   </Button>
                 } />
                 <DropdownMenuContent className="w-40">
-                  {['open', 'pending', 'resolved', 'closed'].map(s => (
+                  {['open', 'pending', 'in_progress', 'resolved', 'closed', 'qs'].map(s => (
                     <DropdownMenuItem key={s} className="capitalize text-xs" onClick={() => handleBulkUpdate({ status: s as any })}>
-                      {t(`tickets.status.${s}`, s)}
+                      {t(`tickets.statusLabels.${s}`, t(`tickets.status.${s}`, s))}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>
@@ -501,6 +416,18 @@ export function TicketDialogs(props: TicketDialogsProps) {
               </DropdownMenu>
 
               <div className="w-px h-6 bg-gray-800 mx-2" />
+
+              {canBulkMerge && onOpenBulkMerge && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onOpenBulkMerge}
+                  className="h-9 px-4 rounded-full text-xs font-bold text-indigo-200 hover:text-white hover:bg-indigo-500/20 gap-2"
+                >
+                  <GitMerge className="w-3.5 h-3.5" />
+                  {t('tickets.merge.bulkButton', 'Tickets zusammenführen')}
+                </Button>
+              )}
 
               <Tooltip>
                 <TooltipTrigger 

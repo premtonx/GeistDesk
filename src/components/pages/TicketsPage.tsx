@@ -68,8 +68,11 @@ import { TicketListView } from '../tickets/TicketListView';
 import { TicketDetailContextPane } from '../tickets/TicketDetailContextPane';
 import { TicketDetailView } from '../tickets/TicketDetailView';
 import { TicketDialogs } from '../tickets/TicketDialogs';
+import { TicketMergeDialog } from '../tickets/TicketMergeDialog';
 import { TICKETS_SIDEBAR_GROUPS } from '../tickets/ticketsSidebarConfig';
 import { TicketsLayoutMode } from '../tickets/TicketsViewModeSelector';
+import { isReadonlyTerminalStatus } from '../../lib/ticket-status';
+import { ticketsShareCustomer } from '../../lib/ticketMerge';
 const matchStatus = (status: string | undefined, target: string): boolean => {
   if (!status) return false;
   return String(status).toLowerCase().trim() === target.toLowerCase().trim();
@@ -219,7 +222,6 @@ export default function TicketsPage() {
   };
   const [viewDensity] = useState<'comfortable' | 'compact'>('compact');
   const [selectedTicketIds, setSelectedTicketIds] = useState<string[]>([]);
-  const [headerCheckboxActive, setHeaderCheckboxActive] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(25);
   const [isSentimentBreakdownOpen, setIsSentimentBreakdownOpen] = useState(false);
@@ -308,6 +310,11 @@ export default function TicketsPage() {
         )
       : data;
 
+    if (isReadonlyTerminalStatus(String(payload.status ?? '')) && payload.status === 'merged') {
+      toast.error(t('tickets.merge.cannotSetManually', 'Zusammengeführt kann nicht manuell gesetzt werden.'));
+      return;
+    }
+
     // Snapshot the pre-update ticket so a failed write can be rolled back.
     const original = allTickets.find(t => t.id === ticketId);
 
@@ -342,17 +349,10 @@ export default function TicketsPage() {
   const [isFindingNeuralLinks, setIsFindingNeuralLinks] = useState(false);
   const [linkInput, setLinkInput] = useState('');
   const [isMergeDialogOpen, setIsMergeDialogOpen] = useState(false);
-  const [mergeSearchQuery, setMergeSearchQuery] = useState('');
+  const [mergeDialogAllowSearch, setMergeDialogAllowSearch] = useState(false);
+  const [mergeDialogTickets, setMergeDialogTickets] = useState<TicketType[]>([]);
+  const [isMerging, setIsMerging] = useState(false);
 
-  const mergeSearchSuggestions = useMemo(() => {
-    if (!mergeSearchQuery.trim()) return [];
-    return allTickets.filter(t => 
-      t.id !== selectedTicketId && (
-        String(t.subject ?? '').toLowerCase().includes(mergeSearchQuery.toLowerCase()) ||
-        String(t.id ?? '').toLowerCase().includes(mergeSearchQuery.toLowerCase())
-      )
-    ).slice(0, 5);
-  }, [mergeSearchQuery, allTickets, selectedTicketId]);
   const [aiSummary, setAiSummary] = useState<string>("");
   const [aiSources, setAiSources] = useState<{ paragraph: string; articleTitle: string; articleId?: string }[]>([]);
 
@@ -615,6 +615,13 @@ export default function TicketsPage() {
 
   const tickets = getFilteredTickets();
   const totalTicketsCount = tickets.length;
+  const headerCheckboxActive =
+    tickets.length > 0 && tickets.every((ticket) => selectedTicketIds.includes(ticket.id));
+  const selectedTicketsForMerge = allTickets.filter(
+    (ticket) => selectedTicketIds.includes(ticket.id) && ticket.status !== 'merged',
+  );
+  const canBulkMerge =
+    selectedTicketsForMerge.length >= 2 && ticketsShareCustomer(selectedTicketsForMerge);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -1081,20 +1088,6 @@ export default function TicketsPage() {
     }
   };
 
-  const handleMerge = async (destinationId: string) => {
-    if (!selectedTicketId) return;
-    
-    const loadingToast = toast.loading("Executing The Unifier: Merging tickets...");
-    try {
-      await ticketService.mergeTickets(selectedTicketId, destinationId);
-      toast.success(`Successfully merged into #${destinationId.slice(-5)}`, { id: loadingToast });
-      setIsMergeDialogOpen(false);
-      setSelectedTicketId(destinationId); // Move to the target ticket
-    } catch (e) {
-      toast.error("Merge operation failed.", { id: loadingToast });
-    }
-  };
-
   const generateAiReply = async () => {
     if (!selectedTicket) return;
     
@@ -1409,22 +1402,77 @@ export default function TicketsPage() {
   };
 
   const toggleTicketSelection = (id: string) => {
-    setSelectedTicketIds(prev => {
-      const next = prev.includes(id) ? prev.filter(tid => tid !== id) : [...prev, id];
-      if (next.length === 0) {
-        setHeaderCheckboxActive(false);
-      }
-      return next;
-    });
+    setSelectedTicketIds((prev) =>
+      prev.includes(id) ? prev.filter((tid) => tid !== id) : [...prev, id],
+    );
   };
 
   const toggleSelectAll = () => {
     if (headerCheckboxActive) {
-      setHeaderCheckboxActive(false);
       setSelectedTicketIds([]);
     } else {
-      setHeaderCheckboxActive(true);
-      setSelectedTicketIds(tickets.map(t => t.id));
+      setSelectedTicketIds(tickets.map((ticket) => ticket.id));
+    }
+  };
+
+  const openBulkMergeDialog = () => {
+    if (!canBulkMerge) return;
+    setMergeDialogAllowSearch(false);
+    setMergeDialogTickets(selectedTicketsForMerge);
+    setIsMergeDialogOpen(true);
+  };
+
+  const openDetailMergeDialog = () => {
+    if (!selectedTicket || selectedTicket.status === 'merged') return;
+    setMergeDialogAllowSearch(true);
+    setMergeDialogTickets([selectedTicket]);
+    setIsMergeDialogOpen(true);
+  };
+
+  const handleConfirmMerge = async (primaryId: string, sourceIds: string[]) => {
+    const involved = [primaryId, ...sourceIds];
+    const ticketsById = new Map(
+      allTickets.filter((ticket) => involved.includes(ticket.id)).map((ticket) => [ticket.id, ticket]),
+    );
+    setIsMerging(true);
+    const loadingToast = toast.loading(
+      t('tickets.merge.merging', 'Tickets werden zusammengeführt…'),
+    );
+    try {
+      await ticketService.mergeTicketsIntoPrimary(primaryId, sourceIds, ticketsById);
+      setAllTickets((prev) =>
+        prev.map((ticket) => {
+          if (sourceIds.includes(ticket.id)) {
+            return {
+              ...ticket,
+              status: 'merged',
+              mergedIntoId: primaryId,
+              masterTicketId: primaryId,
+            };
+          }
+          if (ticket.id === primaryId) {
+            return {
+              ...ticket,
+              isMasterTicket: true,
+              linkedTicketIds: Array.from(new Set([...(ticket.linkedTicketIds || []), ...sourceIds])),
+            };
+          }
+          return ticket;
+        }),
+      );
+      toast.success(t('tickets.merge.success', 'Tickets erfolgreich zusammengeführt.'), {
+        id: loadingToast,
+      });
+      setIsMergeDialogOpen(false);
+      setSelectedTicketIds([]);
+      if (selectedTicketId && sourceIds.includes(selectedTicketId)) {
+        setSelectedTicketId(primaryId);
+        navigate(`/tickets/${primaryId}`);
+      }
+    } catch (e) {
+      toast.error(t('tickets.merge.failed', 'Zusammenführen fehlgeschlagen.'), { id: loadingToast });
+    } finally {
+      setIsMerging(false);
     }
   };
 
@@ -1629,6 +1677,7 @@ export default function TicketsPage() {
                 setIsMobilePropertiesOpen={setIsMobilePropertiesOpen}
                 onConvertToKB={handleConvertToKB}
                 isKbDrafting={isKbDrafting}
+                onOpenMerge={openDetailMergeDialog}
               />
             <TicketDetailContextPane
               selectedTicket={selectedTicket}
@@ -1690,6 +1739,7 @@ export default function TicketsPage() {
         handleInlineUpdate={handleInlineUpdate}
         handleTicketSelect={handleTicketSelect}
         handleBulkUpdate={handleBulkUpdate}
+        onOpenBulkMerge={openBulkMergeDialog}
         viewDensity={viewDensity}
         setHoveredTicketId={setHoveredTicketId}
         mousePosRef={mousePosRef}
@@ -1719,15 +1769,11 @@ export default function TicketsPage() {
           hoveredTicket={hoveredTicket}
           peekOffset={peekOffset}
           peekMessages={peekMessages}
-          isMergeDialogOpen={isMergeDialogOpen}
-          setIsMergeDialogOpen={setIsMergeDialogOpen}
-          mergeSearchQuery={mergeSearchQuery}
-          setMergeSearchQuery={setMergeSearchQuery}
-          mergeSearchSuggestions={mergeSearchSuggestions}
-          handleMerge={handleMerge}
           selectedTicketIds={selectedTicketIds}
           setSelectedTicketIds={setSelectedTicketIds}
           handleBulkUpdate={handleBulkUpdate}
+          canBulkMerge={canBulkMerge}
+          onOpenBulkMerge={openBulkMergeDialog}
           user={user}
           isSentimentBreakdownOpen={isSentimentBreakdownOpen}
           setIsSentimentBreakdownOpen={setIsSentimentBreakdownOpen}
@@ -1744,6 +1790,16 @@ export default function TicketsPage() {
           setKbDraft={setKbDraft}
           isKbDrafting={isKbDrafting}
           confirmKbConvert={confirmKbConvert}
+        />
+
+        <TicketMergeDialog
+          open={isMergeDialogOpen}
+          onOpenChange={setIsMergeDialogOpen}
+          candidateTickets={mergeDialogTickets}
+          allTickets={allTickets}
+          allowSearch={mergeDialogAllowSearch}
+          onConfirm={handleConfirmMerge}
+          isMerging={isMerging}
         />
 
     </div>

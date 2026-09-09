@@ -1,6 +1,7 @@
 export type TicketStatus =
   | 'open'
   | 'pending'
+  | 'in_progress'
   | 'resolved'
   | 'closed'
   | 'deleted'

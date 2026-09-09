@@ -48,8 +48,7 @@ import { deriveAccountHealth } from '../../lib/account-health';
 import { getInitials, safeString } from '../../lib/utils';
 import { TICKET_DISPATCH_AGENTS } from '../../lib/ticketDispatchAgents';
 import { AccountHealthSmiley, accountHealthAriaLabel } from './AccountHealthSmiley';
-
-const STATUS_KEYS = ['open', 'pending', 'resolved', 'closed', 'qs', 'merged', 'trash'] as const;
+import { SELECTABLE_TICKET_STATUSES, isReadonlyTerminalStatus, isSelectableTicketStatus } from '../../lib/ticket-status';
 
 const UNASSIGNED_SENTINELS = new Set(['', 'unassigned', 'nicht-zugewiesen', 'nicht zugewiesen']);
 
@@ -94,6 +93,51 @@ function matchDispatchAgentId(
     if (byName) return byName.id;
   }
   return assignee.id || '';
+}
+
+function DispatchStatusSelect({
+  id,
+  status,
+  statusLabel,
+  onChange,
+  readOnlyHint,
+}: {
+  id?: string;
+  status: string;
+  statusLabel: (st: string) => string;
+  onChange: (status: string) => void;
+  readOnlyHint: string;
+}) {
+  if (isReadonlyTerminalStatus(status)) {
+    return (
+      <div className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center justify-between gap-2">
+        <span>{statusLabel(status)}</span>
+        <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground shrink-0">
+          {readOnlyHint}
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <select
+      id={id}
+      className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer text-slate-700 dark:text-slate-200 capitalize"
+      value={status}
+      onChange={(e) => onChange(e.target.value)}
+    >
+      {SELECTABLE_TICKET_STATUSES.map((st) => (
+        <option key={st} value={st}>
+          {statusLabel(st)}
+        </option>
+      ))}
+      {!isSelectableTicketStatus(status) ? (
+        <option value={status} disabled>
+          {statusLabel(status)}
+        </option>
+      ) : null}
+    </select>
+  );
 }
 
 interface RedesignedSidebarProps {
@@ -359,20 +403,13 @@ export function RedesignedSidebar({
 
           <div className="space-y-1 pt-1">
             <label className="text-[9.5px] font-black text-muted-foreground uppercase block">{t('tickets.sidebar.dispatchCaseStatus', 'Dispatch case status')}</label>
-            <select 
+            <DispatchStatusSelect
               id="dispatch-status-select"
-              className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer text-slate-700 dark:text-slate-200 capitalize"
-              value={ticket.status}
-              onChange={(e) => {
-                onUpdateTicketField({ status: e.target.value as any });
-              }}
-            >
-              {STATUS_KEYS.map(st => (
-                <option key={st} value={st}>
-                  {statusLabel(st)}
-                </option>
-              ))}
-            </select>
+              status={ticket.status}
+              statusLabel={statusLabel}
+              onChange={(status) => onUpdateTicketField({ status: status as any })}
+              readOnlyHint={t('tickets.merge.readonlyMerged', 'Nur lesbar')}
+            />
           </div>
 
           <div className="space-y-1 pt-2">
@@ -563,17 +600,12 @@ export function RedesignedSidebar({
 
               <div className="space-y-1">
                 <label className="text-[9.5px] font-black text-muted-foreground uppercase">{t('tickets.sidebar.lifecycleStatus', 'Lifecycle status')}</label>
-                <select 
-                  className="w-full bg-card border border-border rounded-xl px-3 py-1.5 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary capitalize"
-                  value={ticket.status}
-                  onChange={(e) => onUpdateTicketField({ status: e.target.value as any })}
-                >
-                  {STATUS_KEYS.map(st => (
-                    <option key={st} value={st}>
-                      {statusLabel(st)}
-                    </option>
-                  ))}
-                </select>
+                <DispatchStatusSelect
+                  status={ticket.status}
+                  statusLabel={statusLabel}
+                  onChange={(status) => onUpdateTicketField({ status: status as any })}
+                  readOnlyHint={t('tickets.merge.readonlyMerged', 'Nur lesbar')}
+                />
               </div>
 
               <div className="space-y-1">

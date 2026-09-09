@@ -400,43 +400,100 @@ export const ticketService = {
     }
   },
 
-  mergeTickets: async (sourceId: string, destinationId: string) => {
+  mergeTickets: async (
+    sourceId: string,
+    destinationId: string,
+    snapshots?: { source?: Ticket | null; dest?: Ticket | null },
+  ) => {
+    if (!sourceId || !destinationId || sourceId === destinationId) {
+      throw new Error('Invalid merge targets');
+    }
+
     try {
-      const sourceTicket = await ticketService.getTicket(sourceId);
-      const destTicket = await ticketService.getTicket(destinationId);
-      
-      if (!sourceTicket || !destTicket) throw new Error("Tickets not found");
+      const sourceTicket =
+        snapshots?.source ||
+        (await ticketService.getTicket(sourceId).catch(() => null));
+      const destTicket =
+        snapshots?.dest ||
+        (await ticketService.getTicket(destinationId).catch(() => null));
 
-      const messagesRef = collection(db, `${TICKETS_COLLECTION}/${sourceId}/messages`);
-      const messagesSnap = await getDocs(messagesRef);
-      const messages = messagesSnap.docs.map(d => d.data() as Message);
-
-      for (const msg of messages) {
-        await ticketService.sendMessage(destinationId, {
-          ...msg,
-          id: undefined,
-          content: `[Merged from #${sourceId.slice(-5)}]: ${msg.content}`
-        });
+      if (!sourceTicket && !destTicket && !snapshots) {
+        throw new Error('Tickets not found');
       }
 
-      if (sourceTicket.agentComments && sourceTicket.agentComments.length > 0) {
-        for (const comment of sourceTicket.agentComments) {
-          await ticketService.addAgentComment(destinationId, {
-            ...comment,
-            content: `[Merged from #${sourceId.slice(-5)}]: ${comment.content}`
+      try {
+        const messagesRef = collection(db, `${TICKETS_COLLECTION}/${sourceId}/messages`);
+        const messagesSnap = await getDocs(messagesRef);
+        const messages = messagesSnap.docs.map(d => d.data() as Message);
+
+        for (const msg of messages) {
+          await ticketService.sendMessage(destinationId, {
+            ...msg,
+            id: undefined,
+            content: `[Merged from #${sourceId.slice(-5)}]: ${msg.content}`
           });
         }
+      } catch (messageError) {
+        console.warn('Merge: could not copy Firestore messages', messageError);
       }
+
+      if (sourceTicket?.agentComments && sourceTicket.agentComments.length > 0) {
+        for (const comment of sourceTicket.agentComments) {
+          try {
+            await ticketService.addAgentComment(destinationId, {
+              ...comment,
+              content: `[Merged from #${sourceId.slice(-5)}]: ${comment.content}`
+            });
+          } catch (commentError) {
+            console.warn('Merge: could not copy agent comment', commentError);
+          }
+        }
+      }
+
+      const stamp = new Date().toLocaleString();
+      const sourceRef = `#${sourceId.slice(-5).toUpperCase()}`;
+      const destRef = `#${destinationId.slice(-5).toUpperCase()}`;
+      const timelineBlock = [
+        `[Zusammengeführt von ${sourceRef} am ${stamp}]`,
+        sourceTicket?.subject ? `Betreff: ${sourceTicket.subject}` : '',
+        sourceTicket?.description ? String(sourceTicket.description) : '',
+        sourceTicket?.internalNotes ? `Notizen:\n${sourceTicket.internalNotes}` : '',
+      ].filter(Boolean).join('\n\n');
+
+      const destNotes = [destTicket?.internalNotes, timelineBlock]
+        .filter(Boolean)
+        .join('\n\n');
+      const sourceNotes = [
+        sourceTicket?.internalNotes,
+        `[Zusammengeführt]: Dieses Ticket wurde am ${stamp} in ${destRef} überführt.`,
+      ].filter(Boolean).join('\n\n');
+
+      const destLinked = Array.from(
+        new Set([...(destTicket?.linkedTicketIds || []), sourceId]),
+      );
+
+      await ticketService.updateTicket(destinationId, {
+        internalNotes: destNotes,
+        linkedTicketIds: destLinked,
+        isMasterTicket: true,
+      });
 
       await ticketService.updateTicket(sourceId, {
         status: 'merged',
         mergedIntoId: destinationId,
-        internalNotes: `${sourceTicket.internalNotes || ''}\n\n[Unifier]: This ticket was merged into #${destinationId.slice(-5)} on ${new Date().toLocaleString()}`
+        masterTicketId: destinationId,
+        internalNotes: sourceNotes,
       });
 
-      await ticketService.updateTicket(destinationId, {
-        internalNotes: `${destTicket.internalNotes || ''}\n\n[Unifier]: Ticket #${sourceId.slice(-5)} was merged into this ticket on ${new Date().toLocaleString()}`
-      });
+      try {
+        await ticketService.addAgentComment(destinationId, {
+          content: timelineBlock,
+          agentName: 'System',
+          agentId: 'system-merge',
+        });
+      } catch {
+        /* timeline note already stored on internalNotes */
+      }
 
       await logAudit({
         module: 'tickets',
@@ -445,11 +502,38 @@ export const ticketService = {
         details: { sourceId, destinationId }
       });
 
-      return true;
+      return { destNotes, destLinked };
     } catch (error) {
       console.error("Merge failed:", error);
       throw error;
     }
+  },
+
+  mergeTicketsIntoPrimary: async (
+    primaryId: string,
+    sourceIds: string[],
+    ticketsById?: Map<string, Ticket>,
+  ) => {
+    const uniqueSources = [...new Set(sourceIds)].filter((id) => id && id !== primaryId);
+    if (!primaryId || uniqueSources.length === 0) {
+      throw new Error('Select a primary ticket and at least one ticket to merge.');
+    }
+    let dest = ticketsById?.get(primaryId) ?? null;
+    for (const sourceId of uniqueSources) {
+      const result = await ticketService.mergeTickets(sourceId, primaryId, {
+        source: ticketsById?.get(sourceId) ?? null,
+        dest,
+      });
+      if (dest) {
+        dest = {
+          ...dest,
+          isMasterTicket: true,
+          linkedTicketIds: result.destLinked,
+          internalNotes: result.destNotes,
+        };
+      }
+    }
+    return true;
   },
 
   async getTicketChecklist(ticketId: string): Promise<TicketChecklistItem[]> {

@@ -1,7 +1,7 @@
 import type { Dispatch, SetStateAction } from 'react';
 import { toast } from 'sonner';
 import {
-  BookOpen, ChevronDown, ChevronLeft, Mail, MessageSquare,
+  BookOpen, ChevronDown, ChevronLeft, GitMerge, Mail, MessageSquare,
   RefreshCw, SlidersHorizontal, Sparkles, Ticket,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -87,6 +87,7 @@ export interface TicketDetailViewProps {
   setIsMobilePropertiesOpen: (v: boolean | ((prev: boolean) => boolean)) => void;
   onConvertToKB?: () => void;
   isKbDrafting?: boolean;
+  onOpenMerge?: () => void;
 }
 
 export function TicketDetailView(props: TicketDetailViewProps) {
@@ -144,6 +145,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
     setIsMobilePropertiesOpen,
     onConvertToKB,
     isKbDrafting,
+    onOpenMerge,
   } = props;
 
   // Defensive guard: never crash the ticket workspace when the selected
@@ -211,6 +213,17 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                               setSelectedTicketId(null);
                             }}
                           />
+                          {onOpenMerge && selectedTicket.status !== 'merged' && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={onOpenMerge}
+                              className="h-9 px-3 rounded-lg border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                            >
+                              <GitMerge className="w-3.5 h-3.5" />
+                              <span>{t('tickets.merge.button', 'Zusammenführen')}</span>
+                            </Button>
+                          )}
                           <Button 
                             variant="outline" 
                             size="sm" 

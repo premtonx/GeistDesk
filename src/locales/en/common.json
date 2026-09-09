@@ -135,6 +135,7 @@
     "status": {
       "open": "Open",
       "pending": "In Progress",
+      "in_progress": "In Progress",
       "resolved": "Resolved",
       "closed": "Closed",
       "merged": "Merged",
@@ -142,7 +143,7 @@
       "deleted": "Deleted",
       "on-hold": "On Hold",
       "paused": "Paused",
-      "qs": "In QA",
+      "qs": "Quality assurance",
       "waiting_customer": "Waiting on Customer",
       "waiting_dev": "Waiting on Engineering",
       "waiting_vendor": "Waiting on Vendor"
@@ -334,14 +335,28 @@
       "applyFilters": "Apply Filters"
     },
     "merge": {
-      "title": "The Unifier",
-      "desc": "Select the original ticket to merge this current duplicate into.",
+      "title": "Merge tickets",
+      "desc": "Choose the primary ticket (master) that stays open. Messages and notes from the others are moved into it.",
       "warning": "Warning:",
-      "warningDesc": "All messages from this ticket will be moved, and this ticket will be marked as merged.",
-      "searchLabel": "Original Ticket Search",
-      "searchPlaceholder": "Search by ID or Subject...",
+      "warningDesc": "Messages and notes move to the master ticket. Secondary tickets are marked Merged.",
+      "searchLabel": "Search a ticket from the same customer",
+      "searchPlaceholder": "Search by ID or subject...",
+      "searchSameCustomer": "Search an open ticket from the same customer",
       "notFound": "No original ticket found for \"{{query}}\"",
-      "hint": "Enter a ticket ID or subject to find the original thread."
+      "noSameCustomer": "No other open tickets found for this customer.",
+      "hint": "Enter a ticket ID or subject to find the original thread.",
+      "choosePrimary": "Choose the primary ticket (master)",
+      "choosePrimaryDesc": "This ticket stays open. The others are set to Merged and linked to the master ID.",
+      "secondaries": "These tickets will be merged",
+      "confirm": "Confirm merge",
+      "merging": "Merging…",
+      "button": "Merge",
+      "bulkButton": "Merge tickets",
+      "primaryStaysOpen": "Stays open",
+      "readonlyMerged": "Read-only",
+      "cannotSetManually": "Merged cannot be set manually.",
+      "success": "Tickets merged successfully.",
+      "failed": "Merge failed."
     },
     "sentiment": {
       "title": "Sentiment Breakdown",
@@ -745,7 +760,8 @@
     },
     "statusLabels": {
       "open": "Open",
-      "pending": "Pending",
+      "pending": "Waiting",
+      "in_progress": "In Progress",
       "resolved": "Resolved",
       "closed": "Closed",
       "qs": "Quality assurance",

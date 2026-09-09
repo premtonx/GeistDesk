@@ -1,7 +1,7 @@
 import type { MutableRefObject, MouseEvent } from 'react';
 import {
   AlertTriangle, Angry, Box, Building2, CheckCircle2, ChevronDown, ChevronLeft,
-  ChevronRight, Clock, Frown, Globe, Hash, History, Link2, List, Mail, Meh,
+  ChevronRight, Clock, Frown, GitMerge, Globe, Hash, History, Link2, List, Mail, Meh,
   MessageCircleHeart, MessageSquare, MoreVertical, PhoneCall, RefreshCw, Settings2,
   Share2, SlidersHorizontal, Smile, Sparkles, Tag, Ticket, UserCheck, UserRound, X,
 } from 'lucide-react';
@@ -43,6 +43,8 @@ import { TicketsCardGrid } from './TicketsCardGrid';
 import { useTranslation } from '../../lib/context/I18nContext';
 import type { Ticket as TicketType, KBArticle, TicketStatus, TicketPriority } from '../../types';
 import type { TicketQueueStats, TopStatusFilterId } from '../../lib/ticketViewFilters';
+import { ticketsShareCustomer } from '../../lib/ticketMerge';
+import { SELECTABLE_TICKET_STATUSES } from '../../lib/ticket-status';
 
 export interface TicketListViewProps {
   ticketQueueStats: TicketQueueStats;
@@ -70,6 +72,7 @@ export interface TicketListViewProps {
   handleInlineUpdate: (id: string, data: Partial<TicketType>) => void;
   handleTicketSelect: (id: string) => void;
   handleBulkUpdate: (updates: Partial<TicketType>) => Promise<void>;
+  onOpenBulkMerge?: () => void;
   viewDensity: 'comfortable' | 'compact';
   setHoveredTicketId: (id: string | null) => void;
   mousePosRef: MutableRefObject<{ x: number; y: number }>;
@@ -116,6 +119,7 @@ export function TicketListView(props: TicketListViewProps) {
     handleInlineUpdate,
     handleTicketSelect,
     handleBulkUpdate,
+    onOpenBulkMerge,
     viewDensity,
     setHoveredTicketId,
     mousePosRef,
@@ -139,6 +143,11 @@ export function TicketListView(props: TicketListViewProps) {
   const startIdx = totalTicketsCount === 0 ? 0 : (currentPage - 1) * pageSize + 1;
   const endIdx = Math.min(currentPage * pageSize, totalTicketsCount);
   const totalPages = Math.ceil(totalTicketsCount / pageSize) || 1;
+
+  const selectedTickets = allTickets.filter(
+    (ticket) => selectedTicketIds.includes(ticket.id) && ticket.status !== 'merged',
+  );
+  const canBulkMerge = selectedTickets.length >= 2 && ticketsShareCustomer(selectedTickets);
 
   const formatTicketRef = (id: string) => {
     const upper = id.toUpperCase();
@@ -680,16 +689,16 @@ export function TicketListView(props: TicketListViewProps) {
                           {t('tickets.bulk.updateStatus', 'Status aktualisieren')} <ChevronDown className="w-3 h-3 text-slate-400" />
                         </DropdownMenuTrigger>
                         <DropdownMenuContent className="w-40 rounded-xl">
-                          {['open', 'pending', 'resolved', 'closed'].map(statusVal => (
+                          {SELECTABLE_TICKET_STATUSES.map(statusVal => (
                             <DropdownMenuItem 
                               key={statusVal} 
                               className="capitalize text-xs cursor-pointer py-2" 
                               onClick={() => {
                                 handleBulkUpdate({ status: statusVal as TicketStatus });
-                                toast.success(t('tickets.bulk.statusUpdated', 'Status aktualisiert auf: {{status}}').replace('{{status}}', t(`tickets.status.${statusVal}`, statusVal)));
+                                toast.success(t('tickets.bulk.statusUpdated', 'Status aktualisiert auf: {{status}}').replace('{{status}}', t(`tickets.statusLabels.${statusVal}`, t(`tickets.status.${statusVal}`, statusVal))));
                               }}
                             >
-                              {t(`tickets.status.${statusVal}`, statusVal)}
+                              {t(`tickets.statusLabels.${statusVal}`, t(`tickets.status.${statusVal}`, statusVal))}
                             </DropdownMenuItem>
                           ))}
                         </DropdownMenuContent>
@@ -734,6 +743,18 @@ export function TicketListView(props: TicketListViewProps) {
                         <Sparkles className="w-3.5 h-3.5 text-indigo-500 animate-pulse" />
                         {t('tickets.bulk.aiMassResolve', 'AI Mass-Resolve')}
                       </Button>
+
+                      {canBulkMerge && onOpenBulkMerge && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={onOpenBulkMerge}
+                          className="h-8 px-3.5 rounded-full text-[10px] font-black border-indigo-200 dark:border-slate-800 bg-indigo-50/50 hover:bg-indigo-100/50 text-indigo-700 dark:text-indigo-300 gap-1.5 shadow-xs cursor-pointer uppercase tracking-tight"
+                        >
+                          <GitMerge className="w-3.5 h-3.5 text-indigo-500" />
+                          {t('tickets.merge.bulkButton', 'Tickets zusammenführen')}
+                        </Button>
+                      )}
                     </div>
 
                     {/* Clear selection element */}
@@ -820,7 +841,10 @@ export function TicketListView(props: TicketListViewProps) {
                           key={ticket.id}
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
-                          onClick={() => handleTicketSelect(ticket.id)}
+                          onClick={(e) => {
+                            if ((e.target as HTMLElement).closest('[data-slot="checkbox"]')) return;
+                            handleTicketSelect(ticket.id);
+                          }}
                           className={cn(
                             getTicketTableGridClass(),
                             'px-4 overflow-hidden',
@@ -828,12 +852,16 @@ export function TicketListView(props: TicketListViewProps) {
                           )}
                         >
                           {/* Checkbox Column */}
-                          <div className="justify-self-center" onClick={(e) => e.stopPropagation()}>
+                          <div
+                            className="justify-self-center relative z-10 p-2 -m-2"
+                            onClick={(e) => e.stopPropagation()}
+                            onPointerDown={(e) => e.stopPropagation()}
+                          >
                             <Checkbox 
                               checked={selectedTicketIds.includes(ticket.id)}
                               onCheckedChange={() => toggleTicketSelection(ticket.id)}
-                              disabled={!headerCheckboxActive}
-                              className="bg-card border-border h-4 w-4 rounded-sm"
+                              onClick={(e) => e.stopPropagation()}
+                              className="bg-card border-border h-4 w-4 rounded-sm cursor-pointer"
                             />
                           </div>
 
@@ -1035,7 +1063,10 @@ export function TicketListView(props: TicketListViewProps) {
                     return (
                       <div
                         key={ticket.id}
-                        onClick={() => handleTicketSelect(ticket.id)}
+                        onClick={(e) => {
+                          if ((e.target as HTMLElement).closest('[data-slot="checkbox"]')) return;
+                          handleTicketSelect(ticket.id);
+                        }}
                         className="bg-card hover:bg-muted/40 transition-all border border-border rounded-xl p-4 shadow-sm hover:shadow-md cursor-pointer flex flex-col gap-3 relative"
                       >
                         {/* Row 1: Sentiment, Customer, Tier Badge */}
@@ -1063,7 +1094,8 @@ export function TicketListView(props: TicketListViewProps) {
                               checked={selectedTicketIds.includes(ticket.id)}
                               onCheckedChange={() => toggleTicketSelection(ticket.id)}
                               onClick={(e) => e.stopPropagation()}
-                              className="bg-card border-border h-4 w-4"
+                              onPointerDown={(e) => e.stopPropagation()}
+                              className="bg-card border-border h-4 w-4 cursor-pointer"
                             />
                             <div className="p-1 rounded-full bg-slate-50/50 dark:bg-slate-800 border">
                               {ticket.sentiment === 'positive' && <Smile className="w-3.5 h-3.5 text-emerald-500" />}

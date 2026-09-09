@@ -135,6 +135,7 @@
     "status": {
       "open": "Offen",
       "pending": "In Bearbeitung",
+      "in_progress": "In Bearbeitung",
       "resolved": "Gelöst",
       "closed": "Geschlossen",
       "merged": "Zusammengeführt",
@@ -142,7 +143,7 @@
       "deleted": "Gelöscht",
       "on-hold": "Wartend",
       "paused": "Pausiert",
-      "qs": "In QS",
+      "qs": "Qualitätssicherung",
       "waiting_customer": "Wartend auf Kunde",
       "waiting_dev": "Wartend auf Entwickler",
       "waiting_vendor": "Wartend auf Drittanbieter"
@@ -334,14 +335,28 @@
       "applyFilters": "Filter anwenden"
     },
     "merge": {
-      "title": "The Unifier",
-      "desc": "Wählen Sie das Original-Ticket aus, in das dieses Duplikat überführt werden soll.",
+      "title": "Tickets zusammenführen",
+      "desc": "Wählen Sie das primäre Ticket (Master), das offen bleibt. Nachrichten und Notizen der übrigen Tickets werden dorthin übernommen.",
       "warning": "Achtung:",
-      "warningDesc": "Alle Nachrichten dieses Tickets werden verschoben und dieses Ticket wird als zusammengeführt markiert.",
-      "searchLabel": "Original-Ticket-Suche",
+      "warningDesc": "Nachrichten und Notizen wandern ins Master-Ticket. Sekundäre Tickets erhalten den Status Zusammengeführt.",
+      "searchLabel": "Ticket desselben Kunden suchen",
       "searchPlaceholder": "Nach ID oder Betreff suchen...",
+      "searchSameCustomer": "Offenes Ticket desselben Kunden suchen",
       "notFound": "Kein Original-Ticket für \"{{query}}\" gefunden",
-      "hint": "Ticket-ID oder Betreff eingeben, um den Original-Thread zu finden."
+      "noSameCustomer": "Keine weiteren offenen Tickets für diesen Kunden gefunden.",
+      "hint": "Ticket-ID oder Betreff eingeben, um den Original-Thread zu finden.",
+      "choosePrimary": "Primäres Ticket (Master) wählen",
+      "choosePrimaryDesc": "Dieses Ticket bleibt offen. Die anderen werden auf Zusammengeführt gesetzt und mit der Master-ID verknüpft.",
+      "secondaries": "Diese Tickets werden zusammengeführt",
+      "confirm": "Zusammenführen bestätigen",
+      "merging": "Wird zusammengeführt…",
+      "button": "Zusammenführen",
+      "bulkButton": "Tickets zusammenführen",
+      "primaryStaysOpen": "Bleibt offen",
+      "readonlyMerged": "Nur lesbar",
+      "cannotSetManually": "Zusammengeführt kann nicht manuell gesetzt werden.",
+      "success": "Tickets erfolgreich zusammengeführt.",
+      "failed": "Zusammenführen fehlgeschlagen."
     },
     "sentiment": {
       "title": "Sentiment-Aufschlüsselung",
@@ -746,6 +761,7 @@
     "statusLabels": {
       "open": "Offen",
       "pending": "Wartend",
+      "in_progress": "In Bearbeitung",
       "resolved": "Gelöst",
       "closed": "Geschlossen",
       "qs": "Qualitätssicherung",

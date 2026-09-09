@@ -33,7 +33,8 @@ export function TicketsTableHeader({
         <Checkbox
           checked={headerCheckboxActive}
           onCheckedChange={onToggleSelectAll}
-          className="bg-card border-border"
+          className="bg-card border-border cursor-pointer"
+          aria-label={t('tickets.table.selectAll', 'Alle auswählen')}
         />
       </div>
 

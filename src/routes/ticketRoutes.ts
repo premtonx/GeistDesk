@@ -11,7 +11,7 @@ const router = Router();
 const ASSIGNEE_FIELDS = ['agentId', 'agentName', 'assignedTo', 'assigneeId', 'assignedToEmail'] as const;
 
 const ticketStatusSchema = z.enum([
-  'open', 'pending', 'resolved', 'closed', 'deleted', 'spam', 'merged', 'trash',
+  'open', 'pending', 'in_progress', 'resolved', 'closed', 'deleted', 'spam', 'merged', 'trash',
   'qs', 'paused', 'on-hold', 'on_hold', 'waiting_customer', 'waiting_dev', 'waiting_vendor',
 ]);
 
