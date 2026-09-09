@@ -101,6 +101,20 @@ export async function decryptData(encryptedB64: string, key: Uint8Array): Promis
   return decryptWithWebCryptoAesGcm(encryptedB64, key);
 }
 
+/** True when a string is long enough to be IV(12)+ciphertext+tag AES-GCM, not a demo plaintext secret. */
+export function looksLikeAesGcmPayload(value: string | null | undefined): boolean {
+  if (!value || typeof value !== 'string') return false;
+  const trimmed = value.trim();
+  if (trimmed.length < 40) return false;
+  try {
+    const binary = atob(trimmed);
+    // 12-byte IV + 16-byte GCM tag, minimum
+    return binary.length >= 28;
+  } catch {
+    return false;
+  }
+}
+
 /** Wrap (encrypt) a vault VK under the owner's Master Key. */
 export async function wrapVaultKeyWithMasterKey(
   vaultKey: Uint8Array,

@@ -14,6 +14,7 @@ import { toast } from 'sonner';
 import {
   buildVaultKeySalt,
   decryptData,
+  looksLikeAesGcmPayload,
   deriveMasterKey,
   deriveUserHybridKeyPair,
   encryptData,
@@ -439,19 +440,45 @@ export default function CredentialVaultPage() {
 
   const resolveVaultKeyForCredential = (cred: Credential): Uint8Array | null => {
     const slug = resolveCredVaultId(cred);
-    return vaultKeysBySlug.get(slug) || null;
+    return vaultKeysBySlug.get(slug) || vaultKeysBySlug.get('local') || null;
   };
 
-  // Safe Decrypt helper — uses the credential's vault VK (never MK for KEK vaults).
+  // Same path as the ASSET DETAILS drawer copy/reveal: vault VK, then
+  // master key (legacy items), then plaintext demo/catalog fallbacks.
   const handleDecryptPassword = async (cred: Credential): Promise<string | null> => {
-    const vaultKey = resolveVaultKeyForCredential(cred);
-    if (!vaultKey) return null;
-    try {
-      const plain = await decryptData(cred.encryptedPassword, vaultKey);
-      return plain;
-    } catch (err) {
-      return null;
+    const row =
+      credentials.find((item) => String(item.id) === String(cred.id)) || cred;
+    const record = row as Credential & {
+      password?: string;
+      secretValue?: string;
+      decryptedSecret?: string;
+      source?: string;
+    };
+    const plaintextFallback =
+      record.secretValue ||
+      record.decryptedSecret ||
+      record.password ||
+      '';
+    if (plaintextFallback) return plaintextFallback;
+
+    const cipher = String(record.encryptedPassword || cred.encryptedPassword || '').trim();
+    if (!cipher) return null;
+    if (!looksLikeAesGcmPayload(cipher)) {
+      return cipher;
     }
+
+    const keys = [resolveVaultKeyForCredential(record), derivedKey].filter(
+      (key): key is Uint8Array => Boolean(key && key.length),
+    );
+    for (const key of keys) {
+      try {
+        const plain = await decryptData(cipher, key);
+        if (plain) return plain;
+      } catch {
+        /* try next key */
+      }
+    }
+    return null;
   };
 
   const handleToggleFavorite = async (cred: Credential) => {

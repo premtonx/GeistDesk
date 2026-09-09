@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { toast } from 'sonner';
 import { Button } from '../ui/button';
 import {
   DropdownMenu,
@@ -172,18 +173,18 @@ export function VaultAssetViews({
     return (
       <div className="rounded-2xl border border-slate-200/80 bg-white overflow-hidden shadow-sm w-full max-w-full">
         <div className="w-full max-w-full overflow-x-auto">
-          <table className="w-full max-w-full table-fixed text-left text-xs">
+          <table className="w-full text-left text-xs border-separate border-spacing-0">
             <thead>
               <tr className="bg-slate-50/80 border-b border-slate-100 text-[10px] uppercase font-semibold tracking-wider text-slate-400">
-                <th className="px-4 py-3 w-auto min-w-[200px]">{t('vault.colAsset', 'Asset')}</th>
-                <th className="px-4 py-3 w-[18%] hidden sm:table-cell">{t('vault.colCategory', 'Category')}</th>
-                <th className="px-4 py-3 w-[16%]">{t('vault.colVault', 'Vault')}</th>
-                <th className="px-4 py-3 w-[12%] hidden xl:table-cell">{t('vault.colAuthority', 'Authority')}</th>
-                <th className="px-4 py-3 w-[12%] hidden lg:table-cell">{t('vault.colOwner', 'Owner')}</th>
-                <th className="px-4 py-3 w-[12%] hidden xl:table-cell">{t('vault.colLastUsed', 'Last Used')}</th>
-                <th className="px-4 py-3 w-[12%]">{t('vault.colStatus', 'Status')}</th>
-                <th className="px-4 py-3 w-[12%] hidden xl:table-cell">{t('vault.colUpdated', 'Updated')}</th>
-                <th className="px-4 py-3 w-[140px] text-right">{t('vault.quickActions', 'Actions')}</th>
+                <th scope="col" className="px-4 py-3 font-semibold min-w-[200px]">{t('vault.colAsset', 'Asset')}</th>
+                <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap">{t('vault.colCategory', 'Kategorie')}</th>
+                <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap">{t('vault.colVault', 'Vault')}</th>
+                <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap hidden xl:table-cell">{t('vault.colAuthority', 'Vault-Autorität')}</th>
+                <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap hidden lg:table-cell">{t('vault.colOwner', 'Owner')}</th>
+                <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap hidden xl:table-cell">{t('vault.colLastUsed', 'Zuletzt genutzt')}</th>
+                <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap">{t('vault.colStatus', 'Status')}</th>
+                <th scope="col" className="px-4 py-3 font-semibold whitespace-nowrap hidden xl:table-cell">{t('vault.colUpdated', 'Updated')}</th>
+                <th scope="col" className="px-4 py-3 font-semibold text-right whitespace-nowrap">{t('vault.quickActions', 'Actions')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -268,7 +269,10 @@ function QuickActions({
   const copyPassword = async (e: MouseEvent) => {
     e.stopPropagation();
     const plain = await onDecryptPassword(asset);
-    if (plain) navigator.clipboard.writeText(plain);
+    if (plain) {
+      await navigator.clipboard.writeText(plain);
+      toast.success('Passwort in die Zwischenablage kopiert');
+    }
   };
 
   const reveal = async (e: MouseEvent) => {
@@ -336,37 +340,34 @@ function AssetTableRow({
         selected ? 'bg-blue-50/80' : 'hover:bg-slate-50/60',
       )}
     >
-      <td className="px-4 py-3 min-w-[200px] max-w-0">
-        <div className="flex items-start gap-2.5 min-w-0">
+      <td className="py-3 px-4">
+        <div className="flex items-center gap-3 min-w-0">
           {assetBrandIcon(asset)}
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 min-w-0">
-              <p className="font-semibold text-slate-900 truncate">{asset.label}</p>
+              <span className="font-medium text-slate-900 truncate">{asset.label}</span>
               <button type="button" onClick={(e) => { e.stopPropagation(); onToggleFavorite(asset); }} className="shrink-0">
                 <Star className={cn('w-3.5 h-3.5', asset.favorite ? 'fill-amber-400 text-amber-400' : 'text-slate-300')} />
               </button>
             </div>
-            <p className="text-[10px] text-slate-400 truncate">{asset.username}{asset.host ? ` · ${asset.host}` : ''}</p>
-            {asset.tags?.length ? (
-              <div className="flex gap-1 mt-1 min-w-0">
-                {asset.tags.slice(0, 2).map((tag) => (
-                  <span key={tag} className="text-[9px] px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500 truncate max-w-[7rem]">{tag}</span>
-                ))}
-              </div>
-            ) : null}
+            <p className="text-xs text-slate-400 truncate">{asset.host || asset.username}</p>
           </div>
         </div>
       </td>
-      <td className="px-4 py-3 text-slate-600 hidden sm:table-cell truncate">{categoryLabel(asset.type, t)}</td>
-      <td className="px-4 py-3">
+      <td className="py-3 px-4">
+        <span className="inline-flex max-w-full text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 whitespace-nowrap truncate">
+          {categoryLabel(asset.type, t)}
+        </span>
+      </td>
+      <td className="py-3 px-4">
         <span className="inline-flex max-w-full items-center text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-100 whitespace-nowrap truncate">
           {vaultLabel(vaultId, t)}
         </span>
       </td>
-      <td className="px-4 py-3 text-slate-500 hidden xl:table-cell truncate">{vault ? t(vault.permissionKey, vault.defaultPermission) : '—'}</td>
-      <td className="px-4 py-3 text-slate-600 hidden lg:table-cell truncate">{asset.owner ?? asset.lastModifiedBy ?? t('vault.defaultOwner', 'You')}</td>
-      <td className="px-4 py-3 text-slate-400 tabular-nums hidden xl:table-cell">{formatUpdated(asset.updatedAt)}</td>
-      <td className="px-4 py-3">
+      <td className="py-3 px-4 text-slate-500 hidden xl:table-cell truncate">{vault ? t(vault.permissionKey, vault.defaultPermission) : '—'}</td>
+      <td className="py-3 px-4 text-slate-600 hidden lg:table-cell truncate">{asset.owner ?? asset.lastModifiedBy ?? t('vault.defaultOwner', 'You')}</td>
+      <td className="py-3 px-4 text-slate-400 tabular-nums hidden xl:table-cell">{formatUpdated(asset.updatedAt)}</td>
+      <td className="py-3 px-4">
         <div className="flex flex-col gap-1 min-w-0">
           <span className={cn('text-[10px] font-semibold px-2 py-0.5 rounded-full border w-fit whitespace-nowrap', STATUS_STYLES[status])}>
             {statusLabel(status, t)}
@@ -376,8 +377,8 @@ function AssetTableRow({
           ) : null}
         </div>
       </td>
-      <td className="px-4 py-3 text-slate-400 hidden xl:table-cell">{formatUpdated(asset.updatedAt)}</td>
-      <td className="px-4 py-3 text-right">
+      <td className="py-3 px-4 text-slate-400 hidden xl:table-cell">{formatUpdated(asset.updatedAt)}</td>
+      <td className="py-3 px-4 text-right">
         <QuickActions asset={asset} onEdit={onEdit} onDecryptPassword={onDecryptPassword} onShare={onShare} />
       </td>
     </tr>

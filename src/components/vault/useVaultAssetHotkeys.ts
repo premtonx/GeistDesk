@@ -77,13 +77,20 @@ export function useVaultAssetHotkeys({
           toast.error('Kopieren ist für dieses Asset deaktiviert.');
           return;
         }
-        void onDecryptPassword(selected).then((plain) => {
-          void copyToClipboard(
-            plain || '',
-            'Passwort in die Zwischenablage kopiert',
-            'Passwort konnte nicht entschlüsselt werden.',
-          );
-        });
+        const loading = toast.loading('Passwort wird entschlüsselt…');
+        void onDecryptPassword(selected)
+          .then((plain) => {
+            toast.dismiss(loading);
+            void copyToClipboard(
+              plain || '',
+              'Passwort in die Zwischenablage kopiert',
+              'Passwort konnte nicht entschlüsselt werden.',
+            );
+          })
+          .catch(() => {
+            toast.dismiss(loading);
+            toast.error('Passwort konnte nicht entschlüsselt werden.');
+          });
         return;
       }
       if (key === 'b') {
