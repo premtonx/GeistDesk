@@ -189,6 +189,8 @@ export interface Ticket {
   team: "support" | "engineering" | "legal";
   customerId?: string; // Kept for backward compatibility if needed, but we prefer contactId
   customerName?: string;
+  /** Human ticket code such as GD-SIM-013 / TKT-DEMO-SIM-013. */
+  customId?: string;
   /** Raw inbound From address (email channel). */
   from_email?: string;
   /** Alias used by inbound-mail webhook for the requester address. */

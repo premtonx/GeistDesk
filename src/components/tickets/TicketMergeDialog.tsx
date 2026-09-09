@@ -14,10 +14,9 @@ import {
   DialogTitle,
 } from '../ui/dialog';
 import {
-  formatTicketShortRef,
+  formatTicketCode,
   isMergeableOpenTicket,
-  sameCustomerOpenTickets,
-  ticketsShareCustomer,
+  searchMergeCandidateTickets,
 } from '../../lib/ticketMerge';
 import type { Ticket as TicketType } from '../../types';
 
@@ -46,32 +45,12 @@ export function TicketMergeDialog({
   const [searchQuery, setSearchQuery] = useState('');
   const [addedIds, setAddedIds] = useState<string[]>([]);
   const [primaryId, setPrimaryId] = useState<string>('');
+  const [searchFocused, setSearchFocused] = useState(false);
 
   const seedTickets = useMemo(
     () => candidateTickets.filter((ticket) => ticket && ticket.status !== 'merged'),
     [candidateTickets],
   );
-
-  const searchPool = useMemo(() => {
-    if (!allowSearch || seedTickets.length === 0) return [];
-    const current = seedTickets[0];
-    return sameCustomerOpenTickets(current, allTickets).filter(
-      (ticket) => !seedTickets.some((seed) => seed.id === ticket.id),
-    );
-  }, [allowSearch, allTickets, seedTickets]);
-
-  const filteredSearch = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return searchPool.slice(0, 8);
-    return searchPool
-      .filter((ticket) => {
-        const subject = String(ticket.subject ?? '').toLowerCase();
-        const id = String(ticket.id ?? '').toLowerCase();
-        const name = String(ticket.customerName ?? '').toLowerCase();
-        return subject.includes(q) || id.includes(q) || name.includes(q);
-      })
-      .slice(0, 8);
-  }, [searchPool, searchQuery]);
 
   const mergeSet = useMemo(() => {
     const extra = allTickets.filter((ticket) => addedIds.includes(ticket.id));
@@ -80,10 +59,23 @@ export function TicketMergeDialog({
     return [...byId.values()];
   }, [seedTickets, addedIds, allTickets]);
 
+  const mergeSetIds = useMemo(() => new Set(mergeSet.map((ticket) => ticket.id)), [mergeSet]);
+
+  const filteredSearch = useMemo(() => {
+    if (!allowSearch || seedTickets.length === 0) return [];
+    const current = seedTickets[0];
+    return searchMergeCandidateTickets(current, allTickets, searchQuery)
+      .filter((ticket) => !mergeSetIds.has(ticket.id))
+      .slice(0, 12);
+  }, [allowSearch, allTickets, seedTickets, searchQuery, mergeSetIds]);
+
+  const showSuggestions = allowSearch && (searchFocused || searchQuery.trim().length > 0 || open);
+
   useEffect(() => {
     if (!open) return;
     setSearchQuery('');
     setAddedIds([]);
+    setSearchFocused(true);
     const oldest = [...seedTickets].sort((a, b) => {
       const aTime = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : new Date(a.createdAt || 0).getTime();
       const bTime = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : new Date(b.createdAt || 0).getTime();
@@ -97,7 +89,6 @@ export function TicketMergeDialog({
     mergeSet.length >= 2 &&
     Boolean(primaryId) &&
     secondaries.length > 0 &&
-    ticketsShareCustomer(mergeSet) &&
     !isMerging;
 
   const addTicket = (ticket: TicketType) => {
@@ -105,10 +96,25 @@ export function TicketMergeDialog({
     if (!primaryId) setPrimaryId(ticket.id);
   };
 
+  const handleSuggestionClick = (ticket: TicketType) => {
+    if (mergeSetIds.has(ticket.id)) {
+      setPrimaryId(ticket.id);
+      return;
+    }
+    addTicket(ticket);
+  };
+
   const handleConfirm = async () => {
     if (!canConfirm) return;
     await onConfirm(primaryId, secondaries.map((ticket) => ticket.id));
   };
+
+  const emptySearchCopy = searchQuery.trim()
+    ? t('tickets.merge.noSearchMatches', 'Keine passenden offenen Tickets gefunden.')
+    : t(
+        'tickets.merge.noSameCustomer',
+        'Keine weiteren offenen Tickets für diesen Kunden gefunden.',
+      );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -142,47 +148,58 @@ export function TicketMergeDialog({
                   placeholder={t('tickets.merge.searchPlaceholder', 'Nach ID oder Betreff suchen...')}
                   className="pl-10 h-11 bg-muted/30 border-border rounded-xl"
                   value={searchQuery}
+                  autoComplete="off"
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setSearchFocused(true)}
+                  onBlur={() => {
+                    window.setTimeout(() => setSearchFocused(false), 180);
+                  }}
                 />
               </div>
-              <div className="space-y-2 max-h-40 overflow-y-auto">
-                {filteredSearch.length > 0 ? (
-                  filteredSearch.map((ticket) => (
-                    <button
-                      key={ticket.id}
-                      type="button"
-                      onClick={() => addTicket(ticket)}
-                      disabled={addedIds.includes(ticket.id) || !isMergeableOpenTicket(ticket)}
-                      className="w-full text-left p-3 rounded-xl border border-border bg-card hover:border-indigo-300 hover:bg-indigo-50/30 transition-all disabled:opacity-50"
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="text-xs font-black text-indigo-600 uppercase tracking-tighter">
-                          {formatTicketShortRef(ticket.id)}
+              {showSuggestions && (
+                <div className="space-y-2 max-h-52 overflow-y-auto rounded-xl border border-border bg-card p-1.5">
+                  {filteredSearch.length > 0 ? (
+                    filteredSearch.map((ticket) => (
+                      <button
+                        key={ticket.id}
+                        type="button"
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={() => handleSuggestionClick(ticket)}
+                        disabled={!isMergeableOpenTicket(ticket)}
+                        className="w-full text-left p-3 rounded-xl border border-transparent hover:border-indigo-300 hover:bg-indigo-50/30 transition-all disabled:opacity-50"
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-black text-indigo-600 uppercase tracking-tighter">
+                            {formatTicketCode(ticket)}
+                          </span>
+                        </div>
+                        <span className="text-sm font-bold text-foreground truncate block mt-0.5">
+                          {safeString(ticket.subject)}
                         </span>
-                        <Badge className="text-[9px] font-bold h-4 uppercase">
-                          {t(`tickets.status.${(ticket.status || 'open').toLowerCase()}`, ticket.status || 'Offen')}
-                        </Badge>
-                      </div>
-                      <span className="text-sm font-bold text-foreground truncate block mt-0.5">
-                        {safeString(ticket.subject)}
-                      </span>
-                      <span className="text-[10px] text-muted-foreground">
-                        {safeString(ticket.customerName)}
-                      </span>
-                    </button>
-                  ))
-                ) : (
-                  <div className="py-6 text-center text-muted-foreground space-y-1">
-                    <SearchCheck className="w-7 h-7 mx-auto opacity-20" />
-                    <p className="text-xs font-medium">
-                      {t(
-                        'tickets.merge.noSameCustomer',
-                        'Keine weiteren offenen Tickets für diesen Kunden gefunden.',
+                        <span className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-1 min-w-0">
+                          <span className="truncate">{safeString(ticket.customerName)}</span>
+                          <Badge className="text-[9px] font-bold h-4 uppercase shrink-0">
+                            {t(`tickets.status.${(ticket.status || 'open').toLowerCase()}`, ticket.status || 'Offen')}
+                          </Badge>
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="py-6 text-center text-muted-foreground space-y-1">
+                      <SearchCheck className="w-7 h-7 mx-auto opacity-20" />
+                      <p className="text-xs font-medium">{emptySearchCopy}</p>
+                      {!searchQuery.trim() && (
+                        <p className="text-[10px] text-muted-foreground/80 px-4">
+                          {t(
+                            'tickets.merge.typeToSearchOthers',
+                            'Tippen Sie, um andere offene Tickets (auch anderer Kunden) zu finden.',
+                          )}
+                        </p>
                       )}
-                    </p>
-                  </div>
-                )}
-              </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -219,7 +236,7 @@ export function TicketMergeDialog({
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-black text-indigo-600 uppercase">
-                          {formatTicketShortRef(ticket.id)}
+                          {formatTicketCode(ticket)}
                         </span>
                         {selected && (
                           <Badge className="text-[9px] font-bold h-4 bg-indigo-600 text-white">
@@ -247,7 +264,7 @@ export function TicketMergeDialog({
               </p>
               {secondaries.map((ticket) => (
                 <p key={ticket.id} className="text-xs font-semibold text-foreground">
-                  {formatTicketShortRef(ticket.id)} — {safeString(ticket.subject)}
+                  {formatTicketCode(ticket)} — {safeString(ticket.subject)}
                 </p>
               ))}
               <p className="text-[11px] text-muted-foreground pt-1 flex items-start gap-1.5">

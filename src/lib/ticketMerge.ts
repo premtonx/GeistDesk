@@ -17,34 +17,48 @@ function extractEmail(raw: unknown): string {
   return email.includes('@') ? email : '';
 }
 
+function collectCustomerEmails(ticket: Ticket): Set<string> {
+  const emails = [
+    extractEmail(ticket.customerEmail),
+    extractEmail(ticket.from_email),
+    extractEmail(ticket.customerId),
+  ].filter(Boolean);
+  return new Set(emails);
+}
+
+function collectCustomerIds(ticket: Ticket): Set<string> {
+  const ids = [ticket.customerId, ticket.contactId]
+    .map((value) => (typeof value === 'string' ? value.trim().toLowerCase() : ''))
+    .filter((value) => value && !value.includes('@'));
+  return new Set(ids);
+}
+
 /**
- * Stable identity for "same customer" merge checks.
- * Prefers email, then contactId, then customerId — never display name alone.
+ * Same customer if any identity overlaps (email, customerId, contactId, or name).
+ * A single preferred key is too strict: one ticket may only have a name while
+ * another for Jonas Weber has an email.
  */
-export function getTicketCustomerKey(ticket: Ticket): string {
-  const email =
-    extractEmail(ticket.customerEmail) ||
-    extractEmail(ticket.from_email) ||
-    extractEmail(ticket.customerId);
-  if (email) return `email:${email}`;
+export function ticketsAreSameCustomer(a: Ticket, b: Ticket): boolean {
+  const emailsA = collectCustomerEmails(a);
+  const emailsB = collectCustomerEmails(b);
+  for (const email of emailsA) {
+    if (emailsB.has(email)) return true;
+  }
 
-  const contactId = typeof ticket.contactId === 'string' ? ticket.contactId.trim() : '';
-  if (contactId) return `contact:${contactId}`;
+  const idsA = collectCustomerIds(a);
+  const idsB = collectCustomerIds(b);
+  for (const id of idsA) {
+    if (idsB.has(id)) return true;
+  }
 
-  const customerId = typeof ticket.customerId === 'string' ? ticket.customerId.trim() : '';
-  if (customerId) return `customer:${customerId.toLowerCase()}`;
-
-  const name = typeof ticket.customerName === 'string' ? ticket.customerName.trim().toLowerCase() : '';
-  if (name) return `name:${name}`;
-
-  return '';
+  const nameA = typeof a.customerName === 'string' ? a.customerName.trim().toLowerCase() : '';
+  const nameB = typeof b.customerName === 'string' ? b.customerName.trim().toLowerCase() : '';
+  return Boolean(nameA && nameB && nameA === nameB);
 }
 
 export function ticketsShareCustomer(tickets: Ticket[]): boolean {
   if (tickets.length < 2) return false;
-  const keys = tickets.map(getTicketCustomerKey);
-  if (keys.some((key) => !key)) return false;
-  return keys.every((key) => key === keys[0]);
+  return tickets.every((ticket) => ticketsAreSameCustomer(tickets[0], ticket));
 }
 
 export function isMergeableOpenTicket(ticket: Ticket): boolean {
@@ -53,15 +67,60 @@ export function isMergeableOpenTicket(ticket: Ticket): boolean {
 }
 
 export function formatTicketShortRef(id: string): string {
-  return `#${id.slice(-5).toUpperCase()}`;
+  return formatTicketCode({ id });
+}
+
+/** Display badge like #TKT-013 from TKT-DEMO-SIM-013 / GD-SIM-013 / uuid. */
+export function formatTicketCode(ticket: { id: string; customId?: string }): string {
+  const custom = String(ticket.customId ?? '').trim().toUpperCase();
+  const id = String(ticket.id ?? '').trim().toUpperCase();
+  const source = custom || id;
+  const digits = source.match(/(\d+)\s*$/);
+  if (digits) return `#TKT-${digits[1]}`;
+  if (id.startsWith('TKT')) return `#${id}`;
+  return `#${id.slice(-5)}`;
+}
+
+function ticketSearchHaystack(ticket: Ticket): string {
+  return [
+    ticket.subject,
+    ticket.id,
+    ticket.customId,
+    ticket.customerName,
+    ticket.customerEmail,
+    ticket.from_email,
+    formatTicketCode(ticket),
+  ]
+    .map((value) => String(value ?? '').toLowerCase())
+    .join(' ');
 }
 
 export function sameCustomerOpenTickets(current: Ticket, allTickets: Ticket[]): Ticket[] {
-  const currentKey = getTicketCustomerKey(current);
-  if (!currentKey) return [];
   return allTickets.filter((other) => {
     if (other.id === current.id) return false;
     if (!isMergeableOpenTicket(other)) return false;
-    return getTicketCustomerKey(other) === currentKey;
+    return ticketsAreSameCustomer(current, other);
   });
+}
+
+export function searchMergeCandidateTickets(
+  current: Ticket,
+  allTickets: Ticket[],
+  query: string,
+): Ticket[] {
+  const q = query.trim().toLowerCase();
+  const others = allTickets.filter(
+    (other) => other.id !== current.id && isMergeableOpenTicket(other),
+  );
+  if (!q) {
+    return sameCustomerOpenTickets(current, others);
+  }
+  const matched = others.filter((ticket) => ticketSearchHaystack(ticket).includes(q));
+  matched.sort((a, b) => {
+    const sameA = ticketsAreSameCustomer(current, a) ? 0 : 1;
+    const sameB = ticketsAreSameCustomer(current, b) ? 0 : 1;
+    if (sameA !== sameB) return sameA - sameB;
+    return String(a.subject ?? '').localeCompare(String(b.subject ?? ''));
+  });
+  return matched;
 }

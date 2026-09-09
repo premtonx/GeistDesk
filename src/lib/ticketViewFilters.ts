@@ -6,6 +6,7 @@ import {
   isCustomViewId,
   matchesCustomViewFilters,
 } from './ticketsSidebarPreferences';
+import { hasAssignee, isTicketAssignedToUser } from './ticketAssignee';
 
 export type TopStatusFilterId =
   | 'all'
@@ -32,6 +33,8 @@ export const hasTagCaseInsensitive = (tags: string[] | undefined, target: string
 
 export interface TicketViewFilterContext {
   userId: string;
+  userEmail?: string;
+  userName?: string;
   watchedTicketIds: string[];
   allTickets: Ticket[];
   isAiReady: boolean;
@@ -58,7 +61,7 @@ export function isTeamAllOpenTicket(ticket: Ticket): boolean {
 
 export function isUnassignedTicket(ticket: Ticket): boolean {
   return (
-    !ticket.agentId &&
+    !hasAssignee(ticket) &&
     matchStatusNot(ticket.status, 'resolved') &&
     matchStatusNot(ticket.status, 'closed') &&
     matchStatusNot(ticket.status, 'trash') &&
@@ -68,7 +71,7 @@ export function isUnassignedTicket(ticket: Ticket): boolean {
 }
 
 export function isNewTicket(ticket: Ticket): boolean {
-  return matchStatus(ticket.status, 'open') && !ticket.agentId;
+  return matchStatus(ticket.status, 'open') && !hasAssignee(ticket);
 }
 
 export function isWaitingReviewTicket(ticket: Ticket): boolean {
@@ -138,8 +141,8 @@ export function isWaitingVendorTicket(ticket: Ticket): boolean {
   return matchStatus(ticket.status, 'waiting_vendor');
 }
 
-export function isDueTodayTicket(ticket: Ticket, userId: string): boolean {
-  if (ticket.agentId !== userId) return false;
+export function isDueTodayTicket(ticket: Ticket, ctx: TicketViewFilterContext): boolean {
+  if (!isTicketAssignedToUser(ticket, ctx)) return false;
   const due = ticket.slaDueAt || ticket.firstResponseDue;
   if (!due) return false;
   const dueDate = due.toDate ? due.toDate() : new Date(due as unknown as string);
@@ -151,9 +154,9 @@ export function isDueTodayTicket(ticket: Ticket, userId: string): boolean {
   );
 }
 
-export function isWaitingMyResponseTicket(ticket: Ticket, userId: string): boolean {
+export function isWaitingMyResponseTicket(ticket: Ticket, ctx: TicketViewFilterContext): boolean {
   return (
-    ticket.agentId === userId &&
+    isTicketAssignedToUser(ticket, ctx) &&
     (matchStatus(ticket.status, 'open') || matchStatus(ticket.status, 'pending')) &&
     matchStatusNot(ticket.status, 'resolved') &&
     matchStatusNot(ticket.status, 'closed')
@@ -212,6 +215,30 @@ function filterByStatusValue(tickets: Ticket[], status: string): Ticket[] {
   }
 }
 
+const ASSIGNED_ME_EXCLUDED_STATUSES = new Set([
+  'resolved',
+  'closed',
+  'gelöscht',
+  'geloest',
+  'gelöst',
+  'geschlossen',
+  'merged',
+  'zusammengeführt',
+  'zusammengefuehrt',
+  'trash',
+  'spam',
+  'deleted',
+]);
+
+function isExcludedFromAssignedMe(ticket: Ticket): boolean {
+  const status = String(ticket.status ?? '').toLowerCase().trim();
+  return ASSIGNED_ME_EXCLUDED_STATUSES.has(status);
+}
+
+function isOpenAssignedToMe(ticket: Ticket, ctx: TicketViewFilterContext): boolean {
+  return isTicketAssignedToUser(ticket, ctx) && !isExcludedFromAssignedMe(ticket);
+}
+
 /** Sidebar view predicates — single source of truth for counts and table pools. */
 export function filterTicketsByView(
   tickets: Ticket[],
@@ -223,7 +250,7 @@ export function filterTicketsByView(
   if (isCustomViewId(viewId)) {
     const custom = customViews.find((v) => customViewId(v) === viewId);
     if (!custom) return [];
-    return tickets.filter((t) => matchesCustomViewFilters(t, custom.filters, userId));
+    return tickets.filter((t) => matchesCustomViewFilters(t, custom.filters, ctx));
   }
 
   switch (viewId) {
@@ -243,22 +270,16 @@ export function filterTicketsByView(
     case 'sla_risk':
       return tickets.filter(isSlaRiskTicket);
     case 'assigned_me':
-      return tickets.filter(
-        (t) =>
-          t.agentId === userId &&
-          matchStatusNot(t.status, 'resolved') &&
-          matchStatusNot(t.status, 'closed') &&
-          matchStatusNot(t.status, 'trash') &&
-          matchStatusNot(t.status, 'spam'),
-      );
+    case 'my_queue':
+      return tickets.filter((t) => isOpenAssignedToMe(t, ctx));
     case 'due_today':
-      return tickets.filter((t) => isDueTodayTicket(t, userId));
+      return tickets.filter((t) => isDueTodayTicket(t, ctx));
     case 'waiting_my_response':
-      return tickets.filter((t) => isWaitingMyResponseTicket(t, userId));
+      return tickets.filter((t) => isWaitingMyResponseTicket(t, ctx));
     case 'my_paused':
-      return tickets.filter((t) => t.agentId === userId && isPausedTicket(t));
+      return tickets.filter((t) => isTicketAssignedToUser(t, ctx) && isPausedTicket(t));
     case 'my_qs':
-      return tickets.filter((t) => t.agentId === userId && isQsTicket(t));
+      return tickets.filter((t) => isTicketAssignedToUser(t, ctx) && isQsTicket(t));
     case 'status_open':
       return filterByStatusValue(tickets, 'open');
     case 'status_pending':
@@ -285,15 +306,6 @@ export function filterTicketsByView(
       return tickets.filter((t) => isDuplicateTicket(t, allTickets));
     case 'kb_suggestion':
       return tickets.filter(isKbSuggestionTicket);
-    case 'my_queue':
-      return tickets.filter(
-        (t) =>
-          t.agentId === userId &&
-          matchStatusNot(t.status, 'resolved') &&
-          matchStatusNot(t.status, 'closed') &&
-          matchStatusNot(t.status, 'trash') &&
-          matchStatusNot(t.status, 'spam'),
-      );
     case 'linked_bugs':
       return [];
     case 'bug_backlog':
@@ -331,24 +343,15 @@ export function filterTicketsByView(
     case 'my_open':
       return tickets.filter(
         (t) =>
-          t.agentId === userId &&
+          isTicketAssignedToUser(t, ctx) &&
           (matchStatus(t.status, 'open') || matchStatus(t.status, 'pending')),
-      );
-    case 'assigned_me':
-      return tickets.filter(
-        (t) =>
-          t.agentId === userId &&
-          matchStatusNot(t.status, 'resolved') &&
-          matchStatusNot(t.status, 'closed') &&
-          matchStatusNot(t.status, 'trash') &&
-          matchStatusNot(t.status, 'spam'),
       );
     case 'mentioned_me':
       return tickets.filter((t) => t.mentions?.includes(userId));
     case 'watching':
       return tickets.filter((t) => watchedTicketIds.includes(t.id));
     case 'waiting_customer':
-      return tickets.filter((t) => t.agentId === userId && matchStatus(t.status, 'pending'));
+      return tickets.filter((t) => isTicketAssignedToUser(t, ctx) && matchStatus(t.status, 'pending'));
     case 'recently_updated': {
       const oneDayAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
       return tickets.filter((t) => {

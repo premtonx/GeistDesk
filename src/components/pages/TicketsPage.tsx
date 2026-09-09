@@ -389,12 +389,14 @@ export default function TicketsPage() {
   const viewFilterContext = useMemo(
     () => ({
       userId: user?.uid ?? '',
+      userEmail: user?.email ?? '',
+      userName: user?.displayName || user?.email?.split('@')[0] || '',
       watchedTicketIds,
       allTickets,
       isAiReady,
       customViews: sidebarPrefs.customViews,
     }),
-    [user?.uid, watchedTicketIds, allTickets, isAiReady, sidebarPrefs.customViews],
+    [user?.uid, user?.email, user?.displayName, watchedTicketIds, allTickets, isAiReady, sidebarPrefs.customViews],
   );
 
   // Compute tickets filtered ONLY by the current active sidebar view category

@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import type { Ticket } from '../types';
+import { hasAssignee, isTicketAssignedToUser } from './ticketAssignee';
 
 export interface CustomTicketViewFilters {
   status?: string;
@@ -120,15 +122,21 @@ export function matchesCustomViewFilters(
     status?: string;
     priority?: string;
     agentId?: string;
+    agentName?: string;
+    assignedTo?: string | null;
+    assigneeId?: string | null;
   },
   filters: CustomTicketViewFilters,
-  userId: string,
+  user: { userId?: string; userEmail?: string; userName?: string } | string,
 ): boolean {
   const status = ticket.status?.toLowerCase() ?? '';
   if (filters.status && status !== filters.status.toLowerCase()) return false;
   if (filters.statusNot && status === filters.statusNot.toLowerCase()) return false;
-  if (filters.assignedToMe && ticket.agentId !== userId) return false;
-  if (filters.unassigned && ticket.agentId) return false;
+  if (filters.assignedToMe) {
+    const ctx = typeof user === 'string' ? { userId: user } : user;
+    if (!isTicketAssignedToUser(ticket as Ticket, ctx)) return false;
+  }
+  if (filters.unassigned && hasAssignee(ticket as Ticket)) return false;
   if (filters.priorityMin) {
     const min = PRIORITY_RANK[filters.priorityMin] ?? 0;
     const cur = PRIORITY_RANK[ticket.priority?.toLowerCase() ?? 'low'] ?? 0;

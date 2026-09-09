@@ -44,6 +44,7 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import type { Ticket as TicketType, KBArticle, TicketStatus, TicketPriority } from '../../types';
 import type { TicketQueueStats, TopStatusFilterId } from '../../lib/ticketViewFilters';
 import { ticketsShareCustomer } from '../../lib/ticketMerge';
+import { isTicketAssignedToUser } from '../../lib/ticketAssignee';
 import { SELECTABLE_TICKET_STATUSES } from '../../lib/ticket-status';
 
 export interface TicketListViewProps {
@@ -1157,7 +1158,13 @@ export function TicketListView(props: TicketListViewProps) {
                                 </AvatarFallback>
                               </Avatar>
                               <span className="max-w-[70px] truncate text-[9.5px] font-extrabold text-slate-700 dark:text-slate-300">
-                                {ticket.agentId === user?.uid ? t('tickets.assigneeMeShort', 'Ich') : (safeString(ticket.agentName, t('tickets.unassigned', 'Nicht zugewiesen')))}
+                                {isTicketAssignedToUser(ticket, {
+                                  userId: user?.uid,
+                                  userEmail: user?.email,
+                                  userName: user?.displayName || user?.email?.split('@')[0] || '',
+                                })
+                                  ? t('tickets.assigneeMeShort', 'Ich')
+                                  : (safeString(ticket.agentName, t('tickets.unassigned', 'Nicht zugewiesen')))}
                               </span>
                             </div>
                             <span className="text-[9.5px]">

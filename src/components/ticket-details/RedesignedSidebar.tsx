@@ -47,6 +47,7 @@ import { getTicketKind } from '../../lib/ticketWorkspace';
 import { deriveAccountHealth } from '../../lib/account-health';
 import { getInitials, safeString } from '../../lib/utils';
 import { TICKET_DISPATCH_AGENTS } from '../../lib/ticketDispatchAgents';
+import { useAuth } from '../../lib/hooks';
 import { AccountHealthSmiley, accountHealthAriaLabel } from './AccountHealthSmiley';
 import { SELECTABLE_TICKET_STATUSES, isReadonlyTerminalStatus, isSelectableTicketStatus } from '../../lib/ticket-status';
 
@@ -182,6 +183,7 @@ export function RedesignedSidebar({
   onCloseMobile
 }: RedesignedSidebarProps) {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const ticketKind = getTicketKind(ticket);
   const [slaTierDraft, setSlaTierDraft] = useState(ticket.slaTier ?? '');
   const syncedHealthTicketId = useRef<string | null>(null);
@@ -193,6 +195,14 @@ export function RedesignedSidebar({
 
   const dispatchAgents = useMemo(() => {
     const agents = TICKET_DISPATCH_AGENTS.map((a) => ({ ...a }));
+    const currentId = user?.uid || '';
+    const currentName = user?.displayName || user?.email || '';
+    if (currentId && !agents.some((a) => a.id === currentId)) {
+      agents.unshift({
+        id: currentId,
+        name: currentName || t('tickets.assigneeYourself', 'Yourself'),
+      });
+    }
     if (!ticketAssignee) return agents;
     const knownById = Boolean(ticketAssignee.id && agents.some((a) => a.id === ticketAssignee.id));
     const knownByName = Boolean(
@@ -205,7 +215,7 @@ export function RedesignedSidebar({
       });
     }
     return agents;
-  }, [ticketAssignee]);
+  }, [ticketAssignee, user?.uid, user?.displayName, user?.email, t]);
 
   const syncedDispatchAgentId = useMemo(
     () => matchDispatchAgentId(ticketAssignee, dispatchAgents),
