@@ -2,12 +2,18 @@ import type { Dispatch, SetStateAction } from 'react';
 import { toast } from 'sonner';
 import {
   BookOpen, ChevronDown, ChevronLeft, GitMerge, Mail, MessageSquare,
-  RefreshCw, SlidersHorizontal, Sparkles, Ticket,
+  MoreHorizontal, RefreshCw, SlidersHorizontal, Sparkles, Ticket,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { getInitials, safeString } from '../../lib/utils';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 import { ScrollArea } from '../ui/scroll-area';
 import { AiSummaryCard } from '../ticket-details/AiSummaryCard';
 import { ConversationTimeline } from '../ticket-details/ConversationTimeline';
@@ -174,31 +180,52 @@ export function TicketDetailView(props: TicketDetailViewProps) {
     );
   }
 
+  const canMerge = Boolean(onOpenMerge) && selectedTicket.status !== 'merged';
+
+  const openInternalNoteComposer = () => {
+    setActiveDetailTab('conversation');
+    setIsComposerExpanded(true);
+    setTimeout(() => {
+      const noteEl =
+        document.getElementById('quick-internal-note-input') ||
+        document.getElementById('email-reply-composer');
+      if (noteEl) noteEl.scrollIntoView({ behavior: 'smooth' });
+    }, 100);
+    toast.info(t('tickets.detail.switchedToComposer', 'Switched to conversation notes composer.'));
+  };
+
+  const runAiSync = () => {
+    toast.promise(Promise.resolve(updateSummary(true)), {
+      loading: t(
+        'tickets.detail.aiSyncLoading',
+        'Synchronisiere KI-Erkenntnisse mit dem neuesten E-Mail-Verlauf...',
+      ),
+      success: t('tickets.detail.aiSyncSuccess', 'KI-Erkenntnisse erfolgreich aktualisiert!'),
+      error: t('tickets.detail.aiSyncError', 'Synchronisierung der KI-Erkenntnisse fehlgeschlagen.'),
+    });
+  };
+
+  const actionBtnClass =
+    'h-9 px-3 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs';
+
   return (
     <>
                     <div className="flex-1 flex flex-col min-h-0 min-w-0">
-                      {/* 1. Header component */}
-                    <div className="px-4 md:px-6 pt-4 md:pt-5 pb-3 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shrink-0">
-                      {/* 3-Tier Agentic Graph — Tier 3 swarm outage banner */}
+                      {/* 1. Header — stacked so the title never shares a row with action buttons */}
+                    <div className="flex flex-col gap-2 w-full min-w-0 px-4 md:px-6 pt-4 md:pt-5 pb-3 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shrink-0">
                       <SwarmOutageBanner ticketId={selectedTicket.id} />
-                      <button 
-                        type="button"
-                        onClick={closeFullTicketView}
-                        className="flex items-center gap-1 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-extrabold text-xs cursor-pointer mb-2 transition-colors select-none group"
-                      >
-                        <ChevronLeft className="w-3.5 h-3.5 text-slate-450 group-hover:text-slate-650 transition-colors" /> {t('tickets.detail.backToList', 'Back to tickets')}
-                      </button>
-                      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
-                        <div className="flex items-center gap-2 md:gap-3 overflow-hidden min-w-0 flex-1">
-                          <h2 className="text-xl font-extrabold text-slate-950 dark:text-slate-50 truncate tracking-tight">{safeString(selectedTicket.subject)}</h2>
-                          <span className="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300 px-3 py-1 rounded-md text-[11px] font-extrabold select-none shrink-0 capitalize">
-                            {t(`tickets.status.${(selectedTicket.status || 'open').toLowerCase()}`, selectedTicket.status || 'Offen')}
-                          </span>
-                          <span className="bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-350 px-3 py-1 rounded-md text-[11px] font-extrabold select-none shrink-0 capitalize">
-                            {t(`tickets.priority.${(selectedTicket.priority || 'medium').toLowerCase()}`, selectedTicket.priority || 'Mittel')}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2 shrink-0">
+
+                      {/* Row 1: back link + actions */}
+                      <div className="flex w-full min-w-0 items-start justify-between gap-3">
+                        <button
+                          type="button"
+                          onClick={closeFullTicketView}
+                          className="flex items-center gap-1 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-extrabold text-xs cursor-pointer transition-colors select-none group shrink-0 pt-1.5"
+                        >
+                          <ChevronLeft className="w-3.5 h-3.5 text-slate-450 group-hover:text-slate-650 transition-colors" />
+                          {t('tickets.detail.backToList', 'Back to tickets')}
+                        </button>
+                        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
                           <TicketDetailsSpamAction
                             ticket={selectedTicket}
                             contactEmail={ticketContact?.email}
@@ -213,40 +240,35 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                               setSelectedTicketId(null);
                             }}
                           />
-                          {onOpenMerge && selectedTicket.status !== 'merged' && (
+                          {canMerge && (
                             <Button
                               variant="outline"
                               size="sm"
                               onClick={onOpenMerge}
-                              className="h-9 px-3 rounded-lg border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                              className={cn(
+                                actionBtnClass,
+                                'hidden lg:inline-flex border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/60',
+                              )}
                             >
                               <GitMerge className="w-3.5 h-3.5" />
                               <span>{t('tickets.merge.button', 'Zusammenführen')}</span>
                             </Button>
                           )}
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => {
-                              setActiveDetailTab('conversation');
-                              setIsComposerExpanded(true);
-                              setTimeout(() => {
-                                const noteEl = document.getElementById('quick-internal-note-input') || document.getElementById('email-reply-composer');
-                                if (noteEl) noteEl.scrollIntoView({ behavior: 'smooth' });
-                              }, 100);
-                              toast.info(t('tickets.detail.switchedToComposer', 'Switched to conversation notes composer.'));
-                            }}
-                            className="h-9 px-3 rounded-lg border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold transition-all"
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={openInternalNoteComposer}
+                            className={cn(actionBtnClass, 'hidden lg:inline-flex')}
                           >
                             {t('tickets.noteBtn', 'Internal Note')}
                           </Button>
                           {onConvertToKB && (
-                            <Button 
-                              variant="outline" 
-                              size="sm" 
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={onConvertToKB}
                               disabled={isKbDrafting}
-                              className="h-9 px-3 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-indigo-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                              className={cn(actionBtnClass, 'hidden lg:inline-flex')}
                             >
                               {isKbDrafting
                                 ? <RefreshCw className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
@@ -256,19 +278,10 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                                 : t('tickets.detail.convertToKb', 'In KB übernehmen')}</span>
                             </Button>
                           )}
-                          <Button 
-                            onClick={async () => {
-                              toast.promise(
-                                Promise.resolve(updateSummary(true)),
-                                {
-                                  loading: t('tickets.detail.aiSyncLoading', 'Synchronisiere KI-Erkenntnisse mit dem neuesten E-Mail-Verlauf...'),
-                                  success: t('tickets.detail.aiSyncSuccess', 'KI-Erkenntnisse erfolgreich aktualisiert!'),
-                                  error: t('tickets.detail.aiSyncError', 'Synchronisierung der KI-Erkenntnisse fehlgeschlagen.')
-                                }
-                              );
-                            }}
+                          <Button
+                            onClick={runAiSync}
                             disabled={isAiDrafting}
-                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70 text-white font-extrabold text-xs h-9 px-3 rounded-lg flex items-center gap-1.5 transition-all shadow-sm select-none"
+                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70 text-white font-extrabold text-xs h-9 px-3 rounded-lg inline-flex items-center gap-1.5 transition-all shadow-sm select-none"
                           >
                             {isAiDrafting ? (
                               <RefreshCw className="w-3.5 h-3.5 animate-spin" />
@@ -277,19 +290,80 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                             )}
                             <span>{t('tickets.detail.aiSync', 'AI Sync')}</span>
                           </Button>
-    
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={() => setIsMobilePropertiesOpen(prev => !prev)}
-                            className="xl:hidden h-9 px-3 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setIsMobilePropertiesOpen((prev) => !prev)}
+                            className={cn(actionBtnClass, 'hidden lg:inline-flex xl:hidden')}
                           >
                             <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
                             <span>{isMobilePropertiesOpen ? t('tickets.detail.closeProps', 'Close properties') : t('tickets.detail.properties', 'Properties')}</span>
                           </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              className={cn(actionBtnClass, 'lg:hidden')}
+                              aria-label={t('tickets.detail.more', 'More')}
+                            >
+                              <MoreHorizontal className="w-4 h-4" />
+                              <span>{t('tickets.detail.more', 'More')}</span>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-52 rounded-xl p-1">
+                              {canMerge && (
+                                <DropdownMenuItem
+                                  className="rounded-lg text-xs font-semibold py-2 cursor-pointer"
+                                  onClick={onOpenMerge}
+                                >
+                                  <GitMerge className="w-3.5 h-3.5 text-indigo-600" />
+                                  {t('tickets.merge.button', 'Zusammenführen')}
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                className="rounded-lg text-xs font-semibold py-2 cursor-pointer"
+                                onClick={openInternalNoteComposer}
+                              >
+                                {t('tickets.noteBtn', 'Internal Note')}
+                              </DropdownMenuItem>
+                              {onConvertToKB && (
+                                <DropdownMenuItem
+                                  className="rounded-lg text-xs font-semibold py-2 cursor-pointer"
+                                  onClick={onConvertToKB}
+                                  disabled={isKbDrafting}
+                                >
+                                  <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
+                                  {isKbDrafting
+                                    ? t('tickets.detail.extracting', 'Extracting...')
+                                    : t('tickets.detail.convertToKb', 'In KB übernehmen')}
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                className="rounded-lg text-xs font-semibold py-2 cursor-pointer xl:hidden"
+                                onClick={() => setIsMobilePropertiesOpen((prev) => !prev)}
+                              >
+                                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+                                {isMobilePropertiesOpen
+                                  ? t('tickets.detail.closeProps', 'Close properties')
+                                  : t('tickets.detail.properties', 'Properties')}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </div>
-                      <div className="text-[11px] text-slate-400 font-bold mt-1 tracking-wide uppercase select-none">
+
+                      {/* Row 2: title + status/priority — never competing with action buttons */}
+                      <div className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
+                        <h2 className="min-w-0 max-w-full text-xl font-extrabold tracking-tight text-slate-950 dark:text-slate-50 break-words line-clamp-2">
+                          {safeString(selectedTicket.subject)}
+                        </h2>
+                        <span className="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300 px-3 py-1 rounded-md text-[11px] font-extrabold select-none shrink-0 capitalize">
+                          {t(`tickets.status.${(selectedTicket.status || 'open').toLowerCase()}`, selectedTicket.status || 'Offen')}
+                        </span>
+                        <span className="bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-350 px-3 py-1 rounded-md text-[11px] font-extrabold select-none shrink-0 capitalize">
+                          {t(`tickets.priority.${(selectedTicket.priority || 'medium').toLowerCase()}`, selectedTicket.priority || 'Mittel')}
+                        </span>
+                      </div>
+
+                      {/* Row 3: customer metadata */}
+                      <div className="text-[11px] text-slate-400 font-bold tracking-wide uppercase select-none min-w-0 break-words">
                         {safeString(selectedTicket.company, 'Enterprise Corp')} &bull; {safeString(selectedTicket.customerName, 'PremtonXhafa')}
                       </div>
                     </div>

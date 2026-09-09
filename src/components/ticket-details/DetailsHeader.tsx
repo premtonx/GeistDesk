@@ -138,14 +138,14 @@ export function DetailsHeader({
       </div>
 
       {/* Main Command Center Header Block: Subjects and ribbon layout */}
-      <div className="px-6 py-4 flex flex-col xl:flex-row xl:items-center justify-between gap-4">
+      <div className="px-6 py-4 flex flex-col gap-3 w-full min-w-0">
         {/* Left Side: Ticket Id, Subject & Status/SLA/Priority Badges */}
-        <div className="flex-1 min-w-0 space-y-2">
-          <div className="flex items-center gap-3 flex-wrap">
+        <div className="min-w-0 w-full space-y-2">
+          <div className="flex items-center gap-3 flex-wrap min-w-0">
             <span className="font-mono text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200 shadow-sm shrink-0">
               #{ticket.id.slice(-5).toUpperCase()}
             </span>
-            <h1 className="text-xl font-bold tracking-tight text-foreground truncate max-w-xl">
+            <h1 className="min-w-0 max-w-full flex-1 text-xl font-bold tracking-tight text-foreground break-words line-clamp-2">
               {ticket.subject}
             </h1>
           </div>
@@ -190,7 +190,7 @@ export function DetailsHeader({
         </div>
 
         {/* Right Side: Command ribbon bar next to the ticket title */}
-        <div className="flex items-center gap-2 shrink-0 self-start xl:self-center">
+        <div className="flex flex-wrap items-center gap-2 self-start">
           {onMarkAsSpam && !isSpam ? (
             <Button
               size="sm"
