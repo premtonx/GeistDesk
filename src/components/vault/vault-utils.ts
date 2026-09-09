@@ -145,3 +145,48 @@ export function getAssetStatus(cred: { notes?: string; label: string; username: 
 export function formatUpdated(ts: number): string {
   return new Date(ts).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
+
+export const ALL_VAULTS_ID = 'all';
+
+export type VaultBrowseScope = 'personal' | 'company' | 'all';
+
+export function isCompanySharedVault(params: {
+  vaultId: string;
+  folderType?: 'personal' | 'shared' | null;
+  scope?: VaultAuthorityScope;
+}): boolean {
+  if (params.vaultId === ALL_VAULTS_ID) return false;
+  if (params.folderType === 'shared') return true;
+  if (params.folderType === 'personal') return false;
+  if (params.vaultId === 'local') return false;
+  if (params.scope && params.scope !== 'personal') return true;
+  const def = VAULT_DEFINITIONS.find((v) => v.id === params.vaultId);
+  return Boolean(def && def.scope && def.scope !== 'personal');
+}
+
+/** Compact role chip for shared/company vaults (Admin, Support, DevOps, …). */
+export function vaultRoleBadge(permission?: string | null, vaultId?: string): string {
+  const raw = String(permission || '').trim().toLowerCase();
+  if (raw === 'admin' || raw === 'administrator') return 'Admin';
+  if (raw === 'owner' || raw === 'besitzer') return 'Owner';
+  if (raw === 'support' || raw === 'viewer') return 'Support';
+  if (raw === 'devops' || raw === 'editor') return vaultId === 'support' ? 'Support' : 'DevOps';
+  if (vaultId === 'support') return 'Support';
+  if (vaultId === 'devops' || vaultId === 'infra') return 'DevOps';
+  if (vaultId === 'shared-company' || vaultId === 'it-dept') return 'Admin';
+  if (raw) return permission as string;
+  return 'Admin';
+}
+
+export function isTypingHotkeyTarget(target: EventTarget | null): boolean {
+  if (!target || !(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+  if (target.isContentEditable) return true;
+  return Boolean(target.closest('[contenteditable="true"]'));
+}
+
+export function isMacPlatform(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  return /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+}

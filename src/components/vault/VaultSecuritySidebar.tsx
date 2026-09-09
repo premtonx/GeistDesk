@@ -33,7 +33,7 @@ export function VaultSecuritySidebar({
   const { t } = useTranslation();
 
   return (
-    <aside className="w-[260px] shrink-0 border-l border-slate-200/80 bg-white/80">
+    <aside className="hidden xl:flex w-[260px] shrink-0 flex-col border-l border-slate-200/80 bg-white/80">
       <div className="p-4 space-y-4">
         <div>
           <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-3">

@@ -232,6 +232,7 @@ export async function createVaultFolderOnServer(params: {
   type: 'personal' | 'shared';
   emoji?: string;
   sharedWith?: string[];
+  layout?: CreateCredentialVaultPayload['layout'];
   masterKey: Uint8Array;
   identity: VaultIdentity;
   slug?: string;
@@ -252,6 +253,7 @@ export async function createVaultFolderOnServer(params: {
     slug,
     type: params.type,
     emoji: params.emoji,
+    layout: params.layout,
     sharedWith: params.sharedWith,
     keyWrappers: wrappers,
     encryptedBlob,

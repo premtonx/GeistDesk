@@ -97,12 +97,16 @@ import { VaultImportDialog, type VaultImportFormatOption } from '../vault/VaultI
 import { processVaultImportFile } from '../../lib/vault-import-processor';
 import {
   ACCESS_CATEGORIES,
+  ALL_VAULTS_ID,
   VAULT_DEFINITIONS,
+  isCompanySharedVault,
   resolveCredVaultId,
   isWeakCred,
   isExpiringCred,
   canManageVaultCategories,
+  type VaultBrowseScope,
 } from '../vault/vault-utils';
+import { useVaultAssetHotkeys } from '../vault/useVaultAssetHotkeys';
 
 // --- Database Schema ---
 type Credential = VaultCredential;
@@ -115,6 +119,8 @@ export default function CredentialVaultPage() {
   const { isAdmin } = useAdmin();
   const [searchParams, setSearchParams] = useSearchParams();
   const [activeVaultId, setActiveVaultId] = useState<string>('local');
+  const [browseScope, setBrowseScope] = useState<VaultBrowseScope>('personal');
+  const [focusedAssetId, setFocusedAssetId] = useState<string | number | null>(null);
   const [accessCategory, setAccessCategory] = useState<string>('all');
   const [smartFilter, setSmartFilter] = useState<VaultSmartFilter | null>(null);
   const [assetViewMode, setAssetViewMode] = useState<VaultAssetViewMode>('table');
@@ -231,6 +237,7 @@ export default function CredentialVaultPage() {
   const [showCreateVaultModal, setShowCreateVaultModal] = useState(false);
   const [newVaultName, setNewVaultName] = useState('');
   const [newVaultType, setNewVaultType] = useState<'personal' | 'shared'>('personal');
+  const [newVaultRole, setNewVaultRole] = useState<'Admin' | 'Support' | 'DevOps'>('Admin');
   const [newVaultSharedEmails, setNewVaultSharedEmails] = useState('');
   const [showExportDialog, setShowExportDialog] = useState(false);
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -378,10 +385,14 @@ export default function CredentialVaultPage() {
               .filter(Boolean)
           : undefined;
 
+      const sharedRole = newVaultType === 'shared' ? newVaultRole : 'Owner';
       const { folder: created, vaultKey, missingEmails } = await createVaultFolderOnServer({
         name: newVaultName.trim(),
         type: newVaultType,
-        emoji: newVaultType === 'shared' ? '👥' : '🔒',
+        emoji: newVaultType === 'shared'
+          ? (newVaultRole === 'Support' ? '📞' : newVaultRole === 'DevOps' ? '🚀' : '👥')
+          : '🔒',
+        layout: { permission: sharedRole },
         sharedWith,
         masterKey: derivedKey,
         identity: { userId: user.uid, email: user.email },
@@ -395,9 +406,11 @@ export default function CredentialVaultPage() {
         return next;
       });
       setActiveVaultId(created.slug);
+      setBrowseScope(created.type === 'shared' ? 'company' : 'personal');
       setShowCreateVaultModal(false);
       setNewVaultName('');
       setNewVaultType('personal');
+      setNewVaultRole('Admin');
       setNewVaultSharedEmails('');
       toast.success(`Vault "${created.name}" created with per-vault encryption key.`);
       if (missingEmails.length > 0) {
@@ -899,7 +912,29 @@ export default function CredentialVaultPage() {
       }
 
       // Vault scope
-      list = list.filter((c) => resolveCredVaultId(c) === activeVaultId);
+      if (activeVaultId !== ALL_VAULTS_ID) {
+        list = list.filter((c) => resolveCredVaultId(c) === activeVaultId);
+      } else if (browseScope === 'personal') {
+        list = list.filter((c) => {
+          const vid = resolveCredVaultId(c);
+          const folder = folderBySlug.get(vid);
+          return !isCompanySharedVault({
+            vaultId: vid,
+            folderType: folder?.type,
+            scope: VAULT_DEFINITIONS.find((v) => v.id === vid)?.scope,
+          });
+        });
+      } else if (browseScope === 'company') {
+        list = list.filter((c) => {
+          const vid = resolveCredVaultId(c);
+          const folder = folderBySlug.get(vid);
+          return isCompanySharedVault({
+            vaultId: vid,
+            folderType: folder?.type,
+            scope: VAULT_DEFINITIONS.find((v) => v.id === vid)?.scope,
+          });
+        });
+      }
 
       // Access category (built-in type groups or custom slug == credential type)
       if (accessCategory !== 'all') {
@@ -938,6 +973,49 @@ export default function CredentialVaultPage() {
 
   const currentList = getFilteredCredentials();
 
+  const handleBrowseScopeChange = useCallback(
+    (scope: VaultBrowseScope) => {
+      setBrowseScope(scope);
+      setSmartFilter(null);
+      setAccessCategory('all');
+      setSelectedType('all');
+      setSelectedView('all');
+      if (scope === 'all') {
+        setActiveVaultId(ALL_VAULTS_ID);
+        return;
+      }
+      if (scope === 'personal') {
+        setActiveVaultId(PERSONAL_VAULT_SLUG);
+        return;
+      }
+      const firstShared = vaultFolders.find((folder) => folder.type === 'shared');
+      setActiveVaultId(firstShared?.slug || 'shared-company');
+    },
+    [vaultFolders],
+  );
+
+  const handleSelectAssetIndex = useCallback(
+    (index: number) => {
+      const asset = currentList[index];
+      if (!asset) return;
+      setFocusedAssetId(asset.id ?? null);
+      setSelectedCredential((open) => (open ? (asset as Credential) : open));
+    },
+    [currentList],
+  );
+
+  useVaultAssetHotkeys({
+    enabled: !isLocked && vaultViewMode === 'vault',
+    assets: currentList,
+    selectedId: focusedAssetId,
+    onSelectIndex: handleSelectAssetIndex,
+    onOpen: (asset) => {
+      setFocusedAssetId(asset.id ?? null);
+      setSelectedCredential(asset as Credential);
+    },
+    onDecryptPassword: (asset) => handleDecryptPassword(asset as Credential),
+  });
+
   const vaultCounts = useMemo(() => {
     const acc: Record<string, number> = {};
     for (const v of VAULT_DEFINITIONS) {
@@ -958,18 +1036,41 @@ export default function CredentialVaultPage() {
           emoji: folder.emoji || (folder.type === 'shared' ? '👥' : '🔒'),
           name: folder.name,
           permission: folder.layout?.permission,
+          type: folder.type,
         })),
     [vaultFolders],
   );
 
-  const activeVaultItems = useMemo(
-    () => nonDeletedItems.filter((c) => resolveCredVaultId(c) === activeVaultId),
-    [nonDeletedItems, activeVaultId],
-  );
-  const activeVaultTrash = useMemo(
-    () => trashItems.filter((c) => resolveCredVaultId(c) === activeVaultId),
-    [trashItems, activeVaultId],
-  );
+  const activeVaultItems = useMemo(() => {
+    if (activeVaultId === ALL_VAULTS_ID) {
+      if (browseScope === 'personal') {
+        return nonDeletedItems.filter((c) => {
+          const vid = resolveCredVaultId(c);
+          return !isCompanySharedVault({
+            vaultId: vid,
+            folderType: folderBySlug.get(vid)?.type,
+            scope: VAULT_DEFINITIONS.find((v) => v.id === vid)?.scope,
+          });
+        });
+      }
+      if (browseScope === 'company') {
+        return nonDeletedItems.filter((c) => {
+          const vid = resolveCredVaultId(c);
+          return isCompanySharedVault({
+            vaultId: vid,
+            folderType: folderBySlug.get(vid)?.type,
+            scope: VAULT_DEFINITIONS.find((v) => v.id === vid)?.scope,
+          });
+        });
+      }
+      return nonDeletedItems;
+    }
+    return nonDeletedItems.filter((c) => resolveCredVaultId(c) === activeVaultId);
+  }, [nonDeletedItems, activeVaultId, browseScope, folderBySlug]);
+  const activeVaultTrash = useMemo(() => {
+    if (activeVaultId === ALL_VAULTS_ID) return trashItems;
+    return trashItems.filter((c) => resolveCredVaultId(c) === activeVaultId);
+  }, [trashItems, activeVaultId]);
 
   const CATEGORY_ICON_EMOJI: Record<string, string> = {
     layers: '🧩',
@@ -1058,7 +1159,8 @@ export default function CredentialVaultPage() {
     return all.filter((f) => f.count > 0 || smartFilter === f.id);
   }, [activeVaultItems, activeVaultTrash, smartFilter, t]);
 
-  const canManageActiveVaultCategories = canManageCategoriesForVault(activeVaultId);
+  const canManageActiveVaultCategories =
+    activeVaultId !== ALL_VAULTS_ID && canManageCategoriesForVault(activeVaultId);
 
   const healthScore = Math.max(0, 100 - Math.min(40, weakCount * 12) - Math.min(20, expiringCount * 8));
   const securityScore = Math.min(99, healthScore + 8);
@@ -1067,21 +1169,32 @@ export default function CredentialVaultPage() {
   const activeVaultFolder = folderBySlug.get(activeVaultId);
   const activeVaultDefinition = VAULT_DEFINITIONS.find((v) => v.id === activeVaultId);
   const isPersonalVaultView =
-    activeVaultId === PERSONAL_VAULT_SLUG ||
-    activeVaultFolder?.type === 'personal' ||
-    activeVaultDefinition?.scope === 'personal';
+    activeVaultId !== ALL_VAULTS_ID &&
+    (activeVaultId === PERSONAL_VAULT_SLUG ||
+      activeVaultFolder?.type === 'personal' ||
+      activeVaultDefinition?.scope === 'personal');
   const activeVaultDisplayName =
-    activeVaultFolder?.name ||
-    (activeVaultDefinition
-      ? t(activeVaultDefinition.nameKey, activeVaultDefinition.defaultName)
-      : t('vault.vaults.personal', 'Personal Vault'));
-  const personalExportCredentials = useMemo(
-    () => nonDeletedItems.filter((c) => resolveCredVaultId(c) === activeVaultId),
-    [nonDeletedItems, activeVaultId],
-  );
+    activeVaultId === ALL_VAULTS_ID
+      ? t('vault.scope.all', 'Alle Vaults')
+      : activeVaultFolder?.name ||
+        (activeVaultDefinition
+          ? t(activeVaultDefinition.nameKey, activeVaultDefinition.defaultName)
+          : t('vault.vaults.personal', 'Personal Vault'));
+  const personalExportCredentials = useMemo(() => {
+    if (activeVaultId === ALL_VAULTS_ID) return activeVaultItems;
+    return nonDeletedItems.filter((c) => resolveCredVaultId(c) === activeVaultId);
+  }, [nonDeletedItems, activeVaultId, activeVaultItems]);
 
   const openNewAsset = (type: string) => {
-    setNewEntry((prev) => ({ ...prev, type, vaultId: activeVaultId === PERSONAL_VAULT_SLUG ? PERSONAL_VAULT_SLUG : activeVaultId }));
+    const targetVault =
+      activeVaultId === ALL_VAULTS_ID
+        ? browseScope === 'company'
+          ? (vaultFolders.find((f) => f.type === 'shared')?.slug || 'shared-company')
+          : PERSONAL_VAULT_SLUG
+        : activeVaultId === PERSONAL_VAULT_SLUG
+          ? PERSONAL_VAULT_SLUG
+          : activeVaultId;
+    setNewEntry((prev) => ({ ...prev, type, vaultId: targetVault }));
     setShowAddModal(true);
   };
 
@@ -1153,12 +1266,15 @@ export default function CredentialVaultPage() {
           </div>
         </div>
       ) : (
-        <div className="flex flex-1 min-h-0 w-full overflow-y-auto">
+        <div className="flex flex-1 min-h-0 w-full max-w-full overflow-hidden">
           <VaultLeftSidebar
             activeVaultId={activeVaultId}
-            visibleVaultIds={['local', ...vaultFolders.map((folder) => folder.slug)]}
+            browseScope={browseScope}
+            onBrowseScopeChange={handleBrowseScopeChange}
+            visibleVaultIds={['local', 'shared-company', ...vaultFolders.map((folder) => folder.slug)]}
             onVaultChange={(id) => {
               setActiveVaultId(id);
+              if (id === ALL_VAULTS_ID) setBrowseScope('all');
               setSmartFilter(null);
               setAccessCategory('all');
               setSelectedType('all');
@@ -1187,8 +1303,8 @@ export default function CredentialVaultPage() {
             }}
           />
 
-          <main className="flex-1 min-w-0 w-full">
-            <div className="p-6 space-y-5 w-full min-w-0">
+          <main className="flex-1 min-w-0 w-full max-w-full overflow-y-auto">
+            <div className="p-6 space-y-5 w-full min-w-0 max-w-full">
               <div className="flex items-start justify-between gap-4">
                 <VaultPageHeader />
                 <div className="flex items-center gap-2 shrink-0">
@@ -1258,7 +1374,15 @@ export default function CredentialVaultPage() {
                 assets={currentList}
                 viewMode={assetViewMode}
                 activeVaultId={activeVaultId}
-                onSelect={(cred) => setSelectedCredential(cred as Credential)}
+                selectedId={focusedAssetId}
+                onSelect={(cred) => {
+                  setFocusedAssetId(cred.id ?? null);
+                  setSelectedCredential(cred as Credential);
+                }}
+                onOpen={(cred) => {
+                  setFocusedAssetId(cred.id ?? null);
+                  setSelectedCredential(cred as Credential);
+                }}
                 onEdit={(cred) => setEditingCred(cred as Credential)}
                 onToggleFavorite={handleToggleFavorite}
                 onDecryptPassword={handleDecryptPassword}
@@ -1450,17 +1574,24 @@ export default function CredentialVaultPage() {
         <DialogContent className="sm:max-w-[480px] rounded-[32px] border-[#DADCE0] p-0 overflow-hidden bg-[#F8F9FA]">
           <form onSubmit={handleCreateVault}>
             <DialogHeader className="bg-white border-b border-[#F1F3F4] px-8 py-6">
-              <DialogTitle className="text-xl font-bold text-slate-800">Create Secure Vault Folder</DialogTitle>
+              <DialogTitle className="text-xl font-bold text-slate-800">
+                {t('vault.create.title', 'Neuer Vault')}
+              </DialogTitle>
               <DialogDescription className="text-xs text-slate-400 font-medium">
-                Zero-knowledge: credentials are encrypted in your browser before PostgreSQL persistence. The server stores ciphertext only.
+                {t(
+                  'vault.create.modalDesc',
+                  'Persönlicher Vault (private DB) oder Unternehmens-Vault (geteilte DB) mit Zero-Knowledge-Verschlüsselung.',
+                )}
               </DialogDescription>
             </DialogHeader>
 
             <div className="p-8 space-y-4">
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Vault Name</label>
+                <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">
+                  {t('vault.create.name', 'Vault Name')}
+                </label>
                 <Input
-                  placeholder="e.g. Platform Ops Shared"
+                  placeholder={t('vault.create.namePlaceholder', 'z. B. Platform Ops Shared')}
                   value={newVaultName}
                   onChange={(e) => setNewVaultName(e.target.value)}
                   className="bg-white border-[#DADCE0] rounded-xl h-10 text-sm"
@@ -1469,37 +1600,62 @@ export default function CredentialVaultPage() {
               </div>
 
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Vault Type</label>
+                <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">
+                  {t('vault.create.type', 'Vault-Typ')}
+                </label>
                 <Select value={newVaultType} onValueChange={(val) => setNewVaultType(val as 'personal' | 'shared')}>
                   <SelectTrigger className="bg-white border-[#DADCE0] rounded-xl text-sm h-10">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="personal">Personal Vault</SelectItem>
-                    <SelectItem value="shared">Shared Team Vault</SelectItem>
+                    <SelectItem value="personal">
+                      {t('vault.create.typePersonal', 'Persönlicher Vault (Private DB)')}
+                    </SelectItem>
+                    <SelectItem value="shared">
+                      {t('vault.create.typeCompany', 'Unternehmens-Vault / Geteilte DB')}
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               {newVaultType === 'shared' ? (
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">Share With (emails)</label>
-                  <Textarea
-                    placeholder="ops@company.com, admin@company.com"
-                    value={newVaultSharedEmails}
-                    onChange={(e) => setNewVaultSharedEmails(e.target.value)}
-                    className="bg-white border-[#DADCE0] rounded-xl text-sm min-h-[72px]"
-                  />
-                </div>
+                <>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">
+                      {t('vault.create.teamRole', 'Team / Rolle')}
+                    </label>
+                    <Select value={newVaultRole} onValueChange={(val) => setNewVaultRole(val as typeof newVaultRole)}>
+                      <SelectTrigger className="bg-white border-[#DADCE0] rounded-xl text-sm h-10">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Admin">Admin</SelectItem>
+                        <SelectItem value="Support">Support</SelectItem>
+                        <SelectItem value="DevOps">DevOps</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-[#5F6368] uppercase tracking-widest pl-1">
+                      {t('vault.create.shareWith', 'Teilen mit (E-Mails)')}
+                    </label>
+                    <Textarea
+                      placeholder="ops@company.com, admin@company.com"
+                      value={newVaultSharedEmails}
+                      onChange={(e) => setNewVaultSharedEmails(e.target.value)}
+                      className="bg-white border-[#DADCE0] rounded-xl text-sm min-h-[72px]"
+                    />
+                  </div>
+                </>
               ) : null}
             </div>
 
             <DialogFooter className="bg-white border-t border-[#F1F3F4] px-8 py-5">
               <Button type="button" variant="ghost" onClick={() => setShowCreateVaultModal(false)} className="rounded-xl text-xs">
-                Cancel
+                {t('actions.cancel', 'Abbrechen')}
               </Button>
               <Button type="submit" disabled={isSaving} className="bg-[#1A73E8] hover:bg-blue-700 text-white rounded-xl text-xs h-10 px-6">
-                {isSaving ? 'Encrypting & Saving...' : 'Create Vault'}
+                {isSaving ? t('vault.create.creating', 'Encrypting & Saving...') : t('vault.create.button', 'Vault erstellen')}
               </Button>
             </DialogFooter>
           </form>
