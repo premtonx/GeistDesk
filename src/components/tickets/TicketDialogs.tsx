@@ -1,5 +1,5 @@
 import {
-  AlertCircle, Angry, BookOpen, CheckCircle2, ChevronDown, Frown, GitMerge,
+  AlertCircle, Angry, ArrowRight, BookOpen, CheckCircle2, ChevronDown, Frown, GitMerge,
   Info, Meh, MessageSquare, ShieldCheck, Smile, Sparkles,
   Trash2, UserPlus, Zap,
 } from 'lucide-react';
