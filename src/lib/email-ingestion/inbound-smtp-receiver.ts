@@ -98,7 +98,11 @@ export async function startInboundSmtpReceiver(): Promise<InboundSmtpHandle | nu
       host,
       hostname,
       maxBytes,
-      isAllowedRecipient: (address) => isAllowedInboundSmtpRecipient(address),
+      isAllowedRecipient: async (address) => {
+        if (isAllowedInboundSmtpRecipient(address)) return true;
+        const channel = await findChannelForWebhook({ recipient: extractEmailAddress(address) });
+        return Boolean(channel);
+      },
       onMessage: (message) => deliverSmtpMessage(message),
     });
     safeLog(

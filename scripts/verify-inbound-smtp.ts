@@ -9,6 +9,8 @@ import {
   isAllowedInboundSmtpRecipient,
   listInboundSmtpAcceptDomains,
 } from '../src/lib/email-ingestion/inbound-smtp-domains.ts';
+import { isOwnSupportAddressForChannel } from '../src/lib/email-ingestion/loop-guard.ts';
+import { composeHelpForwardingAddress } from '../src/lib/email-forwarding-address.ts';
 
 function fail(message: string): never {
   console.error(`FAIL: ${message}`);
@@ -69,6 +71,47 @@ async function main() {
   if (isAllowedInboundSmtpRecipient('anyone@gmail.com')) {
     fail('gmail.com must not be an open relay target');
   }
+
+  const preview = composeHelpForwardingAddress('user@gmail.com', 'inbound.geistai.eu');
+  if (preview !== 'help-user@inbound.geistai.eu') {
+    fail(`slug preview mismatch: ${preview}`);
+  }
+
+  const gmailTest = isOwnSupportAddressForChannel({
+    sender: 'user@gmail.com',
+    recipient: 'help-user@inbound.geistai.eu',
+    systemFrom: 'noreply@inbound.geistai.eu',
+    channel: {
+      email: 'user@gmail.com',
+      forwardingAddress: 'help-user@inbound.geistai.eu',
+      mailbox: 'user@gmail.com',
+      connectionType: 'webhook',
+    },
+  });
+  if (gmailTest) fail('webhook test mail from channel.email to forwarding alias must not be dropped');
+
+  const outboundLoop = isOwnSupportAddressForChannel({
+    sender: 'noreply@inbound.geistai.eu',
+    recipient: 'help-user@inbound.geistai.eu',
+    systemFrom: 'noreply@inbound.geistai.eu',
+    channel: {
+      email: 'user@gmail.com',
+      forwardingAddress: 'help-user@inbound.geistai.eu',
+      connectionType: 'webhook',
+    },
+  });
+  if (!outboundLoop) fail('MAIL_FROM_ADDRESS must still be treated as a loop');
+
+  const imapLoop = isOwnSupportAddressForChannel({
+    sender: 'support@company.com',
+    recipient: 'support@company.com',
+    channel: {
+      email: 'support@company.com',
+      mailbox: 'support@company.com',
+      connectionType: 'imap_basic',
+    },
+  });
+  if (!imapLoop) fail('IMAP self-send must still be treated as a loop');
 
   const rfc822 = Buffer.from(
     [

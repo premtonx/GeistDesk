@@ -57,6 +57,7 @@ const BROWSER_SAFE_LIB_MODULES = new Set([
   'src/lib/ticketViewFilters',
   'src/lib/ticketsSidebarPreferences',
   'src/lib/ticket-checklist-utils',
+  'src/lib/email-forwarding-address',
   'src/lib/ticket-kanban-status',
   // module config (localStorage-backed, browser-safe)
   'src/lib/module-config',

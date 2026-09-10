@@ -101,6 +101,7 @@ export async function ingestNormalizedEmail(
   // --- Pre-ticket safety gates (loop guard, rate limit, spam) ---
   const loop = await checkEmailLoopGuard({
     from: sender,
+    recipient: email.mailbox || undefined,
     rawHeaders: email.rawHeaders || null,
   });
   if (loop.blocked) {

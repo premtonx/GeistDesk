@@ -30,6 +30,7 @@ import {
   createEmailChannel,
   getForwardingDomain,
   listEmailChannels,
+  composeHelpForwardingAddress,
 } from './email-ingestion/channel-store.js';
 import { setPersonalVaultInitialized } from './personal-vault-store.js';
 import { purgeSeededVaultFolders } from './vault-demo-purge.js';
@@ -118,6 +119,8 @@ export const completeOnboardingSchema = z.object({
       graphTenantId: z.string().max(255).optional(),
       graphClientId: z.string().max(255).optional(),
       graphClientSecret: z.string().max(500).optional(),
+      /** Exact help-{slug}@domain previewed in the wizard — persisted as-is when valid. */
+      forwardingAddress: z.string().max(320).optional(),
     })
     .optional()
     .default({ skip: true, channel: 'webhook' }),
@@ -1101,6 +1104,14 @@ async function resumeOnboardingSteps(
       );
       if (!alreadyCreated) {
         const connectionType = mapIngestChannel(ingest.channel || 'webhook');
+        const domain = getForwardingDomain();
+        const slugSource = ingest.supportEmail || intendedEmail || input.adminEmail || 'support';
+        const expectedForwarding = composeHelpForwardingAddress(slugSource, domain);
+        const providedForwarding = String(ingest.forwardingAddress || '').trim().toLowerCase();
+        const forwardingAddress =
+          providedForwarding.startsWith('help-') && providedForwarding.endsWith(`@${domain}`)
+            ? providedForwarding
+            : expectedForwarding;
         const created = await createEmailChannel({
           name: 'Primary inbound',
           email: intendedEmail,
@@ -1108,6 +1119,7 @@ async function resumeOnboardingSteps(
           isPrimary: true,
           enabled: true,
           status: 'pending',
+          forwardingAddress,
           provider: connectionType === 'microsoft_graph' ? 'microsoft' : 'custom',
           imapHost: ingest.imapHost,
           imapPort: ingest.imapPort ?? 993,

@@ -2,8 +2,13 @@
  * Infinite email loop guard.
  *
  * Drops inbound mail that is an auto-reply / out-of-office / bounce / system
- * notification, or that comes from the platform's own support addresses.
+ * notification, or that comes from the platform's own outbound addresses.
  * Prevents the classic OOO-responder loop from generating thousands of tickets.
+ *
+ * Passive forwarding channels (webhook / sovereign SMTP) must NOT drop a human
+ * test message just because From equals channel.email — operators often put
+ * their personal Gmail in as the support contact and then mail the help- alias
+ * from that same account.
  */
 
 import { extractEmailAddress } from '../global-blacklist.js';
@@ -15,22 +20,40 @@ export interface LoopGuardResult {
   reason?: string;
 }
 
+export interface LoopGuardChannel {
+  email?: string | null;
+  forwardingAddress?: string | null;
+  mailbox?: string | null;
+  connectionType?: string | null;
+}
+
 const AUTOREPLY_HEADER_VALUES = /auto-replied|auto-generated|auto-reply|autoreply|vacation|out-of-office/i;
+
+const PASSIVE_FORWARD_TYPES = new Set(['webhook', 'sovereign_smtp']);
+
+export function isPassiveForwardConnectionType(connectionType: unknown): boolean {
+  return PASSIVE_FORWARD_TYPES.has(String(connectionType || '').trim().toLowerCase());
+}
+
+const normalize = (value: unknown): string =>
+  extractEmailAddress(String(value || '')).toLowerCase().trim();
 
 /** True when the message declares itself auto-generated via RFC 3834 headers. */
 export function hasAutoReplyHeaders(rawHeaders?: Record<string, string> | null): boolean {
   if (!rawHeaders || typeof rawHeaders !== 'object') return false;
 
-  const autoSubmitted = String(rawHeaders['auto-submitted'] || rawHeaders['auto-submitted'] || '').toLowerCase();
-  if (autoSubmitted && AUTOREPLY_HEADER_VALUES.test(autoSubmitted)) return true;
+  const autoSubmitted = String(rawHeaders['auto-submitted'] || '').toLowerCase();
+  if (autoSubmitted && autoSubmitted !== 'no' && AUTOREPLY_HEADER_VALUES.test(autoSubmitted)) {
+    return true;
+  }
 
-  const xAutoreply = String(rawHeaders['x-autoreply'] || rawHeaders['x-autoreply'] || '').toLowerCase();
+  const xAutoreply = String(rawHeaders['x-autoreply'] || '').toLowerCase();
   if (xAutoreply === 'yes' || xAutoreply === 'true') return true;
 
-  const autoSuppress = String(rawHeaders['x-auto-response-suppress'] || rawHeaders['x-auto-response-suppress'] || '').toLowerCase();
+  const autoSuppress = String(rawHeaders['x-auto-response-suppress'] || '').toLowerCase();
   if (autoSuppress && autoSuppress !== 'none') return true;
 
-  const xAutorespond = String(rawHeaders['x-autorespond'] || rawHeaders['x-autorespond'] || '').toLowerCase();
+  const xAutorespond = String(rawHeaders['x-autorespond'] || '').toLowerCase();
   if (xAutorespond === 'yes') return true;
 
   const precedence = String(rawHeaders.precedence || rawHeaders['x-precedence'] || '').toLowerCase();
@@ -56,18 +79,64 @@ export function isBounceOrSystemSender(from: string): boolean {
   );
 }
 
-const normalize = (value: unknown): string =>
-  extractEmailAddress(String(value || '')).toLowerCase().trim();
+/**
+ * Pure loop check against one channel. Returns true only when accepting the
+ * message would bounce our own outbound traffic back into tickets.
+ */
+export function isOwnSupportAddressForChannel(params: {
+  sender: string;
+  recipient?: string;
+  systemFrom?: string;
+  channel: LoopGuardChannel;
+}): boolean {
+  const sender = normalize(params.sender);
+  if (!sender) return false;
+
+  const systemFrom = normalize(params.systemFrom);
+  if (systemFrom && sender === systemFrom) return true;
+
+  const recipient = normalize(params.recipient);
+  const email = normalize(params.channel.email);
+  const forwarding = normalize(params.channel.forwardingAddress);
+  const mailbox = normalize(params.channel.mailbox);
+  const passive = isPassiveForwardConnectionType(params.channel.connectionType);
+
+  // Mail from the inbound alias itself is always a loop.
+  if (forwarding && sender === forwarding) return true;
+
+  const deliveredToForwarding = Boolean(recipient && forwarding && recipient === forwarding);
+  const deliveredToChannelEmail = Boolean(recipient && email && recipient === email);
+
+  if (passive && (deliveredToForwarding || deliveredToChannelEmail)) {
+    // Human test mail: From: channel.email → To: help-{slug}@domain (or channel.email).
+    // Only the system outbound identity is a loop here.
+    return false;
+  }
+
+  if (passive && !recipient) {
+    // Missing envelope/mailbox: do not drop solely on channel.email for forwarding channels.
+    if (email && sender === email) return false;
+    if (mailbox && sender === mailbox) return false;
+    return false;
+  }
+
+  if ((email && sender === email) || (mailbox && sender === mailbox)) {
+    return true;
+  }
+
+  return false;
+}
 
 /**
- * True when the sender matches one of the platform's own support addresses
- * (channel email / forwarding address / system From), which would otherwise
- * loop back into tickets.
+ * True when the sender matches the platform outbound identity or an IMAP/Graph
+ * mailbox that would loop. Passive forwarding aliases are exempt when the
+ * recipient is the configured help- address (or the channel support email).
  */
 export async function isOwnSupportAddress(
   from: string,
+  recipient?: string,
 ): Promise<boolean> {
-  const sender = extractEmailAddress(from || '').toLowerCase();
+  const sender = normalize(from);
   if (!sender) return false;
 
   const systemFrom = normalize(process.env.MAIL_FROM_ADDRESS || process.env.SMTP_FROM);
@@ -76,11 +145,20 @@ export async function isOwnSupportAddress(
   try {
     const channels = await getDocsDirect(EMAIL_CHANNELS_COLLECTION, []);
     for (const channel of channels) {
-      const data = channel.data || channel;
-      const email = normalize(data.email);
-      const forwarding = normalize(data.forwardingAddress);
-      const mailbox = normalize(data.mailbox);
-      if ((email && sender === email) || (forwarding && sender === forwarding) || (mailbox && sender === mailbox)) {
+      const data = (channel.data || channel) as LoopGuardChannel;
+      if (
+        isOwnSupportAddressForChannel({
+          sender,
+          recipient,
+          systemFrom,
+          channel: {
+            email: data.email,
+            forwardingAddress: data.forwardingAddress,
+            mailbox: data.mailbox,
+            connectionType: data.connectionType || (channel as { connectionType?: string }).connectionType,
+          },
+        })
+      ) {
         return true;
       }
     }
@@ -93,6 +171,7 @@ export async function isOwnSupportAddress(
 /** Combined guard used at the top of the ingest pipeline. */
 export async function checkEmailLoopGuard(params: {
   from: string;
+  recipient?: string | null;
   rawHeaders?: Record<string, string> | null;
 }): Promise<LoopGuardResult> {
   if (isBounceOrSystemSender(params.from)) {
@@ -101,7 +180,7 @@ export async function checkEmailLoopGuard(params: {
   if (hasAutoReplyHeaders(params.rawHeaders)) {
     return { blocked: true, reason: 'auto_reply_headers' };
   }
-  if (await isOwnSupportAddress(params.from)) {
+  if (await isOwnSupportAddress(params.from, params.recipient || undefined)) {
     return { blocked: true, reason: 'own_support_address' };
   }
   return { blocked: false };

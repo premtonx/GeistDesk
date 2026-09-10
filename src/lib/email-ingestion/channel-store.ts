@@ -17,6 +17,8 @@ import {
   type EmailConnectionType,
 } from './types.js';
 import { ensureDomainVerificationFields } from './domain-verification.js';
+import { composeHelpForwardingAddress, forwardingLocalSlug } from '../email-forwarding-address.js';
+import { extractEmailAddress } from '../global-blacklist.js';
 
 const SECRET_FIELDS = [
   'imapPassword',
@@ -50,9 +52,10 @@ export function getForwardingDomain(): string {
 }
 
 export function buildForwardingAddress(channelId: string): string {
-  const slug = channelId.replace(/[^a-zA-Z0-9]/g, '').slice(0, 16).toLowerCase() || 'channel';
-  return `help-${slug}@${forwardingDomain()}`;
+  return composeHelpForwardingAddress(channelId, forwardingDomain());
 }
+
+export { composeHelpForwardingAddress, forwardingLocalSlug };
 
 /**
  * Repair a persisted forwarding address: trailing @localhost (or loopback) is
@@ -423,7 +426,7 @@ export async function findChannelForWebhook(params: {
   webhookSecret?: string;
 }): Promise<EmailChannelConfig | null> {
   const docs = await getDocsDirect(EMAIL_CHANNELS_COLLECTION, []);
-  const recipient = (params.recipient || '').toLowerCase().trim();
+  const recipient = extractEmailAddress(params.recipient || '');
   const secret = params.webhookSecret || '';
 
   for (const doc of docs) {
@@ -432,8 +435,8 @@ export async function findChannelForWebhook(params: {
       return channel;
     }
     if (recipient) {
-      const email = (channel.email || '').toLowerCase().trim();
-      const mailbox = (channel.mailbox || '').toLowerCase().trim();
+      const email = extractEmailAddress(channel.email || '');
+      const mailbox = extractEmailAddress(channel.mailbox || '');
       if (email === recipient || mailbox === recipient) {
         return channel;
       }
@@ -460,7 +463,7 @@ export async function markWebhookChannelLiveFromInbound(
   if (!channel?.id || channel.connectionType !== 'webhook') return;
   if (channel.status === 'disabled') return;
   await updateDocDirect(EMAIL_CHANNELS_COLLECTION, channel.id, {
-    status: result?.blocked ? channel.status : 'connected',
+    status: result?.blocked ? channel.status : 'active',
     lastTestOk: true,
     lastTestAt: new Date().toISOString(),
     lastError: null,

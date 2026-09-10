@@ -37,6 +37,7 @@ import { Checkbox } from '../ui/checkbox';
 import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
 import { cn } from '../../lib/utils';
+import { composeHelpForwardingAddress } from '../../lib/email-forwarding-address';
 import { useAuth } from '../../lib/hooks';
 import { useOnboardingStatus } from '../../hooks/useOnboardingStatus';
 import { applyModuleConfigToStorage, getModuleConfig } from '../../lib/module-config';
@@ -197,14 +198,10 @@ export default function OnboardingWizardPage() {
   const progress = (step / STEPS.length) * 100;
 
   const forwardingDomain = status?.forwardingDomain?.trim() || DEFAULT_INBOUND_DOMAIN;
-  // Derive a deterministic slug from the admin email local-part, matching the
-  // channel-id slug format used by buildForwardingAddress (alphanumeric only).
-  const forwardingSlug =
-    (adminEmail.split('@')[0] || '')
-      .replace(/[^a-zA-Z0-9]/g, '')
-      .slice(0, 16)
-      .toLowerCase() || 'support';
-  const forwardingAddress = `help-${forwardingSlug}@${forwardingDomain}`;
+  const forwardingAddress = composeHelpForwardingAddress(
+    supportEmail.trim() || adminEmail.trim() || 'support',
+    forwardingDomain,
+  );
 
   // Distinct German test-connection banners for the AI step.
   const isDistinctAiError = useMemo(() => {
@@ -346,6 +343,7 @@ export default function OnboardingWizardPage() {
                 skip: false,
                 channel: ingestChannel,
                 supportEmail: supportEmail.trim() || adminEmail.trim(),
+                forwardingAddress,
                 imapHost,
                 imapPort: imapPort.trim() || '993',
                 imapTls,
