@@ -237,11 +237,10 @@ export default function TicketsPage() {
   const [contactSchema, setContactSchema] = useState<CustomField[]>([]);
 
   const [areNotesExpanded, setAreNotesExpanded] = useState(false);
-  const [isComposerExpanded, setIsComposerExpanded] = useState(false);
+  const [isComposerExpanded, setIsComposerExpanded] = useState(true);
 
   useEffect(() => {
     setAreNotesExpanded(false);
-    setIsComposerExpanded(false);
   }, [selectedTicketId]);
 
   useEffect(() => {
@@ -1344,7 +1343,6 @@ export default function TicketsPage() {
     // 2. Immediately clear editor content and collapse composer window
     setReplyText("");
     setLiveTranslation("");
-    setIsComposerExpanded(false);
 
     try {
       const result = await ticketService.sendMessage(selectedTicketId, {

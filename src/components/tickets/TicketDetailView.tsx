@@ -1,7 +1,7 @@
-import type { Dispatch, SetStateAction } from 'react';
+import { useState, type Dispatch, SetStateAction } from 'react';
 import { toast } from 'sonner';
 import {
-  BookOpen, ChevronDown, ChevronLeft, GitMerge, Mail, MessageSquare,
+  BookOpen, ChevronDown, ChevronLeft, GitMerge, MessageSquare,
   MoreHorizontal, RefreshCw, SlidersHorizontal, Sparkles, StickyNote, Ticket, Ban,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
@@ -156,6 +156,8 @@ export function TicketDetailView(props: TicketDetailViewProps) {
     onOpenMerge,
   } = props;
 
+  const [composerTab, setComposerTab] = useState<'reply' | 'note'>('reply');
+
   // Defensive guard: never crash the ticket workspace when the selected
   // ticket is temporarily unavailable (e.g. removed from the master list
   // after an assignment in a filtered view). Render an empty state instead.
@@ -190,11 +192,16 @@ export function TicketDetailView(props: TicketDetailViewProps) {
   const openInternalNoteComposer = () => {
     setActiveDetailTab('conversation');
     setIsComposerExpanded(true);
+    setComposerTab('note');
     setTimeout(() => {
       const noteEl =
+        document.getElementById('composer-internal-note-input') ||
         document.getElementById('quick-internal-note-input') ||
         document.getElementById('email-reply-composer');
-      if (noteEl) noteEl.scrollIntoView({ behavior: 'smooth' });
+      if (noteEl) {
+        noteEl.scrollIntoView({ behavior: 'smooth' });
+        if ('focus' in noteEl) (noteEl as HTMLElement).focus();
+      }
     }, 100);
     toast.info(t('tickets.detail.switchedToComposer', 'Switched to conversation notes composer.'));
   };
@@ -526,6 +533,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                               agentComments={selectedTicket.agentComments || []}
                               onReplyClick={() => {
                                 setIsComposerExpanded(true);
+                                setComposerTab('reply');
                                 setTimeout(() => {
                                   const replyComposer = document.getElementById('email-reply-composer');
                                   if (replyComposer) replyComposer.scrollIntoView({ behavior: 'smooth' });
@@ -534,6 +542,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                               onQuoteClick={(text) => {
                                 setReplyText(prev => prev ? `${prev}<blockquote>${text}</blockquote><br/>` : `<blockquote>${text}</blockquote><br/>`);
                                 setIsComposerExpanded(true);
+                                setComposerTab('reply');
                                 setTimeout(() => {
                                   const replyComposer = document.getElementById('email-reply-composer');
                                   if (replyComposer) replyComposer.scrollIntoView({ behavior: 'smooth' });
@@ -568,9 +577,73 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                               translatedTicket={translatedTicket}
                             />
     
-                            {/* 4. Professional email-style response composer (Foldable/collapsed by default) */}
-                            {isComposerExpanded ? (
-                              <div className="relative">
+                            {/* 4. Professional email-style response composer */}
+                            <div className="relative">
+                                <div className="flex items-center gap-1 px-1">
+                                  <button
+                                    type="button"
+                                    onClick={() => setComposerTab('reply')}
+                                    className={cn(
+                                      'h-8 px-3 text-xs border-b-2 transition-colors',
+                                      composerTab === 'reply'
+                                        ? 'border-blue-600 text-blue-600 font-semibold'
+                                        : 'border-transparent text-slate-500 font-medium hover:text-slate-800',
+                                    )}
+                                  >
+                                    {t('tickets.composer.publicReply', 'Öffentliche Antwort')}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setComposerTab('note')}
+                                    className={cn(
+                                      'h-8 px-3 text-xs border-b-2 transition-colors',
+                                      composerTab === 'note'
+                                        ? 'border-blue-600 text-blue-600 font-semibold'
+                                        : 'border-transparent text-slate-500 font-medium hover:text-slate-800',
+                                    )}
+                                  >
+                                    {t('tickets.composer.internalNote', 'Interne Notiz')}
+                                  </button>
+                                </div>
+                                {composerTab === 'note' ? (
+                                  <div className="bg-card border border-border rounded-2xl shadow-md p-4 space-y-3">
+                                    <textarea
+                                      id="composer-internal-note-input"
+                                      rows={5}
+                                      value={newAgentComment}
+                                      onChange={(e) => setNewAgentComment(e.target.value)}
+                                      placeholder={t('tickets.notes.typeNotePlaceholder', 'Type an internal note to notify workforce, share state...')}
+                                      className="w-full min-h-[120px] rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs text-slate-800 leading-relaxed focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                    />
+                                    <div className="flex justify-end">
+                                      <Button
+                                        size="sm"
+                                        className="h-8 text-xs font-semibold"
+                                        disabled={!newAgentComment.trim() || !user}
+                                        onClick={async () => {
+                                          if (!newAgentComment.trim() || !user) return;
+                                          try {
+                                            await ticketService.addAgentComment(selectedTicket.id, {
+                                              content: newAgentComment.trim(),
+                                              agentId: user.uid,
+                                              agentName: user.displayName || user.email || 'Agent',
+                                            });
+                                            setNewAgentComment('');
+                                            const updatedTicket = await ticketService.getTicket(selectedTicket.id);
+                                            if (updatedTicket) {
+                                              setAllTickets((prev) => prev.map((row) => (row.id === selectedTicket.id ? updatedTicket : row)));
+                                            }
+                                            toast.success(t('tickets.notes.noteLogged', 'Internal note logged.'));
+                                          } catch {
+                                            toast.error(t('tickets.notes.noteFailed', 'Failed to log internal note.'));
+                                          }
+                                        }}
+                                      >
+                                        {t('tickets.notes.logNote', 'Notiz speichern')}
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
                                 <EmailComposer 
                                   ticket={selectedTicket}
                                   value={replyText}
@@ -582,7 +655,6 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                                   onDiscard={() => {
                                     setReplyText("");
                                     setLegalViolation(null);
-                                    setIsComposerExpanded(false);
                                   }}
                                   isAiReady={isAiReady}
                                   isAiDrafting={isAiDrafting}
@@ -614,37 +686,8 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                                   autoDispatchThreshold={95}
                                   isAutoDispatched={selectedTicket?.aiAutoDispatched === true}
                                 />
-                                <div className="mt-2 flex justify-end">
-                                  <Button 
-                                    variant="ghost" 
-                                    size="sm" 
-                                    className="text-xs text-muted-foreground font-semibold hover:text-foreground h-8"
-                                    onClick={() => setIsComposerExpanded(false)}
-                                  >
-                                    {t('tickets.composer.collapseResponseEditor', 'Collapse Response Editor')}
-                                  </Button>
-                                </div>
+                                )}
                               </div>
-                            ) : (
-                              <div className="p-4 bg-muted/40 border border-dashed border-border rounded-xl flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                  <div className="w-8 h-8 rounded-full bg-blue-50 dark:bg-blue-950/40 flex items-center justify-center text-blue-600 dark:text-blue-300 border border-blue-100 dark:border-blue-900">
-                                    <Mail className="w-4 h-4" />
-                                  </div>
-                                  <div className="flex flex-col">
-                                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">{t('tickets.composer.noActiveDraft', 'No active response draft')}</span>
-                                    <span className="text-[10px] text-muted-foreground">{t('tickets.composer.clickReplyDesc', 'Click reply on any message or details header to write a message to the client.')}</span>
-                                  </div>
-                                </div>
-                                <Button 
-                                  size="sm" 
-                                  className="bg-primary hover:bg-primary/95 text-primary-foreground font-bold text-xs h-8 px-3 rounded-lg shadow-sm"
-                                  onClick={() => setIsComposerExpanded(true)}
-                                >
-                                  {t('tickets.composer.expandResponseForm', 'Expand Response Form')}
-                                </Button>
-                              </div>
-                            )}
     
                             {/* 5. Bento Grid horizontal context cards at the end */}
                             <TicketKindFieldsCard

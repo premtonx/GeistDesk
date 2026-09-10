@@ -195,7 +195,23 @@ export function AiSummaryCard({
   }, [ticket]);  return (
     <Card className="bg-gradient-to-r from-blue-50/40 via-violet-50/40 to-indigo-50/30 dark:from-slate-900/60 dark:to-slate-850/40 border-indigo-100 dark:border-indigo-950 rounded-2xl shadow-xs overflow-hidden mb-4 gap-0 py-0">
       {/* Header section of the AI Assistant summary block */}
-      <div className={cn('px-4 py-3 flex items-center justify-between gap-3', isAiSummaryExpanded && 'border-b border-indigo-100/40 dark:border-indigo-950/50')}>
+      <div
+        role="button"
+        tabIndex={0}
+        aria-expanded={isAiSummaryExpanded}
+        aria-controls="ai-orchestrator-deep-dive-body"
+        onClick={() => setIsAiSummaryExpanded((open) => !open)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            setIsAiSummaryExpanded((open) => !open);
+          }
+        }}
+        className={cn(
+          'px-4 py-3 flex items-center justify-between gap-3 cursor-pointer transition-colors hover:bg-slate-50/80 dark:hover:bg-slate-800/40 select-none',
+          isAiSummaryExpanded && 'border-b border-indigo-100/40 dark:border-indigo-950/50',
+        )}
+      >
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-sm shadow-blue-500/20">
             <Sparkles className="w-4.5 h-4.5" />
@@ -226,7 +242,9 @@ export function AiSummaryCard({
             variant="outline" 
             size="sm" 
             className="h-7 text-[10px] font-bold bg-white text-slate-850 border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 rounded-lg shadow-none"
-            onClick={() => {
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
               if (!isAiSummaryExpanded) {
                 setIsAiSummaryExpanded(true);
                 return;
@@ -237,20 +255,17 @@ export function AiSummaryCard({
           >
             {isAiDrafting ? t('tickets.aiSummaryCard.analyzing', 'Analyzing...') : t('tickets.aiSummaryCard.fullAnalysis', 'Full Analysis')}
           </Button>
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            className="h-7 w-7 text-slate-500 hover:bg-indigo-50/50 rounded-lg shrink-0"
-            onClick={() => setIsAiSummaryExpanded(!isAiSummaryExpanded)}
-            aria-label={t('tickets.aiSummaryCard.toggleSummary', 'Toggle summary')}
+          <span
+            className="h-7 w-7 inline-flex items-center justify-center text-slate-500 rounded-lg shrink-0"
+            aria-hidden
           >
             {isAiSummaryExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-          </Button>
+          </span>
         </div>
       </div>
 
       {isAiSummaryExpanded ? (
-        <CardContent className="p-4 space-y-4">
+        <CardContent id="ai-orchestrator-deep-dive-body" className="p-4 space-y-4">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
                 {/* Left Column: Key Findings & Root Cause */}
                 <div className="space-y-4">
