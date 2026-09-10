@@ -18,7 +18,7 @@ import {
   Archive,
   AlertTriangle,
   AlertCircle,
-  HelpCircle,
+  LifeBuoy,
   Frown,
   TrendingUp,
   Copy,
@@ -74,7 +74,7 @@ export const ALL_TICKETS_VIEW_ITEMS: SidebarItemConfig[] = [
   {
     id: 'help_requested',
     label: 'Help Requested',
-    icon: HelpCircle,
+    icon: LifeBuoy,
     indicator: { label: 'help', color: 'bg-red-500 text-white font-black animate-pulse shadow shadow-red-500/50' },
     highlight: true,
   },
@@ -147,7 +147,7 @@ export const TICKETS_SIDEBAR_GROUPS: SidebarGroupConfig[] = [
       {
         id: 'help_requested',
         label: 'Help Requested',
-        icon: HelpCircle,
+        icon: LifeBuoy,
         indicator: { label: 'help', color: 'bg-red-500 text-white font-black animate-pulse shadow shadow-red-500/50' },
         highlight: true,
       },
@@ -178,6 +178,13 @@ export const COMPACT_PRIMARY_VIEWS: SidebarItemConfig[] = [
 
 export const COMPACT_URGENCY_VIEWS: SidebarItemConfig[] = [
   { id: 'sla_risk', label: 'SLA Risk', icon: AlertCircle },
+  {
+    id: 'help_requested',
+    label: 'Help Requested',
+    icon: LifeBuoy,
+    indicator: { label: 'help', color: 'bg-rose-100 text-rose-700' },
+    highlight: true,
+  },
   { id: 'escalations', label: 'Escalations', icon: AlertTriangle },
 ];
 

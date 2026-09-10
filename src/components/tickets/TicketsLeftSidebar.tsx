@@ -39,6 +39,7 @@ interface SidebarNavButtonProps {
   isActive: boolean;
   effectiveCollapsed: boolean;
   badgeTone?: BadgeTone;
+  helpChip?: boolean;
   onSelect: () => void;
 }
 
@@ -56,8 +57,10 @@ function SidebarNavButton({
   isActive,
   effectiveCollapsed,
   badgeTone = 'default',
+  helpChip = false,
   onSelect,
 }: SidebarNavButtonProps) {
+  const roseActive = helpChip && isActive;
   return (
     <button
       type="button"
@@ -65,29 +68,40 @@ function SidebarNavButton({
       title={label}
       className={cn(
         'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors min-w-0',
-        isActive
-          ? 'bg-blue-50 text-blue-700'
-          : 'text-slate-700 hover:bg-slate-100',
+        roseActive
+          ? 'bg-rose-50 text-rose-700 font-semibold'
+          : isActive
+            ? 'bg-blue-50 text-blue-700'
+            : 'text-slate-700 hover:bg-slate-100',
         effectiveCollapsed && 'relative justify-center px-0 h-10 w-10 mx-auto',
       )}
     >
       <span className={cn('flex items-center gap-2 min-w-0', effectiveCollapsed && 'justify-center')}>
         <item.icon
           className={cn(
-            'w-3.5 h-3.5 shrink-0',
-            isActive ? 'text-blue-600' : 'text-slate-500',
+            'w-4 h-4 shrink-0',
+            helpChip ? 'text-rose-500' : isActive ? 'text-blue-600' : 'text-slate-500',
           )}
         />
         {!effectiveCollapsed && <span className="truncate text-left">{label}</span>}
       </span>
-      {!effectiveCollapsed && count > 0 && (
-        <span
-          className={cn(
-            'text-[11px] font-semibold px-1.5 py-0.5 rounded-full min-w-4 text-center shrink-0',
-            countBadgeClass(isActive, badgeTone),
+      {!effectiveCollapsed && (
+        <span className="flex items-center gap-1.5 shrink-0">
+          {helpChip && (
+            <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-rose-100 text-rose-700 border border-rose-200">
+              HILFE
+            </span>
           )}
-        >
-          {count}
+          {count > 0 && (
+            <span
+              className={cn(
+                'text-[11px] font-semibold min-w-4 text-center',
+                helpChip ? 'text-rose-600' : cn('px-1.5 py-0.5 rounded-full', countBadgeClass(isActive, badgeTone)),
+              )}
+            >
+              {count}
+            </span>
+          )}
         </span>
       )}
       {effectiveCollapsed && count > 0 && (
@@ -163,7 +177,7 @@ export function TicketsLeftSidebar({
     ),
   ];
 
-  const renderItem = (item: SidebarItemConfig, badgeTone?: BadgeTone) => (
+  const renderItem = (item: SidebarItemConfig, badgeTone?: BadgeTone, helpChip?: boolean) => (
     <SidebarNavButton
       key={item.id}
       item={item}
@@ -172,6 +186,7 @@ export function TicketsLeftSidebar({
       isActive={activeView === item.id}
       effectiveCollapsed={effectiveCollapsed}
       badgeTone={badgeTone}
+      helpChip={helpChip}
       onSelect={() => onViewChange(item.id)}
     />
   );
@@ -215,7 +230,8 @@ export function TicketsLeftSidebar({
         )}
         <div className={cn('space-y-0.5', effectiveCollapsed && 'space-y-2')}>
           {renderItem(COMPACT_URGENCY_VIEWS[0], 'amber')}
-          {renderItem(COMPACT_URGENCY_VIEWS[1], 'rose')}
+          {renderItem(COMPACT_URGENCY_VIEWS[1], 'rose', true)}
+          {renderItem(COMPACT_URGENCY_VIEWS[2], 'rose')}
         </div>
 
         {!effectiveCollapsed && (
