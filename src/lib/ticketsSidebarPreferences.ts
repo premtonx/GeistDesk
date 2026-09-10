@@ -29,15 +29,50 @@ export interface TicketsSidebarPreferences {
 
 export const DEFAULT_FAVORITE_VIEW_IDS = [
   'assigned_me',
-  'help_requested',
-  'sla_risk',
+  'status_open',
 ];
 
 const REMOVED_VIEW_IDS = new Set(['vip_customers', 'vip_requests']);
 
+/** Dedicated favorites list — real view ids only (never German slugs). */
+export const SIDEBAR_FAVORITES_STORAGE_KEY = 'geistdesk_sidebar_favorites';
+
+const LEGACY_FAVORITE_ID_MAP: Record<string, string> = {
+  'mir-zugewiesen': 'assigned_me',
+  offen: 'status_open',
+};
+
+function normalizeFavoriteId(id: string): string {
+  const trimmed = String(id ?? '').trim();
+  return LEGACY_FAVORITE_ID_MAP[trimmed] ?? trimmed;
+}
+
 function sanitizeFavoriteViewIds(ids: string[]): string[] {
-  const cleaned = ids.filter((id) => !REMOVED_VIEW_IDS.has(id));
-  return cleaned.length > 0 ? cleaned : [...DEFAULT_FAVORITE_VIEW_IDS];
+  const seen = new Set<string>();
+  const cleaned: string[] = [];
+  for (const raw of ids) {
+    const id = normalizeFavoriteId(raw);
+    if (!id || REMOVED_VIEW_IDS.has(id) || seen.has(id)) continue;
+    seen.add(id);
+    cleaned.push(id);
+  }
+  return cleaned;
+}
+
+function readStandaloneFavorites(): string[] | null {
+  try {
+    const raw = localStorage.getItem(SIDEBAR_FAVORITES_STORAGE_KEY);
+    if (raw == null) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return null;
+    return sanitizeFavoriteViewIds(parsed.map(String));
+  } catch {
+    return null;
+  }
+}
+
+function writeStandaloneFavorites(ids: string[]) {
+  localStorage.setItem(SIDEBAR_FAVORITES_STORAGE_KEY, JSON.stringify(sanitizeFavoriteViewIds(ids)));
 }
 
 export const DEFAULT_GROUP_ORDER = [
@@ -69,11 +104,15 @@ function storageKey(userId: string) {
 }
 
 function loadPreferences(userId: string): TicketsSidebarPreferences {
+  const standaloneFavorites = readStandaloneFavorites();
   try {
     const raw = localStorage.getItem(storageKey(userId));
     if (!raw) {
+      const favoriteViewIds =
+        standaloneFavorites !== null ? standaloneFavorites : [...DEFAULT_FAVORITE_VIEW_IDS];
+      if (standaloneFavorites === null) writeStandaloneFavorites(favoriteViewIds);
       return {
-        favoriteViewIds: [...DEFAULT_FAVORITE_VIEW_IDS],
+        favoriteViewIds,
         hiddenGroupIds: [],
         groupOrder: [...DEFAULT_GROUP_ORDER],
         collapsedGroups: { ...DEFAULT_COLLAPSED_GROUPS },
@@ -81,16 +120,23 @@ function loadPreferences(userId: string): TicketsSidebarPreferences {
       };
     }
     const parsed = JSON.parse(raw) as Partial<TicketsSidebarPreferences>;
+    const favoriteViewIds =
+      standaloneFavorites !== null
+        ? standaloneFavorites
+        : sanitizeFavoriteViewIds(parsed.favoriteViewIds ?? [...DEFAULT_FAVORITE_VIEW_IDS]);
+    if (standaloneFavorites === null) writeStandaloneFavorites(favoriteViewIds);
     return {
-      favoriteViewIds: sanitizeFavoriteViewIds(parsed.favoriteViewIds ?? [...DEFAULT_FAVORITE_VIEW_IDS]),
+      favoriteViewIds,
       hiddenGroupIds: parsed.hiddenGroupIds ?? [],
       groupOrder: parsed.groupOrder ?? [...DEFAULT_GROUP_ORDER],
       collapsedGroups: { ...DEFAULT_COLLAPSED_GROUPS, ...parsed.collapsedGroups },
       customViews: parsed.customViews ?? [],
     };
   } catch {
+    const favoriteViewIds =
+      standaloneFavorites !== null ? standaloneFavorites : [...DEFAULT_FAVORITE_VIEW_IDS];
     return {
-      favoriteViewIds: [...DEFAULT_FAVORITE_VIEW_IDS],
+      favoriteViewIds,
       hiddenGroupIds: [],
       groupOrder: [...DEFAULT_GROUP_ORDER],
       collapsedGroups: { ...DEFAULT_COLLAPSED_GROUPS },
@@ -100,11 +146,13 @@ function loadPreferences(userId: string): TicketsSidebarPreferences {
 }
 
 function savePreferences(userId: string, prefs: TicketsSidebarPreferences) {
+  const favoriteViewIds = sanitizeFavoriteViewIds(prefs.favoriteViewIds);
+  writeStandaloneFavorites(favoriteViewIds);
   localStorage.setItem(
     storageKey(userId),
     JSON.stringify({
       ...prefs,
-      favoriteViewIds: sanitizeFavoriteViewIds(prefs.favoriteViewIds),
+      favoriteViewIds,
     }),
   );
 }
@@ -163,11 +211,13 @@ export function useTicketsSidebarPreferences(userId: string | undefined) {
 
   const toggleFavorite = useCallback(
     (viewId: string) => {
+      const id = normalizeFavoriteId(viewId);
+      if (!id) return;
       persist({
         ...prefs,
-        favoriteViewIds: prefs.favoriteViewIds.includes(viewId)
-          ? prefs.favoriteViewIds.filter((id) => id !== viewId)
-          : [...prefs.favoriteViewIds, viewId],
+        favoriteViewIds: prefs.favoriteViewIds.includes(id)
+          ? prefs.favoriteViewIds.filter((existing) => existing !== id)
+          : [...prefs.favoriteViewIds, id],
       });
     },
     [prefs, persist],
