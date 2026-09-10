@@ -226,7 +226,7 @@ export default function MainLayout() {
   const isTicketsPage = location.pathname.startsWith('/tickets');
   
   return (
-    <div className="flex flex-col h-screen overflow-hidden bg-background">
+    <div className="h-screen w-screen flex flex-col overflow-hidden bg-slate-50">
       <CreateTicketDialog 
         isOpen={isCreateTicketOpen} 
         onClose={() => setIsCreateTicketOpen(false)} 
@@ -707,7 +707,7 @@ export default function MainLayout() {
         </AnimatePresence>
 
         {/* Page Content Outlet (takes full remaining width below header) */}
-        <div className="flex-1 overflow-hidden relative bg-background flex flex-col min-h-0">
+        <div className="flex-1 min-h-0 min-w-0 overflow-hidden relative bg-slate-50 flex flex-col">
           <Outlet />
         </div>
       </div>

@@ -1529,7 +1529,7 @@ export default function TicketsPage() {
   };
 
   return (
-    <div className="flex flex-1 min-h-0 w-full overflow-hidden bg-background">
+    <div className="flex flex-1 min-h-0 min-w-0 w-full overflow-hidden bg-slate-50">
       <TicketsLeftSidebar
         effectiveCollapsed={effectiveCollapsed}
         collapsedGroups={collapsedGroups}
@@ -1596,8 +1596,8 @@ export default function TicketsPage() {
 
       {/* Main Content Area: Conditional Master-Detail */}
       <div className={cn(
-        "min-h-0 bg-background text-foreground flex flex-col",
-        isMobileSidebarOpen ? "hidden md:flex md:flex-1" : "w-full flex-1 flex flex-col min-h-0"
+        "flex-1 min-w-0 min-h-0 h-full flex flex-col overflow-hidden bg-slate-50 text-foreground",
+        isMobileSidebarOpen ? "hidden md:flex" : "flex"
       )}>
         {isCreateTicketOpen ? (
           <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-[#F8F9FB] overflow-hidden">
@@ -1623,9 +1623,9 @@ export default function TicketsPage() {
           </div>
         ) : selectedTicketId ? (
           /* Detail View */
-          <div className="flex-1 flex flex-col min-w-0 min-h-0 relative">
+          <div className="flex-1 min-w-0 min-h-0 h-full flex flex-col overflow-hidden relative">
             {selectedTicket ? (
-            <div className="flex-1 flex flex-row min-h-0 min-w-0">
+            <div className="flex-1 min-w-0 min-h-0 h-full flex flex-row overflow-hidden">
               <TicketDetailView
                 selectedTicket={selectedTicket}
                 ticketContact={ticketContact}

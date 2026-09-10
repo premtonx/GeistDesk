@@ -2,7 +2,7 @@ import type { Dispatch, SetStateAction } from 'react';
 import { toast } from 'sonner';
 import {
   BookOpen, ChevronDown, ChevronLeft, GitMerge, Mail, MessageSquare,
-  MoreHorizontal, RefreshCw, SlidersHorizontal, Sparkles, Ticket,
+  MoreHorizontal, RefreshCw, SlidersHorizontal, Sparkles, StickyNote, Ticket, Ban,
 } from 'lucide-react';
 import { cn } from '../../lib/utils';
 import { getInitials, safeString } from '../../lib/utils';
@@ -30,6 +30,7 @@ import { SwarmOutageBanner } from '../tickets/SwarmOutageBanner';
 import { TicketDetailsSpamAction } from '../pages/TicketDetailsPage';
 import { DynamicSentimentGlyph } from '../ticket-details/DynamicSentimentGlyph';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { formatTicketCode } from '../../lib/ticketMerge';
 import type { Ticket as TicketType, Message, Contact, Company, TicketChecklistItem } from '../../types';
 import type { CustomField } from '../../services/schemaService';
 import type { AIAdapter } from '../../lib/ai/provider-adapter';
@@ -182,6 +183,9 @@ export function TicketDetailView(props: TicketDetailViewProps) {
   }
 
   const canMerge = Boolean(onOpenMerge) && selectedTicket.status !== 'merged';
+  const ticketRef = selectedTicket.customId
+    ? `#${String(selectedTicket.customId).replace(/^#/, '')}`
+    : formatTicketCode(selectedTicket);
 
   const openInternalNoteComposer = () => {
     setActiveDetailTab('conversation');
@@ -207,37 +211,123 @@ export function TicketDetailView(props: TicketDetailViewProps) {
   };
 
   const actionBtnClass =
-    'h-9 px-3 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs';
+    'h-8 px-3 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium transition-all inline-flex items-center gap-1.5 shadow-xs';
 
   return (
     <>
-                    <div className="flex-1 flex flex-col min-h-0 min-w-0">
-                      {/* 1. Header — title + actions on one row; metadata underneath */}
-                    <div className="flex flex-col gap-2 w-full min-w-0 px-4 md:px-6 pt-4 md:pt-5 pb-3 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shrink-0">
+                    <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden bg-slate-50">
+                      {/* 1. Compact header: icon back + title/badges + overflow actions */}
+                    <div className="flex flex-col gap-1.5 w-full min-w-0 px-4 md:px-6 pt-3 md:pt-4 pb-3 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shrink-0">
                       <SwarmOutageBanner ticketId={selectedTicket.id} />
 
-                      <div className="flex w-full min-w-0 items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className="flex w-full min-w-0 items-start justify-between gap-3">
+                        <div className="flex items-start gap-2 min-w-0 flex-1">
                           <button
                             type="button"
                             onClick={closeFullTicketView}
-                            className="flex items-center gap-1 h-8 px-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 font-extrabold text-xs cursor-pointer transition-colors select-none group shrink-0"
+                            aria-label={t('tickets.detail.backToList', 'Back to tickets')}
+                            title={t('tickets.detail.backToList', 'Back to tickets')}
+                            className="flex items-center justify-center h-8 w-8 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 cursor-pointer transition-colors select-none shrink-0 mt-0.5"
                           >
-                            <ChevronLeft className="w-3.5 h-3.5 text-slate-450 group-hover:text-slate-650 transition-colors" />
-                            {t('tickets.detail.backToList', 'Back to tickets')}
+                            <ChevronLeft className="w-4 h-4" />
                           </button>
-                          <h2 className="min-w-0 flex-1 text-xl font-bold text-slate-900 dark:text-slate-50 truncate">
-                            {safeString(selectedTicket.subject)}
-                          </h2>
-                          <span className="bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 px-2.5 py-0.5 rounded-md text-[11px] font-extrabold select-none shrink-0 capitalize">
-                            {t(`tickets.status.${(selectedTicket.status || 'open').toLowerCase()}`, selectedTicket.status || 'Offen')}
-                          </span>
-                          <span className="bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 px-2.5 py-0.5 rounded-md text-[11px] font-extrabold select-none shrink-0 capitalize">
-                            {t(`tickets.priority.${(selectedTicket.priority || 'medium').toLowerCase()}`, selectedTicket.priority || 'Mittel')}
-                          </span>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 min-w-0 break-words">
+                                {safeString(selectedTicket.subject)}
+                              </h2>
+                              <span className="bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 px-2 py-0.5 rounded text-[11px] font-medium select-none shrink-0 capitalize">
+                                {t(`tickets.status.${(selectedTicket.status || 'open').toLowerCase()}`, selectedTicket.status || 'Offen')}
+                              </span>
+                              <span className="bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 px-2 py-0.5 rounded text-[11px] font-medium select-none shrink-0 capitalize">
+                                {t(`tickets.priority.${(selectedTicket.priority || 'medium').toLowerCase()}`, selectedTicket.priority || 'Mittel')}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 min-w-0 mt-0.5 text-xs font-semibold text-slate-400 tracking-wide uppercase">
+                              <span className="min-w-0">
+                                {safeString(selectedTicket.company, 'Enterprise Corp')} &bull; {safeString(selectedTicket.customerName, 'PremtonXhafa')} &bull; {ticketRef}
+                              </span>
+                              <DynamicSentimentGlyph sentiment={selectedTicket.sentiment} />
+                            </div>
+                          </div>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
+                          <Button
+                            onClick={runAiSync}
+                            disabled={isAiDrafting}
+                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70 text-white text-xs h-8 px-3 rounded-lg inline-flex items-center gap-1.5 transition-all shadow-sm select-none"
+                          >
+                            {isAiDrafting ? (
+                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            ) : (
+                              <Sparkles className="w-3.5 h-3.5" />
+                            )}
+                            <span>{t('tickets.detail.aiSync', 'KI-Sync')}</span>
+                          </Button>
+                          {onConvertToKB && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={onConvertToKB}
+                              disabled={isKbDrafting}
+                              className={actionBtnClass}
+                            >
+                              {isKbDrafting
+                                ? <RefreshCw className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
+                                : <BookOpen className="w-3.5 h-3.5 text-indigo-500" />}
+                              <span>{isKbDrafting
+                                ? t('tickets.detail.extracting', 'Extracting...')
+                                : t('tickets.detail.convertToKbShort', 'In KB')}</span>
+                            </Button>
+                          )}
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={openInternalNoteComposer}
+                            className={actionBtnClass}
+                          >
+                            <StickyNote className="w-3.5 h-3.5" />
+                            <span>{t('tickets.noteBtnShort', 'Notiz')}</span>
+                          </Button>
+                          <DropdownMenu>
+                            <DropdownMenuTrigger
+                              className={actionBtnClass}
+                              aria-label={t('tickets.detail.more', 'More')}
+                            >
+                              <MoreHorizontal className="w-4 h-4" />
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" className="w-52 rounded-xl p-1">
+                              {canMerge && (
+                                <DropdownMenuItem
+                                  className="rounded-lg text-xs font-semibold py-2 cursor-pointer"
+                                  onClick={onOpenMerge}
+                                >
+                                  <GitMerge className="w-3.5 h-3.5 text-indigo-600" />
+                                  {t('tickets.merge.button', 'Zusammenführen')}
+                                </DropdownMenuItem>
+                              )}
+                              {selectedTicket.status !== 'spam' && (
+                                <DropdownMenuItem
+                                  className="rounded-lg text-xs font-semibold py-2 cursor-pointer text-rose-700"
+                                  onClick={() => document.getElementById('ticket-header-spam-trigger')?.click()}
+                                >
+                                  <Ban className="w-3.5 h-3.5" />
+                                  {t('tickets.spam.button', 'Als Spam markieren')}
+                                </DropdownMenuItem>
+                              )}
+                              <DropdownMenuItem
+                                className="rounded-lg text-xs font-semibold py-2 cursor-pointer lg:hidden"
+                                onClick={() => setIsMobilePropertiesOpen((prev) => !prev)}
+                              >
+                                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
+                                {isMobilePropertiesOpen
+                                  ? t('tickets.detail.closeProps', 'Close properties')
+                                  : t('tickets.detail.properties', 'Properties')}
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                           <TicketDetailsSpamAction
+                            hideTrigger
                             ticket={selectedTicket}
                             contactEmail={ticketContact?.email}
                             onMarked={() => {
@@ -251,120 +341,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                               setSelectedTicketId(null);
                             }}
                           />
-                          {canMerge && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={onOpenMerge}
-                              className={cn(
-                                actionBtnClass,
-                                'hidden lg:inline-flex',
-                              )}
-                            >
-                              <GitMerge className="w-3.5 h-3.5" />
-                              <span>{t('tickets.merge.button', 'Zusammenführen')}</span>
-                            </Button>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={openInternalNoteComposer}
-                            className={cn(actionBtnClass, 'hidden lg:inline-flex')}
-                          >
-                            {t('tickets.noteBtn', 'Internal Note')}
-                          </Button>
-                          {onConvertToKB && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={onConvertToKB}
-                              disabled={isKbDrafting}
-                              className={cn(actionBtnClass, 'hidden lg:inline-flex')}
-                            >
-                              {isKbDrafting
-                                ? <RefreshCw className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
-                                : <BookOpen className="w-3.5 h-3.5 text-indigo-500" />}
-                              <span>{isKbDrafting
-                                ? t('tickets.detail.extracting', 'Extracting...')
-                                : t('tickets.detail.convertToKb', 'In KB übernehmen')}</span>
-                            </Button>
-                          )}
-                          <Button
-                            onClick={runAiSync}
-                            disabled={isAiDrafting}
-                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70 text-white font-extrabold text-xs h-9 px-3 rounded-lg inline-flex items-center gap-1.5 transition-all shadow-sm select-none"
-                          >
-                            {isAiDrafting ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                            ) : (
-                              <Sparkles className="w-3.5 h-3.5" />
-                            )}
-                            <span>{t('tickets.detail.aiSync', 'AI Sync')}</span>
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setIsMobilePropertiesOpen((prev) => !prev)}
-                            className={cn(actionBtnClass, 'hidden lg:inline-flex xl:hidden')}
-                          >
-                            <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
-                            <span>{isMobilePropertiesOpen ? t('tickets.detail.closeProps', 'Close properties') : t('tickets.detail.properties', 'Properties')}</span>
-                          </Button>
-                          <DropdownMenu>
-                            <DropdownMenuTrigger
-                              className={cn(actionBtnClass, 'lg:hidden')}
-                              aria-label={t('tickets.detail.more', 'More')}
-                            >
-                              <MoreHorizontal className="w-4 h-4" />
-                              <span>{t('tickets.detail.more', 'More')}</span>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" className="w-52 rounded-xl p-1">
-                              {canMerge && (
-                                <DropdownMenuItem
-                                  className="rounded-lg text-xs font-semibold py-2 cursor-pointer"
-                                  onClick={onOpenMerge}
-                                >
-                                  <GitMerge className="w-3.5 h-3.5 text-indigo-600" />
-                                  {t('tickets.merge.button', 'Zusammenführen')}
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem
-                                className="rounded-lg text-xs font-semibold py-2 cursor-pointer"
-                                onClick={openInternalNoteComposer}
-                              >
-                                {t('tickets.noteBtn', 'Internal Note')}
-                              </DropdownMenuItem>
-                              {onConvertToKB && (
-                                <DropdownMenuItem
-                                  className="rounded-lg text-xs font-semibold py-2 cursor-pointer"
-                                  onClick={onConvertToKB}
-                                  disabled={isKbDrafting}
-                                >
-                                  <BookOpen className="w-3.5 h-3.5 text-indigo-500" />
-                                  {isKbDrafting
-                                    ? t('tickets.detail.extracting', 'Extracting...')
-                                    : t('tickets.detail.convertToKb', 'In KB übernehmen')}
-                                </DropdownMenuItem>
-                              )}
-                              <DropdownMenuItem
-                                className="rounded-lg text-xs font-semibold py-2 cursor-pointer xl:hidden"
-                                onClick={() => setIsMobilePropertiesOpen((prev) => !prev)}
-                              >
-                                <SlidersHorizontal className="w-3.5 h-3.5 text-slate-500" />
-                                {isMobilePropertiesOpen
-                                  ? t('tickets.detail.closeProps', 'Close properties')
-                                  : t('tickets.detail.properties', 'Properties')}
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
                         </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-bold tracking-wide uppercase select-none min-w-0">
-                        <span className="truncate">
-                          {safeString(selectedTicket.company, 'Enterprise Corp')} &bull; {safeString(selectedTicket.customerName, 'PremtonXhafa')}
-                        </span>
-                        <DynamicSentimentGlyph sentiment={selectedTicket.sentiment} />
                       </div>
                     </div>
     
@@ -400,11 +377,11 @@ export function TicketDetailView(props: TicketDetailViewProps) {
     
     
                   {/* Thread Content */}
-                  <ScrollArea className="flex-1 px-8 py-6 min-h-0">
-                      <div className="max-w-4xl mx-auto space-y-6 pb-12">
+                  <ScrollArea className="flex-1 min-h-0 px-6 py-4">
+                      <div className="w-full space-y-4 pb-12">
                         
                         {activeDetailTab === 'conversation' && (
-                          <div className="space-y-6">
+                          <div className="space-y-4">
                             {/* 1. Collapsible gradient AI summary card */}
                             <AiSummaryCard 
                               ticket={selectedTicket}
@@ -735,7 +712,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                 {isMobilePropertiesOpen && (
                   <div
                     onClick={() => setIsMobilePropertiesOpen(false)}
-                    className="xl:hidden absolute inset-0 z-20 bg-black/40 backdrop-blur-[1px]"
+                    className="lg:hidden absolute inset-0 z-20 bg-black/40 backdrop-blur-[1px]"
                     aria-hidden="true"
                   />
                 )}

@@ -214,7 +214,9 @@ export function TicketsLeftSidebar({
       )}
       {(!collapsedGroups[cat.id] || effectiveCollapsed) && (
         <div className={cn('mt-0.5 space-y-0.5', effectiveCollapsed && 'space-y-2')}>
-          {cat.items.map((item) => (
+          {cat.items
+            .filter((item) => effectiveCollapsed || !favoriteViewIds.includes(item.id))
+            .map((item) => (
             <SidebarNavButton
               key={item.id}
               item={item}
@@ -240,7 +242,7 @@ export function TicketsLeftSidebar({
   return (
     <div
       className={cn(
-        'border-r bg-muted flex flex-col h-full min-h-0 shrink-0 transition-all duration-300 ease-in-out overflow-hidden shadow-inner',
+        'w-64 shrink-0 flex flex-col border-r border-slate-200 bg-white overflow-hidden shadow-inner h-full min-h-0 transition-all duration-300 ease-in-out',
         isMobileSidebarOpen ? 'w-full flex' : 'hidden md:flex',
         effectiveCollapsed ? 'md:w-20' : 'md:w-64',
         selectedTicketId ? 'hidden md:flex' : '',

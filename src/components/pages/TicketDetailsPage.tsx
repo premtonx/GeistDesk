@@ -47,6 +47,8 @@ interface TicketDetailsSpamActionProps {
   contactEmail?: string | null;
   /** Called after a successful spam mark so the parent can update local state / navigate. */
   onMarked?: (result: { status: 'spam'; blocked_value: string }) => void;
+  /** Layout-only: keep the dialog mounted while hiding the full-width header button. */
+  hideTrigger?: boolean;
 }
 
 /**
@@ -56,6 +58,7 @@ export function TicketDetailsSpamAction({
   ticket,
   contactEmail,
   onMarked,
+  hideTrigger,
 }: TicketDetailsSpamActionProps) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
@@ -67,6 +70,7 @@ export function TicketDetailsSpamAction({
   );
 
   if (ticket.status === 'spam') {
+    if (hideTrigger) return null;
     return (
       <span className="inline-flex items-center gap-1.5 h-9 px-3 rounded-lg bg-rose-50 text-rose-700 border border-rose-200 text-[11px] font-extrabold select-none">
         <Ban className="w-3.5 h-3.5" />
@@ -109,11 +113,16 @@ export function TicketDetailsSpamAction({
   return (
     <>
       <Button
+        id="ticket-header-spam-trigger"
         type="button"
         variant="outline"
         size="sm"
         onClick={() => setOpen(true)}
-        className="h-9 px-3 rounded-lg border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all gap-1.5 shadow-xs"
+        className={
+          hideTrigger
+            ? 'hidden'
+            : 'h-9 px-3 rounded-lg border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold transition-all gap-1.5 shadow-xs'
+        }
         aria-label={t('tickets.spam.button', 'Als Spam markieren')}
       >
         <span aria-hidden>🚫</span>

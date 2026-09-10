@@ -20,23 +20,27 @@ export function DynamicSentimentGlyph({
         : t('tickets.context.sentimentNeutral', 'Neutral');
   const tooltip = `${t('tickets.sidebar.dynamicSentiment', 'Dynamische Stimmung')}: ${moodLabel}`;
 
+  const Icon = mood === 'angry' ? Angry : mood === 'positive' ? Smile : Meh;
+  const tone =
+    mood === 'angry'
+      ? 'bg-rose-50 border-rose-200 text-rose-800'
+      : mood === 'positive'
+        ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+        : 'bg-amber-50 border-amber-200 text-amber-800';
+
   return (
     <Tooltip>
       <TooltipTrigger
         type="button"
         className={cn(
-          'inline-flex items-center justify-center shrink-0 rounded-md p-0.5 text-muted-foreground hover:bg-muted/80 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+          'inline-flex items-center gap-1 shrink-0 border text-[10px] px-1.5 py-0.5 rounded font-semibold normal-case tracking-normal',
+          tone,
           className,
         )}
         aria-label={tooltip}
       >
-        {mood === 'angry' ? (
-          <Angry className="w-4 h-4 text-red-500" />
-        ) : mood === 'positive' ? (
-          <Smile className="w-4 h-4 text-emerald-500" />
-        ) : (
-          <Meh className="w-4 h-4 text-amber-500" />
-        )}
+        <Icon className="w-3 h-3" />
+        <span>{moodLabel}</span>
       </TooltipTrigger>
       <TooltipContent>{tooltip}</TooltipContent>
     </Tooltip>

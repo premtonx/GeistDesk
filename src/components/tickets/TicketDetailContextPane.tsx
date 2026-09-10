@@ -53,7 +53,7 @@ export function TicketDetailContextPane(props: TicketDetailContextPaneProps) {
   // instead of crashing on nested property access.
   if (!selectedTicket) {
     return (
-      <aside className="shrink-0 w-[325px] border-l border-border bg-muted xl:flex xl:relative xl:sticky xl:top-6 xl:h-[calc(100vh-5rem)]">
+      <aside className="hidden lg:flex w-80 xl:w-96 shrink-0 border-l border-slate-200 bg-white flex-col h-full overflow-y-auto">
         <div className="flex flex-1 items-center justify-center p-6 text-center">
           <p className="text-xs text-muted-foreground font-medium">
             Kein Ticket ausgewählt. Bitte ein Ticket aus der Liste öffnen.
@@ -67,13 +67,10 @@ export function TicketDetailContextPane(props: TicketDetailContextPaneProps) {
 
   return (
                 <aside className={cn(
-                  "shrink-0 border-l border-border overflow-y-auto custom-scrollbar z-30 transition-all",
-                  // Desktop (xl+): a sticky in-flow properties column.
-                  "xl:flex xl:relative xl:sticky xl:top-6 xl:h-[calc(100vh-5rem)] xl:w-[325px] xl:shadow-none xl:bg-muted",
+                  "w-80 xl:w-96 shrink-0 border-l border-slate-200 bg-white flex flex-col h-full overflow-y-auto z-30",
                   isMobilePropertiesOpen
-                    // Mobile/tablet: a full-height drawer that never exceeds the viewport.
-                    ? "flex absolute inset-y-0 right-0 h-full w-[min(22rem,92vw)] shadow-2xl bg-white dark:bg-slate-900"
-                    : "hidden bg-muted"
+                    ? "flex absolute inset-y-0 right-0 h-full w-[min(22rem,92vw)] shadow-2xl lg:relative lg:shadow-none lg:w-80 xl:w-96"
+                    : "hidden lg:flex"
                 )}>
                     <RedesignedSidebar 
                      ticket={selectedTicket}

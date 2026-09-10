@@ -276,7 +276,7 @@ export function RedesignedSidebar({
   };
 
   return (
-    <aside className="w-[325px] border-l border-border bg-muted/20 flex flex-col shrink-0 h-full overflow-hidden select-none">
+    <aside className="w-full min-w-0 bg-white flex flex-col shrink-0 h-full overflow-hidden select-none">
       <div className="p-4 border-b flex items-center justify-between bg-card shrink-0 h-[56px]">
         <span className="font-bold text-sm text-foreground tracking-tight flex items-center gap-2">
           <Settings2 className="w-4 h-4 text-muted-foreground" />
