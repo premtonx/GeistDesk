@@ -12,6 +12,7 @@ import {
 import { isOwnSupportAddressForChannel } from '../src/lib/email-ingestion/loop-guard.ts';
 import { composeHelpForwardingAddress } from '../src/lib/email-forwarding-address.ts';
 import { formatReplyRecipientLabel, resolveComposerFromAddress } from '../src/lib/ticket-reply-address.ts';
+import { prepareInboundContent } from '../src/lib/email-ingestion/inbound-content.ts';
 
 function fail(message: string): never {
   console.error(`FAIL: ${message}`);
@@ -139,6 +140,26 @@ async function main() {
   if (/<pre[\s>]/i.test(parsed.html_content || '')) fail('plaintext inbound HTML must not use <pre>');
   if (!/<p>/i.test(parsed.html_content || '')) fail('plaintext inbound HTML should use paragraphs');
   if (parsed.from_name !== 'Alice') fail(`from_name ${parsed.from_name}`);
+
+  const prepared = prepareInboundContent({
+    subject: 'Callback',
+    title: 'Callback',
+    html_content:
+      '<p>Please call Jane at +1-555-010-1234 or jane.doe@example.com</p><script>alert(1)</script>',
+    text_content: 'Please call Jane at +1-555-010-1234 or jane.doe@example.com',
+  });
+  if (prepared.html.includes('<script')) fail('stored HTML must still strip scripts');
+  if (prepared.html.includes('[REDACTED')) fail('stored HTML must not be PII-redacted');
+  if (prepared.textFallback.includes('[REDACTED')) fail('stored plaintext must not be PII-redacted');
+  if (!prepared.textFallback.includes('jane.doe@example.com')) {
+    fail('agent plaintext must keep the customer email');
+  }
+  if (!prepared.textFallback.includes('555-010-1234')) {
+    fail('agent plaintext must keep the callback number');
+  }
+  if (!prepared.bodyForAi.includes('[REDACTED_EMAIL]')) fail('AI context must redact emails');
+  if (!prepared.bodyForAi.includes('[REDACTED_PHONE]')) fail('AI context must redact phones');
+  if (prepared.bodyForAi.includes('jane.doe@example.com')) fail('AI context leaked email');
 
   const toLabel = formatReplyRecipientLabel({
     customerName: 'Premton Xhafa',

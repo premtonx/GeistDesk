@@ -12,10 +12,10 @@ import {
   isSenderBlacklisted,
   logBlacklistDrop,
 } from '../global-blacklist.js';
-import { htmlToPlainTextServer, sanitizeInboundHtml } from './sanitize-server.js';
 import { checkEmailLoopGuard } from './loop-guard.js';
 import { checkSenderRateLimit } from './sender-rate-limiter.js';
 import { classifySpam, shouldDropSpam, isDisposableSender } from './spam-guard.js';
+import { prepareInboundContent } from './inbound-content.js';
 import type { NormalizedInboundEmail } from './types.js';
 import { MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS_PER_MESSAGE } from './types.js';
 
@@ -83,12 +83,8 @@ export async function ingestNormalizedEmail(
 ): Promise<IngestResult> {
   const sender = extractEmailAddress(email.from_email || email.sender) || email.sender;
   const subject = String(email.subject || email.title || '(no subject)').trim();
-  const html = sanitizeInboundHtml(email.html_content || '');
-  const textFallback =
-    email.text_content ||
-    (html ? htmlToPlainTextServer(html) : '') ||
-    String(email.html_content || '').trim();
-  const bodyForAi = textFallback || html || subject;
+  const { html, textFallback, bodyForAi } = prepareInboundContent(email);
+  const rawBody = textFallback || html || subject;
 
   if (!sender || !subject) {
     return {
@@ -133,7 +129,7 @@ export async function ingestNormalizedEmail(
     };
   }
 
-  const spam = classifySpam({ from: sender, subject, body: bodyForAi });
+  const spam = classifySpam({ from: sender, subject, body: rawBody });
   if (spam.isSpam || isDisposableSender(sender)) {
     if (shouldDropSpam()) {
       await logBlacklistDrop({
@@ -168,7 +164,7 @@ export async function ingestNormalizedEmail(
 
   try {
     const ticketIdMatch =
-      subject.match(/\[NEX-(\d{4})\]/i) || bodyForAi.match(/\[NEX-(\d{4})\]/i);
+      subject.match(/\[NEX-(\d{4})\]/i) || rawBody.match(/\[NEX-(\d{4})\]/i);
     const customIdHint = ticketIdMatch
       ? `NEX-${ticketIdMatch[1]}`.toUpperCase()
       : null;
@@ -202,6 +198,7 @@ export async function ingestNormalizedEmail(
         include_in_rag: true,
         tags: ['inbound-email', `source:${email.source}`, ...(email.tags || [])],
         mailbox: email.mailbox || undefined,
+        sanitizedAiContext: bodyForAi || undefined,
         createdAt: now,
         updatedAt: now,
       });
@@ -226,6 +223,8 @@ export async function ingestNormalizedEmail(
       attachments,
       externalMessageId: email.externalMessageId || null,
       source: email.source,
+      sanitizedAiContext: bodyForAi || undefined,
+      redactedContent: bodyForAi || undefined,
       createdAt: now,
     });
     const messageId = String(createdMessage.id);

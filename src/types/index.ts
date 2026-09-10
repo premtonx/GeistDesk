@@ -186,6 +186,8 @@ export interface Ticket {
   description: string;
   /** Sanitized inbound HTML when the ticket was created from email. */
   html_content?: string;
+  /** PII-redacted body for AI triage only — never used as the agent-facing timeline. */
+  sanitizedAiContext?: string;
   status: TicketStatus;
   priority: TicketPriority;
   team: "support" | "engineering" | "legal";
@@ -297,6 +299,8 @@ export interface Message {
   attachments?: MessageAttachment[];
   originalContent?: string;
   redactedContent?: string;
+  /** PII-redacted copy for AI — agent UI must render content/html_content instead. */
+  sanitizedAiContext?: string;
   citations?: string[];
   reasoningPath?: string;
   createdAt: any;

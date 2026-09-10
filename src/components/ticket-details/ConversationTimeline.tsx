@@ -14,7 +14,6 @@ import { Avatar, AvatarFallback } from '../ui/avatar';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Ticket as TicketType, Message, AgentComment } from '../../types';
-import { redactPII } from '../../lib/ai/pii-shield';
 import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 
@@ -211,7 +210,7 @@ export function ConversationTimeline({
                         className="select-text cursor-text max-w-none"
                         dangerouslySetInnerHTML={{
                           __html: sanitizeTimelineHtml(
-                            redactPII(item.html_content || item.content || ''),
+                            item.html_content || item.content || '',
                           ),
                         }}
                       />

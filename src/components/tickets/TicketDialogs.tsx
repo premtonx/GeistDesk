@@ -15,7 +15,6 @@ import { Switch } from '../ui/switch';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '../ui/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { useTranslation } from '../../lib/context/I18nContext';
-import { redactPII } from '../../lib/ai/pii-shield';
 import { stripHtml } from '../kb/kb-utils';
 import type { Ticket as TicketType, Message } from '../../types';
 
@@ -211,7 +210,7 @@ export function TicketDialogs(props: TicketDialogsProps) {
                                    <span className="text-[9px] text-[#9AA0A6]">{msg.createdAt?.toDate ? msg.createdAt.toDate().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : t('tickets.justNow', 'Gerade eben')}</span>
                                 </div>
                                 <p className="text-xs text-foreground line-clamp-3 leading-relaxed">
-                                   {redactPII(stripHtml(msg.content))}
+                                   {stripHtml(msg.content)}
                                 </p>
                              </div>
                           ))

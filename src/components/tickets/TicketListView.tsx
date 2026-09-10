@@ -9,7 +9,6 @@ import { toast } from 'sonner';
 import { AnimatePresence, motion } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { getInitials, safeString } from '../../lib/utils';
-import { redactPII } from '../../lib/ai/pii-shield';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { ScrollArea } from '../ui/scroll-area';
@@ -968,7 +967,7 @@ export function TicketListView(props: TicketListViewProps) {
 
                              {viewDensity === 'comfortable' && (
                                <p className="text-[11px] text-muted-foreground truncate opacity-75 font-medium">
-                                  {redactPII(stripHtml(safeString(ticket.description)))}
+                                  {stripHtml(safeString(ticket.description))}
                                 </p>
                              )}
                           </div>
@@ -1121,7 +1120,7 @@ export function TicketListView(props: TicketListViewProps) {
                             {safeString(ticket.subject)}
                           </h4>
                           <p className="text-[11px] text-muted-foreground line-clamp-2 leading-normal select-none font-medium mt-0.5">
-                            {redactPII(stripHtml(safeString(ticket.description)))}
+                            {stripHtml(safeString(ticket.description))}
                           </p>
                         </div>
 
