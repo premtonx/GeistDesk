@@ -140,11 +140,11 @@ export function AiSummaryCard({
     }
     // Hardcoded high-quality fallback from mockup if both are empty
     return [
-      "Microsoft Entra handshake delay identified.",
-      "Billing records in offline mode fallback verify license pending.",
-      "Operator queue prioritizes validation of communication tokens."
+      t('tickets.aiSummaryCard.findingFallback1', 'Microsoft Entra handshake delay identified.'),
+      t('tickets.aiSummaryCard.findingFallback2', 'Billing records in offline mode fallback verify license pending.'),
+      t('tickets.aiSummaryCard.findingFallback3', 'Operator queue prioritizes validation of communication tokens.'),
     ];
-  }, [ticket.aiSummary, aiSummary]);
+  }, [ticket.aiSummary, aiSummary, t]);
 
   // Action Plan checklists maps directly to ticket.aiChecklist
   const checklist = useMemo(
@@ -180,19 +180,15 @@ export function AiSummaryCard({
       'Conditional Access blocked OIDC callback',
     );
   }, [ticket.aiRootCause, t]);
-  const slaRemainingTime = useMemo(() => {
-    const now = new Date();
-    const createdTime = ticket.createdAt?.toDate ? ticket.createdAt.toDate() : new Date(ticket.createdAt);
-    const dueTime = ticket.slaDueAt?.toDate 
-      ? ticket.slaDueAt.toDate() 
-      : new Date(createdTime.getTime() + 2 * 3600 * 1000); // 2 hours
+  const sentimentLabel = useMemo(() => {
+    const raw = String(ticket.aiSentiment || ticket.sentiment || 'NEUTRAL').toLowerCase();
+    if (raw === 'positive') return t('tickets.aiSummaryCard.sentimentPositive', 'POSITIVE');
+    if (raw === 'angry') return t('tickets.aiSummaryCard.sentimentAngry', 'ANGRY');
+    if (raw === 'negative') return t('tickets.aiSummaryCard.sentimentNegative', 'NEGATIVE');
+    return t('tickets.aiSummaryCard.sentimentNeutral', 'NEUTRAL');
+  }, [ticket.aiSentiment, ticket.sentiment, t]);
 
-    const diff = dueTime.getTime() - now.getTime();
-    if (diff <= 0) return "Breached";
-    const hrs = Math.floor(diff / (3600 * 1000));
-    const mins = Math.floor((diff % (3600 * 1000)) / (60 * 1000));
-    return hrs > 0 ? `Breaching in ${hrs}h ${mins}m` : `Breaching in ${mins}m`;
-  }, [ticket]);  return (
+  return (
     <Card className="bg-gradient-to-r from-blue-50/40 via-violet-50/40 to-indigo-50/30 dark:from-slate-900/60 dark:to-slate-850/40 border-indigo-100 dark:border-indigo-950 rounded-2xl shadow-xs overflow-hidden mb-4 gap-0 py-0">
       {/* Header section of the AI Assistant summary block */}
       <div
@@ -314,7 +310,7 @@ export function AiSummaryCard({
                     <div className="flex items-center gap-1.5">
                       <Lightbulb className="w-4 h-4 text-amber-500" />
                       <h4 className="text-xs font-bold text-slate-800 dark:text-indigo-300">
-                        {t('tickets.aiSummaryCard.actionPlan', 'Aktionsplan')}
+                        {t('tickets.aiSummaryCard.actionPlan', 'Action Plan')}
                       </h4>
                     </div>
                     <div className="space-y-2 pt-1 font-sans">
@@ -355,12 +351,12 @@ export function AiSummaryCard({
                     {/* Live Stimmung Card */}
                     <div className="bg-white/65 dark:bg-slate-900 border border-indigo-50/10 dark:border-slate-850 rounded-xl p-3 flex flex-col justify-between h-[64px] shadow-[0_1px_2px_rgba(0,0,0,0.01)]">
                       <span className="text-[9px] text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-widest block leading-none">
-                        {t('tickets.aiSummaryCard.liveSentiment', 'Live Sentiment')}
+                        {t('tickets.aiSummaryCard.liveSentiment', 'LIVE SENTIMENT')}
                       </span>
                       <div className="flex items-center gap-2">
                         <span className="text-orange-500 text-lg">😐</span>
                         <span className="text-xs font-black text-orange-600 dark:text-orange-400 tracking-wider">
-                          {(ticket.aiSentiment || ticket.sentiment || "NEUTRAL").toUpperCase()}
+                          {sentimentLabel}
                         </span>
                       </div>
                     </div>
@@ -368,7 +364,7 @@ export function AiSummaryCard({
                     {/* Prioritātsvorschlag Card */}
                     <div className="bg-white/65 dark:bg-slate-900 border border-indigo-50/10 dark:border-slate-850 rounded-xl p-3 flex flex-col justify-between h-[64px] shadow-[0_1px_2px_rgba(0,0,0,0.01)]">
                       <span className="text-[9px] text-slate-400 dark:text-slate-500 font-extrabold uppercase tracking-widest block leading-none">
-                        {t('tickets.aiSummaryCard.prioritySuggestion', 'Priority Suggestion')}
+                        {t('tickets.aiSummaryCard.prioritySuggestion', 'PRIORITY SUGGESTION')}
                       </span>
                       <div>
                         <span className="text-[10px] font-black text-indigo-600 dark:text-indigo-400 uppercase tracking-tight block leading-none">
@@ -393,7 +389,7 @@ export function AiSummaryCard({
                   <div className="flex items-center gap-1.5">
                     <Wand2 className="w-4 h-4 text-violet-600 dark:text-violet-400 shrink-0" />
                     <h4 className="text-xs font-bold text-slate-800 dark:text-indigo-300">
-                      {t('tickets.aiSummaryCard.proposedSolution', 'Vorgeschlagene KI-Lösung & Strategie')}
+                      {t('tickets.aiSummaryCard.proposedSolution', 'Suggested AI solution & strategy')}
                     </h4>
                   </div>
                   <div className="rounded-xl border border-violet-200/60 dark:border-violet-900/50 bg-violet-50/40 dark:bg-violet-950/20 p-3">
@@ -408,7 +404,7 @@ export function AiSummaryCard({
                       onClick={adoptProposedSolution}
                     >
                       <CheckCircle2 className="w-3.5 h-3.5" />
-                      {t('tickets.aiSummaryCard.adoptSolution', 'Lösung in Antwort übernehmen')}
+                      {t('tickets.aiSummaryCard.adoptSolution', 'Apply solution to reply')}
                     </Button>
                   ) : null}
                 </div>
@@ -419,16 +415,16 @@ export function AiSummaryCard({
                 <div className="flex items-center gap-1.5">
                   <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   <h4 className="text-xs font-bold text-slate-800 dark:text-indigo-300">
-                    {t('tickets.aiSummaryCard.ragReferences', 'Relevante gelöste Tickets & KB-Referenzen')}
+                    {t('tickets.aiSummaryCard.ragReferences', 'Relevant resolved tickets & KB references')}
                   </h4>
                 </div>
                 {ragReferences === null ? (
                   <p className="text-[10px] text-slate-400 italic px-1">
-                    {t('tickets.aiSummaryCard.loadingRefs', 'Suche ähnliche Fälle in der Wissensbasis…')}
+                    {t('tickets.aiSummaryCard.loadingRefs', 'Searching similar cases in the knowledge base…')}
                   </p>
                 ) : ragReferences.length === 0 ? (
                   <p className="text-[10px] text-slate-400 italic px-1">
-                    {t('tickets.aiSummaryCard.noRefs', 'Keine ähnlichen Tickets oder Artikel gefunden.')}
+                    {t('tickets.aiSummaryCard.noRefs', 'No similar tickets or articles found.')}
                   </p>
                 ) : (
                   <div className="grid grid-cols-1 gap-2 pt-1">
@@ -457,7 +453,9 @@ export function AiSummaryCard({
                               ) : (
                                 <BookOpen className="w-2.5 h-2.5" />
                               )}
-                              {ref.sourceType === 'RESOLVED_TICKET' ? 'Ticket' : 'KB'}
+                              {ref.sourceType === 'RESOLVED_TICKET'
+                                ? t('tickets.aiSummaryCard.refTicket', 'Ticket')
+                                : t('tickets.aiSummaryCard.refKb', 'KB')}
                             </Badge>
                             {ref.category ? (
                               <span className="text-[8px] font-bold uppercase tracking-wider text-slate-400 truncate">
@@ -471,7 +469,10 @@ export function AiSummaryCard({
                         </div>
                         <span className="flex items-center gap-1 shrink-0">
                           <span className="text-[9px] font-black text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-100 dark:border-emerald-900/50 px-1.5 py-0.5 rounded-full whitespace-nowrap">
-                            {ref.similarityPct}% Übereinstimmung
+                            {t('tickets.aiSummaryCard.matchPct', '{{percent}}% match').replace(
+                              '{{percent}}',
+                              String(ref.similarityPct),
+                            )}
                           </span>
                           <ExternalLink className="w-3 h-3 text-slate-400 group-hover:text-emerald-500 transition-colors" />
                         </span>
