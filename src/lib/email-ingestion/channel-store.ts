@@ -152,12 +152,20 @@ async function repairForwardingAddressIfNeeded(
   if (channel.connectionType !== 'webhook') return channel;
 
   const raw = channel.forwardingAddress || '';
-  const normalized = normalizeForwardingAddress(raw, channel.id);
-  if (normalized === raw) return channel;
+  let nextAddress = normalizeForwardingAddress(raw, channel.id);
+  const fromId = buildForwardingAddress(channel.id).toLowerCase();
+  if (channel.email) {
+    const fromEmail = composeHelpForwardingAddress(channel.email, getForwardingDomain()).toLowerCase();
+    if (fromEmail && nextAddress.toLowerCase() === fromId && fromEmail !== fromId) {
+      nextAddress = fromEmail;
+    }
+  }
 
-  const next: EmailChannelConfig = { ...channel, forwardingAddress: normalized };
+  if (nextAddress === raw) return channel;
+
+  const next: EmailChannelConfig = { ...channel, forwardingAddress: nextAddress };
   await updateDocDirect(EMAIL_CHANNELS_COLLECTION, channel.id, {
-    forwardingAddress: normalized,
+    forwardingAddress: nextAddress,
     updatedAt: new Date().toISOString(),
   }).catch((err) => {
     console.warn('[channel-store] failed to repair forwarding address:', err?.message || err);
@@ -439,6 +447,12 @@ export async function findChannelForWebhook(params: {
       const mailbox = extractEmailAddress(channel.mailbox || '');
       if (email === recipient || mailbox === recipient) {
         return channel;
+      }
+      if (email) {
+        const expected = composeHelpForwardingAddress(email, getForwardingDomain()).toLowerCase();
+        if (expected === recipient) {
+          return channel;
+        }
       }
       if (channel.forwardingAddress) {
         const stored = channel.forwardingAddress.toLowerCase().trim();
