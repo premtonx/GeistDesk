@@ -160,3 +160,40 @@ export const TICKETS_SIDEBAR_GROUPS: SidebarGroupConfig[] = [
 ];
 
 export const FAVORITES_SECTION_ID = 'favorites';
+
+/** Compact Linear-style nav — view ids stay the same so routing/filters are unchanged. */
+export const WAITING_QUEUE_VIEW_IDS = [
+  'status_waiting_customer',
+  'status_waiting_dev',
+  'status_waiting_vendor',
+] as const;
+
+export const ARCHIVE_VIEW_IDS = ['status_resolved', 'status_closed'] as const;
+
+export const COMPACT_PRIMARY_VIEWS: SidebarItemConfig[] = [
+  { id: 'assigned_me', label: 'Assigned to me', icon: User },
+  { id: 'unassigned', label: 'Unassigned', icon: UserPlus },
+  { id: 'team_all_open', label: 'All tickets', icon: List },
+];
+
+export const COMPACT_URGENCY_VIEWS: SidebarItemConfig[] = [
+  { id: 'sla_risk', label: 'SLA Risk', icon: AlertCircle },
+  { id: 'escalations', label: 'Escalations', icon: AlertTriangle },
+];
+
+export const COMPACT_STATUS_VIEWS: SidebarItemConfig[] = [
+  { id: 'status_open', label: 'Open', icon: CircleDot },
+  { id: 'status_pending', label: 'In Progress', icon: Loader2 },
+];
+
+const COMPACT_INLINE_IDS = new Set<string>([
+  ...COMPACT_PRIMARY_VIEWS.map((item) => item.id),
+  ...COMPACT_URGENCY_VIEWS.map((item) => item.id),
+  ...COMPACT_STATUS_VIEWS.map((item) => item.id),
+  ...WAITING_QUEUE_VIEW_IDS,
+  ...ARCHIVE_VIEW_IDS,
+]);
+
+export function getCompactOverflowViews(): SidebarItemConfig[] {
+  return ALL_TICKETS_VIEW_ITEMS.filter((item) => !COMPACT_INLINE_IDS.has(item.id));
+}

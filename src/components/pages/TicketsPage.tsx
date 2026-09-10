@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { Languages, ChevronLeft, Ticket } from 'lucide-react';
+import { ChevronDown, ChevronLeft, Ticket } from 'lucide-react';
 import axios from 'axios';
 import {
   executeTicketDeepDiveAnalysis,
@@ -62,6 +62,12 @@ import { useTranslation } from '../../lib/context/I18nContext';
 import { validateDraft, LegalValidationResult } from '../../services/legalService';
 import { CreateTicketDialog } from '../CreateTicketDialog';
 import { FlagIcon, languageToFlagCode } from '../ui/FlagIcon';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '../ui/dropdown-menu';
 import { TicketsLeftSidebar } from '../tickets/TicketsLeftSidebar';
 import { TicketsSidebarManageSheet } from '../tickets/TicketsSidebarManageSheet';
 import { TicketListView } from '../tickets/TicketListView';
@@ -1548,32 +1554,41 @@ export default function TicketsPage() {
         isMobileSidebarOpen={isMobileSidebarOpen}
         footer={
           moduleConfig.polyglotEnabled && activePolyglotLanguages.length > 0 ? (
-            <div className={cn('p-2', effectiveCollapsed && 'px-1')}>
-              {!effectiveCollapsed && (
-                <div className="flex items-center gap-2 mb-2 px-1">
-                  <Languages className="w-3.5 h-3.5 text-primary" />
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">
-                    Polyglot Bridge
-                  </span>
-                </div>
-              )}
-              <div className={cn('flex flex-wrap gap-2', effectiveCollapsed && 'flex-col items-center')}>
+            <DropdownMenu>
+              <DropdownMenuTrigger
+                className={cn(
+                  'w-full flex items-center gap-2 h-8 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors min-w-0',
+                  effectiveCollapsed && 'justify-center px-0',
+                )}
+                title={`${t('settings.polyglotBridge', 'Polyglot Bridge')}: ${agentLanguage}`}
+              >
+                <FlagIcon
+                  code={
+                    activePolyglotLanguages.find((f) => f.lang === agentLanguage)?.flagCode
+                    || languageToFlagCode(agentLanguage)
+                  }
+                  className="w-5 h-3.5 shrink-0"
+                />
+                {!effectiveCollapsed && (
+                  <>
+                    <span className="truncate flex-1 text-left">{agentLanguage}</span>
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 shrink-0" />
+                  </>
+                )}
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" className="w-48">
                 {activePolyglotLanguages.map((f) => (
-                  <button
+                  <DropdownMenuItem
                     key={f.isoCode || f.lang}
-                    type="button"
+                    className="text-xs font-medium cursor-pointer"
                     onClick={() => setAgentLanguage(f.lang)}
-                    className={cn(
-                      'h-8 w-8 rounded-full border border-transparent hover:bg-card flex items-center justify-center text-sm shadow-none transition-all shrink-0',
-                      agentLanguage === f.lang && 'border-primary bg-card shadow-sm scale-110',
-                    )}
-                    title={`${t('settings.polyglotBridge', 'Polyglot Bridge')}: ${f.lang}`}
                   >
                     <FlagIcon code={f.flagCode || languageToFlagCode(f.lang)} className="w-5 h-3.5" />
-                  </button>
+                    <span className="flex-1 truncate">{f.lang}</span>
+                  </DropdownMenuItem>
                 ))}
-              </div>
-            </div>
+              </DropdownMenuContent>
+            </DropdownMenu>
           ) : undefined
         }
       />

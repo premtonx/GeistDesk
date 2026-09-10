@@ -125,7 +125,8 @@
     "aiQuality": {
       "excellent": "Excellent",
       "good": "Good",
-      "needsWork": "Needs attention"
+      "needsWork": "Needs attention",
+      "compactLabel": "AI quality"
     },
     "layout": {
       "list": "List",
@@ -502,6 +503,9 @@
       "ai_labs": "AI Labs",
       "inbox": "Inbox",
       "customers_sla": "Customers / SLA",
+      "primaryViews": "Primary views",
+      "urgency": "Urgency & SLA",
+      "statusQueues": "Status & queues",
       "my_work": "My Work",
       "team": "Team Queues",
       "priority": "Priority Views",
@@ -512,7 +516,7 @@
     "items": {
       "assigned_me": "My Tickets",
       "due_today": "Due Today",
-      "waiting_my_response": "Awaiting My Reply",
+      "waiting_my_response": "Awaiting reply",
       "my_paused": "Paused",
       "my_qs": "In QA",
       "status_open": "Open",
@@ -522,6 +526,8 @@
       "status_waiting_customer": "Waiting on Customer",
       "status_waiting_dev": "Waiting on Engineering",
       "status_waiting_vendor": "Waiting on Vendor",
+      "waiting_queues": "Waiting",
+      "archive": "Resolved / Closed",
       "status_resolved": "Resolved",
       "status_closed": "Closed",
       "negative_sentiment": "Negative Sentiment",
@@ -550,7 +556,7 @@
       "agent_seeking_help": "Agenten Helfen",
       "waiting_customer": "Waiting For Customer",
       "recently_updated": "Recently Updated",
-      "team_all_open": "All",
+      "team_all_open": "All tickets",
       "team_pending": "Pending",
       "team_on_hold": "On Hold",
       "resolved_today": "Resolved Today",
@@ -578,6 +584,7 @@
     },
     "sidebar": {
       "manageViews": "Manage views",
+      "moreViews": "More",
       "manageViewsDesc": "Personalize queues, favorites, and saved filters for your workspace.",
       "toggleFavorite": "Toggle favorite",
       "sectionOrder": "Section order & visibility",

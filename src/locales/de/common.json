@@ -125,7 +125,8 @@
     "aiQuality": {
       "excellent": "Ausgezeichnet",
       "good": "Gut",
-      "needsWork": "Verbesserungsbedarf"
+      "needsWork": "Verbesserungsbedarf",
+      "compactLabel": "KI-Qualität"
     },
     "layout": {
       "list": "Liste",
@@ -502,6 +503,9 @@
       "ai_labs": "KI-Lab",
       "inbox": "Posteingang",
       "customers_sla": "Kunden & SLA",
+      "primaryViews": "Hauptansichten",
+      "urgency": "Dringlichkeit & SLA",
+      "statusQueues": "Status & Queues",
       "my_work": "Meine Arbeit",
       "team": "Team-Warteschlangen",
       "priority": "Prioritätsansichten",
@@ -512,7 +516,7 @@
     "items": {
       "assigned_me": "Meine Tickets",
       "due_today": "Heute fällig",
-      "waiting_my_response": "Warte auf meine Antwort",
+      "waiting_my_response": "Warte auf Antwort",
       "my_paused": "Pausiert",
       "my_qs": "In QS",
       "status_open": "Offen",
@@ -522,6 +526,8 @@
       "status_waiting_customer": "Wartend auf Kunde",
       "status_waiting_dev": "Wartend auf Entwickler",
       "status_waiting_vendor": "Wartend auf Drittanbieter",
+      "waiting_queues": "Wartend",
+      "archive": "Gelöst / Geschlossen",
       "status_resolved": "Gelöst",
       "status_closed": "Geschlossen",
       "negative_sentiment": "Negative Stimmung",
@@ -550,7 +556,7 @@
       "agent_seeking_help": "Agenten Helfen",
       "waiting_customer": "Wartet auf Kunden",
       "recently_updated": "Kürzlich aktualisiert",
-      "team_all_open": "Alle",
+      "team_all_open": "Alle Tickets",
       "team_pending": "In Bearbeitung",
       "team_on_hold": "Warteschleife",
       "resolved_today": "Heute gelöst",
@@ -578,6 +584,7 @@
     },
     "sidebar": {
       "manageViews": "Ansichten verwalten",
+      "moreViews": "Mehr",
       "manageViewsDesc": "Warteschlangen, Favoriten und gespeicherte Filter für Ihren Arbeitsbereich anpassen.",
       "toggleFavorite": "Favorit umschalten",
       "sectionOrder": "Bereichsreihenfolge & Sichtbarkeit",
