@@ -431,13 +431,39 @@ export async function findChannelForWebhook(params: {
     if (secret && channel.webhookSecret && channel.webhookSecret === secret) {
       return channel;
     }
-    if (recipient && channel.forwardingAddress) {
-      const stored = channel.forwardingAddress.toLowerCase().trim();
-      const normalized = normalizeForwardingAddress(stored, channel.id).toLowerCase().trim();
-      if (stored === recipient || normalized === recipient) {
+    if (recipient) {
+      const email = (channel.email || '').toLowerCase().trim();
+      const mailbox = (channel.mailbox || '').toLowerCase().trim();
+      if (email === recipient || mailbox === recipient) {
         return channel;
+      }
+      if (channel.forwardingAddress) {
+        const stored = channel.forwardingAddress.toLowerCase().trim();
+        const normalized = normalizeForwardingAddress(stored, channel.id).toLowerCase().trim();
+        if (stored === recipient || normalized === recipient) {
+          return channel;
+        }
       }
     }
   }
   return null;
+}
+
+/**
+ * First successful inbound message (SMTP or webhook) marks a pending
+ * forwarding channel as connected so onboarding Step 4 auto-activates.
+ */
+export async function markWebhookChannelLiveFromInbound(
+  channel: EmailChannelConfig | null | undefined,
+  result?: { blocked?: boolean },
+): Promise<void> {
+  if (!channel?.id || channel.connectionType !== 'webhook') return;
+  if (channel.status === 'disabled') return;
+  await updateDocDirect(EMAIL_CHANNELS_COLLECTION, channel.id, {
+    status: result?.blocked ? channel.status : 'connected',
+    lastTestOk: true,
+    lastTestAt: new Date().toISOString(),
+    lastError: null,
+    updatedAt: new Date().toISOString(),
+  });
 }

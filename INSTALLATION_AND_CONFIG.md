@@ -139,6 +139,18 @@ docker compose down -v       # DESTROYS database volume — irreversible
 
 Inbound mail converges on a unified driver factory (`src/lib/email-ingestion/*`) and shared pipeline `ingestNormalizedEmail` → blacklist → ticket/message → `processAiTriage`.
 
+### 3.0 Native SMTP (embedded MX listener)
+
+**Goal:** Receive mail directly on TCP port 25 — no Postfix, Mailcow, or webhook relay.
+
+1. Point the MX record for `INBOUND_EMAIL_DOMAIN` (default `inbound.geistai.eu`) at the GeistDesk host.
+2. Publish port 25 from the gateway (`INBOUND_SMTP_HOST_PORT` / `INBOUND_SMTP_PORT` in `.env`; use `2525` for local/dev).
+3. Create a forwarding channel (onboarding Step 4 or Admin Hub). Copy `help-{slug}@<domain>`.
+4. Send a test message to that address. The first accepted mail marks the channel **connected** and creates a ticket.
+5. Recipients outside the configured inbound domain(s) receive `550 5.7.1 relay not permitted`. Unknown mailboxes receive `550 5.1.1`.
+
+Disable with `INBOUND_SMTP_ENABLED=false`. Extra accept domains: `INBOUND_SMTP_ACCEPT_DOMAINS`.
+
 ### 3.1 Postal (passive webhook)
 
 **Goal:** Forward `support@your-domain` (or Postal routes) into GeistDesk.

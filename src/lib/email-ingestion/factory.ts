@@ -22,7 +22,7 @@ class WebhookNoopDriver implements EmailIngestionDriver {
   async testConnection() {
     return {
       ok: true,
-      message: 'Webhook channel is passive — no active poll. Use the forwarding address + webhook secret.',
+      message: 'Forwarding channel is passive — point MX at this host or forward mail to the help- address. The first inbound SMTP/webhook message marks the channel connected.',
     };
   }
 }

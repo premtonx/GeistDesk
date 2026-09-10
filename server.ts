@@ -71,9 +71,10 @@ import {
   extractRouterAlias,
   parseInboundWebhookPayload,
 } from "./src/lib/email-ingestion/drivers/webhook-adapter.js";
-import { findChannelForWebhook } from "./src/lib/email-ingestion/channel-store.js";
+import { findChannelForWebhook, markWebhookChannelLiveFromInbound } from "./src/lib/email-ingestion/channel-store.js";
 import { createEmailIngestionDriver } from "./src/lib/email-ingestion/factory.js";
 import { startEmailIngestionScheduler } from "./src/lib/email-ingestion/scheduler.js";
+import { startInboundSmtpReceiver } from "./src/lib/email-ingestion/inbound-smtp-receiver.js";
 import { getEmailChannel } from "./src/lib/email-ingestion/channel-store.js";
 import kbArticleRoutes from "./src/routes/kbArticleRoutes.js";
 import kbCategoryRoutes from "./src/routes/kbCategoryRoutes.js";
@@ -1415,18 +1416,10 @@ async function startServer() {
 
         // A successfully received inbound payload is a live verification ping —
         // flip the forwarding channel to "connected" so the admin UI reflects it.
-        if (channel?.id && channel.connectionType === "webhook") {
-          try {
-            await updateDocDirect("email_channels", channel.id, {
-              status: result.blocked ? channel.status : "connected",
-              lastTestOk: true,
-              lastTestAt: new Date().toISOString(),
-              lastError: null,
-              updatedAt: new Date().toISOString(),
-            });
-          } catch (statusErr) {
-            safeLog('warn', "[inbound-mail] failed to update channel status:", statusErr);
-          }
+        try {
+          await markWebhookChannelLiveFromInbound(channel, result);
+        } catch (statusErr) {
+          safeLog('warn', "[inbound-mail] failed to update channel status:", statusErr);
         }
 
         if (result.blocked) {
@@ -2204,6 +2197,7 @@ Example output format:
   // Wire unified ingest pipeline → AI triage, then start 60s active-pull daemon.
   registerAiTriageHook(processAiTriage);
   startEmailIngestionScheduler(60_000);
+  void startInboundSmtpReceiver();
   startVectorQueueWorker();
   // External KB source connectors — periodic delta-hash sync.
   try {

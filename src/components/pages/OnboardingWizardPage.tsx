@@ -962,8 +962,9 @@ export default function OnboardingWizardPage() {
                   <p className="mb-1 font-medium text-emerald-900">Ihre Weiterleitungsadresse</p>
                   <p className="font-mono">{forwardingAddress}</p>
                   <p className="mt-2">
-                    Richten Sie dort eine Weiterleitung ein — der Kanal wird nach der ersten eingehenden Mail
-                    automatisch als verbunden markiert.
+                    Zeigen Sie den MX-Eintrag von {forwardingDomain} auf diesen Host, oder leiten Sie Mails an
+                    diese Adresse weiter. Der Kanal wird nach der ersten eingehenden Mail automatisch als
+                    verbunden markiert.
                   </p>
                 </div>
               ) : null}

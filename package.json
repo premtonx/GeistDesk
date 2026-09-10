@@ -123,6 +123,7 @@
     "lint:eslint": "eslint . --config eslint.boundary.config.js --max-warnings 0",
     "lint:eslint:full": "eslint . --max-warnings 0",
     "test:lifecycle": "tsx scripts/test-ai-lifecycle.ts",
+    "verify:inbound-smtp": "tsx scripts/verify-inbound-smtp.ts",
     "verify:rag": "tsx scripts/verify-rag-pipeline.ts"
   }
 }
