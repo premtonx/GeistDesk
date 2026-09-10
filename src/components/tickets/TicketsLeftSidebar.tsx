@@ -25,7 +25,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
@@ -110,6 +109,31 @@ function SidebarNavButton({
         </div>
       )}
     </button>
+  );
+}
+
+function ViewMenuItem({
+  item,
+  label,
+  count,
+  onSelect,
+}: {
+  item: SidebarItemConfig;
+  label: string;
+  count: number;
+  onSelect: () => void;
+}) {
+  const Icon = item.icon;
+  if (!item.id || typeof Icon !== 'function') return null;
+  return (
+    <DropdownMenuItem
+      className="text-xs font-medium cursor-pointer"
+      onClick={onSelect}
+    >
+      <Icon className="w-3.5 h-3.5" />
+      <span className="flex-1 truncate">{label}</span>
+      <span className="text-[11px] font-semibold text-slate-500 tabular-nums">{count}</span>
+    </DropdownMenuItem>
   );
 }
 
@@ -242,12 +266,17 @@ export function TicketsLeftSidebar({
 
           <DropdownMenu>
             <DropdownMenuTrigger
-              className={cn(
-                'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors min-w-0',
-                waitingActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100',
-                effectiveCollapsed && 'justify-center px-0 h-10 w-10 mx-auto',
-              )}
-              title={t('tickets.items.waiting_queues', 'Wartend')}
+              render={
+                <button
+                  type="button"
+                  title={t('tickets.items.waiting_queues', 'Wartend')}
+                  className={cn(
+                    'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors min-w-0',
+                    waitingActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100',
+                    effectiveCollapsed && 'justify-center px-0 h-10 w-10 mx-auto',
+                  )}
+                />
+              }
             >
               <span className="flex items-center gap-2 min-w-0">
                 <Hourglass className={cn('w-3.5 h-3.5 shrink-0', waitingActive ? 'text-blue-600' : 'text-slate-500')} />
@@ -271,20 +300,18 @@ export function TicketsLeftSidebar({
                 </span>
               )}
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuContent align="start" className="w-56 min-w-56">
               {WAITING_QUEUE_VIEW_IDS.map((id) => {
                 const item = getSidebarViewItem(id);
                 if (!item) return null;
                 return (
-                  <DropdownMenuItem
+                  <ViewMenuItem
                     key={id}
-                    className="text-xs font-medium cursor-pointer"
-                    onClick={() => onViewChange(id)}
-                  >
-                    <item.icon className="w-3.5 h-3.5" />
-                    <span className="flex-1 truncate">{resolveLabel(item)}</span>
-                    <span className="text-[11px] font-semibold text-slate-500">{getViewCount(id)}</span>
-                  </DropdownMenuItem>
+                    item={item}
+                    label={resolveLabel(item)}
+                    count={getViewCount(id)}
+                    onSelect={() => onViewChange(id)}
+                  />
                 );
               })}
             </DropdownMenuContent>
@@ -292,12 +319,17 @@ export function TicketsLeftSidebar({
 
           <DropdownMenu>
             <DropdownMenuTrigger
-              className={cn(
-                'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors min-w-0',
-                archiveActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100',
-                effectiveCollapsed && 'justify-center px-0 h-10 w-10 mx-auto',
-              )}
-              title={t('tickets.items.archive', 'Gelöst / Geschlossen')}
+              render={
+                <button
+                  type="button"
+                  title={t('tickets.items.archive', 'Gelöst / Geschlossen')}
+                  className={cn(
+                    'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors min-w-0',
+                    archiveActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100',
+                    effectiveCollapsed && 'justify-center px-0 h-10 w-10 mx-auto',
+                  )}
+                />
+              }
             >
               <span className="flex items-center gap-2 min-w-0">
                 <Archive className={cn('w-3.5 h-3.5 shrink-0', archiveActive ? 'text-blue-600' : 'text-slate-500')} />
@@ -321,20 +353,18 @@ export function TicketsLeftSidebar({
                 </span>
               )}
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-56">
+            <DropdownMenuContent align="start" className="w-56 min-w-56">
               {ARCHIVE_VIEW_IDS.map((id) => {
                 const item = getSidebarViewItem(id);
                 if (!item) return null;
                 return (
-                  <DropdownMenuItem
+                  <ViewMenuItem
                     key={id}
-                    className="text-xs font-medium cursor-pointer"
-                    onClick={() => onViewChange(id)}
-                  >
-                    <item.icon className="w-3.5 h-3.5" />
-                    <span className="flex-1 truncate">{resolveLabel(item)}</span>
-                    <span className="text-[11px] font-semibold text-slate-500">{getViewCount(id)}</span>
-                  </DropdownMenuItem>
+                    item={item}
+                    label={resolveLabel(item)}
+                    count={getViewCount(id)}
+                    onSelect={() => onViewChange(id)}
+                  />
                 );
               })}
             </DropdownMenuContent>
@@ -345,11 +375,16 @@ export function TicketsLeftSidebar({
           <div className="mt-2">
             <DropdownMenu>
               <DropdownMenuTrigger
-                className={cn(
-                  'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-slate-700 hover:bg-slate-100 min-w-0',
-                  overflowItems.some((item) => item.id === activeView) && 'bg-blue-50 text-blue-700',
-                  effectiveCollapsed && 'justify-center px-0 h-10 w-10 mx-auto',
-                )}
+                render={
+                  <button
+                    type="button"
+                    className={cn(
+                      'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-slate-700 hover:bg-slate-100 min-w-0',
+                      overflowItems.some((item) => item.id === activeView) && 'bg-blue-50 text-blue-700',
+                      effectiveCollapsed && 'justify-center px-0 h-10 w-10 mx-auto',
+                    )}
+                  />
+                }
               >
                 <span className="flex items-center gap-2 min-w-0">
                   <MoreHorizontal className="w-3.5 h-3.5 shrink-0 text-slate-500" />
@@ -358,19 +393,19 @@ export function TicketsLeftSidebar({
                   )}
                 </span>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-60 max-h-80">
-                <DropdownMenuLabel>{t('tickets.sidebar.moreViews', 'Mehr')}</DropdownMenuLabel>
+              <DropdownMenuContent align="start" className="w-60 min-w-60 max-h-80">
+                <div className="px-1.5 py-1 text-xs font-medium text-muted-foreground">
+                  {t('tickets.sidebar.moreViews', 'Mehr')}
+                </div>
                 <DropdownMenuSeparator />
                 {overflowItems.map((item) => (
-                  <DropdownMenuItem
+                  <ViewMenuItem
                     key={item.id}
-                    className="text-xs font-medium cursor-pointer"
-                    onClick={() => onViewChange(item.id)}
-                  >
-                    <item.icon className="w-3.5 h-3.5" />
-                    <span className="flex-1 truncate">{resolveLabel(item)}</span>
-                    <span className="text-[11px] font-semibold text-slate-500">{getViewCount(item.id)}</span>
-                  </DropdownMenuItem>
+                    item={item}
+                    label={resolveLabel(item)}
+                    count={getViewCount(item.id)}
+                    onSelect={() => onViewChange(item.id)}
+                  />
                 ))}
               </DropdownMenuContent>
             </DropdownMenu>

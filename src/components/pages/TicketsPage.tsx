@@ -1556,11 +1556,16 @@ export default function TicketsPage() {
           moduleConfig.polyglotEnabled && activePolyglotLanguages.length > 0 ? (
             <DropdownMenu>
               <DropdownMenuTrigger
-                className={cn(
-                  'w-full flex items-center gap-2 h-8 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors min-w-0',
-                  effectiveCollapsed && 'justify-center px-0',
-                )}
-                title={`${t('settings.polyglotBridge', 'Polyglot Bridge')}: ${agentLanguage}`}
+                render={
+                  <button
+                    type="button"
+                    title={`${t('settings.polyglotBridge', 'Polyglot Bridge')}: ${agentLanguage}`}
+                    className={cn(
+                      'w-full flex items-center gap-2 h-8 px-2 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 transition-colors min-w-0',
+                      effectiveCollapsed && 'justify-center px-0',
+                    )}
+                  />
+                }
               >
                 <FlagIcon
                   code={

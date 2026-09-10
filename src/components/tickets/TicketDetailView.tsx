@@ -289,8 +289,13 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                           </Button>
                           <DropdownMenu>
                             <DropdownMenuTrigger
-                              className={actionBtnClass}
-                              aria-label={t('tickets.detail.more', 'More')}
+                              render={
+                                <button
+                                  type="button"
+                                  className={actionBtnClass}
+                                  aria-label={t('tickets.detail.more', 'More')}
+                                />
+                              }
                             >
                               <MoreHorizontal className="w-4 h-4" />
                             </DropdownMenuTrigger>
