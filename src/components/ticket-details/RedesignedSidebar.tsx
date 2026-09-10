@@ -108,7 +108,7 @@ function DispatchStatusSelect({
 }) {
   if (isReadonlyTerminalStatus(status)) {
     return (
-      <div className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 flex items-center justify-between gap-2">
+      <div className="w-full bg-muted border border-border rounded-xl px-3 py-2 text-xs font-medium text-slate-800 dark:text-slate-300 flex items-center justify-between gap-2">
         <span>{statusLabel(status)}</span>
         <span className="text-[9px] font-black uppercase tracking-widest text-muted-foreground shrink-0">
           {readOnlyHint}
@@ -120,7 +120,7 @@ function DispatchStatusSelect({
   return (
     <select
       id={id}
-      className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer text-slate-700 dark:text-slate-200 capitalize"
+      className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer dark:text-slate-200 capitalize"
       value={status}
       onChange={(e) => onChange(e.target.value)}
     >
@@ -278,7 +278,7 @@ export function RedesignedSidebar({
   return (
     <aside className="w-full min-w-0 bg-white flex flex-col shrink-0 h-full overflow-hidden select-none">
       <div className="p-4 border-b flex items-center justify-between bg-card shrink-0 h-[56px]">
-        <span className="font-bold text-sm text-foreground tracking-tight flex items-center gap-2">
+        <span className="text-xs font-bold text-slate-900 tracking-tight flex items-center gap-2">
           <Settings2 className="w-4 h-4 text-muted-foreground" />
           <span>{t('tickets.sidebar.title', 'Dispatch desk properties')}</span>
         </span>
@@ -304,7 +304,7 @@ export function RedesignedSidebar({
         {/* PROMINENT AGENT DISPATCH BOARD (ALWAYS VISIBLE AT THE TOP) */}
         <div id="prominent-agent-dispatch-board" className="bg-card border border-border shadow-xs rounded-xl p-3.5 space-y-3 mb-2">
           <div className="flex items-center justify-between">
-            <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
               <UserCheck className="w-3.5 h-3.5 text-primary" />
               <span>{t('tickets.sidebar.agentAssignment', 'Agent assignment')}</span>
             </span>
@@ -329,10 +329,10 @@ export function RedesignedSidebar({
             </div>
             
             <div className="flex-1 min-w-0">
-              <div className="text-[12px] font-extrabold text-foreground truncate">
+              <div className="text-xs font-semibold text-slate-900 truncate">
                 {safeString(ticketAssignee?.name || ticketAssignee?.id, t('tickets.unassigned', 'Unassigned'))}
               </div>
-              <div className="text-[10px] text-muted-foreground truncate">
+              <div className="text-[11px] text-slate-400 truncate">
                 {ticketAssignee
                   ? t('tickets.sidebar.responsibleAgent', 'Responsible agent')
                   : t('tickets.sidebar.clickToAssign', 'Click below to assign this ticket')}
@@ -341,10 +341,10 @@ export function RedesignedSidebar({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[9.5px] font-black text-muted-foreground uppercase block">{t('tickets.sidebar.selectDispatchAgent', 'Select dispatch agent')}</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">{t('tickets.sidebar.selectDispatchAgent', 'Select dispatch agent')}</label>
             <select 
               id="dispatch-agent-select"
-              className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer text-slate-700 dark:text-slate-200"
+              className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-primary cursor-pointer dark:text-slate-200"
               value={dispatchAgentId}
               onChange={(e) => {
                 const val = e.target.value;
@@ -395,7 +395,7 @@ export function RedesignedSidebar({
           )}
 
           <div className="space-y-1 pt-1">
-            <label className="text-[9.5px] font-black text-muted-foreground uppercase block">{t('tickets.sidebar.dispatchCaseStatus', 'Dispatch case status')}</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">{t('tickets.sidebar.dispatchCaseStatus', 'Dispatch case status')}</label>
             <DispatchStatusSelect
               id="dispatch-status-select"
               status={ticket.status}
@@ -406,9 +406,9 @@ export function RedesignedSidebar({
           </div>
 
           <div className="space-y-1 pt-1">
-            <label className="text-[9.5px] font-black text-muted-foreground uppercase">{t('tickets.sidebar.ticketCategory', 'Ticket category')}</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">{t('tickets.sidebar.ticketCategory', 'Ticket category')}</label>
             <select
-              className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+              className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-medium text-slate-800 focus:outline-none focus:ring-1 focus:ring-primary"
               value={ticket.type || 'incident'}
               onChange={(e) => onUpdateTicketField({ type: e.target.value as any })}
             >
@@ -420,7 +420,7 @@ export function RedesignedSidebar({
           </div>
 
           <div className="space-y-1 pt-2">
-            <label className="text-[9.5px] font-black text-muted-foreground uppercase block">{t('tickets.sidebar.slaHelpEscalation', 'SLA help escalation')}</label>
+            <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">{t('tickets.sidebar.slaHelpEscalation', 'SLA help escalation')}</label>
             <Button
               variant={ticket.isHelpRequested ? "destructive" : "outline"}
               size="sm"
@@ -442,7 +442,7 @@ export function RedesignedSidebar({
         {ticketKind === 'support' && (
           <div className="bg-card border border-border shadow-xs rounded-xl p-3.5 space-y-3 mb-2">
             <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-primary" />
                 <span>{t('tickets.sidebar.supportAccountContext', 'Support & account')}</span>
               </span>
@@ -454,11 +454,11 @@ export function RedesignedSidebar({
             </div>
 
             <div className="space-y-1">
-              <label className="text-[9.5px] font-black text-muted-foreground uppercase">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
                 {t('tickets.fields.slaTier', 'SLA Tier')}
               </label>
               <Input
-                className={`h-9 text-xs rounded-xl ${slaTierDirty ? 'ring-1 ring-amber-400/60' : ''}`}
+                className={`h-9 text-xs font-medium text-slate-800 rounded-xl ${slaTierDirty ? 'ring-1 ring-amber-400/60' : ''}`}
                 value={slaTierDraft}
                 onChange={(e) => setSlaTierDraft(e.target.value)}
                 placeholder={t('tickets.fields.slaTierPlaceholder', 'e.g. Platinum')}
@@ -490,7 +490,7 @@ export function RedesignedSidebar({
             )}
 
             <div className="space-y-1 pt-1 border-t border-border/60">
-              <label className="text-[9.5px] font-black text-muted-foreground uppercase">
+              <label className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
                 {t('tickets.fields.accountHealth', 'Account Health')}
               </label>
               <div

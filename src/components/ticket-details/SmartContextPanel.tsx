@@ -167,7 +167,7 @@ export function SmartContextPanel({
             <h4 className="text-xs font-black text-foreground">
               {(ticket as any).product || t('tickets.context.defaultProduct', 'GeistDeskTech License')}
             </h4>
-            <p className="text-[10px] text-muted-foreground truncate">{t('tickets.context.licenseId', 'License ID')}: <span className="font-mono text-[9px]">GDT-8842-AX9</span></p>
+            <p className="text-[10px] text-muted-foreground truncate">{t('tickets.context.licenseId', 'License ID')}: <span className="font-mono tabular-nums text-xs font-semibold text-slate-600">GDT-8842-AX9</span></p>
           </div>
           <div className="flex items-center gap-1 pt-1 border-t border-border/60 text-[9px] text-[#137333] font-bold">
             <CheckCircle className="w-3 h-3 text-[#137333]" />

@@ -905,7 +905,7 @@ export function TicketListView(props: TicketListViewProps) {
                               {safeString(ticket.subject)}
                              </h3>
                             <div className="flex items-center gap-1.5 flex-wrap">
-                               <span className="text-[10px] text-slate-400 font-medium font-mono shrink-0">
+                               <span className="text-[10px] text-slate-400 font-medium font-mono tabular-nums shrink-0">
                                  {formatTicketRef(ticket.id)}
                                </span>
                                {sla && (
@@ -1110,9 +1110,9 @@ export function TicketListView(props: TicketListViewProps) {
                         {/* Row 2: Subject & ID & SLA */}
                         <div className="space-y-1">
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="text-[9px] font-bold text-muted-foreground bg-muted border rounded px-1">#{ticket.id.slice(0, 4)}</span>
+                            <span className="text-[9px] font-bold font-mono tabular-nums text-muted-foreground bg-muted border rounded px-1">#{ticket.id.slice(0, 4)}</span>
                             {sla && (
-                              <Badge className={cn("text-[8px] px-1.5 py-0 h-4 border uppercase tracking-wider font-extrabold", sla.color)}>
+                              <Badge className={cn("text-[8px] px-1.5 py-0 h-4 border uppercase tracking-wider font-extrabold font-mono tabular-nums", sla.color)}>
                                 {sla.label}
                               </Badge>
                             )}

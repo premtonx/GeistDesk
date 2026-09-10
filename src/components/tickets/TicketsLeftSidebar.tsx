@@ -92,10 +92,11 @@ interface SidebarNavButtonProps {
 }
 
 function countBadgeClass(isActive: boolean, tone: BadgeTone = 'default') {
-  if (isActive) return 'bg-blue-100 text-blue-700';
-  if (tone === 'amber') return 'bg-amber-50 text-amber-800';
-  if (tone === 'rose') return 'bg-rose-50 text-rose-800';
-  return 'bg-slate-100 text-slate-500';
+  const base = 'font-mono tabular-nums text-[11px] font-semibold px-1.5 py-0.5 rounded-full';
+  if (isActive) return cn(base, 'bg-blue-100 text-blue-700');
+  if (tone === 'amber') return cn(base, 'bg-amber-50 text-amber-800');
+  if (tone === 'rose') return cn(base, 'bg-rose-50 text-rose-800');
+  return cn(base, 'bg-slate-100 text-slate-500');
 }
 
 function SidebarNavButton({
@@ -116,7 +117,7 @@ function SidebarNavButton({
     ? 'bg-rose-50 text-rose-700 font-semibold'
     : isActive
       ? 'bg-blue-50 text-blue-700 font-semibold'
-      : 'text-slate-700 hover:bg-slate-100';
+      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100';
 
   if (effectiveCollapsed) {
     return (
@@ -125,7 +126,7 @@ function SidebarNavButton({
         onClick={onSelect}
         title={label}
         className={cn(
-          'relative mx-auto flex h-8 w-8 items-center justify-center rounded-md text-xs font-medium transition-colors',
+          'relative mx-auto flex h-8 w-8 items-center justify-center rounded-md text-[13px] font-medium transition-colors',
           rowTone,
         )}
       >
@@ -136,7 +137,7 @@ function SidebarNavButton({
           )}
         />
         {count > 0 && (
-          <div className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[8px] font-bold text-white">
+          <div className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 font-mono tabular-nums text-[8px] font-bold text-white">
             {count}
           </div>
         )}
@@ -150,7 +151,10 @@ function SidebarNavButton({
         type="button"
         onClick={onSelect}
         title={label}
-        className="flex h-8 min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-xs font-medium leading-none bg-transparent"
+        className={cn(
+          'flex h-8 min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-[13px] leading-none bg-transparent',
+          isActive || roseActive ? 'font-semibold' : 'font-medium',
+        )}
       >
         <item.icon
           className={cn(
@@ -167,8 +171,10 @@ function SidebarNavButton({
         {count > 0 && (
           <span
             className={cn(
-              'min-w-4 text-center text-[11px] font-semibold leading-4',
-              helpChip ? 'text-rose-600' : cn('rounded-full px-1.5', countBadgeClass(isActive, badgeTone)),
+              'min-w-4 text-center leading-4',
+              helpChip
+                ? 'font-mono tabular-nums text-[11px] font-semibold text-rose-600'
+                : countBadgeClass(isActive, badgeTone),
             )}
           >
             {count}
@@ -211,8 +217,8 @@ function ViewMenuItem({
     <DropdownMenuItem
       nativeButton={false}
       className={cn(
-        'group flex h-8 items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium leading-none cursor-pointer',
-        tone === 'rose' ? 'text-rose-600 focus:bg-rose-50' : 'text-slate-700',
+        'group flex h-8 items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-[13px] font-medium leading-none cursor-pointer',
+        tone === 'rose' ? 'text-rose-600 focus:bg-rose-50' : 'text-slate-600',
       )}
       onClick={(event) => {
         if ((event.target as HTMLElement).closest('[data-favorite-star]')) {
@@ -231,7 +237,7 @@ function ViewMenuItem({
         {count > 0 && (
           <span
             className={cn(
-              'text-[11px] font-semibold tabular-nums leading-none',
+              'font-mono tabular-nums text-[11px] font-semibold leading-none',
               tone === 'rose' ? 'text-rose-600' : 'text-slate-500',
             )}
           >
@@ -252,7 +258,7 @@ function ViewMenuItem({
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+    <div className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 select-none">
       {children}
     </div>
   );
@@ -377,7 +383,7 @@ export function TicketsLeftSidebar({
     >
       {!effectiveCollapsed && (
         <div className="px-3 pb-1 pt-3 flex items-center justify-between gap-2 shrink-0">
-          <h2 className="text-[10px] font-semibold text-slate-500 uppercase tracking-wider truncate pl-1">
+          <h2 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate pl-1 select-none">
             {t('tickets.aiSupportOperations', 'AI Support Operations')}
           </h2>
           <button
@@ -397,7 +403,7 @@ export function TicketsLeftSidebar({
             {!effectiveCollapsed && (
               <div className="px-3 pt-3 pb-1 flex items-center gap-1.5 min-w-0">
                 <Star className="h-3 w-3 shrink-0 fill-amber-400 text-amber-500" />
-                <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider truncate">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider truncate select-none">
                   {t('tickets.groups.favorites', 'Favoriten')}
                 </span>
               </div>
@@ -438,8 +444,8 @@ export function TicketsLeftSidebar({
                   type="button"
                   title={t('tickets.items.waiting_queues', 'Wartend')}
                   className={cn(
-                    'flex h-8 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-xs font-medium leading-none rounded-md transition-colors',
-                    waitingActive ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-700 hover:bg-slate-100',
+                    'flex h-8 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] font-medium leading-none rounded-md transition-colors',
+                    waitingActive ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
                     effectiveCollapsed && 'justify-center px-0 h-8 w-8 mx-auto',
                   )}
                 />
@@ -456,7 +462,7 @@ export function TicketsLeftSidebar({
                   {waitingCount > 0 && (
                     <span
                       className={cn(
-                        'text-[11px] font-semibold px-1.5 py-0.5 rounded-full',
+                        'font-mono tabular-nums text-[11px] font-semibold px-1.5 py-0.5 rounded-full',
                         countBadgeClass(waitingActive),
                       )}
                     >
@@ -483,8 +489,8 @@ export function TicketsLeftSidebar({
                   type="button"
                   title={t('tickets.items.archive', 'Gelöst / Geschlossen')}
                   className={cn(
-                    'flex h-8 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-xs font-medium leading-none rounded-md transition-colors',
-                    archiveActive ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-700 hover:bg-slate-100',
+                    'flex h-8 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] font-medium leading-none rounded-md transition-colors',
+                    archiveActive ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
                     effectiveCollapsed && 'justify-center px-0 h-8 w-8 mx-auto',
                   )}
                 />
@@ -501,7 +507,7 @@ export function TicketsLeftSidebar({
                   {archiveCount > 0 && (
                     <span
                       className={cn(
-                        'text-[11px] font-semibold px-1.5 py-0.5 rounded-full',
+                        'font-mono tabular-nums text-[11px] font-semibold px-1.5 py-0.5 rounded-full',
                         countBadgeClass(archiveActive),
                       )}
                     >
@@ -530,7 +536,7 @@ export function TicketsLeftSidebar({
                   <button
                     type="button"
                     className={cn(
-                      'flex h-8 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-xs font-medium leading-none rounded-md transition-colors text-slate-700 hover:bg-slate-100',
+                      'flex h-8 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] font-medium leading-none rounded-md transition-colors text-slate-600 hover:text-slate-900 hover:bg-slate-100',
                       overflowItems.some((item) => item.id === activeView) && 'bg-blue-50 text-blue-700 font-semibold',
                       effectiveCollapsed && 'justify-center px-0 h-8 w-8 mx-auto',
                     )}
@@ -545,7 +551,7 @@ export function TicketsLeftSidebar({
                 </span>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" className="w-56 p-1.5 shadow-lg border border-slate-200 bg-white rounded-xl">
-                <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-slate-400 select-none">
                   {t('tickets.sidebar.moreViewsSection', 'Weitere Ansichten')}
                 </div>
                 {(['watching', 'due_today', 'status_qs', 'status_paused'] as const).map((id) => {

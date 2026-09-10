@@ -192,7 +192,7 @@ export function AiSummaryCard({
           </div>
           <div>
             <div className="flex flex-wrap items-center gap-2">
-              <h3 className="text-xs font-black text-indigo-950 dark:text-indigo-200 uppercase tracking-tight font-sans">
+              <h3 className="text-xs font-bold text-slate-900 tracking-tight dark:text-indigo-200 font-sans">
                 {t('tickets.aiSummaryCard.title', 'AI Orchestrator Deep-Dive Summary')}
               </h3>
               <Badge className="bg-[#E6F4EA] hover:bg-[#E6F4EA]/80 text-[#137333] dark:bg-emerald-950/50 dark:text-emerald-400 border-none font-bold text-[9px] tracking-wider px-2 py-0.5 rounded-full shadow-none">
@@ -243,17 +243,17 @@ export function AiSummaryCard({
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5">
                       <CheckCircle2 className="w-4 h-4 text-indigo-600 dark:text-indigo-400 shrink-0" />
-                      <h4 className="text-[10px] uppercase font-bold tracking-wider text-indigo-950 dark:text-indigo-300">
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-indigo-300">
                         {t('tickets.aiSummaryCard.keyTakeaways', 'Key Takeaways')}
                       </h4>
                     </div>
                     <div className="grid grid-cols-1 gap-2 pt-1">
                       {findings.map((finding, idx) => (
                         <div key={idx} className="flex gap-2 p-2.5 bg-white/70 dark:bg-slate-900/60 rounded-xl border border-indigo-50/10 dark:border-slate-850/65 shadow-[0_1px_2px_rgba(0,0,0,0.02)] items-start">
-                          <span className="text-[11px] font-extrabold text-blue-600 dark:text-blue-400 min-w-[14px]">
+                          <span className="font-mono tabular-nums text-xs font-semibold text-blue-600 dark:text-blue-400 min-w-[14px]">
                             {idx + 1}.
                           </span>
-                          <p className="text-[11px] font-medium text-slate-705 dark:text-slate-300 leading-normal">
+                          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-normal">
                             {finding}
                           </p>
                         </div>
@@ -265,12 +265,12 @@ export function AiSummaryCard({
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5">
                       <ShieldAlert className="w-4 h-4 text-indigo-500" />
-                      <h4 className="text-[10px] uppercase font-bold tracking-wider text-slate-400 dark:text-slate-500">
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-slate-300">
                         {t('tickets.aiSummaryCard.diagnosticRootCause', 'Diagnostic Root Cause')}
                       </h4>
                     </div>
-                    <div className="pl-3 border-l-[3px] border-indigo-500 dark:border-indigo-800 py-1 bg-indigo-50/5 dark:bg-indigo-950/5">
-                      <p className="text-xs italic font-bold text-slate-700 dark:text-slate-200 leading-relaxed">
+                    <div className="font-mono text-xs text-slate-800 leading-relaxed bg-purple-50/70 border-l-2 border-purple-500 px-3 py-2 rounded-r dark:bg-purple-950/20 dark:text-slate-200">
+                      <p>
                         &quot;{ticket.aiRootCause || t('tickets.aiSummaryCard.defaultRootCause', 'Configuration parameter mismatch inside client database profile or stripe status.')}&quot;
                       </p>
                     </div>
@@ -283,8 +283,8 @@ export function AiSummaryCard({
                   <div className="space-y-2">
                     <div className="flex items-center gap-1.5">
                       <Lightbulb className="w-4 h-4 text-amber-500" />
-                      <h4 className="text-[10px] uppercase font-bold tracking-wider text-indigo-950 dark:text-indigo-300">
-                        {t('tickets.aiSummaryCard.actionPlan', 'Action Plan Checklist')}
+                      <h4 className="text-xs font-bold text-slate-800 dark:text-indigo-300">
+                        {t('tickets.aiSummaryCard.actionPlan', 'Aktionsplan')}
                       </h4>
                     </div>
                     <div className="space-y-2 pt-1 font-sans">
@@ -304,7 +304,7 @@ export function AiSummaryCard({
                             <label
                               htmlFor={`action-plan-${item.id}`}
                               className={cn(
-                                'text-[11px] leading-tight cursor-pointer font-semibold text-slate-700 dark:text-slate-300 select-none',
+                                'text-xs leading-relaxed cursor-pointer font-normal text-slate-700 dark:text-slate-300 select-none',
                                 item.completed && 'line-through text-muted-foreground/60 opacity-70',
                               )}
                             >
@@ -362,12 +362,12 @@ export function AiSummaryCard({
                 <div className="space-y-2 border-t border-indigo-100/40 dark:border-slate-800 pt-4">
                   <div className="flex items-center gap-1.5">
                     <Wand2 className="w-4 h-4 text-violet-600 dark:text-violet-400 shrink-0" />
-                    <h4 className="text-[10px] uppercase font-bold tracking-wider text-indigo-950 dark:text-indigo-300">
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-indigo-300">
                       {t('tickets.aiSummaryCard.proposedSolution', 'Vorgeschlagene KI-Lösung & Strategie')}
                     </h4>
                   </div>
                   <div className="rounded-xl border border-violet-200/60 dark:border-violet-900/50 bg-violet-50/40 dark:bg-violet-950/20 p-3">
-                    <p className="text-[11px] font-medium text-slate-700 dark:text-slate-300 leading-relaxed whitespace-pre-wrap">
+                    <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-normal whitespace-pre-wrap">
                       {proposedSolution}
                     </p>
                   </div>
@@ -388,7 +388,7 @@ export function AiSummaryCard({
               <div className="space-y-2 border-t border-indigo-100/40 dark:border-slate-800 pt-4">
                 <div className="flex items-center gap-1.5">
                   <BookOpen className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                  <h4 className="text-[10px] uppercase font-bold tracking-wider text-indigo-950 dark:text-indigo-300">
+                  <h4 className="text-xs font-bold text-slate-800 dark:text-indigo-300">
                     {t('tickets.aiSummaryCard.ragReferences', 'Relevante gelöste Tickets & KB-Referenzen')}
                   </h4>
                 </div>

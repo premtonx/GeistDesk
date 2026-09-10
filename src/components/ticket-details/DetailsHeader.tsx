@@ -130,7 +130,7 @@ export function DetailsHeader({
           </Button>
         </div>
         <div className="flex items-center gap-3">
-          <span className="font-mono text-[10.5px]">
+          <span className="font-mono tabular-nums text-[10.5px]">
             {t('tickets.detail.created', 'Created:')}
             {ticket.createdAt?.toDate ? ticket.createdAt.toDate().toLocaleDateString() : t('tickets.customerTab.today', 'Today')}
           </span>
@@ -142,7 +142,7 @@ export function DetailsHeader({
         {/* Left Side: Ticket Id, Subject & Status/SLA/Priority Badges */}
         <div className="min-w-0 w-full space-y-2">
           <div className="flex items-center gap-3 flex-wrap min-w-0">
-            <span className="font-mono text-xs font-bold bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200 shadow-sm shrink-0">
+            <span className="font-mono tabular-nums text-xs font-semibold bg-slate-100 hover:bg-slate-200 text-slate-700 px-2.5 py-1 rounded-lg border border-slate-200 shadow-sm shrink-0">
               #{ticket.id.slice(-5).toUpperCase()}
             </span>
             <h1 className="min-w-0 max-w-full flex-1 text-xl font-bold tracking-tight text-foreground break-words line-clamp-2">
@@ -153,7 +153,7 @@ export function DetailsHeader({
           <div className="flex flex-wrap items-center gap-2 pt-0.5">
             {/* SLA Status Badge */}
             <span className={cn(
-              "inline-flex items-center gap-1 text-[10.5px] font-black uppercase tracking-tight h-5.5 px-3 rounded-md shadow-sm border",
+              "inline-flex items-center gap-1 text-[10.5px] font-semibold font-mono tabular-nums tracking-tight h-5.5 px-3 rounded-md shadow-sm border",
               slaStatus === 'breached' 
                 ? "bg-rose-50 text-rose-700 border-rose-200" 
                 : "bg-amber-50 text-amber-700 border-amber-200"

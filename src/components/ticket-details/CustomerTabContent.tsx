@@ -47,7 +47,7 @@ export function CustomerTabContent({
                 <div>
                   <h3 className="text-base font-bold text-foreground">{safeString(contact?.name ?? ticket.customerName)}</h3>
                   <p className="text-xs text-muted-foreground">{safeString(contact?.email) || `${ticket.customerId}@domain.com`}</p>
-                  <p className="text-[10px] text-muted-foreground mt-1">{t('tickets.customerTab.customerId', 'Customer ID')}: <span className="font-mono font-bold">{ticket.customerId}</span></p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{t('tickets.customerTab.customerId', 'Customer ID')}: <span className="font-mono tabular-nums font-semibold text-slate-600">{ticket.customerId}</span></p>
                 </div>
               </div>
 

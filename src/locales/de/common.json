@@ -630,6 +630,10 @@
       "analyzing": "Analysiere...",
       "fullAnalysis": "Vollständige Analyse",
       "toggleSummary": "Zusammenfassung umschalten",
+      "title": "AI Orchestrator Deep-Dive Summary",
+      "keyTakeaways": "Key Takeaways",
+      "diagnosticRootCause": "Diagnostic Root Cause",
+      "actionPlan": "Aktionsplan",
       "defaultRootCause": "Konfigurationsparameter stimmen nicht mit dem Kunden-Datenbankprofil oder Stripe-Status überein.",
       "p1Immediate": "P1 — SOFORT BEHANDELN",
       "p2High": "P2 — HOHE PRIORITÄT"

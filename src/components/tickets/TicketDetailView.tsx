@@ -232,18 +232,19 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                             <ChevronLeft className="w-4 h-4" />
                           </button>
                           <div className="min-w-0 flex-1">
-                            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 min-w-0 break-words">
+                            <h2 className="text-lg font-bold text-slate-900 tracking-tight leading-snug dark:text-slate-50 min-w-0 break-words">
                               {safeString(selectedTicket.subject)}
                             </h2>
                             <div className="flex items-center gap-2 mt-1 min-w-0 flex-wrap">
-                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 shrink-0 capitalize">
+                              <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 shrink-0 capitalize">
                                 {t(`tickets.status.${(selectedTicket.status || 'open').toLowerCase()}`, selectedTicket.status || 'Offen')}
                               </span>
-                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 shrink-0 capitalize">
+                              <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 shrink-0 capitalize">
                                 {t(`tickets.priority.${(selectedTicket.priority || 'medium').toLowerCase()}`, selectedTicket.priority || 'Mittel')}
                               </span>
-                              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider min-w-0">
-                                {safeString(selectedTicket.company, 'Enterprise Corp')} &bull; {safeString(selectedTicket.customerName, 'PremtonXhafa')} &bull; {ticketRef}
+                              <span className="text-[11px] font-medium tracking-normal text-slate-500 min-w-0">
+                                {safeString(selectedTicket.company, 'Enterprise Corp')} &bull; {safeString(selectedTicket.customerName, 'PremtonXhafa')} &bull;{' '}
+                                <span className="font-mono tabular-nums text-slate-600 font-semibold">{ticketRef}</span>
                               </span>
                               <DynamicSentimentGlyph sentiment={selectedTicket.sentiment} />
                             </div>
@@ -363,10 +364,10 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                           <button
                             key={tab.id}
                             className={cn(
-                              "h-full px-4 text-xs font-extrabold border-b-2 transition-all shrink-0 hover:text-slate-800 flex items-center gap-2 relative",
+                              "h-full px-4 text-xs border-b-2 transition-all shrink-0 flex items-center gap-2 relative",
                               activeDetailTab === tab.id 
-                                ? "border-blue-600 text-blue-600" 
-                                : "border-transparent text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"
+                                ? "border-blue-600 text-blue-600 font-semibold" 
+                                : "border-transparent text-slate-500 font-medium hover:text-slate-800 dark:text-slate-500 dark:hover:text-slate-300"
                             )}
                             onClick={() => {
                               setActiveDetailTab(tab.id);
