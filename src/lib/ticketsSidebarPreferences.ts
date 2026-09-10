@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Ticket } from '../types';
 import { hasAssignee, isTicketAssignedToUser } from './ticketAssignee';
 
@@ -147,14 +147,18 @@ function loadPreferences(userId: string): TicketsSidebarPreferences {
 
 function savePreferences(userId: string, prefs: TicketsSidebarPreferences) {
   const favoriteViewIds = sanitizeFavoriteViewIds(prefs.favoriteViewIds);
-  writeStandaloneFavorites(favoriteViewIds);
-  localStorage.setItem(
-    storageKey(userId),
-    JSON.stringify({
-      ...prefs,
-      favoriteViewIds,
-    }),
-  );
+  try {
+    writeStandaloneFavorites(favoriteViewIds);
+    localStorage.setItem(
+      storageKey(userId),
+      JSON.stringify({
+        ...prefs,
+        favoriteViewIds,
+      }),
+    );
+  } catch {
+    // Persistence can fail in private mode; in-memory state still updates.
+  }
 }
 
 export function customViewId(view: CustomTicketView) {
@@ -209,18 +213,23 @@ export function useTicketsSidebarPreferences(userId: string | undefined) {
     [uid],
   );
 
+  const prefsRef = useRef(prefs);
+  prefsRef.current = prefs;
+
   const toggleFavorite = useCallback(
     (viewId: string) => {
       const id = normalizeFavoriteId(viewId);
       if (!id) return;
+      const current = prefsRef.current;
+      const favoriteViewIds = current.favoriteViewIds.includes(id)
+        ? current.favoriteViewIds.filter((existing) => existing !== id)
+        : [...current.favoriteViewIds, id];
       persist({
-        ...prefs,
-        favoriteViewIds: prefs.favoriteViewIds.includes(id)
-          ? prefs.favoriteViewIds.filter((existing) => existing !== id)
-          : [...prefs.favoriteViewIds, id],
+        ...current,
+        favoriteViewIds,
       });
     },
-    [prefs, persist],
+    [persist],
   );
 
   const reorderFavorites = useCallback(

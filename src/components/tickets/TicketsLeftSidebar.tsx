@@ -41,33 +41,33 @@ function FavoriteStar({
   onToggle: () => void;
 }) {
   return (
-    <span
-      role="button"
-      tabIndex={0}
+    <button
+      type="button"
+      data-favorite-star=""
       aria-label={label}
       aria-pressed={isFavorite}
+      onMouseDown={(e) => {
+        e.stopPropagation();
+      }}
+      onPointerDown={(e) => {
+        e.stopPropagation();
+      }}
       onClick={(e) => {
         e.preventDefault();
         e.stopPropagation();
         onToggle();
       }}
-      onPointerDown={(e) => e.stopPropagation()}
-      onKeyDown={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          e.stopPropagation();
-          onToggle();
-        }
-      }}
       className={cn(
-        'shrink-0 rounded p-0.5 transition-opacity',
+        'relative z-10 flex h-6 w-6 shrink-0 items-center justify-center rounded-md pointer-events-auto',
         isFavorite
           ? 'text-amber-500 opacity-100'
           : 'text-slate-400 opacity-0 group-hover:opacity-100 focus-visible:opacity-100',
       )}
     >
-      <Star className={cn('h-3.5 w-3.5', isFavorite && 'fill-amber-400 text-amber-500')} />
-    </span>
+      <Star
+        className={cn('h-4 w-4 pointer-events-none', isFavorite && 'fill-amber-400 text-amber-500')}
+      />
+    </button>
   );
 }
 
@@ -115,40 +115,8 @@ function SidebarNavButton({
   const rowTone = roseActive
     ? 'bg-rose-50 text-rose-700 font-semibold'
     : isActive
-      ? 'bg-blue-50 text-blue-700'
+      ? 'bg-blue-50 text-blue-700 font-semibold'
       : 'text-slate-700 hover:bg-slate-100';
-
-  const iconAndLabel = (
-    <span className={cn('flex items-center gap-2 min-w-0', effectiveCollapsed && 'justify-center')}>
-      <item.icon
-        className={cn(
-          'w-4 h-4 shrink-0',
-          helpChip ? 'text-rose-500' : isActive ? 'text-blue-600' : 'text-slate-500',
-        )}
-      />
-      {!effectiveCollapsed && <span className="truncate text-left">{label}</span>}
-    </span>
-  );
-
-  const countChip = (
-    <>
-      {helpChip && (
-        <span className="px-1.5 py-0.5 text-[10px] font-bold rounded bg-rose-100 text-rose-700 border border-rose-200">
-          HILFE
-        </span>
-      )}
-      {count > 0 && (
-        <span
-          className={cn(
-            'text-[11px] font-semibold min-w-4 text-center',
-            helpChip ? 'text-rose-600' : cn('px-1.5 py-0.5 rounded-full', countBadgeClass(isActive, badgeTone)),
-          )}
-        >
-          {count}
-        </span>
-      )}
-    </>
-  );
 
   if (effectiveCollapsed) {
     return (
@@ -157,13 +125,18 @@ function SidebarNavButton({
         onClick={onSelect}
         title={label}
         className={cn(
-          'relative w-full flex items-center justify-center px-0 h-10 w-10 mx-auto text-xs font-medium rounded-lg transition-colors min-w-0',
+          'relative mx-auto flex h-8 w-8 items-center justify-center rounded-md text-xs font-medium transition-colors',
           rowTone,
         )}
       >
-        {iconAndLabel}
+        <item.icon
+          className={cn(
+            'h-4 w-4 shrink-0',
+            helpChip ? 'text-rose-500' : isActive ? 'text-blue-600' : 'text-slate-500',
+          )}
+        />
         {count > 0 && (
-          <div className="absolute -top-1 -right-1 h-4 w-4 rounded-full bg-blue-600 text-white text-[8px] font-bold flex items-center justify-center">
+          <div className="absolute -top-1 -right-1 flex h-4 w-4 items-center justify-center rounded-full bg-blue-600 text-[8px] font-bold text-white">
             {count}
           </div>
         )}
@@ -172,20 +145,42 @@ function SidebarNavButton({
   }
 
   return (
-    <div className={cn('group w-full flex items-center min-w-0 rounded-lg transition-colors', rowTone)}>
+    <div className={cn('group flex h-8 w-full min-w-0 items-center rounded-md pr-0.5 transition-colors', rowTone)}>
       <button
         type="button"
         onClick={onSelect}
         title={label}
-        className="flex-1 flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-medium min-w-0 bg-transparent"
+        className="flex h-8 min-w-0 flex-1 items-center gap-2 px-2.5 py-1.5 text-xs font-medium leading-none bg-transparent"
       >
-        {iconAndLabel}
-        <span className="flex items-center gap-1.5 shrink-0">{countChip}</span>
+        <item.icon
+          className={cn(
+            'h-4 w-4 shrink-0',
+            helpChip ? 'text-rose-500' : isActive ? 'text-blue-600' : 'text-slate-500',
+          )}
+        />
+        <span className="min-w-0 flex-1 truncate text-left">{label}</span>
+        {helpChip && (
+          <span className="rounded bg-rose-100 px-1 py-0 text-[10px] font-bold leading-4 text-rose-700 border border-rose-200">
+            HILFE
+          </span>
+        )}
+        {count > 0 && (
+          <span
+            className={cn(
+              'min-w-4 text-center text-[11px] font-semibold leading-4',
+              helpChip ? 'text-rose-600' : cn('rounded-full px-1.5', countBadgeClass(isActive, badgeTone)),
+            )}
+          >
+            {count}
+          </span>
+        )}
       </button>
-      {onToggleFavorite && favoriteAriaLabel && (
-        <div className="pr-2 shrink-0">
-          <FavoriteStar isFavorite={isFavorite} label={favoriteAriaLabel} onToggle={onToggleFavorite} />
-        </div>
+      {onToggleFavorite && (
+        <FavoriteStar
+          isFavorite={isFavorite}
+          label={favoriteAriaLabel || 'Favorit umschalten'}
+          onToggle={onToggleFavorite}
+        />
       )}
     </div>
   );
@@ -214,29 +209,41 @@ function ViewMenuItem({
   if (!item.id || Icon == null) return null;
   return (
     <DropdownMenuItem
+      nativeButton={false}
       className={cn(
-        'group flex items-center justify-between gap-2 px-2.5 py-1.5 text-xs rounded-lg cursor-pointer',
+        'group flex h-8 items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-xs font-medium leading-none cursor-pointer',
         tone === 'rose' ? 'text-rose-600 focus:bg-rose-50' : 'text-slate-700',
       )}
-      onClick={onSelect}
+      onClick={(event) => {
+        if ((event.target as HTMLElement).closest('[data-favorite-star]')) {
+          event.preventDefault();
+          event.stopPropagation();
+          return;
+        }
+        onSelect();
+      }}
     >
-      <span className="flex items-center gap-2 min-w-0">
-        <Icon className={cn('w-3.5 h-3.5 shrink-0', tone === 'rose' ? 'text-rose-500' : 'text-slate-400')} />
+      <span className="flex min-w-0 items-center gap-2">
+        <Icon className={cn('h-4 w-4 shrink-0 pointer-events-none', tone === 'rose' ? 'text-rose-500' : 'text-slate-400')} />
         <span className="truncate">{label}</span>
       </span>
-      <span className="flex items-center gap-1.5 shrink-0">
+      <span className="flex shrink-0 items-center gap-1">
         {count > 0 && (
           <span
             className={cn(
-              'text-[11px] font-semibold tabular-nums',
+              'text-[11px] font-semibold tabular-nums leading-none',
               tone === 'rose' ? 'text-rose-600' : 'text-slate-500',
             )}
           >
             {count}
           </span>
         )}
-        {onToggleFavorite && favoriteAriaLabel && (
-          <FavoriteStar isFavorite={isFavorite} label={favoriteAriaLabel} onToggle={onToggleFavorite} />
+        {onToggleFavorite && (
+          <FavoriteStar
+            isFavorite={isFavorite}
+            label={favoriteAriaLabel || 'Favorit umschalten'}
+            onToggle={onToggleFavorite}
+          />
         )}
       </span>
     </DropdownMenuItem>
@@ -245,7 +252,7 @@ function ViewMenuItem({
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return (
-    <div className="px-3 pt-3 pb-1 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
+    <div className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
       {children}
     </div>
   );
@@ -431,15 +438,15 @@ export function TicketsLeftSidebar({
                   type="button"
                   title={t('tickets.items.waiting_queues', 'Wartend')}
                   className={cn(
-                    'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors min-w-0',
-                    waitingActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100',
-                    effectiveCollapsed && 'justify-center px-0 h-10 w-10 mx-auto',
+                    'flex h-8 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-xs font-medium leading-none rounded-md transition-colors',
+                    waitingActive ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-700 hover:bg-slate-100',
+                    effectiveCollapsed && 'justify-center px-0 h-8 w-8 mx-auto',
                   )}
                 />
               }
             >
               <span className="flex items-center gap-2 min-w-0">
-                <Hourglass className={cn('w-3.5 h-3.5 shrink-0', waitingActive ? 'text-blue-600' : 'text-slate-500')} />
+                <Hourglass className={cn('h-4 w-4 shrink-0', waitingActive ? 'text-blue-600' : 'text-slate-500')} />
                 {!effectiveCollapsed && (
                   <span className="truncate text-left">{t('tickets.items.waiting_queues', 'Wartend')}</span>
                 )}
@@ -476,15 +483,15 @@ export function TicketsLeftSidebar({
                   type="button"
                   title={t('tickets.items.archive', 'Gelöst / Geschlossen')}
                   className={cn(
-                    'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors min-w-0',
-                    archiveActive ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-100',
-                    effectiveCollapsed && 'justify-center px-0 h-10 w-10 mx-auto',
+                    'flex h-8 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-xs font-medium leading-none rounded-md transition-colors',
+                    archiveActive ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-700 hover:bg-slate-100',
+                    effectiveCollapsed && 'justify-center px-0 h-8 w-8 mx-auto',
                   )}
                 />
               }
             >
               <span className="flex items-center gap-2 min-w-0">
-                <Archive className={cn('w-3.5 h-3.5 shrink-0', archiveActive ? 'text-blue-600' : 'text-slate-500')} />
+                <Archive className={cn('h-4 w-4 shrink-0', archiveActive ? 'text-blue-600' : 'text-slate-500')} />
                 {!effectiveCollapsed && (
                   <span className="truncate text-left">{t('tickets.items.archive', 'Gelöst / Geschlossen')}</span>
                 )}
@@ -516,22 +523,22 @@ export function TicketsLeftSidebar({
         </div>
 
         {overflowItems.length > 0 && (
-          <div className="mt-2">
+          <div className="mt-1">
             <DropdownMenu>
               <DropdownMenuTrigger
                 render={
                   <button
                     type="button"
                     className={cn(
-                      'w-full flex items-center justify-between gap-2 px-3 py-1.5 text-xs font-medium rounded-lg transition-colors text-slate-700 hover:bg-slate-100 min-w-0',
-                      overflowItems.some((item) => item.id === activeView) && 'bg-blue-50 text-blue-700',
-                      effectiveCollapsed && 'justify-center px-0 h-10 w-10 mx-auto',
+                      'flex h-8 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-xs font-medium leading-none rounded-md transition-colors text-slate-700 hover:bg-slate-100',
+                      overflowItems.some((item) => item.id === activeView) && 'bg-blue-50 text-blue-700 font-semibold',
+                      effectiveCollapsed && 'justify-center px-0 h-8 w-8 mx-auto',
                     )}
                   />
                 }
               >
                 <span className="flex items-center gap-2 min-w-0">
-                  <MoreHorizontal className="w-3.5 h-3.5 shrink-0 text-slate-500" />
+                  <MoreHorizontal className="h-4 w-4 shrink-0 text-slate-500" />
                   {!effectiveCollapsed && (
                     <span className="truncate">{t('tickets.sidebar.moreViews', 'Mehr')}</span>
                   )}
