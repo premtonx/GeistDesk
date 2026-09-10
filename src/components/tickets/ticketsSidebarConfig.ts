@@ -201,6 +201,16 @@ const COMPACT_INLINE_IDS = new Set<string>([
   ...ARCHIVE_VIEW_IDS,
 ]);
 
+export const COMPACT_MORE_VIEW_IDS = [
+  'watching',
+  'due_today',
+  'status_qs',
+  'status_paused',
+  'spam',
+] as const;
+
 export function getCompactOverflowViews(): SidebarItemConfig[] {
-  return ALL_TICKETS_VIEW_ITEMS.filter((item) => !COMPACT_INLINE_IDS.has(item.id));
+  return ALL_TICKETS_VIEW_ITEMS.filter(
+    (item) => !COMPACT_INLINE_IDS.has(item.id) && !(COMPACT_MORE_VIEW_IDS as readonly string[]).includes(item.id),
+  );
 }

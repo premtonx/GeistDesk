@@ -25,7 +25,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '../ui/dropdown-menu';
 
@@ -117,22 +116,38 @@ function ViewMenuItem({
   label,
   count,
   onSelect,
+  tone = 'default',
 }: {
   item: SidebarItemConfig;
   label: string;
   count: number;
   onSelect: () => void;
+  tone?: 'default' | 'rose';
 }) {
   const Icon = item.icon;
-  if (!item.id || typeof Icon !== 'function') return null;
+  if (!item.id || Icon == null) return null;
   return (
     <DropdownMenuItem
-      className="text-xs font-medium cursor-pointer"
+      className={cn(
+        'flex items-center justify-between px-2.5 py-1.5 text-xs rounded-lg cursor-pointer',
+        tone === 'rose' ? 'text-rose-600 focus:bg-rose-50' : 'text-slate-700',
+      )}
       onClick={onSelect}
     >
-      <Icon className="w-3.5 h-3.5" />
-      <span className="flex-1 truncate">{label}</span>
-      <span className="text-[11px] font-semibold text-slate-500 tabular-nums">{count}</span>
+      <span className="flex items-center gap-2 min-w-0">
+        <Icon className={cn('w-3.5 h-3.5 shrink-0', tone === 'rose' ? 'text-rose-500' : 'text-slate-400')} />
+        <span className="truncate">{label}</span>
+      </span>
+      {count > 0 && (
+        <span
+          className={cn(
+            'text-[11px] font-semibold tabular-nums shrink-0',
+            tone === 'rose' ? 'text-rose-600' : 'text-slate-500',
+          )}
+        >
+          {count}
+        </span>
+      )}
     </DropdownMenuItem>
   );
 }
@@ -393,20 +408,55 @@ export function TicketsLeftSidebar({
                   )}
                 </span>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="start" className="w-60 min-w-60 max-h-80">
-                <div className="px-1.5 py-1 text-xs font-medium text-muted-foreground">
-                  {t('tickets.sidebar.moreViews', 'Mehr')}
+              <DropdownMenuContent align="start" className="w-56 p-1.5 shadow-lg border border-slate-200 bg-white rounded-xl">
+                <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                  {t('tickets.sidebar.moreViewsSection', 'Weitere Ansichten')}
                 </div>
-                <DropdownMenuSeparator />
-                {overflowItems.map((item) => (
-                  <ViewMenuItem
-                    key={item.id}
-                    item={item}
-                    label={resolveLabel(item)}
-                    count={getViewCount(item.id)}
-                    onSelect={() => onViewChange(item.id)}
-                  />
-                ))}
+                {(['watching', 'due_today', 'status_qs', 'status_paused'] as const).map((id) => {
+                  const item = getSidebarViewItem(id);
+                  if (!item) return null;
+                  return (
+                    <ViewMenuItem
+                      key={id}
+                      item={item}
+                      label={
+                        id === 'status_qs'
+                          ? t('tickets.items.status_qs_long', 'In Qualitätssicherung (QS)')
+                          : resolveLabel(item)
+                      }
+                      count={getViewCount(id)}
+                      onSelect={() => onViewChange(id)}
+                    />
+                  );
+                })}
+                <div className="my-1 border-t border-slate-100" />
+                {(() => {
+                  const item = getSidebarViewItem('spam');
+                  if (!item) return null;
+                  return (
+                    <ViewMenuItem
+                      item={item}
+                      label={resolveLabel(item)}
+                      count={getViewCount('spam')}
+                      onSelect={() => onViewChange('spam')}
+                      tone="rose"
+                    />
+                  );
+                })()}
+                {overflowItems.length > 0 && (
+                  <>
+                    <div className="my-1 border-t border-slate-100" />
+                    {overflowItems.map((item) => (
+                      <ViewMenuItem
+                        key={item.id}
+                        item={item}
+                        label={resolveLabel(item)}
+                        count={getViewCount(item.id)}
+                        onSelect={() => onViewChange(item.id)}
+                      />
+                    ))}
+                  </>
+                )}
               </DropdownMenuContent>
             </DropdownMenu>
           </div>
