@@ -66,7 +66,7 @@ export function ConversationTimeline({
         senderType: 'customer',
         createdAt: ticket.createdAt,
         content: translatedTicket?.description || ticket.description,
-        html_content: (ticket as any).html_content,
+        html_content: ticket.html_content,
         channel: 'via Email',
         attachments: undefined,
       }
@@ -203,12 +203,12 @@ export function ConversationTimeline({
                   </div>
 
                   {/* Message body — prefer html_content, sanitize before dangerouslySetInnerHTML */}
-                  <div className="text-[13px] leading-relaxed text-slate-800 dark:text-slate-200 break-words font-sans [&_p]:mb-2 [&_p:last-child]:mb-0 [&_a]:underline">
+                  <div className="font-sans text-sm text-foreground/90 whitespace-pre-wrap leading-relaxed break-words [&_p]:mb-2.5 [&_p:last-child]:mb-0 [&_a]:underline [&_blockquote]:mt-3 [&_blockquote]:border-l-2 [&_blockquote]:border-slate-200 [&_blockquote]:pl-3 [&_blockquote]:text-muted-foreground [.gmail_signature]:mt-3 [.gmail_signature]:text-muted-foreground [&_.gmail_signature]:mt-3 [&_.gmail_signature]:text-muted-foreground [&_pre]:font-sans [&_pre]:text-sm [&_pre]:whitespace-pre-wrap [&_pre]:bg-transparent [&_pre]:p-0 [&_pre]:m-0">
                     {isTranslating && item.id === 'opening-post' ? (
                       <p className="italic text-muted-foreground animate-pulse">Translating message content...</p>
                     ) : (
                       <div
-                        className="select-text cursor-text prose prose-sm max-w-none dark:prose-invert"
+                        className="select-text cursor-text max-w-none"
                         dangerouslySetInnerHTML={{
                           __html: sanitizeTimelineHtml(
                             redactPII(item.html_content || item.content || ''),

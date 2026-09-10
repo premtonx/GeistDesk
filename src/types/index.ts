@@ -184,6 +184,8 @@ export interface Ticket {
   id: string;
   subject: string;
   description: string;
+  /** Sanitized inbound HTML when the ticket was created from email. */
+  html_content?: string;
   status: TicketStatus;
   priority: TicketPriority;
   team: "support" | "engineering" | "legal";
@@ -193,6 +195,8 @@ export interface Ticket {
   customId?: string;
   /** Raw inbound From address (email channel). */
   from_email?: string;
+  /** Mailbox / forwarding alias that received the inbound message. */
+  mailbox?: string;
   /** Alias used by inbound-mail webhook for the requester address. */
   customerEmail?: string;
   contactId: string;

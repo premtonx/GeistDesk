@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { 
   Sparkles, 
   Send, 
@@ -24,9 +24,12 @@ import { Separator } from '../ui/separator';
 import { RichTextEditor } from '../RichTextEditor';
 import { LegalValidationResult } from '../../services/legalService';
 import { Ticket as TicketType } from '../../types';
-import { cn, safeString } from '../../lib/utils';
+import { cn } from '../../lib/utils';
 import { toast } from 'sonner';
 import { useTranslation } from '../../lib/context/I18nContext';
+import { ticketService } from '../../services/ticketService';
+import { getModuleConfig } from '../../lib/module-config';
+import { formatReplyRecipientLabel, resolveComposerFromAddress } from '../../lib/ticket-reply-address';
 
 export interface AiComposerMeta {
   confidenceScore: number | null;
@@ -96,7 +99,47 @@ export function EmailComposer({
   const { t } = useTranslation();
   const [suggestionApplied, setSuggestionApplied] = useState(false);
   const [critiqueOpen, setCritiqueOpen] = useState(false);
+  const [fromAddress, setFromAddress] = useState(() =>
+    resolveComposerFromAddress({
+      ticketMailbox: ticket.mailbox,
+      moduleSupportEmail: getModuleConfig().email?.supportEmail,
+    }),
+  );
   const suggestionText = "Hi there, I have investigated this issue and found similar cases where we resolved... Let me walk you through the troubleshooting.";
+
+  const replyToLabel = useMemo(() => formatReplyRecipientLabel(ticket), [ticket]);
+
+  useEffect(() => {
+    let alive = true;
+    const mailbox = ticket.mailbox;
+    ticketService
+      .getComposerAddresses(ticket.id)
+      .then((addresses) => {
+        if (!alive) return;
+        if (addresses.from) {
+          setFromAddress(addresses.from);
+          return;
+        }
+        setFromAddress(
+          resolveComposerFromAddress({
+            ticketMailbox: mailbox,
+            moduleSupportEmail: getModuleConfig().email?.supportEmail,
+          }),
+        );
+      })
+      .catch(() => {
+        if (!alive) return;
+        setFromAddress(
+          resolveComposerFromAddress({
+            ticketMailbox: mailbox,
+            moduleSupportEmail: getModuleConfig().email?.supportEmail,
+          }),
+        );
+      });
+    return () => {
+      alive = false;
+    };
+  }, [ticket.id, ticket.mailbox]);
 
   const applySuggestion = () => {
     onChange(value ? `${value}<p>${suggestionText}</p>` : `<p>${suggestionText}</p>`);
@@ -127,7 +170,7 @@ export function EmailComposer({
         <div className="flex items-center gap-2">
           <span className="w-12 font-bold text-foreground">{t('tickets.emailComposer.from', 'From:')}</span>
           <span className="font-mono bg-muted/60 px-2 py-0.5 rounded text-foreground border border-border/40">
-            support@geistdesk.support
+            {fromAddress || t('tickets.emailComposer.fromUnset', 'Kein Absender konfiguriert')}
           </span>
           <span className="text-[10px] text-muted-foreground">{t('tickets.emailComposer.guardrails', '(Corporate guardrails enabled)')}</span>
         </div>
@@ -137,7 +180,7 @@ export function EmailComposer({
         <div className="flex items-center gap-2">
           <span className="w-12 font-bold text-foreground">{t('tickets.emailComposer.to', 'To:')}</span>
           <span className="font-mono bg-muted/60 px-2 py-0.5 rounded text-foreground border border-border/40">
-            {safeString(ticket.customerName)} &lt;{safeString(ticket.customerId)}@client.com&gt;
+            {replyToLabel || t('tickets.emailComposer.toUnset', 'Kein Empfänger')}
           </span>
         </div>
 

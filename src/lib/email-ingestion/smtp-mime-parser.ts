@@ -4,6 +4,7 @@
 
 import { simpleParser, type AddressObject, type ParsedMail } from 'mailparser';
 import { extractEmailAddress } from '../global-blacklist.js';
+import { plainTextToEmailHtml } from '../email-plain-html.js';
 import {
   MAX_ATTACHMENT_BYTES,
   MAX_ATTACHMENTS_PER_MESSAGE,
@@ -26,25 +27,24 @@ const LOOP_HEADER_KEYS = [
   'delivered-to',
 ];
 
-function firstAddress(value: AddressObject | AddressObject[] | undefined): string {
-  if (!value) return '';
+function firstMailbox(value: AddressObject | AddressObject[] | undefined): { address: string; name: string } {
+  if (!value) return { address: '', name: '' };
   const list = Array.isArray(value) ? value : [value];
   for (const entry of list) {
     for (const item of entry.value || []) {
       const addr = extractEmailAddress(item.address || item.name || '');
-      if (addr) return addr;
+      if (addr) {
+        const name = String(item.name || '').trim();
+        return { address: addr, name: name && !name.includes('@') ? name : '' };
+      }
     }
   }
-  return '';
+  return { address: '', name: '' };
 }
 
 function htmlFromParsed(parsed: ParsedMail, text: string): string {
   if (typeof parsed.html === 'string' && parsed.html.trim()) return parsed.html;
-  if (!text) return '';
-  return `<pre>${text
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')}</pre>`;
+  return plainTextToEmailHtml(text);
 }
 
 function collectRawHeaders(parsed: ParsedMail): Record<string, string> {
@@ -71,8 +71,9 @@ export async function parseRfc822ToNormalizedEmail(
     return null;
   }
 
+  const fromBox = firstMailbox(parsed.from);
   const sender =
-    firstAddress(parsed.from) ||
+    fromBox.address ||
     extractEmailAddress(envelope.mailFrom || '') ||
     extractEmailAddress(String(parsed.headers?.get('return-path') || ''));
 
@@ -103,12 +104,13 @@ export async function parseRfc822ToNormalizedEmail(
 
   const mailbox =
     extractEmailAddress(envelope.rcptTo[0] || '') ||
-    firstAddress(parsed.to) ||
+    firstMailbox(parsed.to).address ||
     undefined;
 
   return {
     sender,
     from_email: sender,
+    from_name: fromBox.name || undefined,
     subject,
     title: subject,
     html_content,

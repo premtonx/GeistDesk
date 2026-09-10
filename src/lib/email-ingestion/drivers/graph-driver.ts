@@ -4,6 +4,7 @@
 
 import axios from 'axios';
 import { extractEmailAddress } from '../../global-blacklist.js';
+import { plainTextToEmailHtml } from '../../email-plain-html.js';
 import type {
   EmailChannelConfig,
   EmailIngestionDriver,
@@ -101,15 +102,13 @@ export class MicrosoftGraphDriver implements EmailIngestionDriver {
         msg.from?.emailAddress?.address ||
         msg.from?.emailAddress?.name ||
         '';
+      const fromName = String(msg.from?.emailAddress?.name || '').trim();
       const sender = extractEmailAddress(String(fromRaw)) || String(fromRaw);
       const subject = String(msg.subject || '(no subject)');
       const html =
         msg.body?.contentType === 'html'
           ? String(msg.body?.content || '')
-          : `<pre>${String(msg.body?.content || '')
-              .replace(/&/g, '&amp;')
-              .replace(/</g, '&lt;')
-              .replace(/>/g, '&gt;')}</pre>`;
+          : plainTextToEmailHtml(String(msg.body?.content || ''));
 
       const attachments: InboundAttachment[] = [];
       if (msg.hasAttachments && msg.id) {
@@ -141,6 +140,7 @@ export class MicrosoftGraphDriver implements EmailIngestionDriver {
       normalized.push({
         sender,
         from_email: sender,
+        from_name: fromName && !fromName.includes('@') ? fromName : undefined,
         subject,
         title: subject,
         html_content: html,

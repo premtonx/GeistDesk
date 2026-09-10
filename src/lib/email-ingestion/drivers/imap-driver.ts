@@ -5,6 +5,7 @@
 import { createRequire } from 'module';
 import { simpleParser } from 'mailparser';
 import { extractEmailAddress } from '../../global-blacklist.js';
+import { plainTextToEmailHtml } from '../../email-plain-html.js';
 import type {
   EmailChannelConfig,
   EmailIngestionDriver,
@@ -158,13 +159,11 @@ export class ImapDriver implements EmailIngestionDriver {
           '';
         const sender = extractEmailAddress(String(fromText)) || String(fromText);
         const subject = String(parsed.subject || '(no subject)');
+        const fromName = String(parsed.from?.value?.[0]?.name || '').trim();
         const html =
           typeof parsed.html === 'string' && parsed.html
             ? parsed.html
-            : `<pre>${String(parsed.text || '')
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')}</pre>`;
+            : plainTextToEmailHtml(String(parsed.text || ''));
 
         const attachments: InboundAttachment[] = [];
         for (const att of parsed.attachments || []) {
@@ -180,6 +179,7 @@ export class ImapDriver implements EmailIngestionDriver {
         normalized.push({
           sender,
           from_email: sender,
+          from_name: fromName && !fromName.includes('@') ? fromName : undefined,
           subject,
           title: subject,
           html_content: html,

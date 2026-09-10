@@ -21,6 +21,7 @@ export interface InboundAttachment {
 export interface NormalizedInboundEmail {
   sender: string;
   from_email: string;
+  from_name?: string;
   subject: string;
   title: string;
   html_content: string;

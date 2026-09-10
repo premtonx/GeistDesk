@@ -11,6 +11,7 @@ import {
 } from '../src/lib/email-ingestion/inbound-smtp-domains.ts';
 import { isOwnSupportAddressForChannel } from '../src/lib/email-ingestion/loop-guard.ts';
 import { composeHelpForwardingAddress } from '../src/lib/email-forwarding-address.ts';
+import { formatReplyRecipientLabel, resolveComposerFromAddress } from '../src/lib/ticket-reply-address.ts';
 
 function fail(message: string): never {
   console.error(`FAIL: ${message}`);
@@ -135,6 +136,49 @@ async function main() {
   if (parsed.subject !== 'Printer jam') fail(`subject ${parsed.subject}`);
   if (!parsed.text_content?.includes('printer')) fail('body missing');
   if (parsed.source !== 'smtp') fail(`source ${parsed.source}`);
+  if (/<pre[\s>]/i.test(parsed.html_content || '')) fail('plaintext inbound HTML must not use <pre>');
+  if (!/<p>/i.test(parsed.html_content || '')) fail('plaintext inbound HTML should use paragraphs');
+  if (parsed.from_name !== 'Alice') fail(`from_name ${parsed.from_name}`);
+
+  const toLabel = formatReplyRecipientLabel({
+    customerName: 'Premton Xhafa',
+    customerEmail: 'premtonx@gmail.com',
+    customerId: 'premtonx@gmail.com',
+  });
+  if (toLabel.includes('@client.com')) fail(`recipient must not append @client.com: ${toLabel}`);
+  if (toLabel !== 'Premton Xhafa <premtonx@gmail.com>') fail(`recipient label ${toLabel}`);
+
+  const fromAlias = resolveComposerFromAddress({
+    ticketMailbox: 'help-premtonx@inbound.geistai.eu',
+    channels: [
+      {
+        enabled: true,
+        forwardingAddress: 'help-premtonx@inbound.geistai.eu',
+        email: 'premtonx@gmail.com',
+      },
+    ],
+    mailFromAddress: 'support@geistdesk.support',
+  });
+  if (fromAlias !== 'help-premtonx@inbound.geistai.eu') {
+    fail(`composer From should use channel forwardingAddress, got ${fromAlias}`);
+  }
+
+  const fromEnv = resolveComposerFromAddress({
+    moduleSupportEmail: 'support@geistdesk.support',
+    mailFromAddress: 'noreply@inbound.geistai.eu',
+  });
+  if (fromEnv !== 'noreply@inbound.geistai.eu') {
+    fail(`composer From should fall back to MAIL_FROM_ADDRESS, got ${fromEnv}`);
+  }
+
+  const doubled = formatReplyRecipientLabel({
+    customerName: 'premtonx',
+    customerId: 'premtonx@gmail.com',
+  });
+  if (doubled.includes('@client.com')) fail(`customerId must not get @client.com: ${doubled}`);
+  if (!doubled.includes('premtonx@gmail.com') || doubled.includes('gmail.com@')) {
+    fail(`expected clean gmail address, got ${doubled}`);
+  }
 
   let accepted: { mailFrom: string; rcptTo: string[] } | null = null;
   const server = await startInboundSmtpServer({

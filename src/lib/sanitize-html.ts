@@ -1,4 +1,5 @@
 import DOMPurify from 'dompurify';
+import { unwrapLegacyPreHtml } from './email-plain-html';
 
 const LINKIFY_ALLOWED_TAGS = ['a', 'br', 'p', 'strong', 'em', 'ul', 'ol', 'li', 'code', 'pre', 'h1', 'h2', 'h3', 'blockquote', 'div', 'span', 'br'];
 
@@ -109,6 +110,7 @@ export function sanitizeTimelineHtml(raw: string): string {
 
   // Normalize non-breaking spaces to regular spaces for readable thread copy.
   content = content.replace(/&nbsp;/gi, ' ').replace(/\u00a0/g, ' ');
+  content = unwrapLegacyPreHtml(content);
 
   if (looksLikeHtml(content)) {
     return DOMPurify.sanitize(content, {

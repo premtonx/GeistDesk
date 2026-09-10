@@ -305,6 +305,29 @@ export const ticketService = {
   },
 
   /**
+   * Von:/An: labels for the ticket reply composer.
+   * Resolves the channel forwarding alias (not a hardcoded support@ address).
+   */
+  getComposerAddresses: async (
+    ticketId: string,
+  ): Promise<{ from: string; to: string }> => {
+    const res = await fetch(
+      `/api/tickets/${encodeURIComponent(ticketId)}/composer-addresses`,
+      { credentials: 'include' },
+    );
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(
+        (data as { error?: string })?.error || `Composer addresses failed (${res.status})`,
+      );
+    }
+    return {
+      from: String((data as { from?: string }).from || ''),
+      to: String((data as { to?: string }).to || ''),
+    };
+  },
+
+  /**
    * Database-first agent reply via POST /api/tickets/:id/replies.
    * Always persists; returns delivered=false when outbound mail is unavailable.
    */

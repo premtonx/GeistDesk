@@ -3,6 +3,7 @@
  */
 
 import { extractEmailAddress } from '../../global-blacklist.js';
+import { plainTextToEmailHtml } from '../../email-plain-html.js';
 import type { InboundAttachment, NormalizedInboundEmail } from '../types.js';
 
 interface UploadedFileLike {
@@ -11,6 +12,17 @@ interface UploadedFileLike {
   mimetype?: string;
   size?: number;
   buffer?: Buffer;
+}
+
+function displayNameFromAddressHeader(raw: string): string {
+  const text = String(raw || '').trim();
+  if (!text) return '';
+  const quoted = text.match(/^"([^"]+)"\s*</);
+  if (quoted?.[1] && !quoted[1].includes('@')) return quoted[1].trim();
+  const plain = text.match(/^([^<]+)</);
+  const name = (plain?.[1] || '').trim();
+  if (name && !name.includes('@')) return name;
+  return '';
 }
 
 function firstString(...values: unknown[]): string {
@@ -79,13 +91,7 @@ export function parseInboundWebhookPayload(params: {
   );
   const subject = customSubject || '(no subject)';
   const html_content =
-    customHtml ||
-    (customText
-      ? `<pre>${customText
-          .replace(/&/g, '&amp;')
-          .replace(/</g, '&lt;')
-          .replace(/>/g, '&gt;')}</pre>`
-      : '');
+    customHtml || (customText ? plainTextToEmailHtml(customText) : '');
 
   if (!sender || (!html_content && !customText)) {
     return null;
@@ -168,9 +174,14 @@ export function parseInboundWebhookPayload(params: {
     }
   }
 
+  const fromName =
+    firstString(body.from_name, body.fromName, displayNameFromAddressHeader(customSender)) ||
+    displayNameFromAddressHeader(firstString(body.from, body.From));
+
   return {
     sender,
     from_email: sender,
+    from_name: fromName && !fromName.includes('@') ? fromName : undefined,
     subject,
     title: subject,
     html_content,

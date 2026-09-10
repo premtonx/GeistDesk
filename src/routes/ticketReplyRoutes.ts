@@ -4,10 +4,40 @@ import { authenticate } from '../middleware/authMiddleware.js';
 import { addDocDirect, getDocDirect, updateDocDirect } from '../lib/postgres-backend.js';
 import { routeParam } from '../lib/route-params.js';
 import { trySendTicketReplyEmail } from '../lib/outbound-mail.js';
-import { findChannelForOutbound } from '../lib/email-ingestion/channel-store.js';
+import { findChannelForOutbound, listEmailChannels } from '../lib/email-ingestion/channel-store.js';
+import { formatReplyRecipientLabel, resolveComposerFromAddress } from '../lib/ticket-reply-address.js';
 import { safeLog } from '../lib/safe-log.js';
 
 const router = Router();
+
+/**
+ * GET /api/tickets/:id/composer-addresses
+ * Von:/An: for the reply composer. Uses the ticket mailbox's channel
+ * forwardingAddress (or support email), then MAIL_FROM_ADDRESS.
+ */
+router.get('/:id/composer-addresses', authenticate, async (req: Request, res: Response): Promise<any> => {
+  const ticketId = routeParam(req.params.id);
+  try {
+    const ticket = await getDocDirect('tickets', ticketId);
+    if (!ticket) {
+      return res.status(404).json({ error: 'Ticket not found.' });
+    }
+
+    const channels = await listEmailChannels();
+    const from = resolveComposerFromAddress({
+      ticketMailbox: ticket.mailbox || ticket.forwardingAddress || null,
+      channels,
+      moduleSupportEmail: ticket.supportEmail || ticket.channelEmail || null,
+      mailFromAddress: process.env.MAIL_FROM_ADDRESS || process.env.SMTP_FROM || null,
+    });
+    const to = formatReplyRecipientLabel(ticket);
+
+    return res.status(200).json({ from, to });
+  } catch (e: any) {
+    safeLog('error', '[ticket-replies] failed to resolve composer addresses', e?.message || e);
+    return res.status(500).json({ error: 'Failed to resolve composer addresses.' });
+  }
+});
 
 const replySchema = z.object({
   content: z.string().min(1).max(100_000),

@@ -22,6 +22,8 @@ const BROWSER_SAFE_LIB_MODULES = new Set([
   'src/lib/firebase',
   'src/lib/firebase-custom-client',
   'src/lib/sanitize-html',
+  'src/lib/email-plain-html',
+  'src/lib/ticket-reply-address',
   'src/lib/safe-log',
   'src/lib/text-diff',
   'src/lib/account-health',
