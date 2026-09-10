@@ -28,6 +28,7 @@ import { RelatedTicketsTabContent } from '../ticket-details/RelatedTicketsTabCon
 import { TasksTabContent } from '../ticket-details/TasksTabContent';
 import { SwarmOutageBanner } from '../tickets/SwarmOutageBanner';
 import { TicketDetailsSpamAction } from '../pages/TicketDetailsPage';
+import { DynamicSentimentGlyph } from '../ticket-details/DynamicSentimentGlyph';
 import { useTranslation } from '../../lib/context/I18nContext';
 import type { Ticket as TicketType, Message, Contact, Company, TicketChecklistItem } from '../../types';
 import type { CustomField } from '../../services/schemaService';
@@ -211,21 +212,31 @@ export function TicketDetailView(props: TicketDetailViewProps) {
   return (
     <>
                     <div className="flex-1 flex flex-col min-h-0 min-w-0">
-                      {/* 1. Header — stacked so the title never shares a row with action buttons */}
+                      {/* 1. Header — title + actions on one row; metadata underneath */}
                     <div className="flex flex-col gap-2 w-full min-w-0 px-4 md:px-6 pt-4 md:pt-5 pb-3 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shrink-0">
                       <SwarmOutageBanner ticketId={selectedTicket.id} />
 
-                      {/* Row 1: back link + actions */}
-                      <div className="flex w-full min-w-0 items-start justify-between gap-3">
-                        <button
-                          type="button"
-                          onClick={closeFullTicketView}
-                          className="flex items-center gap-1 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 font-extrabold text-xs cursor-pointer transition-colors select-none group shrink-0 pt-1.5"
-                        >
-                          <ChevronLeft className="w-3.5 h-3.5 text-slate-450 group-hover:text-slate-650 transition-colors" />
-                          {t('tickets.detail.backToList', 'Back to tickets')}
-                        </button>
-                        <div className="flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2">
+                      <div className="flex w-full min-w-0 items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <button
+                            type="button"
+                            onClick={closeFullTicketView}
+                            className="flex items-center gap-1 h-8 px-2 rounded-lg text-slate-500 hover:text-slate-800 hover:bg-slate-50 dark:text-slate-400 dark:hover:text-slate-200 dark:hover:bg-slate-800 font-extrabold text-xs cursor-pointer transition-colors select-none group shrink-0"
+                          >
+                            <ChevronLeft className="w-3.5 h-3.5 text-slate-450 group-hover:text-slate-650 transition-colors" />
+                            {t('tickets.detail.backToList', 'Back to tickets')}
+                          </button>
+                          <h2 className="min-w-0 flex-1 text-xl font-bold text-slate-900 dark:text-slate-50 truncate">
+                            {safeString(selectedTicket.subject)}
+                          </h2>
+                          <span className="bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 px-2.5 py-0.5 rounded-md text-[11px] font-extrabold select-none shrink-0 capitalize">
+                            {t(`tickets.status.${(selectedTicket.status || 'open').toLowerCase()}`, selectedTicket.status || 'Offen')}
+                          </span>
+                          <span className="bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 px-2.5 py-0.5 rounded-md text-[11px] font-extrabold select-none shrink-0 capitalize">
+                            {t(`tickets.priority.${(selectedTicket.priority || 'medium').toLowerCase()}`, selectedTicket.priority || 'Mittel')}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
                           <TicketDetailsSpamAction
                             ticket={selectedTicket}
                             contactEmail={ticketContact?.email}
@@ -247,7 +258,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                               onClick={onOpenMerge}
                               className={cn(
                                 actionBtnClass,
-                                'hidden lg:inline-flex border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 dark:border-indigo-800 dark:bg-indigo-950/40 dark:text-indigo-300 dark:hover:bg-indigo-950/60',
+                                'hidden lg:inline-flex',
                               )}
                             >
                               <GitMerge className="w-3.5 h-3.5" />
@@ -349,22 +360,11 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                         </div>
                       </div>
 
-                      {/* Row 2: title + status/priority — never competing with action buttons */}
-                      <div className="flex w-full min-w-0 flex-wrap items-center gap-x-2 gap-y-1.5">
-                        <h2 className="min-w-0 max-w-full text-xl font-extrabold tracking-tight text-slate-950 dark:text-slate-50 break-words line-clamp-2">
-                          {safeString(selectedTicket.subject)}
-                        </h2>
-                        <span className="bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-300 px-3 py-1 rounded-md text-[11px] font-extrabold select-none shrink-0 capitalize">
-                          {t(`tickets.status.${(selectedTicket.status || 'open').toLowerCase()}`, selectedTicket.status || 'Offen')}
+                      <div className="flex items-center gap-1.5 text-[11px] text-slate-400 font-bold tracking-wide uppercase select-none min-w-0">
+                        <span className="truncate">
+                          {safeString(selectedTicket.company, 'Enterprise Corp')} &bull; {safeString(selectedTicket.customerName, 'PremtonXhafa')}
                         </span>
-                        <span className="bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-350 px-3 py-1 rounded-md text-[11px] font-extrabold select-none shrink-0 capitalize">
-                          {t(`tickets.priority.${(selectedTicket.priority || 'medium').toLowerCase()}`, selectedTicket.priority || 'Mittel')}
-                        </span>
-                      </div>
-
-                      {/* Row 3: customer metadata */}
-                      <div className="text-[11px] text-slate-400 font-bold tracking-wide uppercase select-none min-w-0 break-words">
-                        {safeString(selectedTicket.company, 'Enterprise Corp')} &bull; {safeString(selectedTicket.customerName, 'PremtonXhafa')}
+                        <DynamicSentimentGlyph sentiment={selectedTicket.sentiment} />
                       </div>
                     </div>
     

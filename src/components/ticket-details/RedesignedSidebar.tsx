@@ -16,13 +16,9 @@ import {
   Layers, 
   Scale, 
   Languages, 
-  Angry, 
-  Meh, 
-  Smile,
   ShieldAlert,
   HelpCircle,
   PlusCircle,
-  FolderOpen,
   MapPin,
   FileCheck2,
   Trash2,
@@ -49,6 +45,7 @@ import { getInitials, safeString } from '../../lib/utils';
 import { TICKET_DISPATCH_AGENTS } from '../../lib/ticketDispatchAgents';
 import { useAuth } from '../../lib/hooks';
 import { AccountHealthSmiley, accountHealthAriaLabel } from './AccountHealthSmiley';
+import { DynamicSentimentGlyph } from './DynamicSentimentGlyph';
 import { SELECTABLE_TICKET_STATUSES, isReadonlyTerminalStatus, isSelectableTicketStatus } from '../../lib/ticket-status';
 
 const UNASSIGNED_SENTINELS = new Set(['', 'unassigned', 'nicht-zugewiesen', 'nicht zugewiesen']);
@@ -261,11 +258,6 @@ export function RedesignedSidebar({
   }, [ticket.id, ticket.accountHealth, accountHealthStatus, onUpdateTicketField]);
 
   const statusLabel = (st: string) => t(`tickets.statusLabels.${st}`, st);
-  const sentimentLabel = (sentiment?: string) => {
-    if (sentiment === 'angry') return t('tickets.context.sentimentAngry', 'Angry');
-    if (sentiment === 'positive') return t('tickets.context.sentimentPositive', 'Positive');
-    return t('tickets.context.sentimentNeutral', 'Neutral');
-  };
   // Collapsing Section States
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({
     copilot: false,
@@ -282,15 +274,6 @@ export function RedesignedSidebar({
   const toggleSection = (section: string) => {
     setCollapsed(prev => ({ ...prev, [section]: !prev[section] }));
   };
-
-  // Determine sentiment smiley
-  const sentimentIcon = useMemo(() => {
-    switch (ticket.sentiment || 'neutral') {
-      case 'angry': return <Angry className="w-4 h-4 text-red-500 shrink-0" />;
-      case 'positive': return <Smile className="w-4 h-4 text-emerald-500 shrink-0" />;
-      default: return <Meh className="w-4 h-4 text-amber-500 shrink-0" />;
-    }
-  }, [ticket.sentiment]);
 
   return (
     <aside className="w-[325px] border-l border-border bg-muted/20 flex flex-col shrink-0 h-full overflow-hidden select-none">
@@ -420,6 +403,20 @@ export function RedesignedSidebar({
               onChange={(status) => onUpdateTicketField({ status: status as any })}
               readOnlyHint={t('tickets.merge.readonlyMerged', 'Nur lesbar')}
             />
+          </div>
+
+          <div className="space-y-1 pt-1">
+            <label className="text-[9.5px] font-black text-muted-foreground uppercase">{t('tickets.sidebar.ticketCategory', 'Ticket category')}</label>
+            <select
+              className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
+              value={ticket.type || 'incident'}
+              onChange={(e) => onUpdateTicketField({ type: e.target.value as any })}
+            >
+              <option value="incident">{t('tickets.typeLabels.incident', 'Incident')}</option>
+              <option value="question">{t('tickets.typeLabels.question', 'Question')}</option>
+              <option value="problem">{t('tickets.typeLabels.problem', 'Problem')}</option>
+              <option value="feature_request">{t('tickets.typeLabels.feature_request', 'Feature request')}</option>
+            </select>
           </div>
 
           <div className="space-y-1 pt-2">
@@ -578,59 +575,6 @@ export function RedesignedSidebar({
           )}
         </div>
 
-        {/* SECTION 2: CORE PROPERTIES */}
-        <div className="space-y-2 pt-4">
-          <button 
-            className="w-full flex items-center justify-between text-[10.5px] font-black uppercase tracking-widest text-[#5F6368] hover:text-foreground transition-colors py-1.5 focus:outline-none"
-            onClick={() => toggleSection('properties')}
-          >
-            <span className="flex items-center gap-1.5">
-              <FolderOpen className="w-4 h-4 text-blue-500" />
-              <span>{t('tickets.sidebar.standardProperties', 'Standard properties')}</span>
-            </span>
-            {collapsed.properties ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-          </button>
-
-          {!collapsed.properties && (
-            <div className="grid grid-cols-1 gap-3 pt-1">
-              {/* Type selector */}
-              <div className="space-y-1">
-                <label className="text-[9.5px] font-black text-muted-foreground uppercase">{t('tickets.sidebar.ticketCategory', 'Ticket category')}</label>
-                <select 
-                  className="w-full bg-card border border-border rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-primary"
-                  value={ticket.type || 'incident'}
-                  onChange={(e) => onUpdateTicketField({ type: e.target.value as any })}
-                >
-                  <option value="incident">{t('tickets.typeLabels.incident', 'Incident')}</option>
-                  <option value="question">{t('tickets.typeLabels.question', 'Question')}</option>
-                  <option value="problem">{t('tickets.typeLabels.problem', 'Problem')}</option>
-                  <option value="feature_request">{t('tickets.typeLabels.feature_request', 'Feature request')}</option>
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[9.5px] font-black text-muted-foreground uppercase">{t('tickets.sidebar.lifecycleStatus', 'Lifecycle status')}</label>
-                <DispatchStatusSelect
-                  status={ticket.status}
-                  statusLabel={statusLabel}
-                  onChange={(status) => onUpdateTicketField({ status: status as any })}
-                  readOnlyHint={t('tickets.merge.readonlyMerged', 'Nur lesbar')}
-                />
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[9.5px] font-black text-muted-foreground uppercase">{t('tickets.sidebar.dynamicSentiment', 'Dynamic sentiment')}</label>
-                <div className="p-2.5 bg-card border border-border rounded-xl flex items-center justify-between">
-                  <span className="capitalize text-xs font-bold text-foreground">
-                    {sentimentLabel(ticket.sentiment)}
-                  </span>
-                  {sentimentIcon}
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* SECTION 3: REQUESTER INFORMATION */}
         <div className="space-y-2 pt-4">
           <button 
@@ -652,8 +596,11 @@ export function RedesignedSidebar({
                     {getInitials(contact?.name || ticket.customerName)}
                   </AvatarFallback>
                 </Avatar>
-                <div>
-                  <h6 className="text-xs font-black text-foreground">{safeString(contact?.name ?? ticket.customerName)}</h6>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <h6 className="text-xs font-black text-foreground truncate">{safeString(contact?.name ?? ticket.customerName)}</h6>
+                    <DynamicSentimentGlyph sentiment={ticket.sentiment} />
+                  </div>
                   <p className="text-[9px] text-muted-foreground truncate max-w-[180px]">{safeString(contact?.email) || `${ticket.customerId}@mail.com`}</p>
                 </div>
               </div>
