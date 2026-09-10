@@ -59,7 +59,7 @@ export function AiSummaryCard({
   const { t } = useTranslation();
   
   // CRITICAL UI STATE requested:
-  const [isAiSummaryExpanded, setIsAiSummaryExpanded] = useState(true);
+  const [isAiSummaryExpanded, setIsAiSummaryExpanded] = useState(false);
   const [ragReferences, setRagReferences] = useState<RagReference[] | null>(null);
 
   // Proposed solution text: prefer the AI draft, fall back to the summary.
@@ -168,7 +168,18 @@ export function AiSummaryCard({
     }
   };
 
-  // Determine SLA remaining string representing image behavior
+  useEffect(() => {
+    setIsAiSummaryExpanded(false);
+  }, [ticket.id]);
+
+  const rootCauseLine = useMemo(() => {
+    const raw = (ticket.aiRootCause || '').trim();
+    if (raw) return raw.replace(/^["']|["']$/g, '');
+    return t(
+      'tickets.aiSummaryCard.defaultRootCauseShort',
+      'Conditional Access blocked OIDC callback',
+    );
+  }, [ticket.aiRootCause, t]);
   const slaRemainingTime = useMemo(() => {
     const now = new Date();
     const createdTime = ticket.createdAt?.toDate ? ticket.createdAt.toDate() : new Date(ticket.createdAt);
@@ -184,12 +195,12 @@ export function AiSummaryCard({
   }, [ticket]);  return (
     <Card className="bg-gradient-to-r from-blue-50/40 via-violet-50/40 to-indigo-50/30 dark:from-slate-900/60 dark:to-slate-850/40 border-indigo-100 dark:border-indigo-950 rounded-2xl shadow-xs overflow-hidden mb-4 gap-0 py-0">
       {/* Header section of the AI Assistant summary block */}
-      <div className="px-4 py-3 border-b border-indigo-100/40 dark:border-indigo-950/50 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className={cn('px-4 py-3 flex items-center justify-between gap-3', isAiSummaryExpanded && 'border-b border-indigo-100/40 dark:border-indigo-950/50')}>
+        <div className="flex items-center gap-3 min-w-0">
           <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white shrink-0 shadow-sm shadow-blue-500/20">
             <Sparkles className="w-4.5 h-4.5" />
           </div>
-          <div>
+          <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h3 className="text-xs font-bold text-slate-900 tracking-tight dark:text-indigo-200 font-sans">
                 {t('tickets.aiSummaryCard.title', 'AI Orchestrator Deep-Dive Summary')}
@@ -198,18 +209,30 @@ export function AiSummaryCard({
                 {t('tickets.aiSummaryCard.verifiedFacts', 'Verified Facts')}
               </Badge>
             </div>
-            <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
-              {t('tickets.aiSummaryCard.subtitle', 'Automated diagnostic and suggested resolution metrics')}
-            </p>
+            {isAiSummaryExpanded ? (
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
+                {t('tickets.aiSummaryCard.subtitle', 'Automated diagnostic and suggested resolution metrics')}
+              </p>
+            ) : (
+              <p className="text-[11px] text-slate-600 dark:text-slate-300 font-medium truncate mt-0.5">
+                {t('tickets.aiSummaryCard.likelyCause', 'Likely cause')}: {rootCauseLine}
+              </p>
+            )}
           </div>
         </div>
 
-        <div className="flex items-center gap-1 font-bold">
+        <div className="flex items-center gap-1 font-bold shrink-0">
           <Button 
             variant="outline" 
             size="sm" 
             className="h-7 text-[10px] font-bold bg-white text-slate-850 border-slate-200 hover:bg-slate-50 dark:bg-slate-800 dark:text-slate-200 rounded-lg shadow-none"
-            onClick={onRefreshSummary}
+            onClick={() => {
+              if (!isAiSummaryExpanded) {
+                setIsAiSummaryExpanded(true);
+                return;
+              }
+              onRefreshSummary();
+            }}
             disabled={isAiDrafting || !isAiReady}
           >
             {isAiDrafting ? t('tickets.aiSummaryCard.analyzing', 'Analyzing...') : t('tickets.aiSummaryCard.fullAnalysis', 'Full Analysis')}

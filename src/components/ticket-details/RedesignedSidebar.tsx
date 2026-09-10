@@ -276,8 +276,8 @@ export function RedesignedSidebar({
   };
 
   return (
-    <aside className="w-full min-w-0 bg-white flex flex-col shrink-0 h-full min-h-0 overflow-hidden select-none">
-      <div className="sticky top-0 z-20 p-4 border-b border-slate-200 flex items-center justify-between bg-white shrink-0 h-[56px]">
+    <aside className="relative isolate w-full min-w-0 bg-white flex flex-col shrink-0 h-full min-h-0 overflow-hidden select-none">
+      <div className="relative z-20 shrink-0 px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-white">
         <span className="text-xs font-bold text-slate-900 tracking-tight flex items-center gap-2">
           <Settings2 className="w-4 h-4 text-muted-foreground" />
           <span>{t('tickets.sidebar.title', 'Dispatch desk properties')}</span>
@@ -299,10 +299,10 @@ export function RedesignedSidebar({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 p-4 space-y-4">
+      <div className="relative z-0 flex-1 min-h-0 overflow-y-auto overflow-x-hidden overscroll-contain pt-4 px-4 pb-4 space-y-3">
         
         {/* PROMINENT AGENT DISPATCH BOARD (ALWAYS VISIBLE AT THE TOP) */}
-        <div id="prominent-agent-dispatch-board" className="bg-card border border-border shadow-xs rounded-xl p-3.5 space-y-3 mb-2">
+        <div id="prominent-agent-dispatch-board" className="bg-white border border-slate-200 shadow-xs rounded-xl p-3.5 space-y-3 overflow-hidden">
           <div className="flex items-center justify-between">
             <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
               <UserCheck className="w-3.5 h-3.5 text-primary" />
@@ -440,7 +440,7 @@ export function RedesignedSidebar({
         </div>
 
         {ticketKind === 'support' && (
-          <div className="bg-card border border-border shadow-xs rounded-xl p-3.5 space-y-3 mb-2">
+          <div className="bg-white border border-slate-200 shadow-xs rounded-xl p-3.5 space-y-3 overflow-hidden">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1.5">
                 <Clock className="w-3.5 h-3.5 text-primary" />
@@ -494,10 +494,10 @@ export function RedesignedSidebar({
                 {t('tickets.fields.accountHealth', 'Account Health')}
               </label>
               <div
-                className="p-3 bg-muted/30 border border-border rounded-xl flex items-center justify-between gap-3"
+                className="p-3 bg-muted/30 border border-border rounded-xl flex items-center justify-between gap-3 overflow-hidden min-w-0"
                 title={accountHealthAriaLabel(accountHealthStatus)}
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="text-[10px] text-muted-foreground font-semibold">
                     {healthFromAi
                       ? t('tickets.sidebar.aiAccountHealth', 'AI assessment')
@@ -511,9 +511,9 @@ export function RedesignedSidebar({
                         : t('tickets.sidebar.healthAtRisk', 'At risk')}
                   </p>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 overflow-hidden">
                   {healthFromAi && <Sparkles className="w-3.5 h-3.5 text-indigo-500" aria-hidden />}
-                  <AccountHealthSmiley status={accountHealthStatus} size="lg" />
+                  <AccountHealthSmiley status={accountHealthStatus} size="md" className="shrink-0" />
                 </div>
               </div>
             </div>
@@ -521,9 +521,9 @@ export function RedesignedSidebar({
         )}
 
         {/* SECTION 1: AI COPILOT WORKSPACE (Highlight section!) */}
-        <div className="space-y-2">
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
           <button 
-            className="w-full flex items-center justify-between text-[10.5px] font-black uppercase tracking-widest text-[#5F6368] hover:text-foreground transition-colors py-1.5 focus:outline-none"
+            className="w-full flex items-center justify-between text-[10.5px] font-black uppercase tracking-widest text-[#5F6368] hover:text-foreground transition-colors px-3.5 py-2.5 focus:outline-none"
             onClick={() => toggleSection('copilot')}
           >
             <span className="flex items-center gap-1.5 text-indigo-700">
@@ -534,7 +534,7 @@ export function RedesignedSidebar({
           </button>
 
           {!collapsed.copilot && (
-            <div className="space-y-3 bg-gradient-to-br from-indigo-50/40 to-sky-50/20 dark:from-indigo-950/10 dark:to-sky-950/5 border border-indigo-150 rounded-2xl p-3.5 shadow-sm space-y-4">
+            <div className="space-y-3 bg-gradient-to-br from-indigo-50/40 to-sky-50/20 dark:from-indigo-950/10 dark:to-sky-950/5 border-t border-indigo-100 rounded-b-xl p-3.5 shadow-none">
               <div className="space-y-1">
                 <h5 className="text-[10px] font-black text-indigo-900 uppercase">{t('tickets.sidebar.suggestedAiStrategy', 'Suggested AI strategy')}</h5>
                 <p className="text-[11px] text-indigo-950 font-semibold italic border-l-2 border-indigo-300 pl-2 leading-tight">
@@ -576,9 +576,9 @@ export function RedesignedSidebar({
         </div>
 
         {/* SECTION 3: REQUESTER INFORMATION */}
-        <div className="space-y-2 pt-4">
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
           <button 
-            className="w-full flex items-center justify-between text-[10.5px] font-black uppercase tracking-widest text-[#5F6368] hover:text-foreground transition-colors py-1.5 focus:outline-none"
+            className="w-full flex items-center justify-between text-[10.5px] font-black uppercase tracking-widest text-[#5F6368] hover:text-foreground transition-colors px-3.5 py-2.5 focus:outline-none"
             onClick={() => toggleSection('customer')}
           >
             <span className="flex items-center gap-1.5">
@@ -589,7 +589,7 @@ export function RedesignedSidebar({
           </button>
 
           {!collapsed.customer && (
-            <div className="p-3.5 bg-card border rounded-xl space-y-3 pt-1">
+            <div className="p-3.5 bg-white border-t border-slate-100 space-y-3 overflow-hidden">
               <div className="flex items-center gap-2">
                 <Avatar className="h-7 w-7 border">
                   <AvatarFallback className="bg-teal-50 text-teal-700 text-[10px] font-bold">
@@ -609,9 +609,9 @@ export function RedesignedSidebar({
         </div>
 
         {/* SECTION 4: TAG MANAGEMENT */}
-        <div className="space-y-2 pt-4">
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
           <button 
-            className="w-full flex items-center justify-between text-[10.5px] font-black uppercase tracking-widest text-[#5F6368] hover:text-foreground transition-colors py-1.5 focus:outline-none"
+            className="w-full flex items-center justify-between text-[10.5px] font-black uppercase tracking-widest text-[#5F6368] hover:text-foreground transition-colors px-3.5 py-2.5 focus:outline-none"
             onClick={() => toggleSection('tags')}
           >
             <span className="flex items-center gap-1.5">
@@ -622,7 +622,7 @@ export function RedesignedSidebar({
           </button>
 
           {!collapsed.tags && (
-            <div className="space-y-3.5 pt-1">
+            <div className="space-y-3.5 px-3.5 pb-3.5 overflow-hidden">
               <div className="flex flex-wrap gap-1">
                 {ticket.tags && ticket.tags.length > 0 ? (
                   ticket.tags.map(tag => {
@@ -695,9 +695,9 @@ export function RedesignedSidebar({
         </div>
 
         {/* SECTION 5: RELATED NEURAL LINKS */}
-        <div className="space-y-2 pt-4">
+        <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
           <button 
-            className="w-full flex items-center justify-between text-[10.5px] font-black uppercase tracking-widest text-[#5F6368] hover:text-foreground transition-colors py-1.5 focus:outline-none"
+            className="w-full flex items-center justify-between text-[10.5px] font-black uppercase tracking-widest text-[#5F6368] hover:text-foreground transition-colors px-3.5 py-2.5 focus:outline-none"
             onClick={() => toggleSection('related')}
           >
             <span className="flex items-center gap-1.5">
@@ -708,7 +708,7 @@ export function RedesignedSidebar({
           </button>
 
           {!collapsed.related && (
-            <div className="space-y-2 pt-1 font-bold">
+            <div className="space-y-2 px-3.5 pb-3.5 font-bold overflow-hidden">
               {ticket.linkedTicketIds && ticket.linkedTicketIds.length > 0 ? (
                 ticket.linkedTicketIds.map(id => (
                   <div 

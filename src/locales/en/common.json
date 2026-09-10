@@ -634,6 +634,8 @@
       "keyTakeaways": "Key Takeaways",
       "diagnosticRootCause": "Diagnostic Root Cause",
       "actionPlan": "Action Plan",
+      "likelyCause": "Likely cause",
+      "defaultRootCauseShort": "Conditional Access blocked OIDC callback",
       "defaultRootCause": "Configuration parameter mismatch inside client database profile or stripe status.",
       "p1Immediate": "P1 — HANDLE IMMEDIATELY",
       "p2High": "P2 — HIGH PRIORITY"
