@@ -216,7 +216,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
   return (
     <>
                     <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden bg-slate-50">
-                      {/* 1. Compact header: icon back + title/badges + overflow actions */}
+                      {/* 1. Compact header: title + actions; badges live in the subtitle row */}
                     <div className="flex flex-col gap-1.5 w-full min-w-0 px-4 md:px-6 pt-3 md:pt-4 pb-3 border-b border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900 shrink-0">
                       <SwarmOutageBanner ticketId={selectedTicket.id} />
 
@@ -232,19 +232,17 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                             <ChevronLeft className="w-4 h-4" />
                           </button>
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 min-w-0">
-                              <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 min-w-0 break-words">
-                                {safeString(selectedTicket.subject)}
-                              </h2>
-                              <span className="bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 px-2 py-0.5 rounded text-[11px] font-medium select-none shrink-0 capitalize">
+                            <h2 className="text-xl font-bold text-slate-900 dark:text-slate-50 min-w-0 break-words">
+                              {safeString(selectedTicket.subject)}
+                            </h2>
+                            <div className="flex items-center gap-2 mt-1 min-w-0 flex-wrap">
+                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 shrink-0 capitalize">
                                 {t(`tickets.status.${(selectedTicket.status || 'open').toLowerCase()}`, selectedTicket.status || 'Offen')}
                               </span>
-                              <span className="bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 px-2 py-0.5 rounded text-[11px] font-medium select-none shrink-0 capitalize">
+                              <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 shrink-0 capitalize">
                                 {t(`tickets.priority.${(selectedTicket.priority || 'medium').toLowerCase()}`, selectedTicket.priority || 'Mittel')}
                               </span>
-                            </div>
-                            <div className="flex items-center gap-2 min-w-0 mt-0.5 text-xs font-semibold text-slate-400 tracking-wide uppercase">
-                              <span className="min-w-0">
+                              <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider min-w-0">
                                 {safeString(selectedTicket.company, 'Enterprise Corp')} &bull; {safeString(selectedTicket.customerName, 'PremtonXhafa')} &bull; {ticketRef}
                               </span>
                               <DynamicSentimentGlyph sentiment={selectedTicket.sentiment} />
