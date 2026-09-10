@@ -33,7 +33,7 @@ export function DynamicSentimentGlyph({
       <TooltipTrigger
         type="button"
         className={cn(
-          'inline-flex items-center gap-1 shrink-0 border text-[11px] px-1.5 py-0.5 rounded font-medium normal-case tracking-normal',
+          'inline-flex items-center gap-1 shrink-0 h-5 border text-[11px] leading-none px-1.5 rounded-full font-medium normal-case tracking-normal',
           tone,
           className,
         )}

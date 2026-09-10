@@ -53,7 +53,7 @@ export function TicketDetailContextPane(props: TicketDetailContextPaneProps) {
   // instead of crashing on nested property access.
   if (!selectedTicket) {
     return (
-      <aside className="hidden lg:flex w-80 xl:w-96 shrink-0 border-l border-slate-200 bg-white flex-col h-full overflow-y-auto">
+      <aside className="hidden lg:flex w-80 xl:w-96 shrink-0 border-l border-slate-200 bg-white flex-col h-full overflow-hidden">
         <div className="flex flex-1 items-center justify-center p-6 text-center">
           <p className="text-xs text-muted-foreground font-medium">
             Kein Ticket ausgewählt. Bitte ein Ticket aus der Liste öffnen.
@@ -67,7 +67,7 @@ export function TicketDetailContextPane(props: TicketDetailContextPaneProps) {
 
   return (
                 <aside className={cn(
-                  "w-80 xl:w-96 shrink-0 border-l border-slate-200 bg-white flex flex-col h-full overflow-y-auto z-30",
+                  "w-80 xl:w-96 shrink-0 border-l border-slate-200 bg-white flex flex-col h-full overflow-hidden z-30",
                   isMobilePropertiesOpen
                     ? "flex absolute inset-y-0 right-0 h-full w-[min(22rem,92vw)] shadow-2xl lg:relative lg:shadow-none lg:w-80 xl:w-96"
                     : "hidden lg:flex"

@@ -21,13 +21,15 @@ interface SmartContextPanelProps {
   contact: Contact | null;
   company: Company | null;
   allTickets: TicketType[];
+  className?: string;
 }
 
 export function SmartContextPanel({
   ticket,
   contact,
   company,
-  allTickets
+  allTickets,
+  className,
 }: SmartContextPanelProps) {
   const { t } = useTranslation();
 
@@ -80,7 +82,7 @@ export function SmartContextPanel({
   }, [ticket.sentiment, t]);
 
   return (
-    <div id="smart-context-bento-grid" className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+    <div id="smart-context-bento-grid" className={cn('grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-6', className)}>
       <Card className="bg-gradient-to-br from-card to-muted/20 border-border rounded-xl shadow-sm hover:shadow-md transition-shadow">
         <CardContent className="p-3.5 space-y-2">
           <div className="flex items-center justify-between">

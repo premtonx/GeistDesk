@@ -211,7 +211,10 @@ export function TicketDetailView(props: TicketDetailViewProps) {
   };
 
   const actionBtnClass =
-    'h-8 px-3 rounded-lg border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 text-xs font-medium transition-all inline-flex items-center gap-1.5 shadow-xs';
+    'box-border inline-flex h-8 min-h-8 max-h-8 items-center justify-center gap-1.5 rounded-lg border px-3 text-xs font-medium leading-none shrink-0 transition-colors';
+  const actionBtnPrimary = `${actionBtnClass} border-indigo-600 bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-70 shadow-none`;
+  const actionBtnOutline = `${actionBtnClass} border-slate-200 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800 shadow-none`;
+  const actionBtnIcon = `${actionBtnOutline} w-8 px-0`;
 
   return (
     <>
@@ -235,14 +238,14 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                             <h2 className="text-lg font-bold text-slate-900 tracking-tight leading-snug dark:text-slate-50 min-w-0 break-words">
                               {safeString(selectedTicket.subject)}
                             </h2>
-                            <div className="flex items-center gap-2 mt-1 min-w-0 flex-wrap">
-                              <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 shrink-0 capitalize">
+                            <div className="flex items-center gap-1.5 mt-1 min-w-0 flex-wrap leading-none">
+                              <span className="inline-flex h-5 items-center px-2 text-[11px] font-medium rounded-full bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800 shrink-0 capitalize">
                                 {t(`tickets.status.${(selectedTicket.status || 'open').toLowerCase()}`, selectedTicket.status || 'Offen')}
                               </span>
-                              <span className="px-2 py-0.5 text-[11px] font-medium rounded-full bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 shrink-0 capitalize">
+                              <span className="inline-flex h-5 items-center px-2 text-[11px] font-medium rounded-full bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800 shrink-0 capitalize">
                                 {t(`tickets.priority.${(selectedTicket.priority || 'medium').toLowerCase()}`, selectedTicket.priority || 'Mittel')}
                               </span>
-                              <span className="text-[11px] font-medium tracking-normal text-slate-500 min-w-0">
+                              <span className="inline-flex h-5 items-center text-[11px] font-medium tracking-normal text-slate-500 min-w-0">
                                 {safeString(selectedTicket.company, 'Enterprise Corp')} &bull; {safeString(selectedTicket.customerName, 'PremtonXhafa')} &bull;{' '}
                                 <span className="font-mono tabular-nums text-slate-600 font-semibold">{ticketRef}</span>
                               </span>
@@ -250,55 +253,54 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <Button
+                        <div className="flex items-center gap-2 flex-shrink-0 h-8">
+                          <button
+                            type="button"
                             onClick={runAiSync}
                             disabled={isAiDrafting}
-                            className="bg-indigo-600 hover:bg-indigo-700 disabled:opacity-70 text-white text-xs h-8 px-3 rounded-lg inline-flex items-center gap-1.5 transition-all shadow-sm select-none"
+                            className={actionBtnPrimary}
                           >
                             {isAiDrafting ? (
-                              <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                              <RefreshCw className="w-3.5 h-3.5 shrink-0 animate-spin" />
                             ) : (
-                              <Sparkles className="w-3.5 h-3.5" />
+                              <Sparkles className="w-3.5 h-3.5 shrink-0" />
                             )}
                             <span>{t('tickets.detail.aiSync', 'KI-Sync')}</span>
-                          </Button>
+                          </button>
                           {onConvertToKB && (
-                            <Button
-                              variant="outline"
-                              size="sm"
+                            <button
+                              type="button"
                               onClick={onConvertToKB}
                               disabled={isKbDrafting}
-                              className={actionBtnClass}
+                              className={actionBtnOutline}
                             >
                               {isKbDrafting
-                                ? <RefreshCw className="w-3.5 h-3.5 text-indigo-500 animate-spin" />
-                                : <BookOpen className="w-3.5 h-3.5 text-indigo-500" />}
+                                ? <RefreshCw className="w-3.5 h-3.5 shrink-0 text-indigo-500 animate-spin" />
+                                : <BookOpen className="w-3.5 h-3.5 shrink-0 text-indigo-500" />}
                               <span>{isKbDrafting
                                 ? t('tickets.detail.extracting', 'Extracting...')
                                 : t('tickets.detail.convertToKbShort', 'In KB')}</span>
-                            </Button>
+                            </button>
                           )}
-                          <Button
-                            variant="outline"
-                            size="sm"
+                          <button
+                            type="button"
                             onClick={openInternalNoteComposer}
-                            className={actionBtnClass}
+                            className={actionBtnOutline}
                           >
-                            <StickyNote className="w-3.5 h-3.5" />
+                            <StickyNote className="w-3.5 h-3.5 shrink-0" />
                             <span>{t('tickets.noteBtnShort', 'Notiz')}</span>
-                          </Button>
+                          </button>
                           <DropdownMenu>
                             <DropdownMenuTrigger
                               render={
                                 <button
                                   type="button"
-                                  className={actionBtnClass}
+                                  className={actionBtnIcon}
                                   aria-label={t('tickets.detail.more', 'More')}
                                 />
                               }
                             >
-                              <MoreHorizontal className="w-4 h-4" />
+                              <MoreHorizontal className="w-3.5 h-3.5" />
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end" className="w-52 rounded-xl p-1">
                               {canMerge && (
@@ -654,6 +656,7 @@ export function TicketDetailView(props: TicketDetailViewProps) {
                               contact={ticketContact}
                               company={ticketCompany}
                               allTickets={allTickets}
+                              className={cn('lg:hidden', isMobilePropertiesOpen && 'hidden')}
                             />
                           </div>
                         )}

@@ -276,8 +276,8 @@ export function RedesignedSidebar({
   };
 
   return (
-    <aside className="w-full min-w-0 bg-white flex flex-col shrink-0 h-full overflow-hidden select-none">
-      <div className="p-4 border-b flex items-center justify-between bg-card shrink-0 h-[56px]">
+    <aside className="w-full min-w-0 bg-white flex flex-col shrink-0 h-full min-h-0 overflow-hidden select-none">
+      <div className="sticky top-0 z-20 p-4 border-b border-slate-200 flex items-center justify-between bg-white shrink-0 h-[56px]">
         <span className="text-xs font-bold text-slate-900 tracking-tight flex items-center gap-2">
           <Settings2 className="w-4 h-4 text-muted-foreground" />
           <span>{t('tickets.sidebar.title', 'Dispatch desk properties')}</span>
@@ -299,7 +299,7 @@ export function RedesignedSidebar({
         </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-0 divide-y divide-border/60 p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 p-4 space-y-4">
         
         {/* PROMINENT AGENT DISPATCH BOARD (ALWAYS VISIBLE AT THE TOP) */}
         <div id="prominent-agent-dispatch-board" className="bg-card border border-border shadow-xs rounded-xl p-3.5 space-y-3 mb-2">

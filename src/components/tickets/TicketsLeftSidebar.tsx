@@ -93,7 +93,7 @@ interface SidebarNavButtonProps {
 
 function countBadgeClass(isActive: boolean, tone: BadgeTone = 'default') {
   const base = 'font-mono tabular-nums text-[11px] font-semibold px-1.5 py-0.5 rounded-full';
-  if (isActive) return cn(base, 'bg-blue-100 text-blue-700');
+  if (isActive) return cn(base, 'bg-white/20 text-white');
   if (tone === 'amber') return cn(base, 'bg-amber-50 text-amber-800');
   if (tone === 'rose') return cn(base, 'bg-rose-50 text-rose-800');
   return cn(base, 'bg-slate-100 text-slate-500');
@@ -114,9 +114,9 @@ function SidebarNavButton({
 }: SidebarNavButtonProps) {
   const roseActive = helpChip && isActive;
   const rowTone = roseActive
-    ? 'bg-rose-50 text-rose-700 font-semibold'
+    ? 'bg-rose-600 text-white font-semibold shadow-sm'
     : isActive
-      ? 'bg-blue-50 text-blue-700 font-semibold'
+      ? 'bg-blue-600 text-white font-semibold shadow-sm'
       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100';
 
   if (effectiveCollapsed) {
@@ -133,7 +133,7 @@ function SidebarNavButton({
         <item.icon
           className={cn(
             'h-4 w-4 shrink-0',
-            helpChip ? 'text-rose-500' : isActive ? 'text-blue-600' : 'text-slate-500',
+            helpChip ? (isActive ? 'text-white' : 'text-rose-500') : isActive ? 'text-white' : 'text-slate-500',
           )}
         />
         {count > 0 && (
@@ -159,12 +159,17 @@ function SidebarNavButton({
         <item.icon
           className={cn(
             'h-4 w-4 shrink-0',
-            helpChip ? 'text-rose-500' : isActive ? 'text-blue-600' : 'text-slate-500',
+            helpChip ? (isActive ? 'text-white' : 'text-rose-500') : isActive ? 'text-white' : 'text-slate-500',
           )}
         />
         <span className="min-w-0 flex-1 truncate text-left">{label}</span>
         {helpChip && (
-          <span className="rounded bg-rose-100 px-1 py-0 text-[10px] font-bold leading-4 text-rose-700 border border-rose-200">
+          <span className={cn(
+            'rounded px-1 py-0 text-[10px] font-bold leading-4 border',
+            isActive
+              ? 'bg-white/20 text-white border-white/30'
+              : 'bg-rose-100 text-rose-700 border-rose-200',
+          )}>
             HILFE
           </span>
         )}
@@ -173,7 +178,10 @@ function SidebarNavButton({
             className={cn(
               'min-w-4 text-center leading-4',
               helpChip
-                ? 'font-mono tabular-nums text-[11px] font-semibold text-rose-600'
+                ? cn(
+                    'font-mono tabular-nums text-[11px] font-semibold',
+                    isActive ? 'text-white' : 'text-rose-600',
+                  )
                 : countBadgeClass(isActive, badgeTone),
             )}
           >
@@ -340,6 +348,8 @@ export function TicketsLeftSidebar({
     ),
   ];
 
+  const moreActive = overflowItems.some((item) => item.id === activeView);
+
   const renderItem = (item: SidebarItemConfig, badgeTone?: BadgeTone, helpChip?: boolean, keyPrefix = '') => (
     <SidebarNavButton
       key={`${keyPrefix}${item.id}`}
@@ -445,14 +455,14 @@ export function TicketsLeftSidebar({
                   title={t('tickets.items.waiting_queues', 'Wartend')}
                   className={cn(
                     'flex h-8 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] font-medium leading-none rounded-md transition-colors',
-                    waitingActive ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
+                    waitingActive ? 'bg-blue-600 text-white font-semibold shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
                     effectiveCollapsed && 'justify-center px-0 h-8 w-8 mx-auto',
                   )}
                 />
               }
             >
               <span className="flex items-center gap-2 min-w-0">
-                <Hourglass className={cn('h-4 w-4 shrink-0', waitingActive ? 'text-blue-600' : 'text-slate-500')} />
+                <Hourglass className={cn('h-4 w-4 shrink-0', waitingActive ? 'text-white' : 'text-slate-500')} />
                 {!effectiveCollapsed && (
                   <span className="truncate text-left">{t('tickets.items.waiting_queues', 'Wartend')}</span>
                 )}
@@ -469,7 +479,7 @@ export function TicketsLeftSidebar({
                       {waitingCount}
                     </span>
                   )}
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  <ChevronDown className={cn('w-3.5 h-3.5', waitingActive ? 'text-white/80' : 'text-slate-400')} />
                 </span>
               )}
             </DropdownMenuTrigger>
@@ -490,14 +500,14 @@ export function TicketsLeftSidebar({
                   title={t('tickets.items.archive', 'Gelöst / Geschlossen')}
                   className={cn(
                     'flex h-8 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] font-medium leading-none rounded-md transition-colors',
-                    archiveActive ? 'bg-blue-50 text-blue-700 font-semibold' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
+                    archiveActive ? 'bg-blue-600 text-white font-semibold shadow-sm' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
                     effectiveCollapsed && 'justify-center px-0 h-8 w-8 mx-auto',
                   )}
                 />
               }
             >
               <span className="flex items-center gap-2 min-w-0">
-                <Archive className={cn('h-4 w-4 shrink-0', archiveActive ? 'text-blue-600' : 'text-slate-500')} />
+                <Archive className={cn('h-4 w-4 shrink-0', archiveActive ? 'text-white' : 'text-slate-500')} />
                 {!effectiveCollapsed && (
                   <span className="truncate text-left">{t('tickets.items.archive', 'Gelöst / Geschlossen')}</span>
                 )}
@@ -514,7 +524,7 @@ export function TicketsLeftSidebar({
                       {archiveCount}
                     </span>
                   )}
-                  <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+                  <ChevronDown className={cn('w-3.5 h-3.5', archiveActive ? 'text-white/80' : 'text-slate-400')} />
                 </span>
               )}
             </DropdownMenuTrigger>
@@ -536,15 +546,17 @@ export function TicketsLeftSidebar({
                   <button
                     type="button"
                     className={cn(
-                      'flex h-8 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] font-medium leading-none rounded-md transition-colors text-slate-600 hover:text-slate-900 hover:bg-slate-100',
-                      overflowItems.some((item) => item.id === activeView) && 'bg-blue-50 text-blue-700 font-semibold',
+                      'flex h-8 w-full min-w-0 items-center justify-between gap-2 px-2.5 py-1.5 text-[13px] font-medium leading-none rounded-md transition-colors',
+                      moreActive
+                        ? 'bg-blue-600 text-white font-semibold shadow-sm'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-100',
                       effectiveCollapsed && 'justify-center px-0 h-8 w-8 mx-auto',
                     )}
                   />
                 }
               >
                 <span className="flex items-center gap-2 min-w-0">
-                  <MoreHorizontal className="h-4 w-4 shrink-0 text-slate-500" />
+                  <MoreHorizontal className={cn('h-4 w-4 shrink-0', moreActive ? 'text-white' : 'text-slate-500')} />
                   {!effectiveCollapsed && (
                     <span className="truncate">{t('tickets.sidebar.moreViews', 'Mehr')}</span>
                   )}

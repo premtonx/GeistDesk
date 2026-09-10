@@ -22,7 +22,6 @@ import { Card, CardContent } from '../ui/card';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Ticket as TicketType, TicketChecklistItem } from '../../types';
-import { motion, AnimatePresence } from 'motion/react';
 import { cn } from '../../lib/utils';
 import { ticketService } from '../../services/ticketService';
 import { normalizeChecklistItems } from '../../lib/ticket-checklist-utils';
@@ -183,7 +182,7 @@ export function AiSummaryCard({
     const mins = Math.floor((diff % (3600 * 1000)) / (60 * 1000));
     return hrs > 0 ? `Breaching in ${hrs}h ${mins}m` : `Breaching in ${mins}m`;
   }, [ticket]);  return (
-    <Card className="bg-gradient-to-r from-blue-50/40 via-violet-50/40 to-indigo-50/30 dark:from-slate-900/60 dark:to-slate-850/40 border-indigo-100 dark:border-indigo-950 rounded-2xl shadow-xs overflow-hidden mb-4 transition-all duration-305">
+    <Card className="bg-gradient-to-r from-blue-50/40 via-violet-50/40 to-indigo-50/30 dark:from-slate-900/60 dark:to-slate-850/40 border-indigo-100 dark:border-indigo-950 rounded-2xl shadow-xs overflow-hidden mb-4 gap-0 py-0">
       {/* Header section of the AI Assistant summary block */}
       <div className="px-4 py-3 border-b border-indigo-100/40 dark:border-indigo-950/50 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -227,15 +226,8 @@ export function AiSummaryCard({
         </div>
       </div>
 
-      <AnimatePresence initial={false}>
-        {isAiSummaryExpanded && (
-          <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            className="overflow-hidden"
-          >
-            <CardContent className="p-4 space-y-4">
+      {isAiSummaryExpanded ? (
+        <CardContent className="p-4 space-y-4">
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-5 items-start">
                 {/* Left Column: Key Findings & Root Cause */}
                 <div className="space-y-4">
@@ -450,10 +442,8 @@ export function AiSummaryCard({
                   </div>
                 )}
               </div>
-            </CardContent>
-          </motion.div>
-        )}
-      </AnimatePresence>
+        </CardContent>
+      ) : null}
     </Card>
   );
 }
