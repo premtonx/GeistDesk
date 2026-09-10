@@ -907,6 +907,12 @@ export interface TicketStats {
   closed: number;
   unassigned: number;
   urgent: number;
+  /** Tickets resolved or closed since local midnight. */
+  resolvedToday: number;
+  /** Percent of today's resolved tickets that beat slaDueAt; null when none had an SLA. */
+  slaMetPct: number | null;
+  /** CSAT percent from satisfactionRating on tickets resolved today; null when none rated. */
+  csatPct: number | null;
 }
 
 /**
@@ -923,11 +929,54 @@ export async function getTicketStats(): Promise<TicketStats> {
       COUNT(*) FILTER (WHERE LOWER(geistdesk_documents.data->>'status') = 'resolved')::int AS resolved,
       COUNT(*) FILTER (WHERE LOWER(geistdesk_documents.data->>'status') = 'closed')::int AS closed,
       COUNT(*) FILTER (WHERE COALESCE(geistdesk_documents.data->>'agentId', '') = '')::int AS unassigned,
-      COUNT(*) FILTER (WHERE LOWER(geistdesk_documents.data->>'priority') = 'urgent')::int AS urgent
+      COUNT(*) FILTER (WHERE LOWER(geistdesk_documents.data->>'priority') = 'urgent')::int AS urgent,
+      COUNT(*) FILTER (
+        WHERE LOWER(geistdesk_documents.data->>'status') IN ('resolved', 'closed')
+          AND COALESCE(
+            NULLIF(geistdesk_documents.data->>'resolvedAt', '')::timestamptz,
+            NULLIF(geistdesk_documents.data->>'closedAt', '')::timestamptz,
+            NULLIF(geistdesk_documents.data->>'updatedAt', '')::timestamptz
+          )::date = CURRENT_DATE
+      )::int AS resolved_today,
+      COUNT(*) FILTER (
+        WHERE LOWER(geistdesk_documents.data->>'status') IN ('resolved', 'closed')
+          AND COALESCE(
+            NULLIF(geistdesk_documents.data->>'resolvedAt', '')::timestamptz,
+            NULLIF(geistdesk_documents.data->>'closedAt', '')::timestamptz,
+            NULLIF(geistdesk_documents.data->>'updatedAt', '')::timestamptz
+          )::date = CURRENT_DATE
+          AND NULLIF(geistdesk_documents.data->>'slaDueAt', '') IS NOT NULL
+      )::int AS sla_today_total,
+      COUNT(*) FILTER (
+        WHERE LOWER(geistdesk_documents.data->>'status') IN ('resolved', 'closed')
+          AND COALESCE(
+            NULLIF(geistdesk_documents.data->>'resolvedAt', '')::timestamptz,
+            NULLIF(geistdesk_documents.data->>'closedAt', '')::timestamptz,
+            NULLIF(geistdesk_documents.data->>'updatedAt', '')::timestamptz
+          )::date = CURRENT_DATE
+          AND NULLIF(geistdesk_documents.data->>'slaDueAt', '') IS NOT NULL
+          AND COALESCE(
+            NULLIF(geistdesk_documents.data->>'resolvedAt', '')::timestamptz,
+            NULLIF(geistdesk_documents.data->>'closedAt', '')::timestamptz,
+            NULLIF(geistdesk_documents.data->>'updatedAt', '')::timestamptz
+          ) <= (geistdesk_documents.data->>'slaDueAt')::timestamptz
+      )::int AS sla_today_met,
+      AVG(NULLIF(geistdesk_documents.data->>'satisfactionRating', '')::numeric) FILTER (
+        WHERE LOWER(geistdesk_documents.data->>'status') IN ('resolved', 'closed')
+          AND COALESCE(
+            NULLIF(geistdesk_documents.data->>'resolvedAt', '')::timestamptz,
+            NULLIF(geistdesk_documents.data->>'closedAt', '')::timestamptz,
+            NULLIF(geistdesk_documents.data->>'updatedAt', '')::timestamptz
+          )::date = CURRENT_DATE
+          AND NULLIF(geistdesk_documents.data->>'satisfactionRating', '') IS NOT NULL
+      ) AS csat_today_avg
     FROM geistdesk_documents
     WHERE collection = 'tickets'
   `);
   const row = res.rows[0] || {};
+  const slaTodayTotal = Number(row.sla_today_total) || 0;
+  const slaTodayMet = Number(row.sla_today_met) || 0;
+  const csatAvg = row.csat_today_avg == null ? null : Number(row.csat_today_avg);
   return {
     total: row.total || 0,
     open: row.open || 0,
@@ -935,7 +984,10 @@ export async function getTicketStats(): Promise<TicketStats> {
     resolved: row.resolved || 0,
     closed: row.closed || 0,
     unassigned: row.unassigned || 0,
-    urgent: row.urgent || 0
+    urgent: row.urgent || 0,
+    resolvedToday: Number(row.resolved_today) || 0,
+    slaMetPct: slaTodayTotal > 0 ? (slaTodayMet / slaTodayTotal) * 100 : null,
+    csatPct: csatAvg != null && Number.isFinite(csatAvg) ? (csatAvg / 5) * 100 : null,
   };
 }
 

@@ -25,6 +25,7 @@ import { Ticket as TicketType, TicketChecklistItem } from '../../types';
 import { cn } from '../../lib/utils';
 import { ticketService } from '../../services/ticketService';
 import { normalizeChecklistItems } from '../../lib/ticket-checklist-utils';
+import { isPlaceholderAiDiagnosis } from '../../lib/ticket-ai-analysis';
 import axios from 'axios';
 
 interface RagReference {
@@ -65,8 +66,12 @@ export function AiSummaryCard({
   // Proposed solution text: prefer the AI draft, fall back to the summary.
   const proposedSolution = useMemo(() => {
     const draft = ticket.aiSuggestedDraft || ticket.aiDraftRaw || '';
-    if (draft.trim()) return draft.trim();
-    return (ticket.aiSummary || aiSummary || '').trim();
+    if (draft.trim() && !isPlaceholderAiDiagnosis(draft)) return draft.trim();
+    const summary = (ticket.aiSummary || aiSummary || '').trim();
+    if (summary && !isPlaceholderAiDiagnosis(summary) && !/unable to generate summary/i.test(summary)) {
+      return summary;
+    }
+    return '';
   }, [ticket.aiSuggestedDraft, ticket.aiDraftRaw, ticket.aiSummary, aiSummary]);
 
   // Fetch top-3 RAG references (resolved tickets + KB articles) for this ticket.
@@ -129,22 +134,37 @@ export function AiSummaryCard({
     }
   };
 
-  // Key Findings maps directly to ticket.aiSummary (or fallback aiSummary helper)
+  const aiUnavailable = t(
+    'tickets.aiSummaryCard.aiUnavailable',
+    'AI is not configured. Check AI settings.',
+  );
+
+  const realRootCause = useMemo(() => {
+    const raw = String(ticket.aiRootCause || '').trim().replace(/^["']|["']$/g, '');
+    return isPlaceholderAiDiagnosis(raw) ? '' : raw;
+  }, [ticket.aiRootCause]);
+
   const findings = useMemo(() => {
-    const rawText = ticket.aiSummary || aiSummary;
-    if (rawText) {
-      return rawText.split('\n')
-        .map(line => line.trim())
-        .filter(line => line.length > 0)
-        .map(line => line.replace(/^[-\s\d.*•]+\s*/, ''));
+    const insights = Array.isArray(ticket.aiInsights)
+      ? ticket.aiInsights
+          .map((line) => String(line || '').trim())
+          .filter((line) => line && !isPlaceholderAiDiagnosis(line))
+      : [];
+    if (insights.length > 0) return insights;
+
+    const rawText = String(ticket.aiSummary || aiSummary || '').trim();
+    if (!rawText || /unable to generate summary/i.test(rawText) || isPlaceholderAiDiagnosis(rawText)) {
+      return [];
     }
-    // Hardcoded high-quality fallback from mockup if both are empty
-    return [
-      t('tickets.aiSummaryCard.findingFallback1', 'Microsoft Entra handshake delay identified.'),
-      t('tickets.aiSummaryCard.findingFallback2', 'Billing records in offline mode fallback verify license pending.'),
-      t('tickets.aiSummaryCard.findingFallback3', 'Operator queue prioritizes validation of communication tokens.'),
-    ];
-  }, [ticket.aiSummary, aiSummary, t]);
+    return rawText
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => line.replace(/^[-\s\d.*•]+\s*/, ''))
+      .filter((line) => !isPlaceholderAiDiagnosis(line));
+  }, [ticket.aiInsights, ticket.aiSummary, aiSummary]);
+
+  const hasRealInference = Boolean(realRootCause || findings.length > 0);
 
   // Action Plan checklists maps directly to ticket.aiChecklist
   const checklist = useMemo(
@@ -172,14 +192,7 @@ export function AiSummaryCard({
     setIsAiSummaryExpanded(false);
   }, [ticket.id]);
 
-  const rootCauseLine = useMemo(() => {
-    const raw = (ticket.aiRootCause || '').trim();
-    if (raw) return raw.replace(/^["']|["']$/g, '');
-    return t(
-      'tickets.aiSummaryCard.defaultRootCauseShort',
-      'Conditional Access blocked OIDC callback',
-    );
-  }, [ticket.aiRootCause, t]);
+  const rootCauseLine = realRootCause || aiUnavailable;
   const sentimentLabel = useMemo(() => {
     const raw = String(ticket.aiSentiment || ticket.sentiment || 'NEUTRAL').toLowerCase();
     if (raw === 'positive') return t('tickets.aiSummaryCard.sentimentPositive', 'POSITIVE');
@@ -217,9 +230,11 @@ export function AiSummaryCard({
               <h3 className="text-xs font-bold text-slate-900 tracking-tight dark:text-indigo-200 font-sans">
                 {t('tickets.aiSummaryCard.title', 'AI Orchestrator Deep-Dive Summary')}
               </h3>
-              <Badge className="bg-[#E6F4EA] hover:bg-[#E6F4EA]/80 text-[#137333] dark:bg-emerald-950/50 dark:text-emerald-400 border-none font-bold text-[9px] tracking-wider px-2 py-0.5 rounded-full shadow-none">
-                {t('tickets.aiSummaryCard.verifiedFacts', 'Verified Facts')}
-              </Badge>
+              {hasRealInference ? (
+                <Badge className="bg-[#E6F4EA] hover:bg-[#E6F4EA]/80 text-[#137333] dark:bg-emerald-950/50 dark:text-emerald-400 border-none font-bold text-[9px] tracking-wider px-2 py-0.5 rounded-full shadow-none">
+                  {t('tickets.aiSummaryCard.verifiedFacts', 'Verified Facts')}
+                </Badge>
+              ) : null}
             </div>
             {isAiSummaryExpanded ? (
               <p className="text-[10px] text-slate-500 dark:text-slate-400 font-medium">
@@ -274,16 +289,22 @@ export function AiSummaryCard({
                       </h4>
                     </div>
                     <div className="grid grid-cols-1 gap-2 pt-1">
-                      {findings.map((finding, idx) => (
-                        <div key={idx} className="flex gap-2 p-2.5 bg-white/70 dark:bg-slate-900/60 rounded-xl border border-indigo-50/10 dark:border-slate-850/65 shadow-[0_1px_2px_rgba(0,0,0,0.02)] items-start">
-                          <span className="font-mono tabular-nums text-xs font-semibold text-blue-600 dark:text-blue-400 min-w-[14px]">
-                            {idx + 1}.
-                          </span>
-                          <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-normal">
-                            {finding}
-                          </p>
-                        </div>
-                      ))}
+                      {findings.length > 0 ? (
+                        findings.map((finding, idx) => (
+                          <div key={idx} className="flex gap-2 p-2.5 bg-white/70 dark:bg-slate-900/60 rounded-xl border border-indigo-50/10 dark:border-slate-850/65 shadow-[0_1px_2px_rgba(0,0,0,0.02)] items-start">
+                            <span className="font-mono tabular-nums text-xs font-semibold text-blue-600 dark:text-blue-400 min-w-[14px]">
+                              {idx + 1}.
+                            </span>
+                            <p className="text-xs text-slate-700 dark:text-slate-300 leading-relaxed font-normal">
+                              {finding}
+                            </p>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-[10px] text-slate-400 italic px-1">
+                          {aiUnavailable}
+                        </p>
+                      )}
                     </div>
                   </div>
 
@@ -295,11 +316,15 @@ export function AiSummaryCard({
                         {t('tickets.aiSummaryCard.diagnosticRootCause', 'Diagnostic Root Cause')}
                       </h4>
                     </div>
-                    <div className="font-mono text-xs text-slate-800 leading-relaxed bg-purple-50/70 border-l-2 border-purple-500 px-3 py-2 rounded-r dark:bg-purple-950/20 dark:text-slate-200">
-                      <p>
-                        &quot;{ticket.aiRootCause || t('tickets.aiSummaryCard.defaultRootCause', 'Configuration parameter mismatch inside client database profile or stripe status.')}&quot;
+                    {realRootCause ? (
+                      <div className="font-mono text-xs text-slate-800 leading-relaxed bg-purple-50/70 border-l-2 border-purple-500 px-3 py-2 rounded-r dark:bg-purple-950/20 dark:text-slate-200">
+                        <p>&quot;{realRootCause}&quot;</p>
+                      </div>
+                    ) : (
+                      <p className="text-[10px] text-slate-400 italic px-1">
+                        {aiUnavailable}
                       </p>
-                    </div>
+                    )}
                   </div>
                 </div>
 

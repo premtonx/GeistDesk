@@ -1,14 +1,26 @@
-import React from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Button } from '../ui/button';
 import { ModuleCreateButton } from '../ui/ModuleCreateButton';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { cn } from '../../lib/utils';
+import axios from 'axios';
 
 interface TicketsEmptyStateProps {
   onViewUnassigned: () => void;
   onOpenAiSuggestions: () => void;
   onCreateTicket: () => void;
   className?: string;
+}
+
+interface TodayOpsStats {
+  resolvedToday: number;
+  slaMetPct: number | null;
+  csatPct: number | null;
+}
+
+function formatPct(value: number | null): string {
+  if (value == null || Number.isNaN(value)) return '—';
+  return `${Math.round(value)}%`;
 }
 
 export function TicketsEmptyState({
@@ -18,12 +30,53 @@ export function TicketsEmptyState({
   className,
 }: TicketsEmptyStateProps) {
   const { t } = useTranslation();
+  const [ops, setOps] = useState<TodayOpsStats>({
+    resolvedToday: 0,
+    slaMetPct: null,
+    csatPct: null,
+  });
 
-  const stats = [
-    { label: t('tickets.emptyState.resolvedToday', 'Resolved Today'), value: '12' },
-    { label: t('tickets.emptyState.slaMet', 'SLA Met'), value: '100%' },
-    { label: t('tickets.emptyState.csatScore', 'CSAT Score'), value: '96%' },
-  ];
+  useEffect(() => {
+    let alive = true;
+    axios
+      .get('/api/stats/tickets', { withCredentials: true })
+      .then((res) => {
+        if (!alive) return;
+        const data = res.data || {};
+        setOps({
+          resolvedToday: Number(data.resolvedToday) || 0,
+          slaMetPct: data.slaMetPct == null ? null : Number(data.slaMetPct),
+          csatPct: data.csatPct == null ? null : Number(data.csatPct),
+        });
+      })
+      .catch(() => {
+        if (!alive) return;
+        setOps({ resolvedToday: 0, slaMetPct: null, csatPct: null });
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  const slaLabel = formatPct(ops.slaMetPct);
+  const csatLabel = formatPct(ops.csatPct);
+
+  const stats = useMemo(
+    () => [
+      { label: t('tickets.emptyState.resolvedToday', 'Resolved Today'), value: String(ops.resolvedToday) },
+      { label: t('tickets.emptyState.slaMet', 'SLA Met'), value: slaLabel },
+      { label: t('tickets.emptyState.csatScore', 'CSAT Score'), value: csatLabel },
+    ],
+    [t, ops.resolvedToday, slaLabel, csatLabel],
+  );
+
+  const statsInline = t('tickets.emptyState.statsInlineLive', '{{resolved}} {{resolvedLabel}} | {{sla}} {{slaLabel}} | {{csat}} {{csatLabel}}')
+    .replace('{{resolved}}', String(ops.resolvedToday))
+    .replace('{{resolvedLabel}}', t('tickets.emptyState.resolvedToday', 'Resolved Today'))
+    .replace('{{sla}}', slaLabel)
+    .replace('{{slaLabel}}', t('tickets.emptyState.slaMet', 'SLA Met'))
+    .replace('{{csat}}', csatLabel)
+    .replace('{{csatLabel}}', t('tickets.emptyState.csatScore', 'CSAT Score'));
 
   return (
     <div
@@ -85,7 +138,7 @@ export function TicketsEmptyState({
             ))}
           </div>
           <p className="text-[10px] text-slate-400 mt-3 hidden lg:block">
-            {t('tickets.emptyState.statsInline', 'Resolved Today: 12 | SLA Met: 100% | CSAT Score: 96%')}
+            {statsInline}
           </p>
         </div>
       </div>

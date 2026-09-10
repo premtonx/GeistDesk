@@ -192,6 +192,21 @@ async function main() {
     fail(`composer From should fall back to MAIL_FROM_ADDRESS, got ${fromEnv}`);
   }
 
+  const { emptyTicketAnalysis, isPlaceholderAiDiagnosis, parseTicketAnalysisOutput, ticketAnalysisPatch } =
+    await import('../src/lib/ticket-ai-analysis.ts');
+  if (!isPlaceholderAiDiagnosis('Conditional Access hat den OIDC-Callback blockiert')) {
+    fail('OIDC mock diagnosis must be treated as placeholder');
+  }
+  if (!isPlaceholderAiDiagnosis('Konfigurationsparameter stimmen nicht mit dem Kunden-Datenbankprofil oder Stripe-Status überein.')) {
+    fail('Stripe mock diagnosis must be treated as placeholder');
+  }
+  const emptyAnalysis = parseTicketAnalysisOutput('');
+  if (emptyAnalysis.aiRootCause || emptyAnalysis.aiInsights.length || emptyAnalysis.aiSummary) {
+    fail('offline AI parse must not inject mock diagnostics');
+  }
+  const emptyPatch = ticketAnalysisPatch(emptyTicketAnalysis());
+  if (emptyPatch.aiRootCause != null) fail('empty analysis must persist aiRootCause as null');
+
   const doubled = formatReplyRecipientLabel({
     customerName: 'premtonx',
     customerId: 'premtonx@gmail.com',

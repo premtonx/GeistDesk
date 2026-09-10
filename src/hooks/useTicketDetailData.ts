@@ -91,6 +91,10 @@ export function useTicketDetailData(options: {
 
         const rawOutput = resolveLifecycleOutput(lifecycleResult);
         const analysis = parseTicketAnalysisOutput(rawOutput, selectedTicket);
+        if (!analysis.aiSummary.trim()) {
+          setAiSummary('Unable to generate summary. Check AI configuration.');
+          return;
+        }
         setAiSummary(analysis.aiSummary);
 
         const patch = ticketAnalysisPatch(analysis);

@@ -10,6 +10,59 @@ export interface TicketAnalysisPayload {
   accountHealth: 'good' | 'bad' | 'at_risk';
 }
 
+/** Demo sentences previously injected when the model was offline. Never show or persist these. */
+const PLACEHOLDER_DIAGNOSIS = [
+  'conditional access blocked oidc callback',
+  'conditional access hat den oidc-callback blockiert',
+  'configuration parameter mismatch inside client database profile or stripe status.',
+  'konfigurationsparameter stimmen nicht mit dem kunden-datenbankprofil oder stripe-status überein.',
+  'microsoft entra oauth identity provider response timed out during handshake.',
+  'microsoft entra handshake delay identified.',
+  'billing records in offline mode fallback verify license pending.',
+  'operator queue prioritizes validation of communication tokens.',
+];
+
+export function isPlaceholderAiDiagnosis(value: unknown): boolean {
+  const text = String(value || '').trim().replace(/^["']|["']$/g, '').toLowerCase();
+  if (!text) return true;
+  if (text.startsWith('summary of the incident regarding:')) return true;
+  if (text.includes('identity providers are awaiting handshake')) return true;
+  return PLACEHOLDER_DIAGNOSIS.includes(text);
+}
+
+function accountHealthFromSentimentLabel(
+  aiSentiment?: string,
+): TicketAnalysisPayload['accountHealth'] {
+  const label = (aiSentiment || '').toLowerCase();
+  if (label === 'angry' || label === 'negative') return 'bad';
+  if (label === 'positive' || label === 'happy') return 'good';
+  return 'at_risk';
+}
+
+export function emptyTicketAnalysis(ticket?: {
+  sentiment?: string;
+}): TicketAnalysisPayload {
+  return {
+    aiSummary: '',
+    aiInsights: [],
+    aiRootCause: '',
+    aiChecklist: [],
+    aiSentiment:
+      ticket?.sentiment === 'angry'
+        ? 'Angry'
+        : ticket?.sentiment === 'positive'
+          ? 'Positive'
+          : 'Neutral',
+    accountHealth: accountHealthFromSentimentLabel(
+      ticket?.sentiment === 'angry'
+        ? 'Angry'
+        : ticket?.sentiment === 'positive'
+          ? 'Positive'
+          : 'Neutral',
+    ),
+  };
+}
+
 export function buildTicketMessagesText(
   messages: Array<{ senderName?: string; senderType?: string; content?: string }>,
 ): string {
@@ -59,11 +112,14 @@ export function parseTicketAnalysisOutput(
       const accountHealth =
         normalizeAccountHealth(typeof parsed.accountHealth === 'string' ? parsed.accountHealth : null) ??
         accountHealthFromSentimentLabel(parsed.aiSentiment);
+      const rootCause = String(parsed.aiRootCause || '').trim();
 
       return {
         aiSummary: parsed.aiSummary,
-        aiInsights: Array.isArray(parsed.aiInsights) ? parsed.aiInsights : [],
-        aiRootCause: parsed.aiRootCause ?? '',
+        aiInsights: Array.isArray(parsed.aiInsights)
+          ? parsed.aiInsights.filter((line) => !isPlaceholderAiDiagnosis(line))
+          : [],
+        aiRootCause: isPlaceholderAiDiagnosis(rootCause) ? '' : rootCause,
         aiChecklist: Array.isArray(parsed.aiChecklist) ? parsed.aiChecklist : [],
         aiSentiment: parsed.aiSentiment ?? 'Neutral',
         accountHealth,
@@ -95,64 +151,15 @@ export function parseTicketAnalysisOutput(
     };
   }
 
-  return buildTicketAnalysisFallback(fallback);
-}
-
-function accountHealthFromSentimentLabel(
-  aiSentiment?: string,
-): TicketAnalysisPayload['accountHealth'] {
-  const label = (aiSentiment || '').toLowerCase();
-  if (label === 'angry' || label === 'negative') return 'bad';
-  if (label === 'positive' || label === 'happy') return 'good';
-  return 'at_risk';
-}
-
-export function buildTicketAnalysisFallback(ticket?: {
-  subject?: string;
-  description?: string;
-  sentiment?: string;
-}): TicketAnalysisPayload {
-  const subject = ticket?.subject ?? 'this ticket';
-  const isAuth =
-    subject.toLowerCase().includes('auth') ||
-    (ticket?.description ?? '').toLowerCase().includes('auth');
-
-  return {
-    aiSummary: `Summary of the incident regarding: ${subject}. The system detected configuration issues and identity providers are awaiting handshake.`,
-    aiInsights: [
-      'Microsoft Entra handshake delay identified.',
-      'Billing records in offline mode fallback verify license pending.',
-      'Operator queue prioritizes validation of communication tokens.',
-    ],
-    aiRootCause: isAuth
-      ? 'Microsoft Entra OAuth identity provider response timed out during handshake.'
-      : 'Configuration parameter mismatch inside client database profile or stripe status.',
-    aiChecklist: [
-      { task: 'Verify OAuth credential mapping configuration', completed: false },
-      { task: 'Inspect domain synchronize log errors', completed: false },
-      { task: 'Confirm SLA limit constraints remain safe', completed: false },
-    ],
-    aiSentiment:
-      ticket?.sentiment === 'angry'
-        ? 'Angry'
-        : ticket?.sentiment === 'positive'
-          ? 'Positive'
-          : 'Neutral',
-    accountHealth: accountHealthFromSentimentLabel(
-      ticket?.sentiment === 'angry'
-        ? 'Angry'
-        : ticket?.sentiment === 'positive'
-          ? 'Positive'
-          : 'Neutral',
-    ),
-  };
+  return emptyTicketAnalysis(fallback);
 }
 
 export function ticketAnalysisPatch(payload: TicketAnalysisPayload): Record<string, unknown> {
+  const rootCause = String(payload.aiRootCause || '').trim();
   return {
     aiSummary: payload.aiSummary,
     aiInsights: payload.aiInsights,
-    aiRootCause: payload.aiRootCause,
+    aiRootCause: rootCause && !isPlaceholderAiDiagnosis(rootCause) ? rootCause : null,
     aiChecklist: withChecklistTaskIdsFromAi(payload.aiChecklist),
     aiSentiment: payload.aiSentiment,
     accountHealth: payload.accountHealth,

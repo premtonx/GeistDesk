@@ -176,7 +176,10 @@ export async function persistAiResponseCache(
     };
 
     if (ctx.feature === 'ticket_summarization' && ref.module === 'tickets') {
-      Object.assign(patch, ticketAnalysisPatch(parseTicketAnalysisOutput(entry.output)));
+      const parsed = parseTicketAnalysisOutput(entry.output);
+      if (parsed.aiSummary.trim()) {
+        Object.assign(patch, ticketAnalysisPatch(parsed));
+      }
     }
 
     const legacyField = LEGACY_FIELD_BY_FEATURE[ctx.feature];

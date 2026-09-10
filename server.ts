@@ -75,6 +75,7 @@ import { findChannelForWebhook, markWebhookChannelLiveFromInbound } from "./src/
 import { createEmailIngestionDriver } from "./src/lib/email-ingestion/factory.js";
 import { startEmailIngestionScheduler } from "./src/lib/email-ingestion/scheduler.js";
 import { startInboundSmtpReceiver } from "./src/lib/email-ingestion/inbound-smtp-receiver.js";
+import { isPlaceholderAiDiagnosis } from "./src/lib/ticket-ai-analysis.js";
 import { getEmailChannel } from "./src/lib/email-ingestion/channel-store.js";
 import kbArticleRoutes from "./src/routes/kbArticleRoutes.js";
 import kbCategoryRoutes from "./src/routes/kbCategoryRoutes.js";
@@ -1650,10 +1651,11 @@ async function startServer() {
       // Condition A (Cache Hit): check if retrieved ticket record already has populated fields for aiSummary
       if (!forceRefresh && ticket.aiSummary) {
         safeLog('info', `[Cache Hit] Serving cached AI Analysis for Ticket: ${id}`);
+        const insights = Array.isArray(ticket.aiInsights) ? ticket.aiInsights : [];
         return res.json({
           aiSummary: ticket.aiSummary,
-          aiInsights: ticket.aiInsights,
-          aiRootCause: ticket.aiRootCause,
+          aiInsights: insights.filter((line: unknown) => !isPlaceholderAiDiagnosis(line)),
+          aiRootCause: isPlaceholderAiDiagnosis(ticket.aiRootCause) ? null : ticket.aiRootCause,
           aiChecklist: ticket.aiChecklist,
           aiSentiment: ticket.aiSentiment
         });
@@ -1702,39 +1704,33 @@ Respond only with the raw valid JSON payload.`;
         }
       } catch (lifecycleErr) {
         safeLog('warn', `[AI Lifecycle] Ticket analysis fallback for ${id}:`, lifecycleErr);
-        aiSummary = `Summary of the incident regarding: ${ticket.subject}. The system detected configuration issues and identity providers are awaiting handshake.`;
-        aiInsights = [
-          "Microsoft Entra handshake delay identified.",
-          "Billing records in offline mode fallback verify license pending.",
-          "Operator queue prioritizes validation of communication tokens."
-        ];
-        aiRootCause = ticket.subject.toLowerCase().includes("auth") || ticket.description.toLowerCase().includes("auth")
-          ? "Microsoft Entra OAuth identity provider response timed out during handshake."
-          : "Configuration parameter mismatch inside client database profile or stripe status.";
-        aiChecklist = [
-          { task: `Verify OAuth credential mapping configuration`, completed: false },
-          { task: `Inspect domain synchronize log errors`, completed: false },
-          { task: `Confirm SLA limit constraints remain safe`, completed: false }
-        ];
+        aiSummary = "";
+        aiInsights = [];
+        aiRootCause = "";
+        aiChecklist = [];
         aiSentiment = ticket.sentiment === "angry" ? "Angry" : (ticket.sentiment === "positive" ? "Positive" : "Neutral");
       }
 
-      // Condition B (Cache Miss): Persist AI data natively in our database asynchronously
-      await db.collection("tickets").doc(id).update({
-        aiSummary,
-        aiInsights,
-        aiRootCause,
-        aiChecklist,
-        aiSentiment,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp()
-      });
-
-      safeLog('info', `[Cache Updated] Successfully saved computed AI Analysis variables in ticket: ${id}`);
+      // Persist only when the model actually returned a summary. Dummy
+      // Entra/Stripe diagnostics must never be written as cache.
+      if (aiSummary.trim()) {
+        await db.collection("tickets").doc(id).update({
+          aiSummary,
+          aiInsights,
+          aiRootCause: aiRootCause || null,
+          aiChecklist,
+          aiSentiment,
+          updatedAt: admin.firestore.FieldValue.serverTimestamp()
+        });
+        safeLog('info', `[Cache Updated] Successfully saved computed AI Analysis variables in ticket: ${id}`);
+      } else {
+        safeLog('warn', `[Cache Skip] No model summary for ticket ${id}; leaving stored analysis unchanged.`);
+      }
 
       return res.json({
         aiSummary,
         aiInsights,
-        aiRootCause,
+        aiRootCause: aiRootCause || null,
         aiChecklist,
         aiSentiment
       });
