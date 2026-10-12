@@ -137,7 +137,7 @@ Multi-stage `Dockerfile` targets: `backend` (API :5000 + SMTP), `frontend` (Ngin
 ```bash
 ./setup.sh          # delegates to install.sh
 # or:
-docker compose up --build -d
+docker compose --profile caddy up --build -d
 ```
 
 **Zero-config bootstrap:** The container entrypoint deploys the PostgreSQL schema, seeds German platform defaults, and starts the server — no manual `npm run seed` required.

@@ -175,13 +175,40 @@ jobs:
               echo "GEISTDESK_DATABASE_URL=postgresql://${PG_USER}:${PG_PASS}@geistdesk-db:5432/${PG_DB}?sslmode=disable" >> .env
             fi
 
+            # No fixed compose project name — directory-derived project keeps the
+            # existing Postgres volume (pg15). Do not enable --profile caddy here.
             COMPOSE="docker compose -f docker-compose.yml -f docker-compose.traefik.yml"
 
             $COMPOSE build --pull \
               --build-arg BUILD_ID="${BUILD_ID}" \
               geistdesk-gateway
 
+            echo "Starting Postgres and waiting for healthy..."
             $COMPOSE up -d geistdesk-db
+            DB_OK=0
+            for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36; do
+              # health=healthy once pg_isready passes; also accept "starting" during start_period.
+              STATUS="$($COMPOSE ps geistdesk-db --format '{{.Status}}' 2>/dev/null || true)"
+              if echo "$STATUS" | grep -qi '(healthy)'; then
+                echo "Postgres healthy on attempt ${i}: ${STATUS}"
+                DB_OK=1
+                break
+              fi
+              if echo "$STATUS" | grep -qiE 'Exit|exited|dead'; then
+                echo "FATAL: Postgres container exited during boot: ${STATUS}"
+                $COMPOSE logs --tail=120 geistdesk-db || true
+                exit 1
+              fi
+              echo "Postgres wait ${i}/36 — ${STATUS:-unknown}"
+              sleep 5
+            done
+            if [ "${DB_OK}" != "1" ]; then
+              echo "FATAL: Postgres never became healthy"
+              $COMPOSE ps -a || true
+              $COMPOSE logs --tail=120 geistdesk-db || true
+              exit 1
+            fi
+
             $COMPOSE up -d geistdesk-gateway
 
             echo "Waiting for gateway bootstrap (migrate/seed/server)..."

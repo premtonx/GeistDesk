@@ -2,18 +2,12 @@
 # Usage:
 #   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d geistdesk-db geistdesk-gateway
 #
-# Disables the bundled Caddy/frontend pair when Traefik terminates TLS externally.
+# Caddy/frontend stay off unless `--profile caddy` is passed (turnkey install.sh).
 
 services:
-  caddy:
-    profiles: ["never"]
-
-  frontend:
-    profiles: ["never"]
-
   geistdesk-gateway:
     ports:
-      # Traefik reaches the container on the Docker network; no host HTTP publish required.
+      # Traefik reaches the container on the Docker network; only SMTP is published.
       - "${INBOUND_SMTP_HOST_PORT:-25}:${INBOUND_SMTP_PORT:-25}"
     networks:
       - geistdesk-internal
