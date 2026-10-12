@@ -41,6 +41,8 @@ interface RagStatus {
   };
   sampledMissingKb?: string[];
   sampledMissingTickets?: string[];
+  embeddingError?: string | null;
+  recentFailures?: Array<{ id: string; jobType: string; lastError: string | null; updatedAt: string }>;
 }
 
 interface SearchHit {
@@ -59,9 +61,11 @@ interface SearchHit {
 interface IndexProgress {
   type: 'kb' | 'ticket';
   enqueued: number;
+  completed: number;
   queueDepth: number;
   missing: number;
   message: string;
+  error?: string | null;
 }
 
 const MODE_LABELS: Record<ResolutionMode, string> = {
@@ -87,6 +91,7 @@ export function AdminHubRagTab() {
   const [searching, setSearching] = useState(false);
   const [backfilling, setBackfilling] = useState<'kb' | 'ticket' | null>(null);
   const [indexProgress, setIndexProgress] = useState<IndexProgress | null>(null);
+  const [indexError, setIndexError] = useState<string | null>(null);
 
   // External connectors state
   const [sources, setSources] = useState<KbExternalSource[]>([]);
@@ -196,14 +201,18 @@ export function AdminHubRagTab() {
     }
   };
 
-  /** Index only missing sources ("Artikel / Tickets ohne Index") with live progress. */
+  /** Index only missing sources with 2s polling until complete or hard error. */
   const runIndexPending = async (type: 'kb' | 'ticket') => {
     setBackfilling(type);
+    setIndexError(null);
+    const initialMissing =
+      type === 'kb' ? (status?.kb.missingIndexArticles ?? 0) : (status?.tickets.missingIndexTickets ?? 0);
     setIndexProgress({
       type,
       enqueued: 0,
+      completed: 0,
       queueDepth: 0,
-      missing: type === 'kb' ? (status?.kb.missingIndexArticles ?? 0) : (status?.tickets.missingIndexTickets ?? 0),
+      missing: initialMissing,
       message: 'Warteschlange wird gefüllt…',
     });
     try {
@@ -212,41 +221,84 @@ export function AdminHubRagTab() {
       setIndexProgress({
         type,
         enqueued,
+        completed: 0,
         queueDepth: Number(res.data.queueDepth || 0),
-        missing: enqueued,
-        message: enqueued === 0 ? 'Nichts ausstehend.' : `${enqueued} Jobs eingereiht — Indexierung läuft…`,
+        missing: Math.max(enqueued, initialMissing),
+        message:
+          enqueued === 0
+            ? '✓ Alle Artikel synchronisiert'
+            : `⏳ Indexierung läuft... (0/${enqueued} in Bearbeitung)`,
       });
 
-      // Poll status until the queue drains or missing count hits zero (max ~60s).
+      if (enqueued === 0) {
+        setBackfilling(null);
+        await loadStatus();
+        return;
+      }
+
       const started = Date.now();
-      while (Date.now() - started < 60_000) {
-        await new Promise((r) => window.setTimeout(r, 1500));
+      while (Date.now() - started < 90_000) {
+        await new Promise((r) => window.setTimeout(r, 2_000));
         const next = await loadStatus();
         if (!next) break;
         const missing =
           type === 'kb' ? next.kb.missingIndexArticles : next.tickets.missingIndexTickets;
         const depth = next.queueDepth ?? 0;
+        const completed = Math.max(enqueued - missing, 0);
+        const failure =
+          next.embeddingError ||
+          next.recentFailures?.find((f) => f.lastError)?.lastError ||
+          null;
+        const unreachable =
+          failure &&
+          /unreachable|timeout|ECONNREFUSED|nicht erreichbar|port 8080|no embedding provider/i.test(
+            failure,
+          );
+
         setIndexProgress({
           type,
           enqueued,
+          completed,
           queueDepth: depth,
           missing,
+          error: unreachable ? failure : null,
           message:
             missing === 0
-              ? 'Index vollständig.'
-              : `Noch ${missing} offen · Queue ${depth}`,
+              ? '✓ Alle Artikel synchronisiert'
+              : `⏳ Indexierung läuft... (${completed}/${enqueued} in Bearbeitung)`,
         });
-        if (missing === 0 || depth === 0) break;
+
+        if (unreachable) {
+          setIndexError(
+            'Embedding-Endpunkt nicht erreichbar. Bitte Modell-Server (Port 8080) oder API-Key prüfen.',
+          );
+          // Mock fallback may still complete jobs — keep polling briefly, but surface the warning.
+        }
+
+        if (missing === 0) break;
+        // Queue drained but items still missing → jobs failed without indexing.
+        if (depth === 0 && missing > 0 && Date.now() - started > 8_000) {
+          setIndexError(
+            failure ||
+              'Embedding-Endpunkt nicht erreichbar. Bitte Modell-Server (Port 8080) oder API-Key prüfen.',
+          );
+          break;
+        }
       }
       await loadStatus();
     } catch (err) {
       console.warn(`RAG index-pending (${type}) failed`, err);
+      setIndexError(
+        'Embedding-Endpunkt nicht erreichbar. Bitte Modell-Server (Port 8080) oder API-Key prüfen.',
+      );
       setIndexProgress({
         type,
         enqueued: 0,
+        completed: 0,
         queueDepth: 0,
         missing: 0,
         message: 'Indexierung fehlgeschlagen.',
+        error: 'failed',
       });
     } finally {
       setBackfilling(null);
@@ -433,6 +485,24 @@ export function AdminHubRagTab() {
         </div>
       ) : null}
 
+      {indexError || status?.embeddingError ? (
+        <div
+          className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-2"
+          role="alert"
+        >
+          <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5 text-amber-600" />
+          <div>
+            <p className="font-bold">
+              {indexError ||
+                'Embedding-Endpunkt nicht erreichbar. Bitte Modell-Server (Port 8080) oder API-Key prüfen.'}
+            </p>
+            {status?.embeddingError && indexError !== status.embeddingError ? (
+              <p className="text-[11px] text-amber-800/80 mt-1 break-words">{status.embeddingError}</p>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
       {loading ? (
         <div className="flex items-center gap-2 text-slate-500 text-sm py-10 justify-center">
           <Loader2 className="w-4 h-4 animate-spin" />
@@ -446,7 +516,7 @@ export function AdminHubRagTab() {
             indexed={kb?.indexedArticles ?? 0}
             chunks={kb?.indexedChunks ?? 0}
             missing={kb?.missingIndexArticles ?? 0}
-            missingLabel={t('admin.rag.kbMissing', 'Artikel ohne Index')}
+            kind="kb"
             onIndexPending={() => void runIndexPending('kb')}
             backfilling={backfilling === 'kb'}
             progress={indexProgress?.type === 'kb' ? indexProgress : null}
@@ -457,7 +527,7 @@ export function AdminHubRagTab() {
             indexed={tickets?.indexedTickets ?? 0}
             chunks={tickets?.indexedChunks ?? 0}
             missing={tickets?.missingIndexTickets ?? 0}
-            missingLabel={t('admin.rag.ticketsMissing', 'Tickets ohne Index')}
+            kind="ticket"
             onIndexPending={() => void runIndexPending('ticket')}
             backfilling={backfilling === 'ticket'}
             progress={indexProgress?.type === 'ticket' ? indexProgress : null}
@@ -869,7 +939,7 @@ function StatusCard({
   indexed,
   chunks,
   missing,
-  missingLabel,
+  kind,
   onIndexPending,
   backfilling,
   progress,
@@ -879,11 +949,20 @@ function StatusCard({
   indexed: number;
   chunks: number;
   missing: number;
-  missingLabel: string;
+  kind: 'kb' | 'ticket';
   onIndexPending: () => void;
   backfilling: boolean;
   progress: IndexProgress | null;
 }) {
+  const syncedLabel =
+    kind === 'kb' ? '✓ Alle Artikel synchronisiert' : '✓ Alle Tickets synchronisiert';
+  const actionLabel =
+    missing === 0 && !backfilling
+      ? syncedLabel
+      : backfilling
+        ? `⏳ Indexierung läuft... (${progress?.completed ?? 0}/${progress?.enqueued || missing} in Bearbeitung)`
+        : `⚡ Jetzt in RAG indexieren (${missing} ausstehend)`;
+
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
       <div className="flex items-center justify-between gap-2">
@@ -913,24 +992,20 @@ function StatusCard({
         <Metric label="Chunks" value={chunks} />
         <Metric label="Total" value={total} />
       </div>
-      {missing > 0 || backfilling ? (
-        <Button
-          variant="outline"
-          size="sm"
-          className="w-full"
-          onClick={onIndexPending}
-          disabled={backfilling}
-        >
-          {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          {missingLabel} ({missing})
-        </Button>
-      ) : null}
-      {progress ? (
+      <Button
+        variant={missing === 0 && !backfilling ? 'secondary' : 'outline'}
+        size="sm"
+        className="w-full"
+        onClick={onIndexPending}
+        disabled={backfilling || missing === 0}
+      >
+        {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
+        {actionLabel}
+      </Button>
+      {progress?.message ? (
         <p className="text-[11px] text-slate-500 font-medium" aria-live="polite">
           {progress.message}
-          {backfilling && progress.enqueued > 0
-            ? ` · ${Math.max(progress.enqueued - progress.missing, 0)}/${progress.enqueued}`
-            : ''}
+          {backfilling && progress.queueDepth > 0 ? ` · Queue ${progress.queueDepth}` : ''}
         </p>
       ) : null}
     </div>

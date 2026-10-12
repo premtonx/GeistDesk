@@ -132,8 +132,18 @@ export async function failJob(id: string, error: unknown): Promise<void> {
   );
 }
 
-/** Depth of pending/running jobs for health telemetry. */
-export async function getJobQueueDepth(): Promise<number> {
+/** Depth of pending/running jobs for health telemetry (optionally type-filtered). */
+export async function getJobQueueDepth(types?: BackgroundJobType[]): Promise<number> {
+  if (types && types.length > 0) {
+    const res = await queryDb(
+      `SELECT COUNT(*)::int AS depth
+       FROM background_jobs
+       WHERE status IN ('pending', 'running')
+         AND job_type = ANY($1::text[])`,
+      [types],
+    );
+    return Number(res.rows[0]?.depth || 0);
+  }
   const res = await queryDb(
     `SELECT COUNT(*)::int AS depth
      FROM background_jobs
@@ -142,15 +152,43 @@ export async function getJobQueueDepth(): Promise<number> {
   return Number(res.rows[0]?.depth || 0);
 }
 
-/** Requeue jobs that were left `running` by a crashed worker (startup recovery). */
-export async function recoverOrphanedJobs(workerIdPrefix = 'worker'): Promise<number> {
+/** Recent failed jobs (for Admin-Hub error banners). */
+export async function getRecentFailedJobs(
+  types: BackgroundJobType[],
+  limit = 5,
+): Promise<Array<{ id: string; jobType: string; lastError: string | null; updatedAt: string }>> {
+  const res = await queryDb(
+    `SELECT id, job_type, last_error, updated_at
+     FROM background_jobs
+     WHERE status = 'failed'
+       AND job_type = ANY($1::text[])
+     ORDER BY updated_at DESC
+     LIMIT $2`,
+    [types, limit],
+  );
+  return res.rows.map((row) => ({
+    id: String(row.id),
+    jobType: String(row.job_type),
+    lastError: row.last_error ? String(row.last_error) : null,
+    updatedAt: row.updated_at ? new Date(String(row.updated_at)).toISOString() : '',
+  }));
+}
+
+/** Requeue jobs that were left `running` by a crashed / hung worker. */
+export async function recoverOrphanedJobs(
+  workerIdPrefix = 'worker',
+  olderThanMinutes = 10,
+): Promise<number> {
+  const minutes = Math.min(Math.max(Number(olderThanMinutes) || 10, 1), 60);
   const res = await queryDb(
     `UPDATE background_jobs
        SET status = 'pending', worker_id = NULL, run_after = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
      WHERE status = 'running'
-       AND updated_at < CURRENT_TIMESTAMP - interval '10 minutes'
+       AND updated_at < CURRENT_TIMESTAMP - make_interval(mins => $1)
      RETURNING id`,
+    [minutes],
   );
+  void workerIdPrefix;
   return res.rowCount || 0;
 }
 

@@ -72,6 +72,23 @@ function keywordFallback(
 
 export const ragService = {
   /**
+   * Enqueue background chunking + embedding for a published GeistKB article.
+   * Prefer this after create/publish; the server /api/db hook also auto-enqueues.
+   */
+  indexArticle: async (articleId: string): Promise<void> => {
+    if (!articleId) return;
+    await axios.post(
+      '/api/vectors/enqueue',
+      {
+        type: 'INDEX_KB_ARTICLE',
+        sourceId: articleId,
+        sourceType: 'KB_ARTICLE',
+      },
+      { withCredentials: true },
+    );
+  },
+
+  /**
    * Sync keyword fallback (demo / offline). Prefer findRelevantContextHybrid.
    */
   findRelevantContext: (

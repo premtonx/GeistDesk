@@ -38,6 +38,11 @@ function enqueueKbIndex(sourceId: string, type: 'INDEX_KB_ARTICLE' | 'DELETE_EMB
     });
 }
 
+/** Prefer ragService.indexArticle for new call sites; kept for firestore writers. */
+export function indexKbArticleForRag(articleId: string) {
+  enqueueKbIndex(articleId, 'INDEX_KB_ARTICLE');
+}
+
 export const kbService = {
   subscribeToArticles: (callback: (articles: KBArticle[]) => void, visibility?: 'Public' | 'Private') => {
     let q = query(collection(db, KB_COLLECTION), orderBy('createdAt', 'desc'));
