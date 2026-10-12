@@ -1,5 +1,5 @@
-import { PenLine, Sparkles, Settings, Check, X } from 'lucide-react';
-import { type Dispatch, type SetStateAction } from 'react';
+import { PenLine, Sparkles, Settings, Check, FilePenLine, X } from 'lucide-react';
+import { useState, type Dispatch, type SetStateAction } from 'react';
 import { cn } from '../../lib/utils';
 import { useTranslation } from '../../lib/context/I18nContext';
 import { Button } from '../ui/button';
@@ -25,6 +25,8 @@ export interface KBArticleDraft {
   index_in_rag: boolean;
 }
 
+export type KBArticleSaveMode = 'draft' | 'publish';
+
 interface EnterpriseUser {
   uid: string;
   name: string;
@@ -43,10 +45,18 @@ interface KBArticleEditorWorkspaceProps {
   categories: KBCategoryRecord[];
   enterpriseUsers: EnterpriseUser[];
   onClose: () => void;
-  onSave: () => void;
+  onSave: (mode: KBArticleSaveMode) => void;
   /** Instant-persist RAG opt-in for existing articles (fires on toggle change). */
   onToggleIndexInRag?: (checked: boolean) => void;
   className?: string;
+}
+
+function stripHtmlText(html: string): string {
+  return html
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 export function KBArticleEditorWorkspace({
@@ -64,9 +74,24 @@ export function KBArticleEditorWorkspace({
   className,
 }: KBArticleEditorWorkspaceProps) {
   const { t } = useTranslation();
+  const [titleTouched, setTitleTouched] = useState(false);
+  const [attemptedMode, setAttemptedMode] = useState<KBArticleSaveMode | null>(null);
+
+  const titleValid = newArticle.title.trim().length > 0;
+  const bodyValid = stripHtmlText(newArticle.content).length > 0;
+  const showTitleError = (titleTouched || attemptedMode !== null) && !titleValid;
+  const showBodyError = attemptedMode === 'publish' && !bodyValid;
 
   const patchArticle = (patch: Partial<KBArticleDraft>) => {
     onNewArticleChange((prev) => ({ ...prev, ...patch }));
+  };
+
+  const handleSaveClick = (mode: KBArticleSaveMode) => {
+    setAttemptedMode(mode);
+    setTitleTouched(true);
+    if (!titleValid) return;
+    if (mode === 'publish' && !bodyValid) return;
+    onSave(mode);
   };
 
   return (
@@ -104,12 +129,22 @@ export function KBArticleEditorWorkspace({
             <Input
               value={newArticle.title}
               onChange={(e) => patchArticle({ title: e.target.value })}
+              onBlur={() => setTitleTouched(true)}
+              aria-invalid={showTitleError}
               placeholder={t(
                 'kb.editor.titlePlaceholder',
                 'Enter descriptive article title, e.g. AWS SMTP Relay failover protocol...',
               )}
-              className="h-11 text-md font-bold rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-150-all placeholder:text-slate-300"
+              className={cn(
+                'h-11 text-md font-bold rounded-xl border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 placeholder:text-slate-300',
+                showTitleError && 'border-rose-400 focus:ring-rose-100',
+              )}
             />
+            {showTitleError ? (
+              <p className="text-[11px] font-semibold text-rose-600" role="alert">
+                {t('kb.editor.titleRequired', 'A document title is required before saving.')}
+              </p>
+            ) : null}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -156,12 +191,23 @@ export function KBArticleEditorWorkspace({
               value={newArticle.content}
               onChange={(content) => patchArticle({ content })}
               placeholder={t('kb.editor.placeholder', 'Type / for blocks, or start writing…')}
-              className="flex-1 min-h-[280px]"
+              className={cn(
+                'flex-1 min-h-[280px]',
+                showBodyError && 'ring-2 ring-rose-300 border-rose-300 rounded-xl',
+              )}
             />
+            {showBodyError ? (
+              <p className="text-[11px] font-semibold text-rose-600" role="alert">
+                {t(
+                  'kb.editor.bodyRequiredToPublish',
+                  'Add article body content before publishing. You can still save as a draft.',
+                )}
+              </p>
+            ) : null}
           </div>
         </div>
 
-        <footer className="px-4 sm:px-6 py-4 border-t bg-slate-50 flex items-center justify-between shrink-0">
+        <footer className="px-4 sm:px-6 py-4 border-t bg-slate-50 flex flex-wrap items-center justify-between gap-3 shrink-0">
           <Button
             variant="ghost"
             className="rounded-xl px-4 text-xs font-extrabold text-slate-400 hover:text-slate-600"
@@ -170,17 +216,33 @@ export function KBArticleEditorWorkspace({
             {t('kb.editor.closeDraft', 'Close Draft')}
           </Button>
 
-          <Button
-            className="bg-indigo-650 hover:bg-indigo-700 text-white font-extrabold px-6 h-10 rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
-            onClick={onSave}
-          >
-            <Check className="w-4 h-4" />
-            <span>
-              {editingArticleId
-                ? t('kb.editor.saveAmendments', 'Save Guidelines Amendments')
-                : t('kb.editor.publishLive', 'Publish Document Live')}
-            </span>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-xl px-4 h-10 text-xs font-extrabold border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+              onClick={() => handleSaveClick('draft')}
+            >
+              <FilePenLine className="w-4 h-4" />
+              <span>
+                {editingArticleId
+                  ? t('kb.editor.saveDraftAmendments', 'Save as draft')
+                  : t('kb.editor.saveDraft', 'Save draft')}
+              </span>
+            </Button>
+            <Button
+              type="button"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold px-6 h-10 rounded-xl text-xs flex items-center gap-1.5 shadow-sm"
+              onClick={() => handleSaveClick('publish')}
+            >
+              <Check className="w-4 h-4" />
+              <span>
+                {editingArticleId
+                  ? t('kb.editor.saveAmendments', 'Save Guidelines Amendments')
+                  : t('kb.editor.publishLive', 'Publish Document Live')}
+              </span>
+            </Button>
+          </div>
         </footer>
       </div>
 

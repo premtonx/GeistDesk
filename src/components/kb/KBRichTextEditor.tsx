@@ -433,7 +433,23 @@ export function KBRichTextEditor({ value, onChange, placeholder, className }: KB
           color: #64748b;
           font-style: italic;
         }
-        .kb-tiptap-editor ul, .kb-tiptap-editor ol { padding-left: 1.25rem; margin: 0.5rem 0; }
+        /* Tailwind preflight strips list markers — restore them inside the editor */
+        .kb-tiptap-editor ol {
+          list-style-type: decimal !important;
+          padding-left: 1.5rem !important;
+          margin: 0.5rem 0 !important;
+        }
+        .kb-tiptap-editor ul {
+          list-style-type: disc !important;
+          padding-left: 1.5rem !important;
+          margin: 0.5rem 0 !important;
+        }
+        .kb-tiptap-editor li {
+          display: list-item !important;
+        }
+        .kb-tiptap-editor li p {
+          margin: 0;
+        }
         .kb-tiptap-editor hr { border: none; border-top: 1px solid #e2e8f0; margin: 1rem 0; }
       `}</style>
     </div>

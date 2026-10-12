@@ -102,7 +102,11 @@ import { KBKpiCards } from '../kb/KBKpiCards';
 import { KBSearchSection } from '../kb/KBSearchSection';
 import { KBCategoryGrid } from '../kb/KBCategoryGrid';
 import { KBSearchAiOverlay } from '../kb/KBSearchAiOverlay';
-import { KBArticleEditorWorkspace, type KBArticleDraft } from '../kb/KBArticleEditorWorkspace';
+import {
+  KBArticleEditorWorkspace,
+  type KBArticleDraft,
+  type KBArticleSaveMode,
+} from '../kb/KBArticleEditorWorkspace';
 import { KBDocumentsTab } from '../kb/KBDocumentsTab';
 import { KBExternalSourcesTab } from '../kb/KBExternalSourcesTab';
 import { KBBulkActionBar } from '../kb/KBBulkActionBar';
@@ -594,84 +598,123 @@ export default function KBPage() {
     setIsAddingArticle(true);
   };
 
-  const handleSaveArticle = async () => {
-    if (newArticle.title && newArticle.content && user) {
-      try {
-        const tags = tagInput.split(',').map(t => t.trim()).filter(Boolean);
-        
-        const payload: any = {
-          title: newArticle.title,
-          content: newArticle.content,
-          category: newArticle.category,
-          subCategory: newArticle.subCategory || '',
-          visibility: newArticle.visibility,
-          tags: tags,
-          owner: newArticle.owner,
-          reviewer: newArticle.reviewer,
-          lastEditor: user.email || 'Admin',
-          status: newArticle.status,
-          avgReadTime: newArticle.avgReadTime || '4m 00s',
-          language: 'English',
-          index_in_rag: newArticle.index_in_rag !== false,
-        };
+  const handleSaveArticle = async (mode: KBArticleSaveMode = 'draft') => {
+    const title = newArticle.title.trim();
+    const bodyText = stripHtml(newArticle.content || '').trim();
 
-        if (editingArticleId) {
-          // If it is static seed, modify local state directly to show seamless interactivity
-          if (editingArticleId.startsWith('seed-')) {
-            setArticles(prev => prev.map(art => art.id === editingArticleId ? {
-              ...art,
-              ...payload,
-              updatedAt: { toDate: () => new Date() }
-            } : art));
-            toast.success("Knowledge item draft cached successfully.");
-          } else {
-            const oldArticle = firestoreArticles.find(a => a.id === editingArticleId);
-            await kbService.updateArticle(editingArticleId, payload, oldArticle?.tags || []);
-            toast.success("Enterprise article published and synchronized to database.");
-          }
+    if (!title) {
+      toast.error(t('kb.editor.titleRequired', 'A document title is required before saving.'));
+      return;
+    }
+
+    if (mode === 'publish' && !bodyText) {
+      toast.error(
+        t(
+          'kb.editor.bodyRequiredToPublish',
+          'Add article body content before publishing. You can still save as a draft.',
+        ),
+      );
+      return;
+    }
+
+    if (!user) {
+      toast.error(t('kb.editor.authRequired', 'Sign in is required to save articles.'));
+      return;
+    }
+
+    try {
+      const tags = tagInput.split(',').map((tag) => tag.trim()).filter(Boolean);
+      const status =
+        mode === 'publish' ? 'Published' : mode === 'draft' ? 'Draft' : newArticle.status || 'Draft';
+
+      const payload: any = {
+        title,
+        content: newArticle.content || '',
+        category: newArticle.category,
+        subCategory: newArticle.subCategory || '',
+        visibility: newArticle.visibility,
+        tags,
+        owner: newArticle.owner,
+        reviewer: newArticle.reviewer,
+        lastEditor: user.email || 'Admin',
+        status,
+        avgReadTime: newArticle.avgReadTime || '4m 00s',
+        language: 'English',
+        index_in_rag: newArticle.index_in_rag !== false,
+      };
+
+      if (editingArticleId) {
+        // If it is static seed, modify local state directly to show seamless interactivity
+        if (editingArticleId.startsWith('seed-')) {
+          setArticles((prev) =>
+            prev.map((art) =>
+              art.id === editingArticleId
+                ? {
+                    ...art,
+                    ...payload,
+                    updatedAt: { toDate: () => new Date() },
+                  }
+                : art,
+            ),
+          );
+          toast.success(
+            mode === 'publish'
+              ? t('kb.editor.publishSuccess', 'Article published successfully.')
+              : t('kb.editor.draftSuccess', 'Draft saved successfully.'),
+          );
         } else {
-          // Add locally first as well so UI updates immediately
-          const newId = `art-${Date.now()}`;
-          const localItem = {
-            id: newId,
-            ...payload,
-            views: 0,
-            helpfulCount: 0,
-            unhelpfulCount: 0,
-            createdAt: { toDate: () => new Date() },
-            updatedAt: { toDate: () => new Date() }
-          };
-          setArticles(prev => [localItem, ...prev]);
-
-          await kbService.createArticle({
-            ...payload,
-            authorId: user.uid
-          });
-          toast.success("New article deployed into secure active directory!");
+          const oldArticle = firestoreArticles.find((a) => a.id === editingArticleId);
+          await kbService.updateArticle(editingArticleId, payload, oldArticle?.tags || []);
+          toast.success(
+            mode === 'publish'
+              ? t('kb.editor.publishSuccess', 'Article published successfully.')
+              : t('kb.editor.draftSuccess', 'Draft saved successfully.'),
+          );
         }
+      } else {
+        // Add locally first as well so UI updates immediately
+        const newId = `art-${Date.now()}`;
+        const localItem = {
+          id: newId,
+          ...payload,
+          views: 0,
+          helpfulCount: 0,
+          unhelpfulCount: 0,
+          createdAt: { toDate: () => new Date() },
+          updatedAt: { toDate: () => new Date() },
+        };
+        setArticles((prev) => [localItem, ...prev]);
 
-        setIsAddingArticle(false);
-        setEditingArticleId(null);
-        setNewArticle({ 
-          title: '', 
-          content: '', 
-          category: selectedCategory === 'All' ? UNCATEGORIZED_CATEGORY_ID : selectedCategory, 
-          subCategory: '', 
-          visibility: 'Public', 
-          tags: [], 
-          owner: user?.email || '', 
-          reviewer: '', 
-          lastEditor: user?.email || '', 
-          status: 'Draft',
-          avgReadTime: '',
-          index_in_rag: true, 
+        await kbService.createArticle({
+          ...payload,
+          authorId: user.uid,
         });
-        setTagInput('');
-      } catch (e) {
-        toast.error("Authentication vulnerability: secure save failed.");
+        toast.success(
+          mode === 'publish'
+            ? t('kb.editor.publishSuccess', 'Article published successfully.')
+            : t('kb.editor.draftSuccess', 'Draft saved successfully.'),
+        );
       }
-    } else {
-      toast.error("Validation error: Title and content block are mandatory.");
+
+      setIsAddingArticle(false);
+      setEditingArticleId(null);
+      setNewArticle({
+        title: '',
+        content: '',
+        category: selectedCategory === 'All' ? UNCATEGORIZED_CATEGORY_ID : selectedCategory,
+        subCategory: '',
+        visibility: 'Public',
+        tags: [],
+        owner: user?.email || '',
+        reviewer: '',
+        lastEditor: user?.email || '',
+        status: 'Draft',
+        avgReadTime: '',
+        index_in_rag: true,
+      });
+      setTagInput('');
+    } catch (e) {
+      toast.error(t('kb.editor.saveFailed', 'Could not save the article. Please try again.'));
     }
   };
 
