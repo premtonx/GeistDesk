@@ -1,16 +1,41 @@
-# GeistDesk production / self-host compose.
-# All host-specific values come from `.env` (see `.env.example` or `./setup.sh`).
-# No container_name pins — Docker namespaces containers from the project folder.
-# Gateway image is multi-stage (Dockerfile): clean clones do not need host dist/.
+# GeistDesk turnkey stack — Postgres (pgvector) + API + static UI + Caddy.
 #
-# Boot (scripts/docker-entrypoint.sh):
-#   wait for Postgres → db:deploy:prod → seed:prod → server
+#   curl -fsSL https://raw.githubusercontent.com/premtonx/GeistDesk/main/install.sh | bash
+#   # or from a clone:
+#   ./install.sh
+#
+# Host ports: 80, 443 (Caddy). Optional SMTP: set INBOUND_SMTP_HOST_PORT (default 25).
+# Production Traefik overlay: see docker-compose.traefik.yml
+
+name: geistdesk
 
 services:
+  geistdesk-db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-geist_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD — run ./install.sh}
+      POSTGRES_DB: ${POSTGRES_DB:-geistdesk_prod}
+    volumes:
+      # Keep legacy volume key so existing production data is reused.
+      - geistdesk_db_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    networks:
+      geistdesk-internal:
+        aliases:
+          - db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
   geistdesk-gateway:
     build:
       context: .
       dockerfile: Dockerfile
+      target: backend
       args:
         BUILD_ID: ${BUILD_ID:-local}
         VITE_DEMO_MODE: ${VITE_DEMO_MODE:-false}
@@ -18,124 +43,123 @@ services:
         VITE_BETA_AUTO_ADMIN: ${VITE_BETA_AUTO_ADMIN:-false}
         VITE_OLLAMA_ENDPOINT: ${VITE_OLLAMA_ENDPOINT:-}
         VITE_MASTER_KEY_SALT: ${VITE_MASTER_KEY_SALT:-}
-        VITE_PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost:3000}
+        VITE_PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost}
+    image: geistdesk-backend:${BUILD_ID:-local}
     depends_on:
       geistdesk-db:
         condition: service_healthy
-    ports:
-      - "${HOST_PORT:-3000}:3000"
-      # Native inbound SMTP (MX). Developers: INBOUND_SMTP_HOST_PORT=2525 INBOUND_SMTP_PORT=2525
-      - "${INBOUND_SMTP_HOST_PORT:-25}:${INBOUND_SMTP_PORT:-25}"
     environment:
-      - NODE_ENV=${NODE_ENV:-production}
-      - PORT=3000
-      - PUBLIC_APP_URL=${PUBLIC_APP_URL:-http://localhost:3000}
-
-      # Bundled Postgres URL. Prefer GEISTDESK_DATABASE_URL from `.env` (setup.sh
-      # writes it to match POSTGRES_*). Nested defaults keep greenfield boots working
-      # without sed. Existing volumes that used geist_password stay compatible.
-      - DATABASE_URL=${GEISTDESK_DATABASE_URL:-postgresql://${POSTGRES_USER:-geist_user}:${POSTGRES_PASSWORD:-geist_password}@geistdesk-db:5432/${POSTGRES_DB:-geistdesk_prod}?sslmode=disable}
-      - DATABASE_SSL_INSECURE=${DATABASE_SSL_INSECURE:-false}
-
-      - JWT_SECRET=${JWT_SECRET}
-      - VAULT_ENCRYPTION_KEY=${VAULT_ENCRYPTION_KEY}
-      - MASTER_KEY_SALT=${MASTER_KEY_SALT:-}
-      - AI_SECRETS_KEY=${AI_SECRETS_KEY:-}
-      - MICROSOFT_PROVIDER_CLIENT_ID=${MICROSOFT_PROVIDER_CLIENT_ID:-}
-
-      - BETA_AUTO_ADMIN=${BETA_AUTO_ADMIN:-false}
-      - ALLOW_PUBLIC_REGISTRATION=${ALLOW_PUBLIC_REGISTRATION:-false}
-      - ENABLE_SANDBOX=${ENABLE_SANDBOX:-false}
-      - VITE_DEMO_MODE=${VITE_DEMO_MODE:-false}
-      - ENABLE_DEMO_LOGIN=${ENABLE_DEMO_LOGIN:-false}
-      - VITE_ENABLE_DEMO_LOGIN=${VITE_ENABLE_DEMO_LOGIN:-false}
-      - GRAPH_CLIENT_STATE_SECRET=${GRAPH_CLIENT_STATE_SECRET:-}
-      - INBOUND_MAIL_WEBHOOK_SECRET=${INBOUND_MAIL_WEBHOOK_SECRET:-}
-      - INBOUND_EMAIL_DOMAIN=${INBOUND_EMAIL_DOMAIN:-}
-      - INBOUND_MAIL_FORWARD_DOMAIN=${INBOUND_MAIL_FORWARD_DOMAIN:-${DOMAIN_NAME:-localhost}}
-      - EMAIL_INGESTION_INTERVAL_MS=${EMAIL_INGESTION_INTERVAL_MS:-60000}
-      - INBOUND_SMTP_ENABLED=${INBOUND_SMTP_ENABLED:-true}
-      - INBOUND_SMTP_PORT=${INBOUND_SMTP_PORT:-25}
-      - INBOUND_SMTP_BIND=${INBOUND_SMTP_BIND:-0.0.0.0}
-      - INBOUND_SMTP_HOSTNAME=${INBOUND_SMTP_HOSTNAME:-${INBOUND_EMAIL_DOMAIN:-}}
-      - INBOUND_SMTP_MAX_BYTES=${INBOUND_SMTP_MAX_BYTES:-26214400}
-      - INBOUND_SMTP_ACCEPT_DOMAINS=${INBOUND_SMTP_ACCEPT_DOMAINS:-}
-      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
-      - DOCUMENT_STORAGE_DIR=${DOCUMENT_STORAGE_DIR:-/app/storage/documents}
-      - KB_EXTERNAL_SYNC_INTERVAL_MS=${KB_EXTERNAL_SYNC_INTERVAL_MS:-1800000}
-      - KB_SOURCES_ROOT=${KB_SOURCES_ROOT:-/data/sources}
-
-      - SMTP_HOST=${SMTP_HOST:-}
-      - SMTP_USER=${SMTP_USER:-}
-      - MAIL_DISPATCH_URL=${MAIL_DISPATCH_URL:-}
-
-      - OLLAMA_ENDPOINT=${OLLAMA_ENDPOINT:-}
-      - OLLAMA_MODEL=${OLLAMA_MODEL:-}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-}
-      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-}
-      - AZURE_OPENAI_EMBEDDING_DEPLOYMENT=${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:-}
-      - AZURE_OPENAI_API_KEY=${AZURE_OPENAI_API_KEY:-}
-      - AZURE_OPENAI_ENDPOINT=${AZURE_OPENAI_ENDPOINT:-}
-      - AZURE_OPENAI_DEPLOYMENT_NAME=${AZURE_OPENAI_DEPLOYMENT_NAME:-}
-      - AZURE_OPENAI_DEPLOYMENT=${AZURE_OPENAI_DEPLOYMENT:-}
-
-      - AZURE_CLIENT_ID=${AZURE_CLIENT_ID:-}
-      - AZURE_TENANT_ID=${AZURE_TENANT_ID:-}
-      - AZURE_CLIENT_SECRET=${AZURE_CLIENT_SECRET:-}
-      - OIDC_ISSUER=${OIDC_ISSUER:-}
-      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-}
-      - OIDC_CLIENT_SECRET=${OIDC_CLIENT_SECRET:-}
-      - OIDC_REDIRECT_URI=${OIDC_REDIRECT_URI:-}
-
-      - VITE_FIREBASE_API_KEY=${VITE_FIREBASE_API_KEY:-}
-      - VITE_FIREBASE_AUTH_DOMAIN=${VITE_FIREBASE_AUTH_DOMAIN:-}
-      - VITE_FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID:-}
-      - VITE_AI_PROVIDER=${VITE_AI_PROVIDER:-azure}
-      - VITE_MASTER_KEY_SALT=${VITE_MASTER_KEY_SALT:-}
-
-      - MicrosoftAppId=${MicrosoftAppId:-}
-      - MicrosoftAppPassword=${MicrosoftAppPassword:-}
-      - MicrosoftAppType=${MicrosoftAppType:-}
-      - MicrosoftAppTenantId=${MicrosoftAppTenantId:-}
-    restart: always
-    networks:
-      - geistdesk-internal
-      - traefik
+      NODE_ENV: ${NODE_ENV:-production}
+      PORT: "5000"
+      PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost}
+      # install.sh writes GEISTDESK_DATABASE_URL to match POSTGRES_* (host=geistdesk-db)
+      DATABASE_URL: ${GEISTDESK_DATABASE_URL}
+      DATABASE_SSL_INSECURE: ${DATABASE_SSL_INSECURE:-false}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET — run ./install.sh}
+      VAULT_ENCRYPTION_KEY: ${VAULT_ENCRYPTION_KEY:?Set VAULT_ENCRYPTION_KEY — run ./install.sh}
+      MASTER_KEY_SALT: ${MASTER_KEY_SALT:-}
+      AI_SECRETS_KEY: ${AI_SECRETS_KEY:-}
+      BETA_AUTO_ADMIN: ${BETA_AUTO_ADMIN:-false}
+      ALLOW_PUBLIC_REGISTRATION: ${ALLOW_PUBLIC_REGISTRATION:-false}
+      ENABLE_SANDBOX: ${ENABLE_SANDBOX:-false}
+      ENABLE_DEMO_LOGIN: ${ENABLE_DEMO_LOGIN:-false}
+      VITE_ENABLE_DEMO_LOGIN: ${VITE_ENABLE_DEMO_LOGIN:-false}
+      VITE_DEMO_MODE: ${VITE_DEMO_MODE:-false}
+      GRAPH_CLIENT_STATE_SECRET: ${GRAPH_CLIENT_STATE_SECRET:-}
+      INBOUND_MAIL_WEBHOOK_SECRET: ${INBOUND_MAIL_WEBHOOK_SECRET:-}
+      INBOUND_EMAIL_DOMAIN: ${INBOUND_EMAIL_DOMAIN:-}
+      INBOUND_MAIL_FORWARD_DOMAIN: ${INBOUND_MAIL_FORWARD_DOMAIN:-${DOMAIN:-localhost}}
+      EMAIL_INGESTION_INTERVAL_MS: ${EMAIL_INGESTION_INTERVAL_MS:-60000}
+      INBOUND_SMTP_ENABLED: ${INBOUND_SMTP_ENABLED:-true}
+      INBOUND_SMTP_PORT: ${INBOUND_SMTP_PORT:-25}
+      INBOUND_SMTP_BIND: ${INBOUND_SMTP_BIND:-0.0.0.0}
+      INBOUND_SMTP_HOSTNAME: ${INBOUND_SMTP_HOSTNAME:-}
+      INBOUND_SMTP_MAX_BYTES: ${INBOUND_SMTP_MAX_BYTES:-26214400}
+      DOCUMENT_STORAGE_DIR: ${DOCUMENT_STORAGE_DIR:-/app/storage/documents}
+      KB_SOURCES_ROOT: ${KB_SOURCES_ROOT:-/data/sources}
+      OLLAMA_ENDPOINT: ${OLLAMA_ENDPOINT:-}
+      LOCAL_EMBEDDING_ENDPOINT: ${LOCAL_EMBEDDING_ENDPOINT:-http://host.docker.internal:8080}
+      LOCAL_EMBEDDING_MODEL: ${LOCAL_EMBEDDING_MODEL:-}
+      EMBEDDING_PROVIDER: ${EMBEDDING_PROVIDER:-}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      AZURE_OPENAI_API_KEY: ${AZURE_OPENAI_API_KEY:-}
+      AZURE_OPENAI_ENDPOINT: ${AZURE_OPENAI_ENDPOINT:-}
+      AZURE_OPENAI_DEPLOYMENT: ${AZURE_OPENAI_DEPLOYMENT:-}
+      AZURE_OPENAI_DEPLOYMENT_NAME: ${AZURE_OPENAI_DEPLOYMENT_NAME:-}
+      AZURE_OPENAI_EMBEDDING_DEPLOYMENT: ${AZURE_OPENAI_EMBEDDING_DEPLOYMENT:-}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      # Optional inbound SMTP (MX). Override with INBOUND_SMTP_HOST_PORT=2525 if :25 is privileged.
+      - "${INBOUND_SMTP_HOST_PORT:-25}:${INBOUND_SMTP_PORT:-25}"
     volumes:
       - geistdesk_documents:/app/storage/documents
-    labels:
-      - "traefik.enable=true"
-      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik-public}"
-      - "traefik.http.routers.${ROUTER_NAME:-geistdesk}.rule=Host(`${DOMAIN_NAME:-localhost}`)"
-      - "traefik.http.routers.${ROUTER_NAME:-geistdesk}.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
-      - "traefik.http.routers.${ROUTER_NAME:-geistdesk}.tls.certresolver=${TRAEFIK_CERTRESOLVER:-myresolver}"
-      - "traefik.http.services.${ROUTER_NAME:-geistdesk}.loadbalancer.server.port=3000"
+    restart: unless-stopped
+    networks:
+      geistdesk-internal:
+        aliases:
+          - backend
+          - geistdesk-gateway
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:5000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
 
-  geistdesk-db:
-    image: pgvector/pgvector:pg15
-    environment:
-      - POSTGRES_USER=${POSTGRES_USER:-geist_user}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-geist_password}
-      - POSTGRES_DB=${POSTGRES_DB:-geistdesk_prod}
-    volumes:
-      - geistdesk_db_data:/var/lib/postgresql/data
-    restart: always
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: frontend
+      args:
+        BUILD_ID: ${BUILD_ID:-local}
+        VITE_DEMO_MODE: ${VITE_DEMO_MODE:-false}
+        VITE_ENABLE_DEMO_LOGIN: ${VITE_ENABLE_DEMO_LOGIN:-false}
+        VITE_PUBLIC_APP_URL: ${PUBLIC_APP_URL:-http://localhost}
+        VITE_MASTER_KEY_SALT: ${VITE_MASTER_KEY_SALT:-}
+        VITE_OLLAMA_ENDPOINT: ${VITE_OLLAMA_ENDPOINT:-}
+    image: geistdesk-frontend:${BUILD_ID:-local}
+    depends_on:
+      geistdesk-gateway:
+        condition: service_healthy
+    restart: unless-stopped
     networks:
       - geistdesk-internal
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
-      interval: 5s
-      timeout: 5s
-      retries: 12
+
+  caddy:
+    image: caddy:2.8-alpine
+    depends_on:
+      - frontend
+      - geistdesk-gateway
+    environment:
+      DOMAIN: ${DOMAIN:-${DOMAIN_NAME:-localhost}}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    restart: unless-stopped
+    networks:
+      - geistdesk-internal
 
 volumes:
   geistdesk_db_data:
   geistdesk_documents:
+  caddy_data:
+  caddy_config:
 
 networks:
   geistdesk-internal:
     driver: bridge
-  traefik:
-    name: ${TRAEFIK_NETWORK:-traefik-public}
-    external: true

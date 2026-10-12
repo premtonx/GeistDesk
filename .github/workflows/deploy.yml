@@ -164,19 +164,32 @@ jobs:
             # Multi-stage image builds dist/ inside Docker; host node_modules/dist are not required.
             rm -rf .vite node_modules/.vite || true
 
-            docker compose build --pull \
+            # Ensure compose DATABASE_URL points at the bundled Postgres service.
+            if ! grep -q '^GEISTDESK_DATABASE_URL=' .env; then
+              PG_USER="$(grep -E '^POSTGRES_USER=' .env | cut -d= -f2- || true)"
+              PG_DB="$(grep -E '^POSTGRES_DB=' .env | cut -d= -f2- || true)"
+              PG_PASS="$(grep -E '^POSTGRES_PASSWORD=' .env | cut -d= -f2- || true)"
+              PG_USER="${PG_USER:-geist_user}"
+              PG_DB="${PG_DB:-geistdesk_prod}"
+              PG_PASS="${PG_PASS:-geist_password}"
+              echo "GEISTDESK_DATABASE_URL=postgresql://${PG_USER}:${PG_PASS}@geistdesk-db:5432/${PG_DB}?sslmode=disable" >> .env
+            fi
+
+            COMPOSE="docker compose -f docker-compose.yml -f docker-compose.traefik.yml"
+
+            $COMPOSE build --pull \
               --build-arg BUILD_ID="${BUILD_ID}" \
               geistdesk-gateway
 
-            docker compose up -d geistdesk-db
-            docker compose up -d geistdesk-gateway
+            $COMPOSE up -d geistdesk-db
+            $COMPOSE up -d geistdesk-gateway
 
             echo "Waiting for gateway bootstrap (migrate/seed/server)..."
             # Internal health first — Traefik 404s while the entrypoint is still waiting on DB.
             INTERNAL_OK=0
             for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
-              if docker compose exec -T geistdesk-gateway node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
-                echo "Internal health OK (container :3000/api/health) on attempt ${i}"
+              if $COMPOSE exec -T geistdesk-gateway node -e "fetch('http://127.0.0.1:5000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+                echo "Internal health OK (container :5000/api/health) on attempt ${i}"
                 INTERNAL_OK=1
                 break
               fi
@@ -185,12 +198,12 @@ jobs:
             done
             if [ "${INTERNAL_OK}" != "1" ]; then
               echo "FATAL: Gateway never became healthy inside the container"
-              docker compose logs --tail=200 geistdesk-gateway || true
-              docker compose logs --tail=80 geistdesk-db || true
+              $COMPOSE logs --tail=200 geistdesk-gateway || true
+              $COMPOSE logs --tail=80 geistdesk-db || true
               exit 1
             fi
 
-            BUNDLE="$(docker compose exec -T geistdesk-gateway sh -c "grep -oE 'index-[^\"]+\.js' dist/index.html | head -1")"
+            BUNDLE="$($COMPOSE exec -T geistdesk-gateway sh -c "grep -oE 'index-[^\"]+\.js' dist/index.html | head -1")"
             echo "Active bundle inside container: ${BUNDLE}"
 
             if [ -z "${BUNDLE}" ]; then
@@ -211,7 +224,7 @@ jobs:
               fi
               if [ "$i" -eq 10 ]; then
                 echo "FATAL: Public health check did not return 200 after deploy"
-                docker compose logs --tail=120 geistdesk-gateway || true
+                $COMPOSE logs --tail=120 geistdesk-gateway || true
                 exit 1
               fi
               echo "Public health check attempt ${i}/10 failed — retrying in 5s..."

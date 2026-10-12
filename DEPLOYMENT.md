@@ -4,25 +4,53 @@ This document describes how to run GeistDesk in production with **zero-configura
 
 ---
 
-## One-command Docker bootstrap
+## One-command Docker bootstrap (turnkey)
 
-External adopters can bring up a fully populated environment with:
+On any clean Ubuntu/Debian host:
 
 ```bash
-./setup.sh
+curl -fsSL https://raw.githubusercontent.com/premtonx/GeistDesk/main/install.sh | bash
 ```
 
-The installer creates `.env` from `.env.example` if missing, generates
-`POSTGRES_PASSWORD`, `JWT_SECRET`, `MASTER_KEY_SALT`, `VAULT_ENCRYPTION_KEY`,
-and `INBOUND_MAIL_WEBHOOK_SECRET`, asks for a public domain (default
-`http://localhost:3000`, or e.g. `desk.geistai.eu`), then runs
-`docker compose up --build -d`. Non-interactive:
+Or from a git clone:
+
+```bash
+./install.sh
+# non-interactive:
+./install.sh --yes
+```
+
+`install.sh` will:
+
+1. Install Docker + Compose if missing (`get.docker.com`)
+2. Clone this repo (when invoked via `curl|bash`)
+3. Prompt for a public domain (default `localhost`)
+4. Generate a secure `.env` (`POSTGRES_PASSWORD`, `JWT_SECRET`, …)
+5. Run `docker compose up --build -d` (Postgres + API + Nginx UI + Caddy)
+
+Stack layout:
+
+| Service | Role | Host ports |
+|---------|------|------------|
+| `geistdesk-db` | `pgvector/pgvector:pg16` | none |
+| `geistdesk-gateway` | Node API (port 5000) + SMTP | optional `25` |
+| `frontend` | Nginx static Vite build | none (internal) |
+| `caddy` | TLS reverse proxy | `80`, `443` |
+
+Caddy routes `/api/*` → backend and `/*` → frontend. Local inference nodes on the
+Docker host are reachable as `http://host.docker.internal:8080`.
+
+Production hosts that already terminate TLS with Traefik use the overlay:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d geistdesk-db geistdesk-gateway
+```
+
+Legacy helper (delegates to `install.sh`):
 
 ```bash
 ./setup.sh --yes
 ```
-
-Do not edit `docker-compose.yml` — host, router, and Traefik network come from `.env`.
 
 On every container start the entrypoint (`scripts/docker-entrypoint.sh`) runs:
 
@@ -31,7 +59,7 @@ On every container start the entrypoint (`scripts/docker-entrypoint.sh`) runs:
 | 1 | Wait for PostgreSQL | Up to 30 retries (2s apart) until `DATABASE_URL` accepts connections |
 | 2 | `npm run db:deploy:prod` | Applies idempotent PostgreSQL DDL (`dist/migrate.cjs` → `initDb()`) |
 | 3 | `npm run seed:prod` | Seeds German defaults, vault folders, prompts, agent skills. Fixture users/tickets only when `ENABLE_DEMO_LOGIN=true` **and** not production. |
-| 4 | `exec node dist/server.cjs` | Starts the Express gateway on port 3000 |
+| 4 | `exec node dist/server.cjs` | Starts the Express gateway on port 5000 (compose) |
 
 > **Note:** GeistDesk does not use Prisma. Schema deployment is handled by `src/db/migrate.ts`, which wraps the same `initDb()` routine used at runtime in `src/lib/postgres-backend.ts`.
 
@@ -113,11 +141,11 @@ Demo login and vault password autofill are **disabled** in production (`ENABLE_D
 After `docker compose up`:
 
 ```bash
-curl -fsS http://localhost:3000/api/health
+curl -fsS http://localhost/api/health
 # {"status":"ok"}
 ```
 
-Production: `https://app.premtonx.cloud/api/health`
+Production: `https://desk.geistai.eu/api/health`
 
 A successful health response means the full bootstrap chain completed (schema + seed + server).
 

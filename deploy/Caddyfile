@@ -1,0 +1,27 @@
+# GeistDesk turnkey reverse proxy.
+# DOMAIN comes from the compose environment (install.sh / .env).
+# localhost & raw IPs → HTTP (Caddy skips public ACME).
+# Real DNS hostnames → automatic Let's Encrypt on :443.
+
+{$DOMAIN:localhost} {
+	encode gzip zstd
+
+	handle /api/* {
+		reverse_proxy backend:5000
+	}
+
+	handle {
+		reverse_proxy frontend:80
+	}
+
+	header {
+		X-Content-Type-Options nosniff
+		Referrer-Policy no-referrer
+		-Server
+	}
+
+	log {
+		output stdout
+		format console
+	}
+}

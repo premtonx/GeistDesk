@@ -1,10 +1,15 @@
-# GeistDesk multi-stage image — builds frontend + backend inside Docker.
-# A clean Git clone with no host node_modules/ or dist/ is enough:
-#   ./setup.sh
-#   docker compose up --build -d
+# GeistDesk multi-stage image — builds UI + API from a clean Git clone.
+#
+# Targets:
+#   backend  — Node/Express production gateway (API + SPA fallback, SMTP :25)
+#   frontend — Nginx serving Vite static assets (for Caddy reverse-proxy stacks)
+#   runner   — alias of backend (legacy compose / CI)
+#
+#   docker compose build
+#   ./install.sh
 
 # -----------------------------------------------------------------------------
-# Stage 1 — builder: full install (incl. devDependencies), Prisma client, dist/
+# Stage 1 — builder
 # -----------------------------------------------------------------------------
 FROM node:24-alpine AS builder
 WORKDIR /app
@@ -16,8 +21,7 @@ RUN npm ci --dangerously-allow-all-scripts --no-audit
 
 COPY . .
 
-# prisma generate reads DATABASE_URL from the schema datasource; this value is
-# only used at generate time (no live database required in the builder).
+# prisma generate only needs a placeholder URL (no live DB in the builder).
 ARG DATABASE_URL=postgresql://geist_user:geist_password@127.0.0.1:5432/geistdesk_prod?schema=public
 ENV DATABASE_URL=$DATABASE_URL
 RUN npx prisma generate
@@ -43,13 +47,12 @@ RUN npm run build \
   && test -f dist/seed.cjs \
   && test -f dist/seed-demo.cjs
 
-# Production node_modules for the runner (keeps generated Prisma client).
 RUN npm prune --omit=dev && npm cache clean --force
 
 # -----------------------------------------------------------------------------
-# Stage 2 — runner: slim production image
+# Stage 2 — backend (API gateway)
 # -----------------------------------------------------------------------------
-FROM node:24-alpine AS runner
+FROM node:24-alpine AS backend
 WORKDIR /app
 
 RUN apk add --no-cache openssl libc6-compat
@@ -57,7 +60,7 @@ RUN apk add --no-cache openssl libc6-compat
 ARG BUILD_ID=local
 ENV BUILD_ID=$BUILD_ID \
     NODE_ENV=production \
-    PORT=3000
+    PORT=5000
 
 COPY --from=builder /app/package.json /app/package-lock.json /app/.npmrc ./
 COPY --from=builder /app/node_modules ./node_modules
@@ -65,9 +68,29 @@ COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
-EXPOSE 3000
+# API + inbound SMTP (MX). Only exposed on the compose network unless mapped.
+EXPOSE 5000 25
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=5 \
-  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+  CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||5000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+
+# Legacy alias used by older compose / CI references.
+FROM backend AS runner
+
+# -----------------------------------------------------------------------------
+# Stage 3 — frontend (static Vite build behind Caddy)
+# -----------------------------------------------------------------------------
+FROM nginx:1.27-alpine AS frontend
+COPY deploy/nginx-frontend.conf /etc/nginx/conf.d/default.conf
+COPY --from=builder /app/dist/ /usr/share/nginx/html/
+# Drop Node server bundles from the static root (API is the backend service).
+RUN rm -f /usr/share/nginx/html/server.cjs \
+          /usr/share/nginx/html/migrate.cjs \
+          /usr/share/nginx/html/seed.cjs \
+          /usr/share/nginx/html/seed-demo.cjs \
+          /usr/share/nginx/html/*.map 2>/dev/null || true
+EXPOSE 80
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -qO- http://127.0.0.1/ >/dev/null || exit 1
