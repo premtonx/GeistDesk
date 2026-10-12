@@ -3,7 +3,6 @@ import { z } from 'zod';
 import { authenticate, requireRole } from '../middleware/authMiddleware.js';
 import { resolveTenantFromRequest } from '../lib/tenant-context.js';
 import { safeErrorMessage } from '../lib/safe-log.js';
-import { queryDb } from '../lib/postgres-backend.js';
 import {
   getRagPipelineConfig,
   setRagPipelineConfig,
@@ -16,6 +15,9 @@ import {
   getVectorQueueDepth,
 } from '../lib/ai/vector-queue.js';
 import { hybridSearchKnowledge } from '../lib/ai/ki-orchestrator.js';
+import { cosineSearchRagChunks } from '../lib/ai/rag-search.js';
+import { enqueuePendingRagIndex, loadRagStatus } from '../lib/ai/rag-status.js';
+import { queryDb } from '../lib/postgres-backend.js';
 
 const router = Router();
 
@@ -28,143 +30,6 @@ const updateConfigSchema = z.object({
   detectDuplicates: z.boolean().optional(),
 });
 
-interface RagStatusResult {
-  success: boolean;
-  tenantId: string;
-  queueDepth: number;
-  kb: {
-    totalArticles: number;
-    publishedArticles: number;
-    indexedChunks: number;
-    indexedArticles: number;
-    missingIndexArticles: number;
-  };
-  tickets: {
-    totalResolvedClosed: number;
-    indexedChunks: number;
-    indexedTickets: number;
-    missingIndexTickets: number;
-  };
-  activeEmbeddingProvider: unknown;
-  config: RagPipelineConfig;
-  sampledMissingKb?: string[];
-  sampledMissingTickets?: string[];
-}
-
-async function loadRagStatus(tenantId: string): Promise<RagStatusResult> {
-  const { listEmbeddingProviderStatus, resolveEmbeddingProvider } = await import(
-    '../lib/ai/embeddings.js'
-  );
-
-  // Counts from the document store.
-  const docs = await queryDb(
-    `SELECT collection, data FROM geistdesk_documents
-     WHERE collection IN ('kb_articles', 'tickets')
-       AND (data->>'tenantId' IS NULL OR data->>'tenantId' = $1)`,
-    [tenantId],
-  );
-
-  let totalArticles = 0;
-  let publishedArticles = 0;
-  let totalResolvedClosed = 0;
-  const publishedIds: string[] = [];
-  const resolvedIds: string[] = [];
-
-  for (const row of docs.rows) {
-    const collection = String(row.collection);
-    const data = (row as any).data || {};
-    if (collection === 'kb_articles') {
-      totalArticles += 1;
-      const status = String(data.status || '').toLowerCase();
-      const published =
-        status === 'published' || status === 'public' || data.visibility === 'Public' || status === '';
-      if (published) {
-        publishedArticles += 1;
-        publishedIds.push(String((row as any).id));
-      }
-    } else if (collection === 'tickets') {
-      const status = String(data.status || '').toLowerCase();
-      if (status === 'resolved' || status === 'closed') {
-        totalResolvedClosed += 1;
-        resolvedIds.push(String((row as any).id));
-      }
-    }
-  }
-
-  // Indexed chunk counts per source type.
-  const vec = await queryDb(
-    `SELECT source_type, COUNT(*) AS chunks, COUNT(DISTINCT source_id) AS sources
-     FROM "KnowledgeEmbedding"
-     WHERE tenant_id = $1
-     GROUP BY source_type`,
-    [tenantId],
-  );
-  let kbChunks = 0;
-  let kbSources = 0;
-  let ticketChunks = 0;
-  let ticketSources = 0;
-  for (const row of vec.rows) {
-    const type = String(row.source_type);
-    const chunks = Number(row.chunks || 0);
-    const sources = Number(row.sources || 0);
-    if (type === 'KB_ARTICLE') {
-      kbChunks = chunks;
-      kbSources = sources;
-    } else if (type === 'RESOLVED_TICKET') {
-      ticketChunks = chunks;
-      ticketSources = sources;
-    }
-  }
-
-  const [, active] = await Promise.all([
-    listEmbeddingProviderStatus(tenantId),
-    resolveEmbeddingProvider(tenantId),
-  ]);
-
-  const indexedKbIds = new Set(
-    (
-      await queryDb(
-        `SELECT DISTINCT source_id FROM "KnowledgeEmbedding" WHERE tenant_id = $1 AND source_type = 'KB_ARTICLE'`,
-        [tenantId],
-      )
-    ).rows.map((r) => String(r.source_id)),
-  );
-  const indexedTicketIds = new Set(
-    (
-      await queryDb(
-        `SELECT DISTINCT source_id FROM "KnowledgeEmbedding" WHERE tenant_id = $1 AND source_type = 'RESOLVED_TICKET'`,
-        [tenantId],
-      )
-    ).rows.map((r) => String(r.source_id)),
-  );
-
-  const missingKb = publishedIds.filter((id) => !indexedKbIds.has(id));
-  const missingTickets = resolvedIds.filter((id) => !indexedTicketIds.has(id));
-
-  return {
-    success: true,
-    tenantId,
-    queueDepth: await getVectorQueueDepth(),
-    kb: {
-      totalArticles,
-      publishedArticles,
-      indexedChunks: kbChunks,
-      indexedArticles: kbSources,
-      missingIndexArticles: missingKb.length,
-    },
-    tickets: {
-      totalResolvedClosed,
-      indexedChunks: ticketChunks,
-      indexedTickets: ticketSources,
-      missingIndexTickets: missingTickets.length,
-    },
-    activeEmbeddingProvider: active,
-    config: await getRagPipelineConfig(tenantId),
-    sampledMissingKb: missingKb.slice(0, 10),
-    sampledMissingTickets: missingTickets.slice(0, 10),
-  };
-}
-
 /** GET /api/admin/rag/status — indexed KB articles vs chunks, solved tickets vs vectors. */
 router.get(
   '/status',
@@ -173,8 +38,7 @@ router.get(
   async (req: Request, res: Response) => {
     try {
       const tenantId = resolveTenantFromRequest(req);
-      const status = await loadRagStatus(tenantId);
-      return res.json(status);
+      return res.json(await loadRagStatus(tenantId));
     } catch (err: unknown) {
       return res.status(500).json({ error: safeErrorMessage(err, 'Failed to load RAG status') });
     }
@@ -242,25 +106,31 @@ router.put(
 
 const searchTestSchema = z.object({
   q: z.string().min(1).max(8000).default('password reset'),
-  limit: z.number().int().min(1).max(10).optional(),
+  limit: z.coerce.number().int().min(1).max(10).optional(),
+  minSimilarity: z.coerce.number().min(0).max(1).optional(),
 });
 
-/** GET /api/admin/rag/search-test — verify similarity retrieval end-to-end within the tenant. */
+/** GET /api/admin/rag/search-test — cosine similarity end-to-end within the tenant. */
 router.get(
   '/search-test',
   authenticate,
   requireRole(['SYSTEM_ADMIN']),
   async (req: Request, res: Response) => {
     try {
-      const parsed = searchTestSchema.safeParse({ q: req.query.q, limit: req.query.limit });
+      const parsed = searchTestSchema.safeParse({
+        q: req.query.q,
+        limit: req.query.limit,
+        minSimilarity: req.query.minSimilarity,
+      });
       if (!parsed.success) {
         return res.status(400).json({ error: 'Invalid search-test params', details: parsed.error.flatten() });
       }
       const tenantId = resolveTenantFromRequest(req);
-      const hits = await hybridSearchKnowledge({
+      const hits = await cosineSearchRagChunks({
         query: parsed.data.q,
         tenantId,
         limit: parsed.data.limit ?? 5,
+        minSimilarity: parsed.data.minSimilarity,
       });
       return res.json({
         success: true,
@@ -268,12 +138,50 @@ router.get(
         query: parsed.data.q,
         hitCount: hits.length,
         hits,
-        // All queries are scoped by tenant_id in hybridSearchKnowledge; the
-        // flag confirms no cross-tenant rows can leak into results.
         matchedTenantOnly: true,
       });
     } catch (err: unknown) {
-      return res.status(500).json({ error: safeErrorMessage(err, 'RAG search test failed') });
+      // Fall back to hybrid search if pure cosine fails (e.g. no embedding provider).
+      try {
+        const tenantId = resolveTenantFromRequest(req);
+        const q = String(req.query.q || 'password reset');
+        const hits = await hybridSearchKnowledge({
+          query: q,
+          tenantId,
+          limit: Number(req.query.limit) || 5,
+        });
+        return res.json({
+          success: true,
+          tenantId,
+          query: q,
+          hitCount: hits.length,
+          hits,
+          matchedTenantOnly: true,
+          fallback: 'hybrid',
+        });
+      } catch {
+        return res.status(500).json({ error: safeErrorMessage(err, 'RAG search test failed') });
+      }
+    }
+  },
+);
+
+/** POST /api/admin/rag/index-pending — alias of /api/rag/index-pending. */
+router.post(
+  '/index-pending',
+  authenticate,
+  requireRole(['SYSTEM_ADMIN']),
+  async (req: Request, res: Response) => {
+    try {
+      const type = String(req.body?.type || 'kb');
+      if (type !== 'kb' && type !== 'ticket' && type !== 'all') {
+        return res.status(400).json({ error: "type must be 'kb' | 'ticket' | 'all'" });
+      }
+      const tenantId = resolveTenantFromRequest(req);
+      const result = await enqueuePendingRagIndex({ tenantId, type });
+      return res.status(202).json({ success: true, ...result });
+    } catch (err: unknown) {
+      return res.status(500).json({ error: safeErrorMessage(err, 'Failed to enqueue pending RAG index') });
     }
   },
 );
@@ -294,8 +202,8 @@ router.get(
       );
       let enqueued = 0;
       for (const row of docs.rows) {
-        const id = String((row as any).id);
-        const data = (row as any).data || {};
+        const id = String((row as { id: string }).id);
+        const data = ((row as { data?: Record<string, unknown> }).data || {}) as Record<string, unknown>;
         if (type === 'ticket') {
           const status = String(data.status || '').toLowerCase();
           if (status === 'resolved' || status === 'closed') {
@@ -305,7 +213,10 @@ router.get(
         } else {
           const status = String(data.status || '').toLowerCase();
           const published =
-            status === 'published' || status === 'public' || data.visibility === 'Public' || status === '';
+            status === 'published' ||
+            status === 'public' ||
+            data.visibility === 'Public' ||
+            status === '';
           if (published) {
             await enqueueKbArticleIndex(id, tenantId);
             enqueued += 1;

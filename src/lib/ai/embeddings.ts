@@ -84,14 +84,32 @@ async function readLocalKey(workspaceId: string): Promise<string> {
   );
 }
 
+/**
+ * Prefer explicit local embedding gateways (bge-small / bge-large / all-MiniLM
+ * behind an OpenAI-compatible /v1/embeddings server), then orchestrator
+ * endpoint, then Ollama.
+ *
+ * Set LOCAL_EMBEDDING_ENDPOINT=http://host.docker.internal:8080 in Docker
+ * compose when a host-side inference node serves /v1/embeddings.
+ */
 async function resolveLocalEndpoint(workspaceId: string): Promise<string> {
+  const fromEnv = normalizeLocalBase(
+    process.env.LOCAL_EMBEDDING_ENDPOINT ||
+      process.env.EMBEDDING_ENDPOINT ||
+      process.env.OLLAMA_ENDPOINT ||
+      getOllamaEndpoint() ||
+      '',
+  );
+  if (fromEnv) return fromEnv;
+
   try {
     const cfg = await getOrchestratorConfig(workspaceId);
     if (cfg.endpointUrl?.trim()) return normalizeLocalBase(cfg.endpointUrl.trim());
   } catch {
     /* config table may be unavailable during early boot */
   }
-  return normalizeLocalBase(getOllamaEndpoint() || process.env.OLLAMA_ENDPOINT || '');
+
+  return '';
 }
 
 function azureEndpoint(): string {
@@ -272,11 +290,35 @@ async function buildCandidates(workspaceId: string): Promise<ProviderCandidate[]
   const azureModel = explicitModel || 'text-embedding-3-small';
   const googleModel = explicitModel || 'text-embedding-004';
   const ollamaModel = explicitModel || 'nomic-embed-text';
-  const compatModel = explicitModel || ollamaModel;
+  // Local OpenAI-compat gateways commonly serve bge-* / MiniLM sentence models.
+  const compatModel =
+    explicitModel ||
+    process.env.LOCAL_EMBEDDING_MODEL ||
+    'BAAI/bge-small-en-v1.5';
 
   const localEndpoint = await resolveLocalEndpoint(workspaceId);
 
   const all: ProviderCandidate[] = [
+    {
+      kind: 'openai_compat',
+      model: compatModel,
+      label: 'Local embeddings (OpenAI-compat)',
+      available: async () => Boolean(localEndpoint),
+      embed: async (texts) =>
+        embedWithOpenAICompat(
+          texts,
+          compatModel,
+          localEndpoint,
+          (await readLocalKey(workspaceId)) || undefined,
+        ),
+    },
+    {
+      kind: 'ollama',
+      model: ollamaModel,
+      label: 'Ollama',
+      available: async () => Boolean(localEndpoint),
+      embed: async (texts) => embedWithOllama(texts, ollamaModel, localEndpoint),
+    },
     {
       kind: 'openai',
       model: openaiModel,
@@ -299,21 +341,6 @@ async function buildCandidates(workspaceId: string): Promise<ProviderCandidate[]
       available: async () => Boolean(await readGoogleKey(workspaceId)),
       embed: async (texts) => embedWithGoogle(texts, googleModel, await readGoogleKey(workspaceId)),
     },
-    {
-      kind: 'ollama',
-      model: ollamaModel,
-      label: 'Ollama',
-      available: async () => Boolean(localEndpoint),
-      embed: async (texts) => embedWithOllama(texts, ollamaModel, localEndpoint),
-    },
-    {
-      kind: 'openai_compat',
-      model: compatModel,
-      label: 'OpenAI-compatible local gateway',
-      available: async () => Boolean(localEndpoint),
-      embed: async (texts) =>
-        embedWithOpenAICompat(texts, compatModel, localEndpoint, (await readLocalKey(workspaceId)) || undefined),
-    },
   ];
 
   if (force) {
@@ -325,14 +352,14 @@ async function buildCandidates(workspaceId: string): Promise<ProviderCandidate[]
         ? 'google'
         : force === 'azure' || force === 'azure_openai'
           ? 'azure_openai'
-          : force === 'local' || force === 'lmstudio' || force === 'vllm'
+          : force === 'local' || force === 'lmstudio' || force === 'vllm' || force === 'openai_compat'
             ? 'openai_compat'
             : (force as EmbeddingProviderKind);
     return all.filter((c) => c.kind === mapped);
   }
 
-  // Prefer order derived from orchestrator providerPriority (skip Claude).
-  const orderedKinds: EmbeddingProviderKind[] = [];
+  // Prefer local inference first, then cloud keys, then orchestrator chat priority.
+  const orderedKinds: EmbeddingProviderKind[] = ['openai_compat', 'ollama'];
   try {
     const cfg = await getOrchestratorConfig(workspaceId);
     for (const modelId of cfg.providerPriority || []) {
@@ -343,13 +370,10 @@ async function buildCandidates(workspaceId: string): Promise<ProviderCandidate[]
     /* ignore */
   }
 
-  // Sensible defaults if priority empty / unavailable
   for (const kind of [
     'openai',
     'azure_openai',
     'google',
-    'ollama',
-    'openai_compat',
   ] as const satisfies ReadonlyArray<Exclude<EmbeddingProviderKind, 'none'>>) {
     if (!orderedKinds.includes(kind)) orderedKinds.push(kind);
   }

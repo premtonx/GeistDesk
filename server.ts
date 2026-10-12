@@ -43,6 +43,7 @@ import mailDomainRoutes from "./src/routes/mailDomainRoutes.js";
 import vectorRoutes from "./src/routes/vectorRoutes.js";
 import kbDocumentRoutes from "./src/routes/kbDocumentRoutes.js";
 import ragAdminRoutes from "./src/routes/ragAdminRoutes.js";
+import ragRoutes from "./src/routes/ragRoutes.js";
 import importRoutes from "./src/routes/importRoutes.js";
 import onboardingRoutes from "./src/routes/onboardingRoutes.js";
 import { ensureOnboardingState } from "./src/lib/onboarding-service.js";
@@ -737,6 +738,7 @@ async function startServer() {
   app.use("/api/email-channels", emailChannelRoutes);
   app.use("/api/mail", mailDomainRoutes);
   app.use("/api/vectors", vectorRoutes);
+  app.use("/api/rag", ragRoutes);
   app.use("/api/admin/rag", ragAdminRoutes);
 
   // Authoritative, SQL-computed ticket metrics for dashboards.
