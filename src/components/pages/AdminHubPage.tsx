@@ -42,22 +42,17 @@ export default function AdminHubPage() {
     setSearchParams(next, { replace: true });
   }, [activeTab, searchParams, setSearchParams]);
 
+  const refreshTelemetry = () => {
+    void axios
+      .get('/api/admin/hub-stats')
+      .then((res) => setTelemetry(res.data))
+      .catch((err) => console.warn('Admin hub stats unavailable', err));
+  };
+
   useEffect(() => {
-    let alive = true;
-    const loadStats = async () => {
-      try {
-        const res = await axios.get('/api/admin/hub-stats');
-        if (alive) setTelemetry(res.data);
-      } catch (err) {
-        console.warn('Admin hub stats unavailable', err);
-      }
-    };
-    void loadStats();
-    const interval = setInterval(loadStats, 30000);
-    return () => {
-      alive = false;
-      clearInterval(interval);
-    };
+    refreshTelemetry();
+    const interval = setInterval(refreshTelemetry, 30000);
+    return () => clearInterval(interval);
   }, []);
 
   const setTab = (next: string) => {
@@ -120,7 +115,7 @@ export default function AdminHubPage() {
           </div>
 
           <TabsContent value={'uebersicht' satisfies AdminHubTabId} className="mt-6 outline-none">
-            <AdminHubOverviewTab telemetry={telemetry} />
+            <AdminHubOverviewTab telemetry={telemetry} onTelemetryRefresh={refreshTelemetry} />
           </TabsContent>
           <TabsContent value={'ai-engine' satisfies AdminHubTabId} className="mt-6 outline-none">
             <AdminHubAiEngineTab telemetry={telemetry} />
@@ -135,7 +130,7 @@ export default function AdminHubPage() {
             <AdminHubIntegrationsTab />
           </TabsContent>
           <TabsContent value={'system' satisfies AdminHubTabId} className="mt-6 outline-none">
-            <AdminHubSystemTab telemetry={telemetry} />
+            <AdminHubSystemTab telemetry={telemetry} onTelemetryRefresh={refreshTelemetry} />
           </TabsContent>
         </Tabs>
       </div>

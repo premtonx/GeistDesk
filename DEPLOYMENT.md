@@ -134,6 +134,19 @@ After first boot (German localization defaults):
 
 Demo login and vault password autofill are **disabled** in production (`ENABLE_DEMO_LOGIN` / `VITE_ENABLE_DEMO_LOGIN` are ignored when `NODE_ENV=production`).
 
+### Realistic IT demo dataset (opt-in)
+
+Controllable seeder for screenshots / sandboxes (`src/services/seedService.ts`):
+
+| Trigger | How |
+|---------|-----|
+| Admin Hub | **Übersicht** or **Infrastruktur & Backups** → “Demo-Daten importieren / bereinigen” |
+| API | `POST /api/admin/demo-data/seed` · `DELETE /api/admin/demo-data/reset` |
+| CLI | `npm run seed:demo` · `npm run seed:demo:dev -- --reset` |
+| Boot | `SEED_DEMO_DATA=true` (skips if demo rows already exist) |
+
+Rows are tagged `isDemoData: true` / `source: demo-simulation` with stable `*-demo-sim-*` IDs so reset never touches real tenant data.
+
 ---
 
 ## Health check
