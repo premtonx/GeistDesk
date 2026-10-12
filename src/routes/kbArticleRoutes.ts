@@ -271,14 +271,22 @@ router.patch('/:id', authenticate, async (req: Request, res: Response) => {
     patch.updatedAt = new Date().toISOString();
     await updateDocDirect('kb_articles', id, patch);
 
-    // Selective RAG: toggling index_in_rag enqueues a re-index (or purges the
-    // existing vectors immediately when the article is opted out).
-    if (typeof patch.index_in_rag === 'boolean') {
-      const tenantId = resolveTenantFromRequest(req);
-      if (patch.index_in_rag) {
+    // Auto-sync RAG: re-index on content/title publish updates, or purge when
+    // the article is opted out of the knowledge store.
+    const tenantId = resolveTenantFromRequest(req);
+    if (patch.index_in_rag === false) {
+      await deleteEmbeddingsForSource(tenantId, 'KB_ARTICLE', id);
+    } else if (
+      typeof patch.index_in_rag === 'boolean' ||
+      patch.content !== undefined ||
+      patch.title !== undefined
+    ) {
+      const { getRagPipelineConfig } = await import('../lib/rag-pipeline-config.js');
+      const { drainVectorQueue } = await import('../lib/ai/vector-queue.js');
+      const ragConfig = await getRagPipelineConfig(tenantId);
+      if (ragConfig.indexNewKbArticles && (article.index_in_rag !== false || patch.index_in_rag === true)) {
         await enqueueKbArticleIndex(id, tenantId);
-      } else {
-        await deleteEmbeddingsForSource(tenantId, 'KB_ARTICLE', id);
+        void drainVectorQueue();
       }
     }
 

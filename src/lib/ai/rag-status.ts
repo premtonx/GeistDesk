@@ -4,7 +4,10 @@
 
 import { queryDb } from '../postgres-backend.js';
 import { getRagPipelineConfig, type RagPipelineConfig } from '../rag-pipeline-config.js';
+import { getRecentFailedJobs } from '../job-queue.js';
+import { getLastEmbeddingFailure } from './embeddings.js';
 import {
+  drainVectorQueue,
   enqueueKbArticleIndex,
   enqueueResolvedTicketIndex,
   getVectorQueueDepth,
@@ -31,6 +34,9 @@ export interface RagStatusResult {
   config: RagPipelineConfig;
   sampledMissingKb?: string[];
   sampledMissingTickets?: string[];
+  /** Latest embedding/provider failure (for Admin-Hub banner). */
+  embeddingError?: string | null;
+  recentFailures?: Array<{ id: string; jobType: string; lastError: string | null; updatedAt: string }>;
 }
 
 export type RagIndexPendingType = 'kb' | 'ticket' | 'all';
@@ -131,6 +137,7 @@ export async function loadRagStatus(tenantId: string): Promise<RagStatusResult> 
 
   const missingKb = publishedIds.filter((id) => !indexedKbIds.has(id));
   const missingTickets = resolvedIds.filter((id) => !indexedTicketIds.has(id));
+  const recentFailures = await getRecentFailedJobs(['VECTOR_INDEX', 'VECTOR_DELETE'], 5);
 
   return {
     success: true,
@@ -153,6 +160,8 @@ export async function loadRagStatus(tenantId: string): Promise<RagStatusResult> 
     config: await getRagPipelineConfig(tenantId),
     sampledMissingKb: missingKb.slice(0, 10),
     sampledMissingTickets: missingTickets.slice(0, 10),
+    embeddingError: getLastEmbeddingFailure(),
+    recentFailures,
   };
 }
 
@@ -216,6 +225,9 @@ export async function enqueuePendingRagIndex(params: {
       }
     }
   }
+
+  // Process immediately — do not wait for the worker interval.
+  void drainVectorQueue();
 
   return {
     tenantId,

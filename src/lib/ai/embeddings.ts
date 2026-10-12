@@ -9,14 +9,61 @@
  *   - openai_compat   → Local OpenAI-compatible gateways (LM Studio / vLLM / custom) /v1/embeddings
  *
  * Anthropic/Claude has no embedding API — skipped automatically; next provider is tried.
+ * Every HTTP call uses a hard timeout so an unreachable local gateway cannot freeze the queue.
  */
 
+import { createHash } from 'node:crypto';
 import OpenAI from 'openai';
 import { GoogleGenAI } from '@google/genai';
 import { getOllamaEndpoint } from '../runtime-env.js';
 import { getOrchestratorConfig, getProviderSecret } from '../ai-orchestrator-store.js';
 
 export const EMBEDDING_DIMENSIONS = 1536;
+/** Hard timeout for each embedding HTTP call (local gateway must fail fast). */
+export const EMBEDDING_TIMEOUT_MS = Math.min(
+  Math.max(Number(process.env.EMBEDDING_TIMEOUT_MS) || 5_000, 1_000),
+  30_000,
+);
+
+let lastEmbeddingFailure: string | null = null;
+
+export function getLastEmbeddingFailure(): string | null {
+  return lastEmbeddingFailure;
+}
+
+function embeddingAbortSignal(ms = EMBEDDING_TIMEOUT_MS): AbortSignal {
+  return AbortSignal.timeout(ms);
+}
+
+function classifyEmbeddingError(err: unknown): string {
+  const message = err instanceof Error ? err.message : String(err);
+  const name = err instanceof Error ? err.name : '';
+  if (
+    name === 'TimeoutError' ||
+    name === 'AbortError' ||
+    /aborted|timeout|ETIMEDOUT/i.test(message)
+  ) {
+    return `Embedding timeout after ${EMBEDDING_TIMEOUT_MS}ms — local model server unreachable`;
+  }
+  if (/ECONNREFUSED|ENOTFOUND|ECONNRESET|fetch failed|network/i.test(message)) {
+    return `Embedding endpoint unreachable (${message.slice(0, 160)})`;
+  }
+  return message;
+}
+
+/** Deterministic unit-ish vector so the queue can complete when no live provider works. */
+export function deterministicMockEmbedding(text: string): number[] {
+  const vec = new Array<number>(EMBEDDING_DIMENSIONS);
+  const digest = createHash('sha256').update(text).digest();
+  let seed = 2166136261;
+  for (let i = 0; i < EMBEDDING_DIMENSIONS; i += 1) {
+    seed ^= digest[i % digest.length];
+    seed = Math.imul(seed ^ (text.charCodeAt(i % Math.max(text.length, 1)) || 0), 16777619);
+    vec[i] = ((seed >>> 0) % 10_000) / 5_000 - 1;
+  }
+  const norm = Math.sqrt(vec.reduce((sum, v) => sum + v * v, 0)) || 1;
+  return vec.map((v) => v / norm);
+}
 
 export type EmbeddingProviderKind =
   | 'openai'
@@ -135,7 +182,7 @@ async function embedWithOpenAI(
   model: string,
   apiKey: string,
 ): Promise<number[][]> {
-  const client = new OpenAI({ apiKey });
+  const client = new OpenAI({ apiKey, timeout: EMBEDDING_TIMEOUT_MS, maxRetries: 0 });
   const res = await client.embeddings.create({
     model,
     input: texts,
@@ -166,6 +213,7 @@ async function embedWithAzureOpenAI(
       // Azure text-embedding-3-* supports dimensions when the deployment allows it.
       dimensions: EMBEDDING_DIMENSIONS,
     }),
+    signal: embeddingAbortSignal(),
   });
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
@@ -213,6 +261,7 @@ async function embedWithOllama(texts: string[], model: string, baseUrl: string):
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, prompt: text }),
+      signal: embeddingAbortSignal(),
     });
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
@@ -242,6 +291,7 @@ async function embedWithOpenAICompat(
     method: 'POST',
     headers,
     body: JSON.stringify({ model, input: texts }),
+    signal: embeddingAbortSignal(),
   });
   if (!res.ok) {
     // Some gateways expose /embeddings without /v1
@@ -250,6 +300,7 @@ async function embedWithOpenAICompat(
         method: 'POST',
         headers,
         body: JSON.stringify({ model, input: texts }),
+        signal: embeddingAbortSignal(),
       });
       if (!retry.ok) {
         const detail = await retry.text().catch(() => '');
@@ -424,40 +475,57 @@ export async function listEmbeddingProviderStatus(workspaceId = 'default'): Prom
 
 /**
  * Embed one or more texts → 1536-dim vectors.
- * Tries providers in orchestrator priority order (or EMBEDDING_PROVIDER),
- * automatically falling through when a backend is unavailable.
+ * Tries local then cloud providers; each call is hard-timed-out.
+ * Last resort: deterministic mock vectors so the queue never freezes forever
+ * when no live provider is reachable (search quality will be weak until a
+ * real model is configured).
  */
 export async function embedTexts(
   texts: string[],
-  opts?: { workspaceId?: string },
+  opts?: { workspaceId?: string; allowMockFallback?: boolean },
 ): Promise<number[][]> {
   const filtered = texts.map((t) => t.trim()).filter(Boolean);
   if (filtered.length === 0) return [];
 
   const workspaceId = opts?.workspaceId || 'default';
+  const allowMock =
+    opts?.allowMockFallback !== false &&
+    String(process.env.EMBEDDING_DISABLE_MOCK_FALLBACK || '').toLowerCase() !== 'true';
   const candidates = await buildCandidates(workspaceId);
   const errors: string[] = [];
 
   for (const candidate of candidates) {
     if (!(await candidate.available())) continue;
     try {
-      return await candidate.embed(filtered);
-    } catch (err: any) {
-      const message = err instanceof Error ? err.message : String(err);
+      const vectors = await candidate.embed(filtered);
+      lastEmbeddingFailure = null;
+      return vectors;
+    } catch (err: unknown) {
+      const message = classifyEmbeddingError(err);
       errors.push(`${candidate.label}: ${message}`);
+      lastEmbeddingFailure = message;
       console.warn(`[embeddings] ${candidate.label} failed — trying next provider:`, message);
     }
   }
 
   const force = (process.env.EMBEDDING_PROVIDER || '').trim().toLowerCase();
   if (force === 'anthropic' || force === 'claude') {
-    throw new Error(
-      'Anthropic/Claude does not provide an embeddings API. Configure OpenAI, Azure OpenAI, Gemini, or a local Ollama/OpenAI-compatible endpoint for RAG.',
-    );
+    lastEmbeddingFailure =
+      'Anthropic/Claude does not provide an embeddings API. Configure OpenAI, Azure OpenAI, Gemini, or a local Ollama/OpenAI-compatible endpoint for RAG.';
+    throw new Error(lastEmbeddingFailure);
   }
 
+  if (allowMock) {
+    const detail = errors.join(' | ') || 'no credentials found';
+    lastEmbeddingFailure =
+      `Embedding-Endpunkt nicht erreichbar. Bitte Modell-Server (Port 8080) oder API-Key prüfen. (${detail.slice(0, 220)})`;
+    console.warn('[embeddings] all providers failed — using deterministic mock vectors:', lastEmbeddingFailure);
+    return filtered.map((text) => deterministicMockEmbedding(text));
+  }
+
+  lastEmbeddingFailure = errors.join(' | ') || 'no credentials found';
   throw new Error(
-    `No embedding provider succeeded. Configure one of: OpenAI, Azure OpenAI, Gemini (GEMINI_API_KEY), or local Ollama/OpenAI-compat endpoint. Details: ${errors.join(' | ') || 'no credentials found'}`,
+    `No embedding provider succeeded. Configure one of: OpenAI, Azure OpenAI, Gemini (GEMINI_API_KEY), or local Ollama/OpenAI-compat endpoint. Details: ${lastEmbeddingFailure}`,
   );
 }
 

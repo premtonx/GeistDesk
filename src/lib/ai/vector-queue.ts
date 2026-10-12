@@ -159,7 +159,7 @@ async function upsertChunks(params: {
     ? chunks.map((chunk) => `${params.chunkPrefix!}\n\n${chunk}`)
     : chunks;
 
-  const vectors = await embedTexts(stamped);
+  const vectors = await embedTexts(stamped, { workspaceId: params.tenantId });
   await deleteEmbeddingsForSource(params.tenantId, params.sourceType, params.sourceId);
 
   for (let i = 0; i < chunks.length; i += 1) {
@@ -381,7 +381,7 @@ async function findSimilarResolvedTickets(
   body: string,
   limit = 5,
 ): Promise<Array<{ vector_distance: number | null }>> {
-  const [vector] = await embedTexts([body]);
+  const [vector] = await embedTexts([body], { workspaceId: tenantId });
   if (!vector) return [];
   const literal = vectorToSqlLiteral(vector);
   const res = await queryDb(
@@ -556,7 +556,21 @@ export function handleKnowledgeDocumentMutation(params: {
         return;
       }
       if ((action === 'add_doc' || action === 'update_doc' || action === 'set_doc') && id) {
-        void enqueueKbArticleIndex(id, tenantId);
+        // Auto-sync on publish/create when RAG indexing is enabled for the article.
+        void (async () => {
+          try {
+            const ragConfig = await getRagPipelineConfig(tenantId);
+            if (!ragConfig.indexNewKbArticles) return;
+            if (params.data?.index_in_rag === false) {
+              await enqueueDeleteEmbeddings(id, 'KB_ARTICLE', tenantId);
+              return;
+            }
+            await enqueueKbArticleIndex(id, tenantId);
+            void drainVectorQueue();
+          } catch (err: any) {
+            safeLog('warn', '[vector-queue] KB auto-index enqueue failed:', err?.message || err);
+          }
+        })();
       }
       return;
     }
@@ -570,7 +584,7 @@ export function handleKnowledgeDocumentMutation(params: {
         if (params.data?.index_in_rag === false) {
           void enqueueDeleteEmbeddings(id, 'KB_DOCUMENT', tenantId);
         } else {
-          void enqueueKbDocumentIndex(id, tenantId);
+          void enqueueKbDocumentIndex(id, tenantId).then(() => void drainVectorQueue());
         }
       }
       return;
@@ -587,7 +601,12 @@ export function handleKnowledgeDocumentMutation(params: {
           // Selective RAG: opting a ticket out purges existing vectors immediately.
           void enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);
         } else if (status === 'resolved' || status === 'closed') {
-          void enqueueResolvedTicketIndex(id, tenantId);
+          void (async () => {
+            const ragConfig = await getRagPipelineConfig(tenantId);
+            if (!ragConfig.indexResolvedTickets) return;
+            await enqueueResolvedTicketIndex(id, tenantId);
+            void drainVectorQueue();
+          })();
         } else if (status === 'trash' || status === 'deleted') {
           void enqueueDeleteEmbeddings(id, 'RESOLVED_TICKET', tenantId);
         }
@@ -601,16 +620,21 @@ export function handleKnowledgeDocumentMutation(params: {
 export function startVectorQueueWorker(): void {
   if (workerStarted) return;
   workerStarted = true;
-  void recoverOrphanedJobs('vector').then((recovered) => {
+  // Recover hung "running" vector jobs quickly (embedding timeouts used to leave
+  // leases stuck for 10 minutes).
+  void recoverOrphanedJobs('vector', 2).then((recovered) => {
     if (recovered > 0) safeLog('info', `[vector-queue] recovered ${recovered} orphaned job(s)`);
   });
   setInterval(() => {
+    void recoverOrphanedJobs('vector', 2);
     void drainVectorQueue();
-  }, 5_000);
+  }, 2_000);
+  // Kick immediately so index-pending does not wait for the first interval.
+  void drainVectorQueue();
   safeLog('info', '[vector-queue] background worker started (durable queue)');
 }
 
 export async function getVectorQueueDepth(): Promise<number> {
   const { getJobQueueDepth } = await import('../job-queue.js');
-  return getJobQueueDepth();
+  return getJobQueueDepth(['VECTOR_INDEX', 'VECTOR_DELETE']);
 }
