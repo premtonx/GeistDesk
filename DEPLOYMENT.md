@@ -26,16 +26,16 @@ Or from a git clone:
 2. Clone this repo (when invoked via `curl|bash`)
 3. Prompt for a public domain (default `localhost`)
 4. Generate a secure `.env` (`POSTGRES_PASSWORD`, `JWT_SECRET`, …)
-5. Run `docker compose up --build -d` (Postgres + API + Nginx UI + Caddy)
+5. Run `docker compose --profile caddy up --build -d` (Postgres + API + Nginx UI + Caddy)
 
 Stack layout:
 
 | Service | Role | Host ports |
 |---------|------|------------|
-| `geistdesk-db` | `pgvector/pgvector:pg16` | none |
+| `geistdesk-db` | `pgvector/pgvector:pg15` | none |
 | `geistdesk-gateway` | Node API (port 5000) + SMTP | optional `25` |
-| `frontend` | Nginx static Vite build | none (internal) |
-| `caddy` | TLS reverse proxy | `80`, `443` |
+| `frontend` | Nginx static Vite build (`--profile caddy`) | none (internal) |
+| `caddy` | TLS reverse proxy (`--profile caddy`) | `80`, `443` |
 
 Caddy routes `/api/*` → backend and `/*` → frontend. Local inference nodes on the
 Docker host are reachable as `http://host.docker.internal:8080`.

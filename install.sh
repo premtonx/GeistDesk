@@ -314,8 +314,9 @@ main() {
   fi
 
   log "Building and starting containers (db, backend, frontend, caddy)..."
-  docker compose -f "$root/docker-compose.yml" --env-file "$env_file" pull caddy || true
-  docker compose -f "$root/docker-compose.yml" --env-file "$env_file" up --build -d
+  # frontend/caddy are behind Compose profile `caddy` so Traefik hosts stay clean.
+  docker compose -f "$root/docker-compose.yml" --env-file "$env_file" --profile caddy pull caddy || true
+  docker compose -f "$root/docker-compose.yml" --env-file "$env_file" --profile caddy up --build -d
 
   log "Waiting for API health..."
   local ok=0 i

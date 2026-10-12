@@ -264,8 +264,12 @@ check_compose_sanitized() {
     printf '%s\n' "$names" >&2
     failed=1
   fi
-  if ! grep -qE 'pgvector/pgvector:pg1[56]' "$COMPOSE_FILE"; then
-    err "docker-compose.yml must use the pgvector/pgvector image."
+  if ! grep -qE 'pgvector/pgvector:pg15' "$COMPOSE_FILE"; then
+    err "docker-compose.yml must use pgvector/pgvector:pg15 (production volumes are pg15)."
+    failed=1
+  fi
+  if grep -qE '^name:[[:space:]]*geistdesk[[:space:]]*$' "$COMPOSE_FILE"; then
+    err "docker-compose.yml must not pin project name 'geistdesk' (breaks existing volume binding)."
     failed=1
   fi
   if ! grep -q 'geistdesk-gateway' "$COMPOSE_FILE"; then
@@ -407,7 +411,7 @@ compose_up() {
     exit 1
   fi
   log "Building from source inside Docker (host node_modules/ and dist/ are not required)…"
-  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up --build -d
+  docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile caddy up --build -d
 }
 
 print_banner() {
