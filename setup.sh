@@ -116,15 +116,18 @@ ensure_secret() {
 normalize_public_url() {
   local raw="${1:-}"
   raw="$(printf '%s' "$raw" | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//')"
-  if [[ -z "$raw" ]]; then
-    printf '%s\n' "http://localhost:3000"
+  if [[ -z "$raw" || "$raw" == "localhost" ]]; then
+    printf '%s\n' "http://localhost"
     return
   fi
   case "$raw" in
     http://*|https://*)
       printf '%s\n' "${raw%/}"
       ;;
-    localhost|localhost:*|127.0.0.1|127.0.0.1:*)
+    localhost:*|127.0.0.1|127.0.0.1:*)
+      printf '%s\n' "http://${raw}"
+      ;;
+    [0-9]*.[0-9]*.[0-9]*.[0-9]*)
       printf '%s\n' "http://${raw}"
       ;;
     *)
@@ -184,8 +187,12 @@ check_dockerfile_self_contained() {
     err "Dockerfile must have a builder stage (FROM … AS builder)."
     failed=1
   fi
-  if ! grep -qE '^FROM[[:space:]].+[[:space:]]AS[[:space:]]runner' "$df"; then
-    err "Dockerfile must have a runner stage (FROM … AS runner)."
+  if ! grep -qE '^FROM[[:space:]].+[[:space:]]AS[[:space:]](backend|runner)' "$df"; then
+    err "Dockerfile must have a backend/runner stage."
+    failed=1
+  fi
+  if ! grep -qE '^FROM[[:space:]].+[[:space:]]AS[[:space:]]frontend' "$df"; then
+    err "Dockerfile must have a frontend (nginx) stage for the Caddy stack."
     failed=1
   fi
   if ! grep -qE 'prisma generate' "$df"; then
@@ -257,16 +264,24 @@ check_compose_sanitized() {
     printf '%s\n' "$names" >&2
     failed=1
   fi
-  if ! grep -q 'Host(`${DOMAIN_NAME:-localhost}`)' "$COMPOSE_FILE"; then
-    err "Traefik Host rule must use Host(\`\${DOMAIN_NAME:-localhost}\`)."
+  if ! grep -qE 'pgvector/pgvector:pg1[56]' "$COMPOSE_FILE"; then
+    err "docker-compose.yml must use the pgvector/pgvector image."
     failed=1
   fi
-  if ! grep -q '\${ROUTER_NAME:-geistdesk}' "$COMPOSE_FILE"; then
-    err "Router names must use \${ROUTER_NAME:-geistdesk}."
+  if ! grep -q 'geistdesk-gateway' "$COMPOSE_FILE"; then
+    err "docker-compose.yml must define geistdesk-gateway (API backend)."
     failed=1
   fi
-  if ! grep -q '\${TRAEFIK_NETWORK:-traefik-public}' "$COMPOSE_FILE"; then
-    err "Traefik network must use \${TRAEFIK_NETWORK:-traefik-public}."
+  if [[ ! -f "${ROOT}/deploy/Caddyfile" ]]; then
+    err "deploy/Caddyfile is required for turnkey TLS reverse proxy."
+    failed=1
+  fi
+  if [[ ! -f "${ROOT}/docker-compose.traefik.yml" ]]; then
+    err "docker-compose.traefik.yml overlay is required for production Traefik deploys."
+    failed=1
+  fi
+  if ! grep -q 'Host(`${DOMAIN_NAME:-localhost}`)' "${ROOT}/docker-compose.traefik.yml"; then
+    err "Traefik overlay Host rule must use Host(\`\${DOMAIN_NAME:-localhost}\`)."
     failed=1
   fi
   return "$failed"
@@ -312,6 +327,8 @@ sync_database_url() {
   fi
   env_set GEISTDESK_DATABASE_URL \
     "postgresql://${user}:${password}@geistdesk-db:5432/${db}?sslmode=disable"
+  env_set POSTGRES_USER "$user"
+  env_set POSTGRES_DB "$db"
 }
 
 prompt_public_url() {
@@ -324,14 +341,14 @@ prompt_public_url() {
   if [[ -n "$current" ]]; then
     suggested="$current"
   else
-    suggested="http://localhost:3000"
+    suggested="http://localhost"
   fi
   if [[ "$ASSUME_YES" -eq 1 || ! -t 0 ]]; then
     printf '%s\n' "$(normalize_public_url "$suggested")"
     return
   fi
   printf '\nPublic URL for GeistDesk [%s]\n' "$suggested" >&2
-  printf '  Examples: http://localhost:3000   desk.geistai.eu   https://desk.example.com\n' >&2
+  printf '  Examples: localhost   desk.geistai.eu   https://desk.example.com\n' >&2
   printf '  Domain: ' >&2
   read -r answer || true
   if [[ -z "${answer:-}" ]]; then
@@ -346,13 +363,17 @@ apply_public_url() {
   local host
   host="$(hostname_from_url "$url")"
   env_set PUBLIC_APP_URL "$url"
+  env_set DOMAIN "$host"
   env_set DOMAIN_NAME "$host"
   env_set PUBLIC_HOSTNAME "$host"
   if [[ -z "$(env_get INBOUND_MAIL_FORWARD_DOMAIN)" ]]; then
     env_set INBOUND_MAIL_FORWARD_DOMAIN "$host"
   fi
-  if [[ -z "$(env_get HOST_PORT)" ]]; then
-    env_set HOST_PORT "3000"
+  if [[ -z "$(env_get PORT)" ]]; then
+    env_set PORT "5000"
+  fi
+  if [[ -z "$(env_get LOCAL_EMBEDDING_ENDPOINT)" ]]; then
+    env_set LOCAL_EMBEDDING_ENDPOINT "http://host.docker.internal:8080"
   fi
   if [[ -z "$(env_get ROUTER_NAME)" ]]; then
     env_set ROUTER_NAME "geistdesk"
@@ -362,34 +383,29 @@ apply_public_url() {
   fi
 }
 
-ensure_traefik_network() {
-  local network
-  network="$(env_get TRAEFIK_NETWORK)"
-  network="${network:-traefik-public}"
-  if ! command -v docker >/dev/null 2>&1; then
-    return
-  fi
-  if docker network inspect "$network" >/dev/null 2>&1; then
-    return
-  fi
-  log "Creating Docker network ${network} (external Traefik attach)…"
-  docker network create "$network" >/dev/null
-}
-
 compose_up() {
   if [[ "$SKIP_COMPOSE" == "1" ]]; then
     log "Skipping docker compose (GEISTDESK_SKIP_COMPOSE=1)."
     return
   fi
+  if [[ -x "${ROOT}/install.sh" ]]; then
+    log "Delegating stack boot to ./install.sh (Caddy turnkey)…"
+    local args=()
+    if [[ "$ASSUME_YES" -eq 1 ]]; then args+=(--yes); fi
+    PUBLIC_APP_URL="$(env_get PUBLIC_APP_URL)" \
+      GEISTDESK_SKIP_CLONE=1 \
+      GEISTDESK_INSTALL_DIR="$ROOT" \
+      bash "${ROOT}/install.sh" "${args[@]}"
+    return
+  fi
   if ! command -v docker >/dev/null 2>&1; then
-    err "docker is not installed. Install Docker, then re-run ./setup.sh"
+    err "docker is not installed. Install Docker, then re-run ./setup.sh or ./install.sh"
     exit 1
   fi
   if ! docker compose version >/dev/null 2>&1; then
     err "docker compose is not available. Install Docker Compose v2."
     exit 1
   fi
-  ensure_traefik_network
   log "Building from source inside Docker (host node_modules/ and dist/ are not required)…"
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" up --build -d
 }
@@ -398,19 +414,16 @@ print_banner() {
   local url host
   url="$(env_get PUBLIC_APP_URL)"
   host="$(env_get DOMAIN_NAME)"
-  url="${url:-http://localhost:3000}"
+  url="${url:-http://localhost}"
   host="${host:-localhost}"
-  local display="$url"
-  if [[ "$host" != "localhost" && "$host" != "127.0.0.1" ]]; then
-    display="https://${host}"
-  fi
   cat <<EOF
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  GeistDesk is ready at ${display}
+  GeistDesk is ready at ${url}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Compose file:  docker-compose.yml
+  Prefer:        ./install.sh
+  Compose file:  docker-compose.yml (+ Caddy on :80/:443)
   Environment:   .env   (never commit this file)
   Stop stack:    docker compose down
   Follow logs:   docker compose logs -f geistdesk-gateway
@@ -424,6 +437,15 @@ run_check() {
     err "setup.sh is not executable (chmod +x setup.sh)."
     failed=1
   fi
+  if [[ ! -f "${ROOT}/install.sh" ]]; then
+    err "Missing install.sh (turnkey one-command installer)."
+    failed=1
+  elif [[ ! -x "${ROOT}/install.sh" ]]; then
+    err "install.sh is not executable (chmod +x install.sh)."
+    failed=1
+  else
+    bash -n "${ROOT}/install.sh"
+  fi
   if ! check_compose_sanitized; then
     failed=1
   fi
@@ -434,7 +456,7 @@ run_check() {
     err "Missing .env.example"
     failed=1
   else
-    for key in DOMAIN_NAME ROUTER_NAME TRAEFIK_NETWORK POSTGRES_PASSWORD JWT_SECRET MASTER_KEY_SALT VAULT_ENCRYPTION_KEY AI_SECRETS_KEY INBOUND_MAIL_WEBHOOK_SECRET; do
+    for key in DOMAIN DOMAIN_NAME ROUTER_NAME TRAEFIK_NETWORK POSTGRES_PASSWORD JWT_SECRET MASTER_KEY_SALT VAULT_ENCRYPTION_KEY AI_SECRETS_KEY INBOUND_MAIL_WEBHOOK_SECRET; do
       if ! grep -qE "^${key}=" "$ENV_EXAMPLE"; then
         err ".env.example is missing ${key}"
         failed=1

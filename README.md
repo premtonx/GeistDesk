@@ -122,26 +122,25 @@ npm run dev
 ```
 The client and backend server boot simultaneously at `http://localhost:3000`.
 
-### 2️⃣ Docker Production Build
-The multi-stage `Dockerfile` installs dependencies, generates the Prisma client, and runs `npm run build` inside Docker — no host `dist/` is required:
+### 2️⃣ One-command turnkey deploy (recommended)
+On a clean Ubuntu/Debian host (installs Docker if needed, generates `.env`, starts Postgres + API + UI + Caddy):
 ```bash
-# Build the production docker image from a clean clone
-docker build -t geistdesk-support-gate .
+curl -fsSL https://raw.githubusercontent.com/premtonx/GeistDesk/main/install.sh | bash
+# or from a clone:
+./install.sh
+./install.sh --yes   # non-interactive (localhost)
+```
+Host ports: **80 / 443** (Caddy), optional **25** (inbound SMTP). See **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
-# Run the docker container locally or on your remote host
-docker run -p 3000:3000 \
-  -e PG_DATABASE_URL="postgres://username:password@your-db-host:5432/db_name" \
-  geistdesk-support-gate
+### 3️⃣ Docker / Compose (from a clone)
+Multi-stage `Dockerfile` targets: `backend` (API :5000 + SMTP), `frontend` (Nginx static UI).
+```bash
+./setup.sh          # delegates to install.sh
+# or:
+docker compose up --build -d
 ```
 
-### 3️⃣ Docker-Compose Multi-Container Orchestration
-A custom `docker-compose.yml` file is provided, mapping essential environment variables and allowing quick, scaling deployments:
-```bash
-# Zero-config: generates .env secrets, prompts for a domain, then compose up
-./setup.sh
-```
-
-**Zero-config bootstrap:** The container entrypoint automatically deploys the PostgreSQL schema, seeds German platform defaults, and starts the server — no manual `npm run seed` required. See **[DEPLOYMENT.md](DEPLOYMENT.md)** for the full one-command bootstrapping guide.
+**Zero-config bootstrap:** The container entrypoint deploys the PostgreSQL schema, seeds German platform defaults, and starts the server — no manual `npm run seed` required.
 
 ---
 
