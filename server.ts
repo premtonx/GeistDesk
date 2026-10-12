@@ -33,6 +33,7 @@ import aiRoutes from "./src/routes/aiRoutes.js";
 import moduleConfigRoutes from "./src/routes/moduleConfigRoutes.js";
 import vaultRoutes from "./src/routes/vaultRoutes.js";
 import demoSeedRoutes from "./src/routes/demoSeedRoutes.js";
+import demoDataAdminRoutes from "./src/routes/demoDataAdminRoutes.js";
 import credentialVaultRoutes from "./src/routes/credentialVaultRoutes.js";
 import exchangeRoutes from "./src/routes/exchangeRoutes.js";
 import ticketReplyRoutes from "./src/routes/ticketReplyRoutes.js";
@@ -644,6 +645,7 @@ async function startServer() {
 
   // Mount Admin User Management Router
   app.use("/api/admin/onboarding", onboardingRoutes);
+  app.use("/api/admin/demo-data", demoDataAdminRoutes);
   app.use("/api/admin", adminRoutes);
   app.use("/api/admin/import", importRoutes);
   app.use("/api/ai", aiRoutes);

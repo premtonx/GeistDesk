@@ -1,11 +1,20 @@
 #!/usr/bin/env npx tsx
 /**
  * CLI: npm run seed:demo
- * Seeds the production-simulation dataset (tickets, vault catalog, exchange, personas).
+ * Seeds realistic IT-operations demo data (tickets, KB, vault, exchange).
+ *
+ *   npm run seed:demo
+ *   npm run seed:demo:dev
+ *   SEED_DEMO_DATA=true npm run seed:prod   # also triggers once on boot when set
  */
 import 'dotenv/config';
 import { initDb, getDocsDirect } from '../src/lib/postgres-backend.js';
-import { previewDemoSimulationKpis, seedDemoSimulation } from '../src/lib/demo-simulation-seed.js';
+import {
+  getDemoDataStatus,
+  previewDemoSimulationKpis,
+  resetDemoData,
+  seedDemoData,
+} from '../src/services/seedService.js';
 
 async function resolveActor() {
   const users = await getDocsDirect('users', []);
@@ -25,11 +34,34 @@ async function main() {
     console.error('[seed-demo] DATABASE_URL is required.');
     process.exit(1);
   }
+
+  const args = new Set(process.argv.slice(2));
   await initDb();
+
+  if (args.has('--reset') || args.has('--purge')) {
+    const result = await resetDemoData({ replaceLegacySamples: true });
+    console.log('[seed-demo] Reset:', result);
+    return;
+  }
+
   const actor = await resolveActor();
   const preview = previewDemoSimulationKpis();
-  console.log('[seed-demo] Expected KPIs:', preview);
-  const result = await seedDemoSimulation({ ...actor, replaceLegacySamples: true });
+  console.log('[seed-demo] Expected dataset:', preview);
+
+  const skipIfPresent = args.has('--skip-if-present') || process.env.SEED_DEMO_DATA === 'true';
+  if (skipIfPresent && !args.has('--force')) {
+    const status = await getDemoDataStatus();
+    if (status.seeded) {
+      console.log('[seed-demo] Demo data already present — skipping (use --force to replace).', status);
+      return;
+    }
+  }
+
+  const result = await seedDemoData({
+    ...actor,
+    replaceLegacySamples: !args.has('--keep-legacy'),
+    skipIfPresent: false,
+  });
   console.log('[seed-demo] Seeded:', result);
 }
 

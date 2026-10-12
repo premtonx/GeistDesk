@@ -2,14 +2,16 @@ import type { ReactNode } from 'react';
 import { Database, HardDrive, ShieldCheck } from 'lucide-react';
 import { useTranslation } from '../../../lib/context/I18nContext';
 import { AdminHubSectionGrid } from './AdminHubSectionGrid';
+import { AdminHubDemoDataCard } from './AdminHubDemoDataCard';
 import { categoriesForTab } from './adminHubConfig';
 import type { AdminHubTelemetry } from './adminHubTelemetry';
 
 interface AdminHubSystemTabProps {
   telemetry: AdminHubTelemetry;
+  onTelemetryRefresh?: () => void;
 }
 
-export function AdminHubSystemTab({ telemetry }: AdminHubSystemTabProps) {
+export function AdminHubSystemTab({ telemetry, onTelemetryRefresh }: AdminHubSystemTabProps) {
   const { t } = useTranslation();
 
   return (
@@ -34,6 +36,9 @@ export function AdminHubSystemTab({ telemetry }: AdminHubSystemTabProps) {
           hint={t('admin.hubSys.backupHint', 'Use Data Import for tenant backups and migrations')}
         />
       </div>
+
+      <AdminHubDemoDataCard onChanged={onTelemetryRefresh} />
+
       <AdminHubSectionGrid categories={categoriesForTab('system')} />
     </div>
   );

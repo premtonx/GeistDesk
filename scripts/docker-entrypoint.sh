@@ -55,5 +55,8 @@ npm run db:deploy:prod
 echo "[entrypoint] Step 2/3 — running idempotent platform seed (npm run seed:prod)..."
 npm run seed:prod
 
+# Optional: SEED_DEMO_DATA=true is honored inside seed:prod (skip-if-present).
+# Explicit CLI re-seed remains: npm run seed:demo
+
 echo "[entrypoint] Step 3/3 — starting application server (node dist/server.cjs)..."
 exec node dist/server.cjs
