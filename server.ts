@@ -229,7 +229,8 @@ async function startServer() {
     }
   }
   const app = express();
-  const PORT = 3000;
+  // Compose / Traefik / Dockerfile healthchecks use PORT=5000; honor the env.
+  const PORT = Number.parseInt(String(process.env.PORT || "5000"), 10) || 5000;
 
   app.use(requestLoggingMiddleware);
 
