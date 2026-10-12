@@ -361,6 +361,31 @@ export async function initDb() {
         hnswErr?.message || hnswErr,
       );
     }
+    // Compatibility view used by Admin docs / SQL examples as `rag_chunks`.
+    try {
+      await pgPool.query(`
+        CREATE OR REPLACE VIEW rag_chunks AS
+        SELECT
+          id,
+          CASE source_type::text
+            WHEN 'KB_ARTICLE' THEN 'kb_article'
+            WHEN 'RESOLVED_TICKET' THEN 'resolved_ticket'
+            WHEN 'KB_DOCUMENT' THEN 'file'
+            ELSE lower(source_type::text)
+          END AS source_type,
+          source_id,
+          chunk_index,
+          chunk_content AS content,
+          embedding,
+          tenant_id,
+          metadata,
+          created_at,
+          updated_at
+        FROM "KnowledgeEmbedding";
+      `);
+    } catch (viewErr: any) {
+      safeLog('warn', '[DB Engine] rag_chunks view skipped:', viewErr?.message || viewErr);
+    }
     safeLog('info', '[DB Engine] KnowledgeEmbedding (pgvector) verified.');
   } catch (vectorErr: any) {
     safeLog('warn', 

@@ -44,13 +44,24 @@ interface RagStatus {
 }
 
 interface SearchHit {
+  id?: string;
   sourceType?: string;
   sourceId?: string;
   title?: string;
+  content?: string;
   chunkContent?: string;
+  similarityScore?: number;
   hybridScore?: number;
   vectorDistance?: number;
   metadata?: Record<string, unknown>;
+}
+
+interface IndexProgress {
+  type: 'kb' | 'ticket';
+  enqueued: number;
+  queueDepth: number;
+  missing: number;
+  message: string;
 }
 
 const MODE_LABELS: Record<ResolutionMode, string> = {
@@ -75,6 +86,7 @@ export function AdminHubRagTab() {
   const [hits, setHits] = useState<SearchHit[] | null>(null);
   const [searching, setSearching] = useState(false);
   const [backfilling, setBackfilling] = useState<'kb' | 'ticket' | null>(null);
+  const [indexProgress, setIndexProgress] = useState<IndexProgress | null>(null);
 
   // External connectors state
   const [sources, setSources] = useState<KbExternalSource[]>([]);
@@ -125,7 +137,7 @@ export function AdminHubRagTab() {
 
   const loadStatus = useCallback(async () => {
     try {
-      const res = await axios.get('/api/admin/rag/status');
+      const res = await axios.get('/api/rag/status');
       setStatus(res.data);
       setResolutionMode(res.data.config?.resolutionMode ?? 'hybrid');
       setRedactPii(res.data.config?.redactPii ?? true);
@@ -133,8 +145,10 @@ export function AdminHubRagTab() {
       setIndexResolvedTickets(res.data.config?.indexResolvedTickets !== false);
       setIndexNewKbArticles(res.data.config?.indexNewKbArticles !== false);
       setDetectDuplicates(res.data.config?.detectDuplicates !== false);
+      return res.data as RagStatus;
     } catch (err) {
       console.warn('RAG status unavailable', err);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -147,7 +161,7 @@ export function AdminHubRagTab() {
   const saveConfig = async () => {
     setSavingConfig(true);
     try {
-      await axios.put('/api/admin/rag/config', {
+      await axios.put('/api/rag/config', {
         resolutionMode,
         redactPii,
         chunkOverlapTokens: chunkOverlap,
@@ -168,8 +182,10 @@ export function AdminHubRagTab() {
     setSearching(true);
     setHits(null);
     try {
-      const res = await axios.get('/api/admin/rag/search-test', {
-        params: { q: query.trim() || 'password reset', limit: 5 },
+      const res = await axios.post('/api/rag/search', {
+        query: query.trim() || 'password reset',
+        limit: 5,
+        minSimilarity: 0.65,
       });
       setHits(res.data.hits ?? []);
     } catch (err) {
@@ -180,13 +196,58 @@ export function AdminHubRagTab() {
     }
   };
 
-  const runBackfill = async (type: 'kb' | 'ticket') => {
+  /** Index only missing sources ("Artikel / Tickets ohne Index") with live progress. */
+  const runIndexPending = async (type: 'kb' | 'ticket') => {
     setBackfilling(type);
+    setIndexProgress({
+      type,
+      enqueued: 0,
+      queueDepth: 0,
+      missing: type === 'kb' ? (status?.kb.missingIndexArticles ?? 0) : (status?.tickets.missingIndexTickets ?? 0),
+      message: 'Warteschlange wird gefüllt…',
+    });
     try {
-      await axios.get('/api/admin/rag/backfill', { params: { type } });
+      const res = await axios.post('/api/rag/index-pending', { type });
+      const enqueued = Number(res.data.enqueued || 0);
+      setIndexProgress({
+        type,
+        enqueued,
+        queueDepth: Number(res.data.queueDepth || 0),
+        missing: enqueued,
+        message: enqueued === 0 ? 'Nichts ausstehend.' : `${enqueued} Jobs eingereiht — Indexierung läuft…`,
+      });
+
+      // Poll status until the queue drains or missing count hits zero (max ~60s).
+      const started = Date.now();
+      while (Date.now() - started < 60_000) {
+        await new Promise((r) => window.setTimeout(r, 1500));
+        const next = await loadStatus();
+        if (!next) break;
+        const missing =
+          type === 'kb' ? next.kb.missingIndexArticles : next.tickets.missingIndexTickets;
+        const depth = next.queueDepth ?? 0;
+        setIndexProgress({
+          type,
+          enqueued,
+          queueDepth: depth,
+          missing,
+          message:
+            missing === 0
+              ? 'Index vollständig.'
+              : `Noch ${missing} offen · Queue ${depth}`,
+        });
+        if (missing === 0 || depth === 0) break;
+      }
       await loadStatus();
     } catch (err) {
-      console.warn(`RAG backfill (${type}) failed`, err);
+      console.warn(`RAG index-pending (${type}) failed`, err);
+      setIndexProgress({
+        type,
+        enqueued: 0,
+        queueDepth: 0,
+        missing: 0,
+        message: 'Indexierung fehlgeschlagen.',
+      });
     } finally {
       setBackfilling(null);
     }
@@ -386,8 +447,9 @@ export function AdminHubRagTab() {
             chunks={kb?.indexedChunks ?? 0}
             missing={kb?.missingIndexArticles ?? 0}
             missingLabel={t('admin.rag.kbMissing', 'Artikel ohne Index')}
-            onBackfill={() => void runBackfill('kb')}
+            onIndexPending={() => void runIndexPending('kb')}
             backfilling={backfilling === 'kb'}
+            progress={indexProgress?.type === 'kb' ? indexProgress : null}
           />
           <StatusCard
             title={t('admin.rag.ticketsTitle', 'Gelöste Tickets')}
@@ -396,8 +458,9 @@ export function AdminHubRagTab() {
             chunks={tickets?.indexedChunks ?? 0}
             missing={tickets?.missingIndexTickets ?? 0}
             missingLabel={t('admin.rag.ticketsMissing', 'Tickets ohne Index')}
-            onBackfill={() => void runBackfill('ticket')}
+            onIndexPending={() => void runIndexPending('ticket')}
             backfilling={backfilling === 'ticket'}
+            progress={indexProgress?.type === 'ticket' ? indexProgress : null}
           />
         </div>
       )}
@@ -424,24 +487,33 @@ export function AdminHubRagTab() {
         {hits !== null ? (
           <div className="space-y-2">
             <p className="text-[11px] text-slate-500">
-              {hits.length} Treffer — nur Workspace-{status?.tenantId || 'default'}-Daten (
+              {hits.length} Treffer (cosine ≥ 0.65) — Workspace-{status?.tenantId || 'default'} (
               <span className="font-semibold text-emerald-600">tenant-isoliert</span>)
             </p>
             {hits.length === 0 ? (
               <p className="text-[11px] text-slate-400">Keine Treffer.</p>
             ) : (
               hits.map((hit, i) => (
-                <div key={i} className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2">
+                <div key={hit.id || i} className="rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-bold text-slate-700 truncate">
                       {hit.title || hit.sourceId || 'Untitled'}
                     </span>
-                    <Badge className="text-[10px] font-bold uppercase">
-                      {hit.sourceType === 'RESOLVED_TICKET' ? 'Ticket' : 'KB'}
-                    </Badge>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      {typeof hit.similarityScore === 'number' ? (
+                        <Badge className="text-[10px] font-bold bg-emerald-50 text-emerald-700">
+                          {(hit.similarityScore * 100).toFixed(1)}%
+                        </Badge>
+                      ) : null}
+                      <Badge className="text-[10px] font-bold uppercase">
+                        {hit.sourceType === 'RESOLVED_TICKET' || hit.sourceType === 'resolved_ticket'
+                          ? 'Ticket'
+                          : 'KB'}
+                      </Badge>
+                    </div>
                   </div>
                   <p className="text-[11px] text-slate-500 line-clamp-2 mt-0.5">
-                    {String(hit.chunkContent || '').slice(0, 220)}
+                    {String(hit.content || hit.chunkContent || '').slice(0, 220)}
                   </p>
                 </div>
               ))
@@ -798,8 +870,9 @@ function StatusCard({
   chunks,
   missing,
   missingLabel,
-  onBackfill,
+  onIndexPending,
   backfilling,
+  progress,
 }: {
   title: string;
   total: number;
@@ -807,8 +880,9 @@ function StatusCard({
   chunks: number;
   missing: number;
   missingLabel: string;
-  onBackfill: () => void;
+  onIndexPending: () => void;
   backfilling: boolean;
+  progress: IndexProgress | null;
 }) {
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-4 space-y-3">
@@ -839,11 +913,25 @@ function StatusCard({
         <Metric label="Chunks" value={chunks} />
         <Metric label="Total" value={total} />
       </div>
-      {missing > 0 ? (
-        <Button variant="outline" size="sm" className="w-full" onClick={onBackfill} disabled={backfilling}>
+      {missing > 0 || backfilling ? (
+        <Button
+          variant="outline"
+          size="sm"
+          className="w-full"
+          onClick={onIndexPending}
+          disabled={backfilling}
+        >
           {backfilling ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
           {missingLabel} ({missing})
         </Button>
+      ) : null}
+      {progress ? (
+        <p className="text-[11px] text-slate-500 font-medium" aria-live="polite">
+          {progress.message}
+          {backfilling && progress.enqueued > 0
+            ? ` · ${Math.max(progress.enqueued - progress.missing, 0)}/${progress.enqueued}`
+            : ''}
+        </p>
       ) : null}
     </div>
   );

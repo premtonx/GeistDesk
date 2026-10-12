@@ -1,11 +1,12 @@
 /**
  * Plain-text cleanup + token-approximate chunking for RAG embeddings.
- * Target: ~500 tokens per chunk with ~50-token overlap (≈4 chars/token heuristic).
+ * Target: ~500 tokens per chunk with ~100-token overlap (≈4 chars/token heuristic).
+ * Overlap is overridden by Admin-Hub `rag_pipeline_config.chunk_overlap_tokens`.
  */
 
 const CHARS_PER_TOKEN = 4;
 export const CHUNK_TOKENS = 500;
-export const CHUNK_OVERLAP_TOKENS = 50;
+export const CHUNK_OVERLAP_TOKENS = 100;
 
 export function stripHtmlToPlainText(input: string): string {
   if (!input) return '';
