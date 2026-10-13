@@ -6,6 +6,7 @@ import { useWorkspaceModuleConfig } from '../../../hooks/useWorkspaceModuleConfi
 import { useTranslation } from '../../../lib/context/I18nContext';
 import { AdminHubSectionGrid } from './AdminHubSectionGrid';
 import { categoriesForTab } from './adminHubConfig';
+import { AdminHubMcpPanel } from './AdminHubMcpPanel';
 
 export function AdminHubIntegrationsTab() {
   const { t } = useTranslation();
@@ -37,6 +38,7 @@ export function AdminHubIntegrationsTab() {
           onClick={() => navigate('/admin/notifications')}
         />
       </div>
+      <AdminHubMcpPanel />
       <AdminHubSectionGrid categories={categoriesForTab('integrations')} />
     </div>
   );

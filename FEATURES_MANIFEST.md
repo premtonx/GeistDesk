@@ -103,7 +103,7 @@ Screenshot DE labels mapped to code categories:
 
 | Division (DE) | Code category ID | Modules | Route |
 |---------------|------------------|---------|-------|
-| **KERN-KI** | `core_ai` | KI-Orchestrator, Sovereign AI Insights, MCP-Protokoll-Hub, Kontaktprofil | `/admin/ai`, `/insights`, `/admin/mcp`, `/admin/contact-schema` |
+| **KERN-KI** | `core_ai` | KI-Orchestrator, Sovereign AI Insights, MCP-Protokoll-Hub, Kontaktprofil | `/admin/ai`, `/insights`, `/admin?tab=integrations` (API & MCP), `/admin/contact-schema` |
 | **IDENTITÄT & ZUGRIFF** | `identity_access` | RBAC-Kontrolle, Workforce-Hub, Funktionale Teams, Unternehmen | `/admin/roles`, `/admin/workforce`, `/admin/groups`, `/customers` |
 | **GOVERNANCE** | `governance` | Souveränitäts-Center, PII-Schutzschild, Recht & Risiko, Reports & Auditing, Unternehmensschema | `/admin/sovereignty`, `/admin/pii`, `/admin/legal`, `/audit`, `/admin/schema` |
 | **PLATTFORM** | `platform` | Kommunikation, Benachrichtigungen, Integrations-Hub, Systemeinstellungen | `/email-channels`, `/admin/notifications`, `/admin/integrations`, `/settings` |
@@ -675,7 +675,8 @@ Columns: file hash/name · state (`Hochgeladen`/`Abgelaufen`/`Aktiv`) · downloa
 |------|-----------|
 | `/admin` | `AdminHubPage` |
 | `/admin/ai` | `AiOrchestratorPage` → `AISettingsPage` |
-| `/admin/mcp` | `MCPHubPage` |
+| `/admin/mcp` | redirect → `/admin?tab=integrations` (native MCP panel) |
+| `/api/mcp` | Streamable HTTP MCP server (`src/mcp/`, `src/routes/mcpRoutes.ts`) |
 | `/admin/legal` | `LegalSettingsPage` |
 | `/admin/notifications` | `NotificationEnginePage` |
 | `/admin/schema` | `CompanySchemaPage` |

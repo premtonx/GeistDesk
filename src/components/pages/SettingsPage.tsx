@@ -731,7 +731,7 @@ export default function SettingsPage() {
 
             {/* MCP hub */}
             <div 
-              onClick={() => navigate('/admin?tab=ai-engine')}
+              onClick={() => navigate('/admin?tab=integrations')}
               className="group flex flex-col justify-between p-5 bg-white rounded-2xl border border-[#DADCE0] cursor-pointer hover:border-rose-300 hover:bg-rose-50/5 transition-all shadow-xs"
             >
               <div className="flex items-start justify-between">
@@ -745,7 +745,7 @@ export default function SettingsPage() {
                   {t('settings.mcpLabel', 'MCP Protocol Gateway')}
                   <ArrowRight className="w-3.5 h-3.5 text-slate-400 group-hover:translate-x-1 transition-transform" />
                 </h3>
-                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{t('settings.mcpDesc', 'Configure local LLM data providers and register Model Context Protocol servers.')}</p>
+                <p className="text-[11px] text-slate-500 mt-1 leading-relaxed">{t('settings.mcpDesc', 'Enable the native MCP server, manage API tokens, and copy Cursor / Claude Desktop configs.')}</p>
               </div>
             </div>
 

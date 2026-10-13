@@ -204,6 +204,12 @@ const moduleConfigPatchSchema = z
         storageQuotaGb: z.number().optional(),
       })
       .optional(),
+    mcp: z
+      .object({
+        enabled: z.boolean().optional(),
+        systemInstructions: z.string().max(20_000).optional(),
+      })
+      .optional(),
   })
   .strict();
 
