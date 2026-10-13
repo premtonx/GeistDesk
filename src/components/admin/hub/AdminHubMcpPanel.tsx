@@ -8,6 +8,7 @@ import { Textarea } from '../../ui/textarea';
 import { Input } from '../../ui/input';
 import { useWorkspaceModuleConfig } from '../../../hooks/useWorkspaceModuleConfig';
 import { useTranslation } from '../../../lib/context/I18nContext';
+import { applyModuleConfigToStorage } from '../../../lib/module-config';
 import { DEFAULT_MCP_SETTINGS } from '../../../lib/mcp-config';
 
 interface ApiTokenRow {
@@ -27,7 +28,7 @@ function resolvePublicOrigin(): string {
 
 export function AdminHubMcpPanel() {
   const { t } = useTranslation();
-  const { config, persist, syncing } = useWorkspaceModuleConfig({ admin: true });
+  const { config, setConfig, syncing } = useWorkspaceModuleConfig({ admin: true });
   const mcp = config.mcp ?? DEFAULT_MCP_SETTINGS;
   const [instructions, setInstructions] = useState(mcp.systemInstructions);
   const [saving, setSaving] = useState(false);
@@ -95,21 +96,44 @@ export function AdminHubMcpPanel() {
   const persistMcp = useCallback(
     async (patch: Partial<typeof mcp>) => {
       setSaving(true);
-      const next = {
-        ...config,
-        mcp: {
-          enabled: patch.enabled ?? mcp.enabled,
-          systemInstructions: patch.systemInstructions ?? mcp.systemInstructions,
-        },
+      const previous = config;
+      const nextMcp = {
+        enabled: patch.enabled ?? mcp.enabled,
+        systemInstructions: patch.systemInstructions ?? mcp.systemInstructions,
       };
-      const ok = await persist(next);
-      setSaving(false);
-      if (ok) {
+      const next = { ...config, mcp: nextMcp };
+      // Optimistic local update; focused PUT so unknown hydrated keys cannot 400.
+      setConfig(next);
+      applyModuleConfigToStorage(next);
+      try {
+        const res = await fetch('/api/module-config', {
+          method: 'PUT',
+          credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mcp: nextMcp }),
+        });
+        if (!res.ok) {
+          const payload = await res.json().catch(() => ({}));
+          throw new Error(payload?.error || `HTTP ${res.status}`);
+        }
+        setSaving(false);
         toast.success(t('admin.hubMcp.saved', 'MCP settings saved'));
+        return true;
+      } catch (error) {
+        console.error('[AdminHubMcp] Persist failed:', error);
+        setConfig(previous);
+        applyModuleConfigToStorage(previous);
+        setSaving(false);
+        toast.error(
+          t(
+            'admin.hubMcp.saveError',
+            'Workspace settings could not be saved to the database. Please try again.',
+          ),
+        );
+        return false;
       }
-      return ok;
     },
-    [config, mcp.enabled, mcp.systemInstructions, persist, t],
+    [config, mcp.enabled, mcp.systemInstructions, setConfig, t],
   );
 
   const loadTokens = useCallback(async () => {
