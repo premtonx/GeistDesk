@@ -85,6 +85,8 @@ import kbDashboardRoutes from "./src/routes/kbDashboardRoutes.js";
 import kbIngestionRoutes from "./src/routes/kbIngestionRoutes.js";
 import executiveDashboardRoutes from "./src/routes/executiveDashboardRoutes.js";
 import headerTelemetryRoutes from "./src/routes/headerTelemetryRoutes.js";
+import mcpRoutes from "./src/routes/mcpRoutes.js";
+import apiTokenRoutes from "./src/routes/apiTokenRoutes.js";
 import { orchestratorEventBus } from "./src/lib/ai-orchestrator-events.js";
 import { hashPassword, verifyPassword, assertVaultEncryptionConfigured } from "./src/lib/crypto.js";
 import { assertOrchestratorSecretsConfigured } from "./src/lib/ai-orchestrator-store.js";
@@ -658,6 +660,10 @@ async function startServer() {
   app.use("/api/dashboard", executiveDashboardRoutes);
   app.use("/api/module-config", moduleConfigRoutes);
   app.use("/api/header", headerTelemetryRoutes);
+  app.use("/api/mcp", mcpRoutes);
+  // Alias for clients that expect a root /mcp path.
+  app.use("/mcp", mcpRoutes);
+  app.use("/api/api-tokens", apiTokenRoutes);
 
   // Workspace AI orchestrator — redacted config for agents; full config via /api/admin/orchestrator/config
   app.get("/api/ai/config", authenticate, async (req: any, res) => {

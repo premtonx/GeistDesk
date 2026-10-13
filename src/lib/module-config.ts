@@ -65,6 +65,14 @@ export function normalizePolyglotBridgeSettings(
 }
 
 import { PLATFORM_DEFAULT_LANGUAGES } from '../data/platform-defaults';
+import {
+  DEFAULT_MCP_SETTINGS,
+  normalizeMcpSettings,
+  type McpWorkspaceSettings,
+} from './mcp-config';
+
+export type { McpWorkspaceSettings };
+export { DEFAULT_MCP_SETTINGS, normalizeMcpSettings };
 
 /** @deprecated Use PLATFORM_DEFAULT_LANGUAGES from src/data/platform-defaults.ts */
 export const DEFAULT_SUPPORTED_LANGUAGES: PolyglotLanguage[] = PLATFORM_DEFAULT_LANGUAGES.map((entry) => ({
@@ -185,6 +193,8 @@ export interface ModuleConfig {
   exchangeCustomTemplates: ExchangeCustomTemplate[];
   /** GeistExchange — workspace-wide defaults for expiration, downloads, and storage warnings. */
   exchangeSettings: ExchangeWorkspaceSettings;
+  /** Native MCP server (Streamable HTTP) workspace settings. */
+  mcp: McpWorkspaceSettings;
 }
 
 export const DEFAULT_MODULE_CONFIG: ModuleConfig = {
@@ -236,6 +246,7 @@ export const DEFAULT_MODULE_CONFIG: ModuleConfig = {
     storageWarningThresholdPercent: 80,
     storageQuotaGb: 2048,
   },
+  mcp: { ...DEFAULT_MCP_SETTINGS },
 };
 
 function inferIsoCodeFromLanguage(lang: string): string {
@@ -285,6 +296,7 @@ export function normalizeModuleConfig(parsed: Partial<ModuleConfig> | Record<str
       ...DEFAULT_MODULE_CONFIG.exchangeSettings,
       ...(source.exchangeSettings ?? {}),
     },
+    mcp: normalizeMcpSettings(source.mcp),
   };
 }
 

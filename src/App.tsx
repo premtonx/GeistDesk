@@ -198,7 +198,7 @@ function AppRoutes() {
                     <Route path="audit" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Audit Log" />}><LazyPage><AuditLogPage /></LazyPage></ErrorBoundary></AdminRoute>} />
                     <Route path="settings" element={<ErrorBoundary fallback={<ModuleCrashFallback module="Settings" />}><LazyPage><SettingsPage /></LazyPage></ErrorBoundary>} />
                     <Route path="admin" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Admin Hub" />}><LazyPage><AdminHubPage /></LazyPage></ErrorBoundary></AdminRoute>} />
-                    <Route path="admin/mcp" element={<Navigate to="/admin?tab=ai-engine" replace />} />
+                    <Route path="admin/mcp" element={<Navigate to="/admin?tab=integrations" replace />} />
                     <Route path="admin/ai" element={<Navigate to="/admin?tab=ai-engine" replace />} />
                     <Route path="ai-orchestrator" element={<Navigate to="/admin?tab=ai-engine" replace />} />
                     <Route path="admin/legal" element={<AdminRoute><ErrorBoundary fallback={<ModuleCrashFallback module="Legal Settings" />}><LazyPage><LegalSettingsPage /></LazyPage></ErrorBoundary></AdminRoute>} />
