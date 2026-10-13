@@ -1,4 +1,5 @@
-# GeistDesk
+# GeistDesk<br>
+<img width="1774" height="887" alt="geistbanner" src="https://github.com/user-attachments/assets/c5a7f00e-91e4-407f-a655-162c486f7345" />
 
 
 **Sovereign IT Operations Platform**  
