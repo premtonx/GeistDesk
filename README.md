@@ -1,5 +1,6 @@
 # GeistDesk
 
+
 **Sovereign IT Operations Platform**  
 The Open-Source Standard for Secure IT Operations
 
@@ -23,9 +24,32 @@ Built with **React 19 / Vite**, **Express on Node.js 24**, **PostgreSQL 15 + pgv
 | Pillar | Focus |
 |--------|--------|
 | **Helpdesk** | Ticketing & workflows — multi-channel inbox, triage, AI drafts, checklists |
+| **Knowledge Base** | RAG-powered documentation, AI autopilot search, vector embeddings |
 | **Assets** | Hardware & software — account coverage, CRM schemas, operational context |
 | **Phantom Vault** | Secure secret exchange — GeistExchange / GeistVault, audited reveals, dropzones |
 | **AI Orchestration** | Local AI with PII Shield — Ollama or cloud providers, feature routing, RAG |
+
+Helpdesk:<br>
+<br>
+<img width="800" alt="Helpdesk View" src="https://github.com/user-attachments/assets/404ec1ee-2a35-479d-b3b1-90e8ee028b7b" />
+<br><br>
+<img width="800" alt="Helpdesk Workflow" src="https://github.com/user-attachments/assets/a02eff9c-c6a0-48ed-8c53-4f839e1452e1" />
+
+Knowledge Base:<br>
+<br>
+<img width="800" alt="Knowledge Base View" src="https://github.com/user-attachments/assets/14c8da50-17eb-4a90-a7e7-da973d6982d7" />
+
+Geist Vault:<br>
+<br>
+<img width="800" alt="Geist Vault View" src="https://github.com/user-attachments/assets/742ae582-9b21-47d6-affc-ac06c480e802" />
+
+Geist Exchange:<br>
+<br>
+<img width="800" alt="Geist Exchange View" src="https://github.com/user-attachments/assets/6e14a3fd-41a6-4911-8094-879f57bf4976" />
+<br><br>
+<img width="400" alt="Geist Exchange Dropzone" src="https://github.com/user-attachments/assets/8eb9727a-2077-42f9-9303-dbef38f83a88" />
+
+
 
 Also included: **GeistKB** (knowledge + hybrid search), **Native MCP** at `/api/mcp`, and **Admin Hub** (mail, governance, workforce / RBAC).
 
