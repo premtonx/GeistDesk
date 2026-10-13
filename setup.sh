@@ -102,12 +102,24 @@ with open(path, "w", encoding="utf-8") as fh:
 PY
 }
 
+is_placeholder_secret() {
+  local value="${1:-}"
+  [[ -z "$value" ]] && return 0
+  case "$value" in
+    replace_with_*|changeme*|change-me*|geist_password|your_*|TODO*|xxx*|XXXX*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 ensure_secret() {
   local key="$1"
   local bytes="$2"
   local current
   current="$(env_get "$key")"
-  if [[ -n "$current" ]]; then
+  # Idempotent: never overwrite a real secret the operator already set.
+  if ! is_placeholder_secret "$current"; then
     return
   fi
   env_set "$key" "$(rand_hex "$bytes")"
@@ -311,10 +323,12 @@ fill_secrets() {
   ensure_secret VAULT_ENCRYPTION_KEY 32
   ensure_secret AI_SECRETS_KEY 32
   ensure_secret INBOUND_MAIL_WEBHOOK_SECRET 32
+  ensure_secret GRAPH_CLIENT_STATE_SECRET 32
 
-  local salt
+  local salt vite_salt
   salt="$(env_get MASTER_KEY_SALT)"
-  if [[ -n "$salt" && -z "$(env_get VITE_MASTER_KEY_SALT)" ]]; then
+  vite_salt="$(env_get VITE_MASTER_KEY_SALT)"
+  if [[ -n "$salt" ]] && is_placeholder_secret "$vite_salt"; then
     env_set VITE_MASTER_KEY_SALT "$salt"
   fi
 }
@@ -366,14 +380,28 @@ apply_public_url() {
   local url="$1"
   local host
   host="$(hostname_from_url "$url")"
+  # Always persist the resolved public URL from this run (prompt / PUBLIC_APP_URL env).
   env_set PUBLIC_APP_URL "$url"
-  env_set DOMAIN "$host"
-  env_set DOMAIN_NAME "$host"
-  env_set PUBLIC_HOSTNAME "$host"
-  if [[ -z "$(env_get INBOUND_MAIL_FORWARD_DOMAIN)" ]]; then
-    env_set INBOUND_MAIL_FORWARD_DOMAIN "$host"
+  # Domain fields: fill when empty or still on localhost defaults from the template.
+  local existing_domain existing_name existing_hostname
+  existing_domain="$(env_get DOMAIN)"
+  existing_name="$(env_get DOMAIN_NAME)"
+  existing_hostname="$(env_get PUBLIC_HOSTNAME)"
+  if [[ -z "$existing_domain" || "$existing_domain" == "localhost" ]]; then
+    env_set DOMAIN "$host"
   fi
-  if [[ -z "$(env_get PORT)" ]]; then
+  if [[ -z "$existing_name" || "$existing_name" == "localhost" ]]; then
+    env_set DOMAIN_NAME "$host"
+  fi
+  if [[ -z "$existing_hostname" || "$existing_hostname" == "localhost" ]]; then
+    env_set PUBLIC_HOSTNAME "$host"
+  fi
+  if [[ -z "$(env_get INBOUND_MAIL_FORWARD_DOMAIN)" || "$(env_get INBOUND_MAIL_FORWARD_DOMAIN)" == "inbound.localhost" ]]; then
+    if [[ "$host" != "localhost" ]]; then
+      env_set INBOUND_MAIL_FORWARD_DOMAIN "$host"
+    fi
+  fi
+  if [[ -z "$(env_get PORT)" || "$(env_get PORT)" == "3000" ]]; then
     env_set PORT "5000"
   fi
   if [[ -z "$(env_get LOCAL_EMBEDDING_ENDPOINT)" ]]; then
@@ -385,21 +413,17 @@ apply_public_url() {
   if [[ -z "$(env_get TRAEFIK_NETWORK)" ]]; then
     env_set TRAEFIK_NETWORK "traefik-public"
   fi
+  if [[ -z "$(env_get TRAEFIK_ENTRYPOINT)" ]]; then
+    env_set TRAEFIK_ENTRYPOINT "websecure"
+  fi
+  if [[ -z "$(env_get TRAEFIK_CERTRESOLVER)" ]]; then
+    env_set TRAEFIK_CERTRESOLVER "myresolver"
+  fi
 }
 
 compose_up() {
   if [[ "$SKIP_COMPOSE" == "1" ]]; then
     log "Skipping docker compose (GEISTDESK_SKIP_COMPOSE=1)."
-    return
-  fi
-  if [[ -x "${ROOT}/install.sh" ]]; then
-    log "Delegating stack boot to ./install.sh (Caddy turnkey)…"
-    local args=()
-    if [[ "$ASSUME_YES" -eq 1 ]]; then args+=(--yes); fi
-    PUBLIC_APP_URL="$(env_get PUBLIC_APP_URL)" \
-      GEISTDESK_SKIP_CLONE=1 \
-      GEISTDESK_INSTALL_DIR="$ROOT" \
-      bash "${ROOT}/install.sh" "${args[@]}"
     return
   fi
   if ! command -v docker >/dev/null 2>&1; then
@@ -410,14 +434,37 @@ compose_up() {
     err "docker compose is not available. Install Docker Compose v2."
     exit 1
   fi
+
+  local compose_merge
+  compose_merge="$(env_get COMPOSE_FILE)"
+  if [[ -n "$compose_merge" ]]; then
+    log "Starting stack with COMPOSE_FILE=${compose_merge}"
+    log "Building from source inside Docker (host node_modules/ and dist/ are not required)…"
+    # Docker Compose reads COMPOSE_FILE from the process environment / project .env
+    COMPOSE_FILE="$compose_merge" docker compose --env-file "$ENV_FILE" up --build -d
+    return
+  fi
+
+  if [[ -x "${ROOT}/install.sh" ]]; then
+    log "No COMPOSE_FILE set — delegating to ./install.sh (Caddy turnkey)…"
+    local args=()
+    if [[ "$ASSUME_YES" -eq 1 ]]; then args+=(--yes); fi
+    PUBLIC_APP_URL="$(env_get PUBLIC_APP_URL)" \
+      GEISTDESK_SKIP_CLONE=1 \
+      GEISTDESK_INSTALL_DIR="$ROOT" \
+      bash "${ROOT}/install.sh" "${args[@]}"
+    return
+  fi
+
   log "Building from source inside Docker (host node_modules/ and dist/ are not required)…"
   docker compose --env-file "$ENV_FILE" -f "$COMPOSE_FILE" --profile caddy up --build -d
 }
 
 print_banner() {
-  local url host
+  local url host compose_merge
   url="$(env_get PUBLIC_APP_URL)"
   host="$(env_get DOMAIN_NAME)"
+  compose_merge="$(env_get COMPOSE_FILE)"
   url="${url:-http://localhost}"
   host="${host:-localhost}"
   cat <<EOF
@@ -426,13 +473,25 @@ print_banner() {
   GeistDesk is ready at ${url}
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  Prefer:        ./install.sh
-  Compose file:  docker-compose.yml (+ Caddy on :80/:443)
   Environment:   .env   (never commit this file)
+  MCP admin:     Admin Hub → Mail & Schnittstellen → API & MCP
   Stop stack:    docker compose down
   Follow logs:   docker compose logs -f geistdesk-gateway
 
 EOF
+  if [[ -n "$compose_merge" ]]; then
+    cat <<EOF
+  Compose mode:  Traefik overlay (COMPOSE_FILE set)
+  Hostname:      ${host}  · network ${TRAEFIK_NETWORK:-traefik-public}
+
+EOF
+  else
+    cat <<EOF
+  Compose mode:  Caddy turnkey (or set COMPOSE_FILE for Traefik)
+  Tip:           COMPOSE_FILE=docker-compose.yml:docker-compose.traefik.yml
+
+EOF
+  fi
 }
 
 run_check() {

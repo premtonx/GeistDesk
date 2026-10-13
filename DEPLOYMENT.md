@@ -1,219 +1,159 @@
 # GeistDesk Deployment Guide
 
-This document describes how to run GeistDesk in production with **zero-configuration bootstrapping**: a fresh Docker install automatically creates the database schema, seeds German platform defaults, and starts the web server — no SSH or manual CLI steps required.
+Production bootstrapping for GeistDesk: **Node.js 24 / Alpine**, **PostgreSQL 15 + pgvector**, and a reverse proxy (**Traefik** recommended, **Caddy** optional).
 
 ---
 
-## One-command Docker bootstrap (turnkey)
+## Traefik (recommended)
 
-On any clean Ubuntu/Debian host:
+Use this when Traefik already terminates TLS on the host.
+
+1. Ensure an external Docker network exists (default name `traefik-public`):
+
+   ```bash
+   docker network create traefik-public  # skip if it already exists
+   ```
+
+2. Configure `.env` (from `.env.example` + `./setup.sh --yes`):
+
+   ```bash
+   COMPOSE_FILE=docker-compose.yml:docker-compose.traefik.yml
+   DOMAIN_NAME=desk.example.com
+   PUBLIC_APP_URL=https://desk.example.com
+   TRAEFIK_NETWORK=traefik-public
+   TRAEFIK_ENTRYPOINT=websecure
+   TRAEFIK_CERTRESOLVER=myresolver
+   ROUTER_NAME=geistdesk
+   ```
+
+3. Launch:
+
+   ```bash
+   docker compose up -d
+   ```
+
+   Equivalent explicit form:
+
+   ```bash
+   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d \
+     geistdesk-db geistdesk-gateway
+   ```
+
+| Service | Role | Published ports |
+|---------|------|-----------------|
+| `geistdesk-db` | `pgvector/pgvector:pg15` | none (internal) |
+| `geistdesk-gateway` | Express API + SPA (`:5000`) | SMTP only (`INBOUND_SMTP_HOST_PORT`, default `25`) |
+
+Traefik routes `Host(${DOMAIN_NAME})` on `websecure` with certresolver `myresolver` to gateway port `5000`. Postgres data persists in volume `geistdesk_db_data` (**pg15** — do not bump the major version without dump/restore).
+
+---
+
+## Caddy turnkey (no existing proxy)
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/premtonx/GeistDesk/main/install.sh | bash
-```
-
-Or from a git clone:
-
-```bash
+# or from a clone:
 ./install.sh
-# non-interactive:
 ./install.sh --yes
 ```
 
-`install.sh` will:
+`install.sh` installs Docker if needed, writes `.env`, and runs:
 
-1. Install Docker + Compose if missing (`get.docker.com`)
-2. Clone this repo (when invoked via `curl|bash`)
-3. Prompt for a public domain (default `localhost`)
-4. Generate a secure `.env` (`POSTGRES_PASSWORD`, `JWT_SECRET`, …)
-5. Run `docker compose --profile caddy up --build -d` (Postgres + API + Nginx UI + Caddy)
-
-Stack layout:
+```bash
+docker compose -f docker-compose.yml --profile caddy up --build -d
+```
 
 | Service | Role | Host ports |
 |---------|------|------------|
-| `geistdesk-db` | `pgvector/pgvector:pg15` | none |
-| `geistdesk-gateway` | Node API (port 5000) + SMTP | optional `25` |
-| `frontend` | Nginx static Vite build (`--profile caddy`) | none (internal) |
-| `caddy` | TLS reverse proxy (`--profile caddy`) | `80`, `443` |
+| `geistdesk-db` | Postgres 15 + pgvector | none |
+| `geistdesk-gateway` | API | optional SMTP |
+| `frontend` | Nginx static build | internal |
+| `caddy` | TLS reverse proxy | `80`, `443` |
 
-Caddy routes `/api/*` → backend and `/*` → frontend. Local inference nodes on the
-Docker host are reachable as `http://host.docker.internal:8080`.
-
-Production hosts that already terminate TLS with Traefik use the overlay:
-
-```bash
-docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d geistdesk-db geistdesk-gateway
-```
-
-Legacy helper (delegates to `install.sh`):
+Legacy helper (delegates to `install.sh` unless `COMPOSE_FILE` is set):
 
 ```bash
 ./setup.sh --yes
 ```
 
-On every container start the entrypoint (`scripts/docker-entrypoint.sh`) runs:
+---
 
-| Step | Command | What it does |
-|------|---------|----------------|
-| 1 | Wait for PostgreSQL | Up to 30 retries (2s apart) until `DATABASE_URL` accepts connections |
-| 2 | `npm run db:deploy:prod` | Applies idempotent PostgreSQL DDL (`dist/migrate.cjs` → `initDb()`) |
-| 3 | `npm run seed:prod` | Seeds German defaults, vault folders, prompts, agent skills. Fixture users/tickets only when `ENABLE_DEMO_LOGIN=true` **and** not production. |
-| 4 | `exec node dist/server.cjs` | Starts the Express gateway on port 5000 (compose) |
+## Container entrypoint
 
-> **Note:** GeistDesk does not use Prisma. Schema deployment is handled by `src/db/migrate.ts`, which wraps the same `initDb()` routine used at runtime in `src/lib/postgres-backend.ts`.
+On every gateway start (`scripts/docker-entrypoint.sh`):
 
-### Equivalent `package.json` scripts
+| Step | What it does |
+|------|----------------|
+| 1 | Wait for PostgreSQL (retries until `DATABASE_URL` accepts connections) |
+| 2 | `npm run db:deploy:prod` — idempotent DDL via `dist/migrate.cjs` / `initDb()` |
+| 3 | `npm run seed:prod` — platform defaults (demo fixtures only when demo flags allow) |
+| 4 | `exec node dist/server.cjs` — listen on port **5000** |
 
-```json
-"db:deploy:prod": "node dist/migrate.cjs",
-"seed:prod": "node dist/seed.cjs",
-"prod:bootstrap": "npm run db:deploy:prod && npm run seed:prod",
-"prod:start": "npm run prod:bootstrap && node dist/server.cjs"
-```
+Schema management is **not** Prisma Migrate for the document store. Prisma is used for the pgvector `KnowledgeEmbedding` model; document collections live in `geistdesk_documents` (JSONB).
 
-For bare-metal or VM hosts (after `npm run build`):
+---
+
+## Required secrets
+
+| Variable | Notes |
+|----------|--------|
+| `JWT_SECRET` | `openssl rand -hex 48` |
+| `VAULT_ENCRYPTION_KEY` | `openssl rand -hex 32` |
+| `AI_SECRETS_KEY` | `openssl rand -hex 32` |
+| `POSTGRES_PASSWORD` | Compose maps `GEISTDESK_DATABASE_URL` → container `DATABASE_URL` |
+| `MASTER_KEY_SALT` / `VITE_MASTER_KEY_SALT` | Keep in sync for client/server KDF |
+
+Full template: [`.env.example`](./.env.example). `./setup.sh` fills missing or `replace_with_*` placeholders without overwriting real secrets.
+
+---
+
+## Native MCP
+
+1. Admin Hub → **Mail & Schnittstellen** → **API & MCP** → enable
+2. Create a `gdk_…` API token
+3. Point clients at `https://<DOMAIN_NAME>/api/mcp` with `Authorization: Bearer gdk_…`
+
+See the [README MCP section](./README.md#model-context-protocol-mcp).
+
+---
+
+## Operations cheat sheet
 
 ```bash
-export DATABASE_URL=postgresql://...
-export JWT_SECRET=...
-export VAULT_ENCRYPTION_KEY=...
-npm run prod:start
+# Validate merged compose (with Traefik overlay)
+COMPOSE_FILE=docker-compose.yml:docker-compose.traefik.yml docker compose config
+
+# Logs
+docker compose logs -f geistdesk-gateway
+
+# Stop
+docker compose down
+
+# Installer self-check (no Docker required for most checks)
+./setup.sh --check
 ```
 
----
+### Health
 
-## Required environment variables
+- App: `GET https://<host>/api/health` (or your health route)
+- DB: Compose healthcheck via `pg_isready` inside `geistdesk-db`
 
-Create a `.env` file next to `docker-compose.yml` before first boot:
+### CI
 
-```env
-# Required — application will not start without these
-JWT_SECRET=<random-64-char-hex>
-VAULT_ENCRYPTION_KEY=<random-32-byte-key>
-
-# Auto-generated on first deploy if missing (production server)
-GRAPH_CLIENT_STATE_SECRET=<random-hex>
-INBOUND_MAIL_WEBHOOK_SECRET=<random-hex>
-
-# Recommended production hardening (defaults shown)
-BETA_AUTO_ADMIN=false
-ALLOW_PUBLIC_REGISTRATION=false
-ENABLE_SANDBOX=false
-```
-
-`DATABASE_URL` is set inside `docker-compose.yml` for the bundled PostgreSQL service. Override it if you attach an external database.
-
-Optional integrations (Azure OpenAI, Firebase, Teams bot, Gemini) are documented in [README.md](README.md#-environment-variables-reference).
+GitHub Actions workflow `.github/workflows/deploy.yml` runs the strict build gate on pushes to `main`, then deploys using the same compose model.
 
 ---
 
-## Idempotency and restarts
-
-All bootstrap steps are safe to run on **every container restart**:
-
-| Layer | Idempotency mechanism |
-|-------|----------------------|
-| **Schema (`migrate`)** | `CREATE TABLE IF NOT EXISTS`, `ALTER TABLE … IF NOT EXISTS` |
-| **Documents (`seed`)** | `ON CONFLICT (collection, id) DO UPDATE` for users/tickets |
-| **Platform defaults** | Skips `module_config/global` if already present; upserts vault folders; inserts prompt templates only when missing; seeds persona skills only when empty |
-
-Restarting the container will **not** overwrite custom admin edits or throw unique-constraint errors.
-
----
-
-## What gets seeded automatically
-
-After first boot (German localization defaults):
-
-- **Polyglot Bridge** — Deutsch-first language roster in `module_config/global`
-- **Credential vault folders** — `Produktion`, `VPN & Netzwerk`, `EU-West` (PostgreSQL `vault_folders`)
-- **AI prompt templates** — German baselines for summarization, KB generation, RCA, translation
-- **Agent persona skills** — Support-Agent, Sicherheitsanalyst, Wissensautor JSON manifests
-- **Sample users & tickets** — from `src/db/seed-data.json` only when `ENABLE_DEMO_LOGIN=true` on a non-production runtime. Production boots stay userless until `/onboarding` creates the primary admin.
-
-Demo login and vault password autofill are **disabled** in production (`ENABLE_DEMO_LOGIN` / `VITE_ENABLE_DEMO_LOGIN` are ignored when `NODE_ENV=production`).
-
-### Realistic IT demo dataset (opt-in)
-
-Controllable seeder for screenshots / sandboxes (`src/services/seedService.ts`):
-
-| Trigger | How |
-|---------|-----|
-| Admin Hub | **Übersicht** or **Infrastruktur & Backups** → “Demo-Daten importieren / bereinigen” |
-| API | `POST /api/admin/demo-data/seed` · `DELETE /api/admin/demo-data/reset` |
-| CLI | `npm run seed:demo` · `npm run seed:demo:dev -- --reset` |
-| Boot | `SEED_DEMO_DATA=true` (skips if demo rows already exist) |
-
-Rows are tagged `isDemoData: true` / `source: demo-simulation` with stable `*-demo-sim-*` IDs so reset never touches real tenant data.
-
----
-
-## Health check
-
-After `docker compose up`:
+## Bare metal (advanced)
 
 ```bash
-curl -fsS http://localhost/api/health
-# {"status":"ok"}
+npm ci
+npm run build
+export DATABASE_URL=postgresql://…
+export JWT_SECRET=…
+export VAULT_ENCRYPTION_KEY=…
+export AI_SECRETS_KEY=…
+npm run prod:start   # migrate + seed + server
 ```
 
-Production: `https://desk.geistai.eu/api/health`
-
-A successful health response means the full bootstrap chain completed (schema + seed + server).
-
----
-
-## Manual operations (optional)
-
-Normally unnecessary in Docker; useful for local development:
-
-```bash
-npm run db:migrate      # schema only (tsx, dev)
-npm run seed            # data only (tsx, dev)
-npm run db:migrate:prod # schema only (compiled)
-npm run seed:prod       # data only (compiled)
-```
-
----
-
-## CI/CD (maintainers)
-
-Pushes to `main` trigger `.github/workflows/deploy.yml`:
-
-1. **Strict build gate** (`lint`, license check, `npm run build` on GitHub Actions runners)
-2. **Artifact upload** — `dist/` bundle (frontend + `server.cjs`, `migrate.cjs`, `seed.cjs`)
-3. **Deploy** — pull `main` on the host and `docker compose build` the multi-stage image (frontend + backend compiled inside the builder; host `dist/` is not required)
-4. Post-deploy health check against `https://app.premtonx.cloud/api/health`
-
-Database bootstrap runs inside the container entrypoint — the workflow does not SSH in to run seed manually.
-
-**Local Docker builds** work from a clean clone:
-
-```bash
-./setup.sh
-# or: docker compose up --build -d
-```
-
----
-
-## Troubleshooting
-
-| Symptom | Likely cause | Fix |
-|---------|--------------|-----|
-| Container exits immediately | `JWT_SECRET` or `VAULT_ENCRYPTION_KEY` missing | Add to `.env` and recreate container |
-| `PostgreSQL did not become ready` | DB container slow or wrong `DATABASE_URL` | Check `geistdesk-db` logs; verify network |
-| Health 502 after boot | Bootstrap still running | Wait 30–60s; check gateway logs for `[entrypoint]` lines |
-| Empty prompt library | Seed failed silently | Inspect logs for `[seed]` errors; run `docker compose exec geistdesk-gateway npm run seed:prod` once |
-
-Gateway logs show the bootstrap sequence:
-
-```
-[entrypoint] GeistDesk production bootstrap starting...
-[entrypoint] PostgreSQL is ready.
-[entrypoint] Step 1/3 — deploying database schema...
-[migrate] Schema deployment complete.
-[entrypoint] Step 2/3 — running idempotent platform seed...
-[seed] Upserted N users and M tickets...
-[entrypoint] Step 3/3 — starting application server...
-```
+Prefer Docker Compose for production parity with Traefik/Caddy networking.
