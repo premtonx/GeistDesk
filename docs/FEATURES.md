@@ -1,6 +1,15 @@
 # GeistDesk — Feature Overview
 
-Concise public registry of product modules. For deep route inventories, explore `src/App.tsx` and `src/components/admin/hub/adminHubConfig.ts`.
+**Sovereign IT Operations Platform** — unify helpdesk, assets, credentials, knowledge, and AI orchestration in a self-hosted runtime. For deep route inventories, explore `src/App.tsx` and `src/components/admin/hub/adminHubConfig.ts`.
+
+## Core pillars
+
+| Pillar | Product surface |
+|--------|-----------------|
+| **Helpdesk** | Ticketing & workflows (`/tickets`) |
+| **Assets** | Hardware & software / account coverage context (`/customers`, schemas) |
+| **Phantom Vault** | Secure secret exchange — GeistExchange & GeistVault (`/vault`, `/credentials`) |
+| **AI Orchestration** | Local/cloud AI with PII Shield (`/admin?tab=ai-engine`) |
 
 ## Stack
 
@@ -16,7 +25,7 @@ Concise public registry of product modules. For deep route inventories, explore 
 | **Tickets** | Multi-channel inbox, AI triage/drafts, checklists, Kanban | `/tickets` |
 | **GeistKB** | Articles, categories, RAG indexing, hybrid search | `/kb` |
 | **GeistVault** | Client-side encrypted credential vault (ZKP-style unlock) | `/credentials` |
-| **GeistExchange** | Server-encrypted secrets, dropzones, audit log | `/vault` |
+| **GeistExchange** | Server-encrypted secrets, dropzones, audit log (Phantom Vault) | `/vault` |
 | **AI Orchestrator** | Provider routing, PII shield, personas/skills | `/admin?tab=ai-engine` |
 | **Insights** | Executive / SLA analytics | `/insights` |
 | **Admin Hub** | RAG, governance, mail/integrations, system | `/admin` |

@@ -1,23 +1,42 @@
 # GeistDesk
 
-**Enterprise sovereign helpdesk** — ticketing, knowledge base (RAG), credential vaults, and a detachable AI orchestrator you can run fully on your own infrastructure.
+# Sovereign IT Operations Platform
 
-GeistDesk is a full-stack TypeScript app (**React 19 / Vite** + **Express on Node.js 24**) backed by **PostgreSQL 15 with pgvector**. Production deploys sit behind **Traefik** (or optional Caddy) with Let’s Encrypt TLS.
+**The Open-Source Standard for Secure IT Operations**
+
+Unify helpdesk, assets, credentials, knowledge, and AI orchestration in a sovereign self-hosted platform. **Keep your data, your rules.**
+
+GeistDesk is a full-stack TypeScript platform (**React 19 / Vite** + **Express on Node.js 24**) backed by **PostgreSQL 15 with pgvector**. Production deploys sit behind **Traefik** (or optional Caddy) with Let’s Encrypt TLS.
+
+| Badge | Meaning |
+|-------|---------|
+| **Self-Hosted** | 100% data sovereignty on your infrastructure |
+| **AGPLv3** | Sovereign & open source |
+| **Post-Quantum** | Hybrid ML-KEM-1024 + X25519 (NIST FIPS 203–aligned) readiness for secret envelopes |
+| **AI PII Shield** | Privacy by design — redact before model egress |
 
 License: [AGPL-3.0](./LICENSE)
 
 ---
 
-## Features
+## Core pillars
 
-| Area | What you get |
-|------|----------------|
-| **Ticketing** | Multi-channel inbox, triage, internal notes, AI drafts, checklists |
-| **GeistKB + RAG** | Articles/SOPs with hybrid search (pgvector + FTS) |
-| **AI Orchestrator** | Local (Ollama) or cloud providers, PII scrubbing, feature routing |
-| **GeistVault / Exchange** | Server-side encrypted secrets, audited reveals, dropzones |
-| **Native MCP** | Streamable HTTP MCP at `/api/mcp` for Cursor, Claude Desktop, Windsurf |
-| **Admin Hub** | Mail & integrations, RAG pipeline, governance, workforce / RBAC |
+| Pillar | Focus |
+|--------|--------|
+| **Helpdesk** | Ticketing & workflows — multi-channel inbox, SLA-aware triage, AI drafts, checklists |
+| **Assets** | Hardware & software — inventory-minded CRM schemas, coverage, and operational context |
+| **Phantom Vault** | Secure secret exchange — GeistExchange / GeistVault with audited reveals and dropzones |
+| **AI Orchestration** | Local AI with PII Shield — Ollama or cloud providers, feature routing, RAG (pgvector) |
+
+Also included: **GeistKB** knowledge/RAG, **Native MCP** (`/api/mcp` for Cursor, Claude Desktop, Windsurf), and **Admin Hub** (mail, governance, workforce / RBAC).
+
+---
+
+## Sovereignty & security
+
+**Sovereignty by design.** GeistDesk keeps IT operations inside your perimeter: local processing options, encrypted storage, scoped API tokens, and no requirement to ship tickets, vault material, or knowledge to a vendor SaaS control plane.
+
+Built for teams that must align with regulated-industry expectations — including structural practices relevant to **GDPR**, **HIPAA**, **ITAR**, and **ISO**-oriented controls (access isolation, audit trails, PII redaction, and self-hosted residency). You remain the data controller; GeistDesk is the open runtime.
 
 ---
 

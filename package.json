@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "license": "AGPL-3.0",
   "type": "module",
-  "description": "Enterprise sovereign AI Orchestrator with detachable AI engines supporting local Ollama models and cloud services.",
+  "description": "Sovereign IT Operations Platform — self-hosted helpdesk, assets, Phantom Vault, knowledge, and AI orchestration with PII Shield.",
   "main": "server.ts",
   "engines": {
     "node": ">=20.0.0"

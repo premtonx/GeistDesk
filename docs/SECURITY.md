@@ -2,6 +2,10 @@
 
 Contributor-facing access-control invariants and regression cases. Operational secrets (JWT, vault keys, MCP tokens) must never be committed — see `.gitignore` and `.env.example`.
 
+## Sovereignty by design
+
+GeistDesk is positioned as a **Sovereign IT Operations Platform**: keep helpdesk, vault, knowledge, and AI workloads on infrastructure you control. Prefer local model endpoints where possible; encrypt secret envelopes at rest; scrub PII before model egress (**AI PII Shield**). Hybrid post-quantum KEM (**ML-KEM-1024 + X25519**) protects GeistExchange/GeistVault payload envelopes. Deployment patterns support regulated-industry residency expectations (e.g. GDPR, HIPAA, ITAR, ISO-oriented controls) without mandating a vendor SaaS control plane.
+
 ## Data invariants
 
 1. **Identity integrity:** `ownerId` / `senderId` must match the authenticated user UID where applicable.

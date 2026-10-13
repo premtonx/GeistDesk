@@ -1,14 +1,16 @@
 {
-  "name": "Remix: GeistDesk",
-  "description": "An AI-native ticketing system with detachable AI engines, RAG-powered knowledge base, and PII protection.",
+  "name": "GeistDesk",
+  "description": "Sovereign IT Operations Platform — the open-source standard for secure IT operations. Unify helpdesk, assets, credentials, knowledge, and AI orchestration in a self-hosted platform.",
   "requestFramePermissions": [
     "camera",
     "microphone"
   ],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API",
-    "AI Ticketing",
-    "RAG Knowledge Base",
-    "PII Redaction"
+    "Helpdesk & Workflows",
+    "Assets",
+    "Phantom Vault",
+    "AI Orchestration with PII Shield",
+    "RAG Knowledge Base"
   ]
 }
