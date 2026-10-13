@@ -69,7 +69,7 @@ import {
   DEFAULT_MCP_SETTINGS,
   normalizeMcpSettings,
   type McpWorkspaceSettings,
-} from './mcp-config.js';
+} from './mcp-config';
 
 export type { McpWorkspaceSettings };
 export { DEFAULT_MCP_SETTINGS, normalizeMcpSettings };
