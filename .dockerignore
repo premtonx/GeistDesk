@@ -1,0 +1,17 @@
+# Host artifacts are not required — the builder stage runs `npm ci` + `npm run build`.
+node_modules
+dist
+.git
+.github
+.env
+.env.*
+!.env.example
+*.md
+!INSTALLATION_AND_CONFIG.md
+coverage
+tmp
+.cursor
+**/.DS_Store
+npm-debug.log*
+.vite
+**/node_modules

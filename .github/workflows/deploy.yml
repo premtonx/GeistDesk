@@ -1,0 +1,268 @@
+name: Secure Production Deployment
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+concurrency:
+  group: geistdesk-production-deploy
+  cancel-in-progress: true
+
+jobs:
+  validate-build:
+    name: Strict build gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code Baseline
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      - name: Install exact dependencies
+        run: npm ci --dangerously-allow-all-scripts --no-audit
+
+      - name: TypeScript compile gate
+        run: npm run lint
+
+      - name: Open-source license compliance gate
+        run: npm run verify:license
+
+      - name: Reject unsafe React namespace usage
+        run: node scripts/verify-no-react-namespace.mjs
+
+      - name: Strict production build
+        env:
+          BUILD_ID: ${{ github.sha }}
+          VAULT_ENCRYPTION_KEY: '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'
+          VITE_DEMO_MODE: 'false'
+          VITE_ENABLE_DEMO_LOGIN: 'false'
+        run: |
+          set -euo pipefail
+          npm run build 2>&1 | tee build.log
+
+          if grep -E '(^✗|error during build|Build failed|SyntaxError|ReferenceError: React|TS[0-9]{4}:)' build.log; then
+            echo "::error::Production build reported fatal errors — deployment blocked."
+            exit 1
+          fi
+
+          if grep -Ei '\[plugin vite:esbuild\].*\berror\b' build.log; then
+            echo "::error::Vite esbuild plugin reported errors — deployment blocked."
+            exit 1
+          fi
+
+          node scripts/verify-production-build.mjs
+          node scripts/verify-server-bundle.mjs
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: production-dist-${{ github.sha }}
+          path: dist/
+          retention-days: 14
+
+  deploy:
+    name: Deploy to production
+    needs: validate-build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout compose and Dockerfile
+        uses: actions/checkout@v4
+
+      - name: Download CI build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: production-dist-${{ github.sha }}
+          path: dist
+
+      - name: Upload prebuilt dist to production host
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: sovereign
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          source: dist
+          target: /home/sovereign/desk.geistai.eu
+          overwrite: true
+
+      - name: Execute Remote SSH Deployment Loop
+        uses: appleboy/ssh-action@v1.0.3
+        env:
+          BUILD_ID: ${{ github.sha }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: sovereign
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT }}
+          command_timeout: 30m
+          envs: BUILD_ID,GITHUB_TOKEN
+          script: |
+            set -euo pipefail
+
+            cd ~/desk.geistai.eu
+            git fetch https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/premtonx/GeistDesk.git main
+            git reset --hard FETCH_HEAD
+
+            DEPLOY_COMMIT="$(git rev-parse HEAD)"
+            export BUILD_ID="${BUILD_ID:-$DEPLOY_COMMIT}"
+
+            echo "=== GeistDesk deploy @ ${DEPLOY_COMMIT} (BUILD_ID=${BUILD_ID}) ==="
+
+            if [ ! -f dist/index.html ] || [ ! -f dist/server.cjs ]; then
+              echo "FATAL: Prebuilt dist/ artifact missing on host (index.html or server.cjs)"
+              exit 1
+            fi
+
+            # Ensure production security env vars exist in host .env (never overwrite existing secrets).
+            touch .env
+            set_env_default() {
+              local key="$1"
+              local value="$2"
+              if ! grep -q "^${key}=" .env; then
+                echo "${key}=${value}" >> .env
+              fi
+            }
+            set_env_if_missing() {
+              local key="$1"
+              if ! grep -q "^${key}=" .env; then
+                echo "${key}=$(openssl rand -hex 32)" >> .env
+              fi
+            }
+
+            set_env_default BETA_AUTO_ADMIN false
+            set_env_default ALLOW_PUBLIC_REGISTRATION false
+            set_env_default ENABLE_SANDBOX false
+            # Compose Traefik labels now read from .env. Pin the live host so
+            # Host(`${DOMAIN_NAME:-localhost}`) does not fall back to localhost.
+            set_env_default DOMAIN_NAME desk.geistai.eu
+            set_env_default PUBLIC_HOSTNAME desk.geistai.eu
+            set_env_default PUBLIC_APP_URL https://desk.geistai.eu
+            set_env_default ROUTER_NAME geistdesk-sso
+            set_env_default TRAEFIK_NETWORK traefik-public
+            set_env_default INBOUND_EMAIL_DOMAIN inbound.geistai.eu
+            set_env_if_missing GRAPH_CLIENT_STATE_SECRET
+            set_env_if_missing INBOUND_MAIL_WEBHOOK_SECRET
+
+            if ! grep -q "^JWT_SECRET=" .env; then
+              echo "FATAL: JWT_SECRET must be set in ~/desk.geistai.eu/.env before deploy"
+              exit 1
+            fi
+            if ! grep -q "^VAULT_ENCRYPTION_KEY=" .env; then
+              echo "FATAL: VAULT_ENCRYPTION_KEY must be set in ~/desk.geistai.eu/.env before deploy"
+              exit 1
+            fi
+
+            # Multi-stage image builds dist/ inside Docker; host node_modules/dist are not required.
+            rm -rf .vite node_modules/.vite || true
+
+            # Ensure compose DATABASE_URL points at the bundled Postgres service.
+            if ! grep -q '^GEISTDESK_DATABASE_URL=' .env; then
+              PG_USER="$(grep -E '^POSTGRES_USER=' .env | cut -d= -f2- || true)"
+              PG_DB="$(grep -E '^POSTGRES_DB=' .env | cut -d= -f2- || true)"
+              PG_PASS="$(grep -E '^POSTGRES_PASSWORD=' .env | cut -d= -f2- || true)"
+              PG_USER="${PG_USER:-geist_user}"
+              PG_DB="${PG_DB:-geistdesk_prod}"
+              PG_PASS="${PG_PASS:-geist_password}"
+              echo "GEISTDESK_DATABASE_URL=postgresql://${PG_USER}:${PG_PASS}@geistdesk-db:5432/${PG_DB}?sslmode=disable" >> .env
+            fi
+
+            # No fixed compose project name — directory-derived project keeps the
+            # existing Postgres volume (pg15). Do not enable --profile caddy here.
+            COMPOSE="docker compose -f docker-compose.yml -f docker-compose.traefik.yml"
+
+            $COMPOSE build --pull \
+              --build-arg BUILD_ID="${BUILD_ID}" \
+              geistdesk-gateway
+
+            echo "Starting Postgres and waiting for healthy..."
+            $COMPOSE up -d geistdesk-db
+            DB_OK=0
+            for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36; do
+              # health=healthy once pg_isready passes; also accept "starting" during start_period.
+              STATUS="$($COMPOSE ps geistdesk-db --format '{{.Status}}' 2>/dev/null || true)"
+              if echo "$STATUS" | grep -qi '(healthy)'; then
+                echo "Postgres healthy on attempt ${i}: ${STATUS}"
+                DB_OK=1
+                break
+              fi
+              if echo "$STATUS" | grep -qiE 'Exit|exited|dead'; then
+                echo "FATAL: Postgres container exited during boot: ${STATUS}"
+                $COMPOSE logs --tail=120 geistdesk-db || true
+                exit 1
+              fi
+              echo "Postgres wait ${i}/36 — ${STATUS:-unknown}"
+              sleep 5
+            done
+            if [ "${DB_OK}" != "1" ]; then
+              echo "FATAL: Postgres never became healthy"
+              $COMPOSE ps -a || true
+              $COMPOSE logs --tail=120 geistdesk-db || true
+              exit 1
+            fi
+
+            $COMPOSE up -d --force-recreate geistdesk-gateway
+
+            echo "Waiting for gateway bootstrap (migrate/seed/server)..."
+            # Probe the PORT the process actually bound (compose sets PORT=5000).
+            INTERNAL_OK=0
+            for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30; do
+              if $COMPOSE exec -T geistdesk-gateway node -e "const p=process.env.PORT||5000; fetch('http://127.0.0.1:'+p+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" >/dev/null 2>&1; then
+                echo "Internal health OK (container PORT/api/health) on attempt ${i}"
+                INTERNAL_OK=1
+                break
+              fi
+              # Surface crash loops early (rate-limit / port bind failures).
+              GW_STATUS="$($COMPOSE ps geistdesk-gateway --format '{{.Status}}' 2>/dev/null || true)"
+              if echo "$GW_STATUS" | grep -qiE 'Exit|exited|dead|Restarting'; then
+                echo "WARN: gateway status=${GW_STATUS} — dumping recent logs"
+                $COMPOSE logs --tail=80 geistdesk-gateway || true
+              fi
+              echo "Internal health attempt ${i}/30 — waiting for entrypoint... (${GW_STATUS:-unknown})"
+              sleep 5
+            done
+            if [ "${INTERNAL_OK}" != "1" ]; then
+              echo "FATAL: Gateway never became healthy inside the container"
+              $COMPOSE logs --tail=200 geistdesk-gateway || true
+              $COMPOSE logs --tail=80 geistdesk-db || true
+              exit 1
+            fi
+
+            BUNDLE="$($COMPOSE exec -T geistdesk-gateway sh -c "grep -oE 'index-[^\"]+\.js' dist/index.html | head -1")"
+            echo "Active bundle inside container: ${BUNDLE}"
+
+            if [ -z "${BUNDLE}" ]; then
+              echo "FATAL: Could not detect bundle hash in dist/index.html"
+              exit 1
+            fi
+
+            if [ "${BUNDLE}" = "index-PNcfVvbc.js" ]; then
+              echo "FATAL: Legacy broken bundle still deployed after forced rebuild"
+              exit 1
+            fi
+
+            echo "Verifying public health endpoint..."
+            for i in 1 2 3 4 5 6 7 8 9 10; do
+              if curl -fsS "https://desk.geistai.eu/api/health" >/dev/null; then
+                echo "Health check OK (https://desk.geistai.eu/api/health)"
+                break
+              fi
+              if [ "$i" -eq 10 ]; then
+                echo "FATAL: Public health check did not return 200 after deploy"
+                $COMPOSE logs --tail=120 geistdesk-gateway || true
+                exit 1
+              fi
+              echo "Public health check attempt ${i}/10 failed — retrying in 5s..."
+              sleep 5
+            done
+
+            echo "=== Deploy success: ${BUNDLE} @ ${DEPLOY_COMMIT} ==="
+            echo "Deploy model: multi-stage Docker image (builder runs npm run build)"

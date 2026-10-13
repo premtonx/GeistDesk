@@ -1,0 +1,3 @@
+subject,html_content,body,sender_email,status,created_at,tags,priority,customer_name
+"VPN disconnects on wake","","Laptop loses VPN after sleep","user@acme.com",RESOLVED,2024-01-15T10:00:00Z,"vpn;network",medium,"Alice Example"
+"Cannot reset MFA","","Need help resetting authenticator","bob@acme.com",OPEN,2024-02-01T09:30:00Z,"mfa;security",high,"Bob Example"

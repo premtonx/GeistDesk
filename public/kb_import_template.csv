@@ -1,0 +1,3 @@
+title,content,category,status,tags
+"How to reset your password","<p>Open Settings → Security → Reset Password.</p>",Account,PUBLISHED,"password;howto"
+"Draft: SSO rollout notes","Internal notes for SSO cutover.",IT,DRAFT,"sso;draft"

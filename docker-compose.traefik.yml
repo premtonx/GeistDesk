@@ -1,0 +1,26 @@
+# Production Traefik overlay (desk.geistai.eu and similar).
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d geistdesk-db geistdesk-gateway
+#
+# Caddy/frontend stay off unless `--profile caddy` is passed (turnkey install.sh).
+
+services:
+  geistdesk-gateway:
+    ports:
+      # Traefik reaches the container on the Docker network; only SMTP is published.
+      - "${INBOUND_SMTP_HOST_PORT:-25}:${INBOUND_SMTP_PORT:-25}"
+    networks:
+      - geistdesk-internal
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik-public}"
+      - "traefik.http.routers.${ROUTER_NAME:-geistdesk}.rule=Host(`${DOMAIN_NAME:-localhost}`)"
+      - "traefik.http.routers.${ROUTER_NAME:-geistdesk}.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.${ROUTER_NAME:-geistdesk}.tls.certresolver=${TRAEFIK_CERTRESOLVER:-myresolver}"
+      - "traefik.http.services.${ROUTER_NAME:-geistdesk}.loadbalancer.server.port=5000"
+
+networks:
+  traefik:
+    name: ${TRAEFIK_NETWORK:-traefik-public}
+    external: true

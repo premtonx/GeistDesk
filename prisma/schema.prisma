@@ -1,0 +1,46 @@
+// GeistDesk Prisma schema — KnowledgeEmbedding (pgvector RAG).
+// Runtime schema deploy still uses initDb()/migrate.cjs for the document store;
+// this Prisma model + migration SQL is the source of truth for vector DDL and
+// can be applied with: npx prisma migrate deploy
+
+generator client {
+  provider        = "prisma-client-js"
+  output          = "../node_modules/.prisma/client"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider   = "postgresql"
+  extensions = [vector]
+}
+
+/// RAG chunk store — KB articles + resolved tickets for hybrid search.
+model KnowledgeEmbedding {
+  id           String                       @id @default(uuid()) @db.Uuid
+  tenantId     String                       @default("default") @map("tenant_id") @db.VarChar(255)
+  sourceType   KnowledgeSourceType          @map("source_type")
+  sourceId     String                       @map("source_id") @db.VarChar(255)
+  chunkIndex   Int                          @default(0) @map("chunk_index")
+  chunkContent String                       @map("chunk_content") @db.Text
+  metadata     Json                         @default("{}")
+  /// OpenAI text-embedding-3-small (1536 dims) or compatible provider.
+  embedding    Unsupported("vector(1536)")?
+  searchTsv    Unsupported("tsvector")?     @map("search_tsv")
+  createdAt    DateTime                     @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime                     @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@unique([tenantId, sourceType, sourceId, chunkIndex], map: "knowledge_embedding_source_chunk_uq")
+  @@index([tenantId, sourceType, sourceId], map: "idx_knowledge_embedding_source")
+  @@map("KnowledgeEmbedding")
+}
+
+enum KnowledgeSourceType {
+  KB_ARTICLE
+  RESOLVED_TICKET
+  KB_DOCUMENT
+}
+
+// module_config lives in geistdesk_documents (collection='module_config', id='global').
+// JSONB field `is_initialized` defaults to false. See
+// prisma/migrations/20260815120000_module_config_is_initialized/migration.sql
+// Only POST /api/admin/onboarding/complete may set is_initialized = true.

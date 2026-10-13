@@ -1,0 +1,180 @@
+{
+  "nav": {
+    "dashboard": "Dashboard",
+    "tickets": "Tickets",
+    "geistKB": "GeistKB",
+    "geistVault": "GeistVault",
+    "companies": "Companies",
+    "geistExchange": "GeistExchange",
+    "reports": "Reports",
+    "aiInsights": "AI Insights",
+    "integrations": "Integrations",
+    "settings": "Settings"
+  },
+  "actions": {
+    "create": "Create",
+    "edit": "Edit",
+    "delete": "Delete",
+    "save": "Save",
+    "cancel": "Cancel",
+    "search": "Search",
+    "filter": "Filter",
+    "close": "Close",
+    "actions": "Actions",
+    "createTicket": "Create Ticket",
+    "createKBArticle": "Create GeistKB Article",
+    "createVaultEntry": "Create GeistVault Entry",
+    "createCompany": "Create Company"
+  },
+  "common": {
+    "loading": "Loading...",
+    "status": "Status",
+    "priority": "Priority",
+    "assignee": "Assignee",
+    "customer": "Customer",
+    "date": "Date",
+    "title": "Title",
+    "description": "Description",
+    "category": "Category",
+    "active": "Active",
+    "emergency": "Emergency",
+    "quantumSecure": "QUANTUM SECURE"
+  },
+  "dashboard": {
+    "title": "Enterprise Dashboard",
+    "welcome": "Welcome back, {{name}}! 👋",
+    "subtitle": "Here's what's happening with your support operations today.",
+    "exportReport": "Export Report",
+    "resolutionRate": "Resolution Rate",
+    "avgResolutionTime": "Avg. Resolution Time",
+    "ticketsResolved": "Tickets Resolved",
+    "customerSatisfaction": "Customer Satisfaction",
+    "aiSuggestions": "AI Suggestions",
+    "vsLast7Days": "vs last 7 days",
+    "vsLastMonth": "vs last month",
+    "open": "Open",
+    "needsAttention": "Needs attention",
+    "pending": "Pending",
+    "waitingResponse": "Waiting response",
+    "unassigned": "Unassigned",
+    "requiresAssignment": "Requires assignment",
+    "overdue": "Overdue",
+    "urgent": "Urgent",
+    "ticketTrends": "Ticket Trends",
+    "incoming": "Incoming",
+    "days7": "7 Days",
+    "totalTickets": "Total Tickets",
+    "recentTickets": "Recent Tickets",
+    "viewAll": "View All",
+    "quickAccess": "Quick Access",
+    "createTicketDesc": "Submit a new request",
+    "searchKbDesc": "Find solutions",
+    "geistVault": "GeistVault",
+    "geistVaultDesc": "Store and retrieve system secrets",
+    "aiAssistant": "AI Assistant",
+    "aiAssistantDesc": "Get AI-powered help",
+    "aiInsights": "AI Insights",
+    "problemDetection": "Problem Detection",
+    "aiProblemDetectionDesc": "AI has identified 3 recurring issues that may require your attention.",
+    "vpnConnectionFailures": "VPN Connection Failures",
+    "emailSyncProblems": "Email Sync Problems",
+    "passwordResetDelays": "Password Reset Delays",
+    "highImpact": "High Impact",
+    "mediumImpact": "Medium",
+    "lowImpact": "Low",
+    "similarTickets": "{{count}} similar tickets",
+    "viewAllInsights": "View All Insights →",
+    "kbHealth": "Knowledge Base Health",
+    "wellMaintained": "Well Maintained",
+    "viewKbAnalytics": "View KB Analytics →"
+  },
+  "tickets": {
+    "title": "Sovereign Tickets",
+    "searchPlaceholder": "Search tickets, tags or customers...",
+    "allTickets": "All Tickets",
+    "open": "Open",
+    "pending": "Pending",
+    "solved": "Solved",
+    "closed": "Closed",
+    "priorityHigh": "High",
+    "priorityMedium": "Medium",
+    "priorityLow": "Low",
+    "agentResponseLoop": "AI Agent Response Loop"
+  },
+  "kb": {
+    "title": "GeistKB Knowledge Base",
+    "structure": "Knowledge Structure",
+    "searchPlaceholder": "Search knowledge articles or SOP guidelines...",
+    "authoring": "Author New Guidelines",
+    "owner": "Owner",
+    "lastUpdated": "Last Updated",
+    "createArticle": "Create Article"
+  },
+  "vault": {
+    "title": "GeistVault Enterprise Vault",
+    "subtitle": "Centralized infrastructure access, passwords, cryptographic secret link drops & compliance vaults.",
+    "storageCenter": "Vault Storage",
+    "searchPlaceholder": "Search credentials, domains or secrets...",
+    "createCredential": "Create Credential",
+    "sovereignVault": "Sovereign Vault",
+    "securityChecks": "AI Security Checks",
+    "breakGlass": "Break Glass Emergency"
+  },
+  "companies": {
+    "title": "Company Profiles",
+    "searchPlaceholder": "Search companies...",
+    "createCompany": "Create Company",
+    "name": "Name",
+    "domain": "Domain",
+    "tier": "Tier",
+    "industry": "Industry",
+    "contacts": "Contacts",
+    "timeline": "Timeline"
+  },
+  "aiOrchestrator": {
+    "featureRouting": {
+      "title": "Feature Routing",
+      "description": "Visual routing matrix for all GeistDesk AI features",
+      "bulkRouter": "Bulk Model Router",
+      "applyToAll": "Apply to All",
+      "featureColumn": "Feature",
+      "routedModelColumn": "Routed Model",
+      "selectModel": "Select model…",
+      "bulkApplied": "Routed model applied to all features."
+    },
+    "features": {
+      "ticket_summarization": {
+        "label": "Ticket Summarization",
+        "tooltip": "Generates a concise TL;DR text summary right at the top of incoming customer support threads to save agent evaluation time."
+      },
+      "sentiment_analysis": {
+        "label": "Sentiment Analysis",
+        "tooltip": "Evaluates the emotional tone of customer messages (e.g., Negative, Critical) to color-code triage priority tags dynamically."
+      },
+      "smart_reply": {
+        "label": "Smart Reply",
+        "tooltip": "Drafts automated context-aware text responses directly within the ticket response composer window for rapid execution."
+      },
+      "kb_generation": {
+        "label": "KB Generation",
+        "tooltip": "Converts closed, high-quality resolution threads into draft document suggestions inside the GeistKB repository."
+      },
+      "escalation_analysis": {
+        "label": "Escalation Analysis",
+        "tooltip": "Monitors response drift and customer urgency signals to auto-route critical tickets to manager queues before SLA breaches."
+      },
+      "root_cause_analysis": {
+        "label": "Root Cause Analysis",
+        "tooltip": "Identifies systemic clusters among incoming issues to automatically flag system bugs to the engineering backlogs."
+      },
+      "translation": {
+        "label": "Translation",
+        "tooltip": "Instantly translates incoming messages to the agent's system language, and translates outgoing replies back to the customer's language."
+      },
+      "vault_insights": {
+        "label": "Vault Insights",
+        "tooltip": "Scans data encryption strengths and key lifecycles to surface security recommendations on the GeistVault compliance dashboard."
+      }
+    }
+  }
+}
