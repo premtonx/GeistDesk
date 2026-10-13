@@ -1,8 +1,7 @@
 # GeistDesk
 
-# Sovereign IT Operations Platform
-
-**The Open-Source Standard for Secure IT Operations**
+**Sovereign IT Operations Platform**  
+The Open-Source Standard for Secure IT Operations
 
 Unify helpdesk, assets, credentials, knowledge, and AI orchestration in a sovereign self-hosted platform. **Keep your data, your rules.**
 
