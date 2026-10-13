@@ -168,11 +168,23 @@ open(path, "w", encoding="utf-8").write("\n".join(out) + "\n")
 PY
 }
 
+is_placeholder_secret() {
+  local value="${1:-}"
+  [[ -z "$value" ]] && return 0
+  case "$value" in
+    replace_with_*|changeme*|change-me*|geist_password|your_*|TODO*|xxx*|XXXX*)
+      return 0
+      ;;
+  esac
+  return 1
+}
+
 ensure_secret() {
   local file="$1" key="$2" bytes="$3"
   local current
   current="$(env_get "$file" "$key")"
-  if [[ -n "$current" ]]; then
+  # Idempotent: do not overwrite operator-provided secrets.
+  if ! is_placeholder_secret "$current"; then
     return
   fi
   env_set "$file" "$key" "$(rand_hex "$bytes")"

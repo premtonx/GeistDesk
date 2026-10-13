@@ -1,178 +1,200 @@
-# 🌟 GeistDesk: Enterprise Sovereign AI Orchestrator
+# GeistDesk
 
-GeistDesk is a secure, high-performance, and deeply integrated Customer Support portal and sovereign AI Orchestrator. Designed to respect data sovereignty and infrastructure privacy, GeistDesk is capable of being hosted in internal isolated networks while providing advanced AI-powered insights, intelligence routing, private secret management, and robust CRM functionalities.
+**Enterprise sovereign helpdesk** — ticketing, knowledge base (RAG), credential vaults, and a detachable AI orchestrator you can run fully on your own infrastructure.
 
-This repository holds a modern, full-stack application leveraging **React 19 (Vite)** on the client side and an **Express.js** backend compiled as a single bundle for optimal multi-environment compatibility.
+GeistDesk is a full-stack TypeScript app (**React 19 / Vite** + **Express on Node.js 24**) backed by **PostgreSQL 15 with pgvector**. Production deploys sit behind **Traefik** (or optional Caddy) with Let’s Encrypt TLS.
 
----
-
-### 🚀 Recent Architecture Upgrades
-
-#### 1. 🛡️ Post-Quantum Hybrid Cryptography (GeistExchange & GeistVault)
-- **Hybrid Key Encapsulation (KEM):** Upgraded our secure data envelope system to a dual-layered protection model. We combine classic **X25519 (Elliptic Curve)** with **ML-KEM-1024 (Kyber)** via a **Hybrid Key Derivation Function (HKDF-SHA256)** in compliance with NIST FIPS 203. Ciphertext remains mathematically impenetrable even if one primitive is compromised.
-- **Malicious-Server Tamper Defenses (v2 Payloads):** Hardened all payloads against server-mediated key substitution attacks. Payload blocks utilize **AES-256-GCM** with strict **Authenticated Additional Data (AAD)** binding context (`userId:itemId`). Verification happens entirely client-side via a strict `CryptoIntegrityError` layer before any plaintext exposure.
-- **Backward Compatibility:** Implemented an automated fallback decryption pipeline (`decryptPayloadAuto`) ensuring legacy `v1` data fragments remain operational during migration cycles.
-
-#### 2. 🤖 Interactive & Collaborative AI Checklists (Tickets Module)
-- **Optimistic UI Engine:** The `Aufgaben` (Tasks) tab now features an interactive, real-time checklist synced with the Firestore JSONB layer. User state interactions offer zero-latency optimistic feedback loops with automated transaction rollback protections.
-- **Bilingual Inline Custom Task Injection:** Supports native multi-language task modifications and creations with clean `Enter` and `Escape` keyboard shortcuts.
-- **Visual Milestones:** Features smart responsive badges that shift to high-visibility emerald arrays upon 100% checklist milestone completion.
-
-#### 3. 🧠 Advanced AI Orchestrator Core & Global Agent Skill Registry
-- **Single-Page Sub-Tab Router Navigation:** Restructured the massive AI Management Console canvas into a high-density horizontal sub-tab framework (`🚀 Kommandozentrale`, `🧠 Agenten & Personas`, `📊 Qualität & Auditing`). This completely flattens vertical page height and eliminates scrolling fatigue while preserving active operational monitoring pipelines.
-- **Permanent "Skills verwalten" Control Anchors:** Standardized a highly visible, uniform interactive card footer button across all Agent Persona profiles (`Support-Agent`, `Sicherheitsanalyst`, `Wissensautor`). Administrative access to agent brain configurations is exposed globally by default, bypassing multi-step selection layers.
-- **Multi-Modal Skill Manifest Drawer:** Built a slide-out administrative editor panel allowing operators to customize an agent's runtime instructions, behavioral guardrails, and tool execution privileges. Supports twin operational pathways:
-  * *Manual Configuration Canvas:* A raw, high-density text interface allowing real-time edits to system instructions or JSON/YAML tool structures.
-  * *Skill File Dropzone:* A client-side `FileReader` parsing slot that allows operators to drag and drop custom `.json` or `.yaml` skill blueprints directly into the validation stream.
-- **Built-In System Blueprints Library:** Embedded a set of quick-load, enterprise-optimized template blueprints (*Customer Empathy & Translation*, *Strict Auditing & Zero-Trust PII Redaction*, *Technical Markdown Documentation*). Admins can instantiate production-ready agent boundaries with a single click.
-- **Global Immutability and Persistence:** Wired all mutations directly to our centralized data layer (`orchestratorService.updateAgentSkills`), ensuring that modified configurations deploy globally across all operator sessions simultaneously instead of caching locally.
-- **Layout Overflows Hardened:** Solved severe compound string clipping bugs by applying fluid responsive width tracking, `min-w-0` grid recalculations, and strict `break-words` text wrapping boundaries to long titles like `KI-Qualitäts-Dashboard`.
-
-#### 4. 📦 Secure Dropzone Pipelines & Unified UI Consistency
-- **High-Density Drawer Framework:** Re-engineered the admin file-auditing telemetry layout to use a modern, expanded fixed full-height viewport canvas (`max-w-4xl`), resolving tight structural sidebar container blowouts.
-- **Binary Stream Recovery:** Replaced raw placeholder actions with an authenticated, zero-leak binary blob recovery streaming pipeline (`createObjectURL`), tracking server-side retention timeouts with clean `HTTP 410` error banners.
-- **KB Editor Unification:** Stripped out legacy HTML-leaking textareas within GeistKB and successfully ported over the premium markdown rich-text editing workspace framework from our Tickets canvas.
+License: [AGPL-3.0](./LICENSE)
 
 ---
 
-## 🛠️ Architecture Overview
+## Features
 
-GeistDesk utilizes a modular, robust, dual-mode full-stack architecture tailored to run either locally, inside lightweight Docker containers, or inside enterprise-grade environments backed by PostgreSQL.
-
-### 💻 Client-Side
-*   **React 19 & Vite**: Ultra-fast hot-reloading development cycle with compiled, minified production assets located inside static `dist/` directory.
-*   **Tailwind CSS**: Modern utility classes paired with responsive display properties for fluid multi-device layouts.
-*   **Framer Motion**: Smooth interactive animations, active sliding drawers, scale effects, and custom transition timelines.
-*   **Lucide React**: Clean vector icon components.
-
-### ⚙️ Server-Side
-*   **Express compiled via esbuild**: High-efficiency Node.js application. Our bundle process uses `esbuild` to compile our production environment into a self-contained, high-performance CommonJS file: `dist/server.cjs`. This design completely avoids imports-lookup delays and enables standard, zero-overhead Docker start cycles.
-*   **PostgreSQL & Local File Auto-Detect Engine**: 
-    Our custom DB manager (`/src/lib/postgres-backend.ts`) automatically probes your environment. If the configuration variable `DATABASE_URL` is set, the application initializes database pools, runs DDL scripts, verifies schemas, and stores documents inside raw structured Postgres tables equipped with JSONB indexes. If Postgres is unavailable, our database engine elegantly initiates zero-dependency persistence fallback writing directly to local text-serialized file `/geistdesk_local_db.json`.
+| Area | What you get |
+|------|----------------|
+| **Ticketing** | Multi-channel inbox, triage, internal notes, AI drafts, checklists |
+| **GeistKB + RAG** | Articles/SOPs with hybrid search (pgvector + FTS) |
+| **AI Orchestrator** | Local (Ollama) or cloud providers, PII scrubbing, feature routing |
+| **GeistVault / Exchange** | Server-side encrypted secrets, audited reveals, dropzones |
+| **Native MCP** | Streamable HTTP MCP at `/api/mcp` for Cursor, Claude Desktop, Windsurf |
+| **Admin Hub** | Mail & integrations, RAG pipeline, governance, workforce / RBAC |
 
 ---
 
-## 💎 Features List & Capabilities
+## Quickstart (1-command launch)
 
-### 1. 🎛️ Dual-Row Header Navigation & Admin Hub
-*   **Double-Row Structural Separation**: An elegant layout separating user identity, notifications center, active timers, and system status indicators from the deep page-routing navigation menu. This ensures maximum horizontal space, meaning **all navigation buttons and control modules fit beautifully without truncating or overflowing**.
-*   **Global Actions Profile Bar**: Access search directly using global keyboard shortcut `⌘K` or click the search prompt anywhere across pages.
-*   **Live Engine Status**: Always-on visual connection status representing the state of internal system processes.
+### Traefik (recommended production path)
 
-### 2. 🛡️ PII Shield Guardrails & Safety Middleware
-*   **Automatic Scrubbing**: Real-time prompt safety middleware that automatically detects and redacts sensitive customer patterns.
-*   **Information Redaction**: Email addresses, 16-digit credit card integers, and custom identifiable formats are masked before sending prompt packages to downstream AI endpoints, protecting customer privacy.
+Prerequisites: Docker Compose v2, an existing Traefik stack with an external network named `traefik-public` (override with `TRAEFIK_NETWORK`), and a DNS record pointing at your host.
 
-### 3. 📝 Dynamic Custom Schemas (Contact & Company CRM)
-*   **Data Models**: Tailor fields, weights, and constraints representing incoming contact profiles (`ContactSchemaPage`) and enterprise accounts (`CompanySchemaPage`).
-*   **Dynamic Data Integration**: Generates context attributes appended dynamically to raw prompt sequences during AI evaluation loops.
-
-### 4. 🔗 Multi-Channel Email Integrations
-*   Manage support aliases, configure IMAP/SMTP parameters, configure routing filters, and oversee automated inbound ticket creation workflows seamlessly (`EmailChannelsPage`).
-
-### 5. 🔔 Active Notification Engine
-*   Create automated rules, trigger real-time system banners or auditory cues, manage dispatch logs, and control template styles (`NotificationEnginePage`).
-
-### 6. 🕒 Active Work Timer & Schedules Tracker
-*   **Real-Time Tracker**: Keep track of agent online shifts, work levels, and active schedules directly inside the global header using the `WorkTimer` component.
-*   **Shift Rotations**: Establish scheduled shifts, weights, and fallback queues across multiple agents inside the group directories.
-
-### 7. 🔑 Vault Manager & Secret Vault Page
-*   Securely store application keys, private company logins, and connection parameters.
-*   **Shamir Secret Sharing**: Fully supports advanced data sharing protocols to divide private master keys or encrypt sensitive properties inside local profiles.
-
-### 8. 🎫 Visual Pipelines, Kanban Board & Help Center
-*   Manage customer tickets inside beautiful visually organized drag-and-drop pipeline blocks (`TicketsPage`), update logs, query knowledge bases (`KBPage`), and generate deep visual telemetry charts (`InsightsPage`).
-
----
-
-## 🐳 Ready to Deploy: GitHub & Production Servers
-
-Yes, **everything in this directory is fully production ready** for instant migration to a remote GitHub repository and custom deployment servers! 
-
-Here is exactly how the database and demo data are prepared:
-
-### 🗄️ Database Ready State
-1.  **Dual Storage Reliability**:
-    *   **In Development/Sandbox**: It automatically uses the local file `/geistdesk_local_db.json` which contains your existing root admin workspace user data (`premtonxh@gmail.com`).
-    *   **In Production**: Connect your live production database by setting the `DATABASE_URL` environment variables. The server will detect it instantly on startup, automatically execute the DDL table creation scripts, and connect smoothly.
-2.  **Zero-Configuration Table Generation**: On connection with Postgres, the system runs raw query commands creating the robust `geistdesk_documents` table and optimized `idx_geistdesk_documents_collection` indexes if they do not yet exist, removing manual SQL installation steps.
-
-### 💾 First-run wizard (no default password)
-*   Production boots stay uninitialized (`module_config.is_initialized=false`) with no fixture admin accounts.
-*   Opening `/` or `/login` routes to `/onboarding`, where the operator creates the primary administrator.
-*   Showcase demo users are seeded only when `ENABLE_DEMO_LOGIN=true` on a non-production runtime.
-
----
-
-## 🚀 Easy Installation & Setup Instructions
-
-### 1️⃣ Local Development Setup
-Clone the project, install packages, and boot up the development server:
 ```bash
-# Clone the repository (or import into your local repository)
-git clone <your-repository-url>
-cd geistdesk
+git clone https://github.com/premtonx/GeistDesk.git
+cd GeistDesk
+cp .env.example .env
 
-# Install top-level and node dependency packages
-npm install
+# Generate secrets + sync DB URL (does not overwrite existing secrets)
+./setup.sh --yes
+# Or manually:
+#   openssl rand -hex 48   → JWT_SECRET
+#   openssl rand -hex 32   → VAULT_ENCRYPTION_KEY, AI_SECRETS_KEY, …
 
-# Start the Vite + Express Development Server
-npm run dev
+# Enable Traefik overlay (uncomment in .env or export):
+# COMPOSE_FILE=docker-compose.yml:docker-compose.traefik.yml
+
+# Set your public hostname
+# DOMAIN_NAME=desk.example.com
+# PUBLIC_APP_URL=https://desk.example.com
+
+docker compose up -d
 ```
-The client and backend server boot simultaneously at `http://localhost:3000`.
 
-### 2️⃣ One-command turnkey deploy (recommended)
-On a clean Ubuntu/Debian host (installs Docker if needed, generates `.env`, starts Postgres + API + UI + Caddy):
+Open `https://<DOMAIN_NAME>` and complete the Day-0 onboarding wizard.
+
+### Turnkey Caddy (no existing reverse proxy)
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/premtonx/GeistDesk/main/install.sh | bash
-# or from a clone:
 ./install.sh
-./install.sh --yes   # non-interactive (localhost)
+# non-interactive:
+./install.sh --yes
 ```
-Host ports: **80 / 443** (Caddy), optional **25** (inbound SMTP). See **[DEPLOYMENT.md](DEPLOYMENT.md)**.
 
-### 3️⃣ Docker / Compose (from a clone)
-Multi-stage `Dockerfile` targets: `backend` (API :5000 + SMTP), `frontend` (Nginx static UI).
+This builds the stack with the `caddy` Compose profile (ports 80/443) when you are not using Traefik.
+
+### Local development
+
 ```bash
-./setup.sh          # delegates to install.sh
-# or:
-docker compose --profile caddy up --build -d
+cp .env.example .env
+./setup.sh --yes          # fills secrets; skip compose if you prefer
+# Point GEISTDESK_DATABASE_URL at a local Postgres 15 + pgvector instance
+npm ci
+npm run db:migrate
+npm run seed:demo:dev     # optional
+npm run dev               # Vite + Express via tsx (see package.json)
 ```
 
-**Zero-config bootstrap:** The container entrypoint deploys the PostgreSQL schema, seeds German platform defaults, and starts the server — no manual `npm run seed` required.
+PostgreSQL is **required** — there is no local JSON file database fallback.
 
 ---
 
-## 🔒 Environment Variables Reference
+## Production architecture
 
-Define these secrets inside your server environment variables or within your persistent secure local environments:
-
-```env
-# Database Credentials
-DATABASE_URL=postgres://your_user:your_password@your_host:5432/your_database
-
-# Sovereign AI Integrations: Local Ollama Model OR Azure OpenAI
-OLLAMA_ENDPOINT=http://localhost:11434
-OLLAMA_MODEL=gemma
-
-# Optional Azure OpenAI (if preferred over local Ollama)
-AZURE_OPENAI_API_KEY=your_azure_openai_api_key_here
-AZURE_OPENAI_ENDPOINT=https://your-endpoint.openai.azure.com/
-AZURE_OPENAI_DEPLOYMENT=gpt-4o
-
-# Firebase Auth Configuration (Optional frontend bindings)
-VITE_FIREBASE_API_KEY=your_firebase_api_key
-VITE_FIREBASE_AUTH_DOMAIN=your_firebase_auth_domain
-VITE_FIREBASE_PROJECT_ID=your_firebase_project_id
+```
+                    ┌─────────────────────┐
+   Internet ───────►│ Traefik (websecure) │  TLS via certresolver=myresolver
+                    │ network: traefik-public
+                    └──────────┬──────────┘
+                               │ Host(`${DOMAIN_NAME}`)
+                               ▼
+                    ┌─────────────────────┐
+                    │ geistdesk-gateway   │  Node 24 / Alpine · Express :5000
+                    │ (API + SPA dist/)   │  MCP · /api/mcp
+                    └──────────┬──────────┘
+                               │ geistdesk-internal
+                               ▼
+                    ┌─────────────────────┐
+                    │ geistdesk-db        │  pgvector/pgvector:pg15
+                    │ volume: geistdesk_db_data
+                    └─────────────────────┘
 ```
 
-Enjoy using **GeistDesk**! Keep your infrastructure sovereign, safe, and powerful! 🚀
+| Piece | Detail |
+|-------|--------|
+| **Compose** | `docker-compose.yml` + optional `docker-compose.traefik.yml` |
+| **COMPOSE_FILE** | Set `COMPOSE_FILE=docker-compose.yml:docker-compose.traefik.yml` in `.env` so `docker compose up -d` merges both files |
+| **Traefik** | Labels use `TRAEFIK_ENTRYPOINT` (default `websecure`) and `TRAEFIK_CERTRESOLVER` (default `myresolver`) |
+| **Network** | Gateway joins external `traefik-public` (name configurable) |
+| **Persistence** | Postgres data in Docker volume `geistdesk_db_data` (pg15 — do not jump major versions without dump/restore) |
+| **Boot** | Entrypoint waits for DB → migrates schema → seeds defaults → starts `dist/server.cjs` |
+
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for entrypoint details, CI notes, and the Caddy profile.
+
+---
+
+## Model Context Protocol (MCP)
+
+GeistDesk embeds a native MCP server (Streamable HTTP / SSE) so external agents can call GeistKB, tickets, and vault tools with scoped API tokens.
+
+### Enable
+
+1. Sign in as **SYSTEM_ADMIN**
+2. Open **Admin Hub → Mail & Schnittstellen → API & MCP**
+3. Toggle **Enable MCP server**
+4. Optionally set custom system instructions
+5. Create an API token (`gdk_…`) and copy it once
+
+### Connect Cursor / Claude Desktop / Windsurf
+
+**URL:** `https://<your-domain>/api/mcp`  
+**Auth:** `Authorization: Bearer gdk_<your-token>`
+
+Cursor `mcp.json` / Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "geistdesk": {
+      "url": "https://desk.example.com/api/mcp",
+      "headers": {
+        "Authorization": "Bearer gdk_YOUR_API_TOKEN"
+      }
+    }
+  }
+}
+```
+
+| Tool | Purpose |
+|------|---------|
+| `geistkb_search` / `geistkb_get_article` / `geistkb_create_article` | RAG search & KB writes |
+| `tickets_list` / `tickets_get` / `tickets_update_status` | Ticket ops + audit |
+| `vault_search_secrets` | Metadata only (no plaintext) |
+| `vault_get_secret` | Decrypt with mandatory reason + immutable audit |
+
+Scopes follow the token’s role (`vault:reveal` requires admin). MCP is **disabled** until enabled in Admin Hub.
+
+---
+
+## Configuration
+
+All runtime knobs live in **`.env`** (never commit it). Start from [`.env.example`](./.env.example).
+
+| Required | Purpose | Generate |
+|----------|---------|----------|
+| `JWT_SECRET` | Session tokens | `openssl rand -hex 48` |
+| `VAULT_ENCRYPTION_KEY` | Exchange/vault at-rest crypto | `openssl rand -hex 32` |
+| `AI_SECRETS_KEY` | Provider API key encryption | `openssl rand -hex 32` |
+| `POSTGRES_PASSWORD` | Database password | `openssl rand -hex 16` |
+| `GEISTDESK_DATABASE_URL` | Postgres DSN used by the gateway | synced by `./setup.sh` |
+
+`./setup.sh` copies `.env.example` if needed and **idempotently fills missing or placeholder secrets** without overwriting real values you already set.
+
+---
+
+## Project layout
+
+```
+├── docker-compose.yml           # Postgres + gateway (+ optional Caddy profile)
+├── docker-compose.traefik.yml   # Traefik labels / external network
+├── setup.sh / install.sh        # Env bootstrap & turnkey launchers
+├── server.ts                    # Express entry (dev + bundled prod)
+├── src/mcp/                     # Native MCP tools & server factory
+├── src/routes/mcpRoutes.ts      # /api/mcp transport + auth
+├── prisma/                      # pgvector KnowledgeEmbedding model
+└── docs/                        # Extra references (features, security)
+```
+
+---
+
+## Documentation
+
+| Doc | Contents |
+|-----|----------|
+| [DEPLOYMENT.md](./DEPLOYMENT.md) | Production boot, Traefik/Caddy, migrations, ops |
+| [docs/FEATURES.md](./docs/FEATURES.md) | Feature registry (modules & routes) |
+| [docs/SECURITY.md](./docs/SECURITY.md) | Access-control invariants & test cases |
+| [`.env.example`](./.env.example) | Full environment template with comments |
 
 ---
 
 ## License
 
-This project is licensed under the GNU Affero General Public License v3.0 (AGPL-3.0) - see the [LICENSE](LICENSE) file for details.
-
-Copyright (C) 2026 Premton Xhafa. All rights reserved.
+GeistDesk is free software under the **GNU Affero General Public License v3.0**. See [LICENSE](./LICENSE).
