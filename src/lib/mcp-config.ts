@@ -18,12 +18,17 @@ export const DEFAULT_MCP_SETTINGS: McpWorkspaceSettings = {
 export function normalizeMcpSettings(
   raw: Partial<McpWorkspaceSettings> | Record<string, unknown> | undefined,
 ): McpWorkspaceSettings {
-  const source = (raw ?? {}) as Partial<McpWorkspaceSettings>;
+  const source = (raw ?? {}) as Partial<McpWorkspaceSettings> & {
+    customInstructions?: unknown;
+  };
+  const instructions =
+    typeof source.systemInstructions === 'string'
+      ? source.systemInstructions
+      : typeof source.customInstructions === 'string'
+        ? source.customInstructions
+        : DEFAULT_MCP_SETTINGS.systemInstructions;
   return {
     enabled: source.enabled === true,
-    systemInstructions:
-      typeof source.systemInstructions === 'string'
-        ? source.systemInstructions
-        : DEFAULT_MCP_SETTINGS.systemInstructions,
+    systemInstructions: instructions,
   };
 }

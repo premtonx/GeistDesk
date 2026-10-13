@@ -419,6 +419,65 @@ export async function syncModuleConfigFromServer(isAdmin = false): Promise<Modul
   }
 }
 
+/**
+ * Pick only API-allowlisted fields from a ModuleConfig (or loose object).
+ * Prevents 400s from Zod `.strict()` / unknown keys like `id`, `initializedAt`,
+ * `onboardingSteps` that sneak in via GET → localStorage → PUT round-trips.
+ */
+export function toModuleConfigApiPayload(
+  config: ModuleConfig | Record<string, unknown>,
+): Record<string, unknown> {
+  const normalized = normalizeModuleConfig(config as ModuleConfig);
+  return {
+    is_initialized: normalized.is_initialized,
+    platformModules: {
+      geistKB: normalized.platformModules.geistKB,
+      geistVault: normalized.platformModules.geistVault,
+      geistExchange: normalized.platformModules.geistExchange,
+    },
+    polyglotEnabled: normalized.polyglotEnabled,
+    languages: normalized.languages,
+    polyglot: {
+      translationProviderMode: normalized.polyglot.translationProviderMode,
+      translationProviderKey: normalized.polyglot.translationProviderKey,
+      hasTranslationKey: normalized.polyglot.hasTranslationKey === true,
+      customDictionary: normalized.polyglot.customDictionary,
+      allowAiFallback: normalized.polyglot.allowAiFallback,
+    },
+    debugAdminMode: normalized.debugAdminMode,
+    personioEnabled: normalized.personioEnabled,
+    personioClientId: normalized.personioClientId,
+    personioClientSecret: normalized.personioClientSecret,
+    hasPersonioSecret: normalized.hasPersonioSecret === true,
+    personioEmployeeId: normalized.personioEmployeeId,
+    ai: {
+      sentimentModel: normalized.ai.sentimentModel,
+      deepThinkingModel: normalized.ai.deepThinkingModel,
+      summaryModel: normalized.ai.summaryModel,
+      localEndpoint: normalized.ai.localEndpoint,
+      apiKey: normalized.ai.apiKey,
+      hasKey: Boolean((normalized.ai as { hasKey?: boolean }).hasKey),
+      customSentimentModelName: normalized.ai.customSentimentModelName,
+      customThinkingModelName: normalized.ai.customThinkingModelName,
+      customApiKey: normalized.ai.customApiKey,
+      hasCustomKey: Boolean((normalized.ai as { hasCustomKey?: boolean }).hasCustomKey),
+    },
+    email: normalized.email,
+    legalPolicy: normalized.legalPolicy,
+    forbiddenText: normalized.forbiddenText ?? '',
+    ssoEnabled: normalized.ssoEnabled,
+    ssoClientId: normalized.ssoClientId,
+    ssoTenantId: normalized.ssoTenantId,
+    ssoDomains: normalized.ssoDomains,
+    exchangeCustomTemplates: normalized.exchangeCustomTemplates,
+    exchangeSettings: normalized.exchangeSettings,
+    mcp: {
+      enabled: normalized.mcp.enabled,
+      systemInstructions: normalized.mcp.systemInstructions,
+    },
+  };
+}
+
 /** Persists workspace module config to PostgreSQL and local storage. */
 export async function saveModuleConfig(config: ModuleConfig): Promise<void> {
   const normalized = normalizeModuleConfig(config);
@@ -432,7 +491,7 @@ export async function saveModuleConfig(config: ModuleConfig): Promise<void> {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify(normalized),
+    body: JSON.stringify(toModuleConfigApiPayload(normalized)),
   });
 
   if (!res.ok) {

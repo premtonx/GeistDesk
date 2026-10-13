@@ -1,10 +1,8 @@
 import { Router, type Request, type Response } from 'express';
 import { authenticate, requireRole } from '../middleware/authMiddleware.js';
 import { getDocDirect, setDocDirect } from '../lib/postgres-backend.js';
-import {
-  normalizePolyglotBridgeSettings,
-  resolvePolyglotTranslationProviderMode,
-} from '../lib/module-config.js';
+import { normalizePolyglotBridgeSettings } from '../lib/module-config.js';
+import { normalizeMcpSettings } from '../lib/mcp-config.js';
 import { z } from 'zod';
 
 const router = Router();
@@ -208,10 +206,13 @@ const moduleConfigPatchSchema = z
       .object({
         enabled: z.boolean().optional(),
         systemInstructions: z.string().max(20_000).optional(),
+        /** Alias accepted from older / Outline-style clients. */
+        customInstructions: z.string().max(20_000).optional(),
       })
       .optional(),
-  })
-  .strict();
+  });
+  // Unknown top-level keys (id, initializedAt, onboardingSteps, …) are stripped
+  // rather than rejected — Admin UIs round-trip the hydrated GET document.
 
 /**
  * GET /api/module-config
@@ -234,14 +235,47 @@ router.get('/', authenticate, async (req: Request, res: Response) => {
 });
 
 /**
+ * Deep-merge a validated patch into the stored module_config document so
+ * partial updates (e.g. `{ mcp: { enabled: true } }`) do not wipe siblings.
+ */
+function mergeModuleConfigPatch(
+  stored: Record<string, unknown> | null,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  const base: Record<string, unknown> = stored
+    ? (JSON.parse(JSON.stringify(stored)) as Record<string, unknown>)
+    : {};
+  delete base.id;
+
+  for (const [key, value] of Object.entries(patch)) {
+    if (value === undefined) continue;
+    const existing = base[key];
+    if (
+      value &&
+      typeof value === 'object' &&
+      !Array.isArray(value) &&
+      existing &&
+      typeof existing === 'object' &&
+      !Array.isArray(existing)
+    ) {
+      base[key] = { ...(existing as Record<string, unknown>), ...(value as Record<string, unknown>) };
+    } else {
+      base[key] = value;
+    }
+  }
+  return base;
+}
+
+/**
  * PUT /api/module-config
  * Persists workspace module configuration (admin-only). The payload is
  * validated against an allow-list; secrets the client did not change are kept
- * from the stored document via the `hasX` flags.
+ * from the stored document via the `hasX` flags. Unknown keys are stripped.
+ * Nested objects are deep-merged into the stored document.
  */
 router.put('/', authenticate, requireRole(['SYSTEM_ADMIN']), async (req: Request, res: Response) => {
   try {
-    const parsed = moduleConfigPatchSchema.safeParse(req.body);
+    const parsed = moduleConfigPatchSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return res.status(400).json({
         error: 'Input validation failed',
@@ -252,13 +286,21 @@ router.put('/', authenticate, requireRole(['SYSTEM_ADMIN']), async (req: Request
     const data = parsed.data as Record<string, unknown>;
 
     const stored = await getDocDirect(COLLECTION, DOC_ID);
-    const merged = mergeKeptSecrets(
+    const deepMerged = mergeModuleConfigPatch(
       (stored as Record<string, unknown> | null),
       data,
+    );
+    const merged = mergeKeptSecrets(
+      (stored as Record<string, unknown> | null),
+      deepMerged,
     );
 
     if (merged.polyglot && typeof merged.polyglot === 'object') {
       merged.polyglot = normalizePolyglotBridgeSettings(merged.polyglot as Record<string, unknown>);
+    }
+
+    if (merged.mcp && typeof merged.mcp === 'object') {
+      merged.mcp = normalizeMcpSettings(merged.mcp as Record<string, unknown>);
     }
 
     await setDocDirect(COLLECTION, DOC_ID, merged);
