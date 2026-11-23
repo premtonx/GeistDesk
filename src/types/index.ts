@@ -95,6 +95,9 @@ export interface Organization {
   domain?: string | null;
   is_active: boolean;
   settings?: Record<string, unknown>;
+  /** Optional Entra ID tenant GUID for client M365 SSO. */
+  m365_tenant_id?: string | null;
+  sso_enabled?: boolean;
   created_at?: string;
   updated_at?: string;
 }

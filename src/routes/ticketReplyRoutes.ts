@@ -127,9 +127,14 @@ router.post('/:id/replies', authenticate, attachClientOrganizationContext, async
     let mailFrom: string | undefined;
     let domainVerified: boolean | undefined;
     try {
+      const ticketOrgId =
+        (typeof ticket.organizationId === 'string' && ticket.organizationId) ||
+        (typeof ticket.organization_id === 'string' && ticket.organization_id) ||
+        null;
       const channel = await findChannelForOutbound({
         mailbox: ticket.mailbox || ticket.forwardingAddress || null,
         supportEmail: ticket.supportEmail || ticket.channelEmail || null,
+        organizationId: ticketOrgId,
       });
       const mailResult = await trySendTicketReplyEmail({
         ticketId,
@@ -138,6 +143,7 @@ router.post('/:id/replies', authenticate, attachClientOrganizationContext, async
         body: data.content,
         agentName: data.senderName || req.user!.email || 'Agent',
         channel,
+        organizationId: ticketOrgId,
       });
       delivered = mailResult.delivered;
       deliveryReason = mailResult.reason;

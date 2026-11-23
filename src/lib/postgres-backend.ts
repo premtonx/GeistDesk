@@ -322,14 +322,21 @@ export async function initDb() {
       domain TEXT,
       is_active BOOLEAN NOT NULL DEFAULT TRUE,
       settings JSONB NOT NULL DEFAULT '{}'::jsonb,
+      m365_tenant_id TEXT,
+      sso_enabled BOOLEAN NOT NULL DEFAULT FALSE,
       created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
       updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
     );
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS m365_tenant_id TEXT;
+    ALTER TABLE organizations ADD COLUMN IF NOT EXISTS sso_enabled BOOLEAN NOT NULL DEFAULT FALSE;
     CREATE INDEX IF NOT EXISTS idx_organizations_active_name
       ON organizations (is_active, name);
     CREATE INDEX IF NOT EXISTS idx_organizations_domain
       ON organizations (domain)
       WHERE domain IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_organizations_m365_tenant
+      ON organizations (m365_tenant_id)
+      WHERE m365_tenant_id IS NOT NULL AND sso_enabled = TRUE;
 
     CREATE TABLE IF NOT EXISTS ticket_participants (
       ticket_id VARCHAR(255) NOT NULL,

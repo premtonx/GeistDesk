@@ -181,8 +181,14 @@ export async function ingestNormalizedEmail(
     const now = new Date().toISOString();
     const attachments = sanitizeAttachments(email);
 
+    const organizationId = email.organizationId || undefined;
+    const channelId = email.channelId || undefined;
+
     if (!ticket) {
       const customId = nextCustomId(allTickets);
+      const orgTags = organizationId
+        ? [`org:${organizationId}`, ...(channelId ? [`channel:${channelId}`] : [])]
+        : [];
       const created = await addDocDirect('tickets', {
         subject,
         description: html || textFallback,
@@ -196,19 +202,35 @@ export async function ingestNormalizedEmail(
         customId,
         channel: 'email',
         include_in_rag: true,
-        tags: ['inbound-email', `source:${email.source}`, ...(email.tags || [])],
+        tags: ['inbound-email', `source:${email.source}`, ...orgTags, ...(email.tags || [])],
         mailbox: email.mailbox || undefined,
+        organizationId: organizationId || null,
+        organization_id: organizationId || null,
+        emailChannelId: channelId || null,
+        channel_id: channelId || null,
         sanitizedAiContext: bodyForAi || undefined,
         createdAt: now,
         updatedAt: now,
       });
       ticket = { id: created.id, ...created.data, customId };
     } else {
-      await updateDocDirect('tickets', ticket.id, {
+      const patch: Record<string, unknown> = {
         updatedAt: now,
         from_email: sender,
         customerEmail: (ticket as any).customerEmail || sender,
-      });
+      };
+      // Stamp org/channel on first inbound hit if the ticket is still unscoped.
+      const existingOrg =
+        (ticket as any).organizationId || (ticket as any).organization_id || null;
+      if (!existingOrg && organizationId) {
+        patch.organizationId = organizationId;
+        patch.organization_id = organizationId;
+      }
+      if (channelId && !(ticket as any).emailChannelId) {
+        patch.emailChannelId = channelId;
+        patch.channel_id = channelId;
+      }
+      await updateDocDirect('tickets', ticket.id, patch);
     }
 
     const ticketId = String(ticket.id);

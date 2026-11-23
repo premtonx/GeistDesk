@@ -45,6 +45,8 @@ export function createEmailIngestionDriver(
 export function isActivePullDriver(channel: EmailChannelConfig): boolean {
   return (
     channel.enabled !== false &&
+    channel.status !== 'disabled' &&
+    channel.inboundEnabled !== false &&
     (channel.connectionType === 'microsoft_graph' ||
       channel.connectionType === 'imap_basic' ||
       channel.connectionType === 'imap_oauth2')
