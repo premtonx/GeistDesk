@@ -39,8 +39,15 @@ import {
   parseTicketMessagesCollection,
   postFilterClientDbResult,
 } from "./src/lib/client-portal/db-ticket-guard.js";
-import { clientCanViewTicket, resolveOrganizationIdFromUser } from "./src/lib/client-portal/ticket-visibility.js";
+import {
+  clientCanMutateTicket,
+  clientCanViewTicket,
+  filterMessagesForClient,
+  resolveOrganizationIdFromUser,
+  sanitizeTicketForClient,
+} from "./src/lib/client-portal/ticket-visibility.js";
 import { isClientPortalRole } from "./src/lib/client-portal/roles.js";
+import { forbidClientOnHubcomTicketTool } from "./src/lib/client-portal/assert-ticket-access.js";
 import aiRoutes from "./src/routes/aiRoutes.js";
 import moduleConfigRoutes from "./src/routes/moduleConfigRoutes.js";
 import vaultRoutes from "./src/routes/vaultRoutes.js";
@@ -651,31 +658,53 @@ async function startServer() {
         });
         return res.json({ result: resObj });
       }
-      if (action === "update_doc") {
+      if (action === "update_doc" || action === "set_doc") {
         if (tenantScoped) {
           const existing = await getDocDirect(collection, id, { tenantId });
           if (!existing) {
             return res.status(404).json({ error: "Document not found" });
           }
-        }
-        const payload = tenantScoped ? stampTenantId(data || {}, tenantId) : data;
-        await updateDocDirect(collection, id, payload, {
-          tenantId: tenantScoped ? tenantId : undefined,
-        });
-        handleKnowledgeDocumentMutation({ collection, action, id, data: payload, tenantId });
-        return res.json({ result: { success: true } });
-      }
-      if (action === "set_doc") {
-        if (tenantScoped) {
-          const existing = await getDocDirect(collection, id, { tenantId });
-          if (existing && !documentBelongsToTenant(existing, tenantId)) {
+          if (action === "set_doc" && !documentBelongsToTenant(existing, tenantId)) {
             return res.status(404).json({ error: "Document not found" });
           }
         }
+        // Client portal: never mutate tickets/messages outside visibility scope.
+        if (req.user && isClientPortalRole(req.user.role) && collection === "tickets") {
+          const existingTicket = await getDocDirect("tickets", id);
+          if (!existingTicket) {
+            return res.status(404).json({ error: "Document not found" });
+          }
+          const canMutate = await clientCanMutateTicket(
+            {
+              id: String(req.user.id),
+              role: String(req.user.role),
+              organizationId: resolveOrganizationIdFromUser(req.user),
+            },
+            { ...existingTicket, id },
+          );
+          if (!canMutate) {
+            return res.status(404).json({ error: "Document not found" });
+          }
+        }
+        if (
+          req.user &&
+          isClientPortalRole(req.user.role) &&
+          parseTicketMessagesCollection(collection)
+        ) {
+          return res.status(403).json({
+            error: "Forbidden: Client portal accounts cannot rewrite message history.",
+          });
+        }
         const payload = tenantScoped ? stampTenantId(data || {}, tenantId) : data;
-        await setDocDirect(collection, id, payload, {
-          tenantId: tenantScoped ? tenantId : undefined,
-        });
+        if (action === "update_doc") {
+          await updateDocDirect(collection, id, payload, {
+            tenantId: tenantScoped ? tenantId : undefined,
+          });
+        } else {
+          await setDocDirect(collection, id, payload, {
+            tenantId: tenantScoped ? tenantId : undefined,
+          });
+        }
         handleKnowledgeDocumentMutation({ collection, action, id, data: payload, tenantId });
         return res.json({ result: { success: true } });
       }
@@ -1744,12 +1773,15 @@ async function startServer() {
     res.json({ success: true, settings });
   });
 
-  app.get("/api/tickets/:id", authenticate, async (req, res) => {
+  app.get("/api/tickets/:id", authenticate, async (req: any, res) => {
     const { id } = req.params;
     const forceRefresh = req.query.refresh === 'true';
     const db = getDb();
 
     try {
+      // Hubcom AI analysis — never expose internal diagnosis to client portal roles.
+      if (forbidClientOnHubcomTicketTool(req, res)) return;
+
       const ticketSnap = await db.collection("tickets").doc(id).get();
       if (!ticketSnap.exists) {
         return res.status(404).json({ error: "Ticket not found" });
@@ -1849,16 +1881,31 @@ Respond only with the raw valid JSON payload.`;
     }
   });
 
-  app.get("/api/tickets/:ticketId/export", authenticate, async (req, res) => {
+  app.get("/api/tickets/:ticketId/export", authenticate, async (req: any, res) => {
     const { ticketId } = req.params;
     try {
       const db = getDb();
       const ticketSnap = await db.collection("tickets").doc(ticketId).get();
       if (!ticketSnap.exists) return res.status(404).json({ error: "Ticket not found" });
       
-      const ticket = ticketSnap.data()!;
+      let ticket = { id: ticketId, ...ticketSnap.data()! } as Record<string, unknown>;
+      if (isClientPortalRole(req.user?.role)) {
+        const canView = await clientCanViewTicket(
+          {
+            id: String(req.user.id),
+            role: String(req.user.role),
+            organizationId: resolveOrganizationIdFromUser(req.user),
+          },
+          ticket,
+        );
+        if (!canView) return res.status(404).json({ error: "Ticket not found" });
+        ticket = sanitizeTicketForClient(ticket);
+      }
       const messagesSnap = await db.collection("tickets").doc(ticketId).collection("messages").orderBy("createdAt", "asc").get();
-      const messages = messagesSnap.docs.map(d => d.data());
+      let messages = messagesSnap.docs.map(d => d.data());
+      if (isClientPortalRole(req.user?.role)) {
+        messages = filterMessagesForClient(messages as Record<string, unknown>[]);
+      }
 
       const doc = new jsPDF();
       
@@ -1873,17 +1920,23 @@ Respond only with the raw valid JSON payload.`;
       doc.text(`Generated: ${new Date().toLocaleString()}`, 20, 36);
       doc.line(20, 42, 190, 42);
 
+      const subject = String(ticket.subject || '');
+      const customId = ticket.customId != null ? String(ticket.customId) : 'N/A';
+      const priority = String(ticket.priority || '').toUpperCase();
+      const status = String(ticket.status || '').toUpperCase();
+      const customerName = String(ticket.customerName || '');
+
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
-      doc.text(`Subject: ${ticket.subject}`, 20, 52);
+      doc.text(`Subject: ${subject}`, 20, 52);
       
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
-      doc.text(`Ticket ID: ${ticket.customId || "N/A"}`, 20, 60);
-      doc.text(`Priority: ${ticket.priority?.toUpperCase()}`, 70, 60);
-      doc.text(`Status: ${ticket.status?.toUpperCase()}`, 110, 60);
-      doc.text(`Customer: ${ticket.customerName}`, 150, 60);
+      doc.text(`Ticket ID: ${customId}`, 20, 60);
+      doc.text(`Priority: ${priority}`, 70, 60);
+      doc.text(`Status: ${status}`, 110, 60);
+      doc.text(`Customer: ${customerName}`, 150, 60);
 
       let y = 75;
       messages.forEach((msg: any) => {
@@ -1926,7 +1979,7 @@ Respond only with the raw valid JSON payload.`;
       const buffer = Buffer.from(pdfBase64, 'base64');
       
       res.setHeader("Content-Type", "application/pdf");
-      res.setHeader("Content-Disposition", `attachment; filename=GeistDesk_Archive_${ticket.customId || ticketId}.pdf`);
+      res.setHeader("Content-Disposition", `attachment; filename=GeistDesk_Archive_${customId === 'N/A' ? ticketId : customId}.pdf`);
       res.send(buffer);
     } catch (error) {
       safeLog('error', "Export Error:", error);
@@ -2002,11 +2055,12 @@ Respond only with the raw valid JSON payload.`;
   app.post("/coverage/recalculate", authenticate, handleRecalculateCoverage);
 
   // Handoff Engine Endpoints
-  app.post("/api/tickets/:ticketId/handoff-summary", authenticate, async (req, res) => {
+  app.post("/api/tickets/:ticketId/handoff-summary", authenticate, async (req: any, res) => {
     const { ticketId } = req.params;
     const db = getDb();
 
     try {
+      if (forbidClientOnHubcomTicketTool(req, res)) return;
       const ticketSnap = await db.collection("tickets").doc(ticketId).get();
       if (!ticketSnap.exists) return res.status(404).json({ error: "Ticket not found" });
       
@@ -2051,6 +2105,7 @@ Respond only with the raw valid JSON payload.`;
     }
 
     try {
+      if (forbidClientOnHubcomTicketTool(req, res)) return;
       await db.collection("tickets").doc(ticketId).collection("messages").add({
         ticketId,
         senderId: req.user?.id,
@@ -2058,6 +2113,9 @@ Respond only with the raw valid JSON payload.`;
         senderName: req.user?.name || req.user?.email || "Agent",
         content,
         isGoldenNote: true,
+        is_internal: true,
+        isInternal: true,
+        visibility: "internal",
         createdAt: admin.firestore.FieldValue.serverTimestamp()
       });
       res.json({ success: true });

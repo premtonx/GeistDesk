@@ -152,14 +152,22 @@ router.patch('/:id', authenticate, attachClientOrganizationContext, async (req: 
       if (!canMutate) {
         return res.status(404).json({ error: 'Ticket not found.' });
       }
-      // Clients must never flip internal notes into customer-visible payloads.
+      // Clients must never flip internal notes / Hubcom analysis into payloads.
       delete data.internalNotes;
+      delete data.internal_notes;
+      delete data.agentComments;
+      delete data.agent_comments;
       delete data.is_internal;
       delete data.isInternal;
       delete data.organizationId;
       delete data.organization_id;
       delete data.requesterId;
       delete data.requester_id;
+      delete data.aiSummary;
+      delete data.aiInsights;
+      delete data.aiRootCause;
+      delete data.aiChecklist;
+      delete data.aiSentiment;
     }
 
     const now = new Date().toISOString();
