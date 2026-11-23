@@ -1388,11 +1388,15 @@ export default function TicketsPage() {
       });
 
       if (result?.delivered === false) {
+        const detail =
+          typeof result?.deliveryReason === 'string' && result.deliveryReason.trim()
+            ? ` ${result.deliveryReason.slice(0, 220)}`
+            : '';
         toast.success(
           t(
             'tickets.replySavedLocally',
             'Reply saved. Outbound email unavailable — stored in ticket history only.',
-          ),
+          ) + detail,
         );
       } else {
         toast.success(

@@ -240,11 +240,25 @@ export async function getEmailChannel(
   return redactChannelSecrets(repaired);
 }
 
-/** Hubcom global default channel (organization_id IS NULL). */
+/** Hubcom global default channel (organization_id IS NULL). Prefer healthy Graph. */
 export async function findGlobalDefaultEmailChannel(
   opts?: { includeSecrets?: boolean },
 ): Promise<EmailChannelConfig | null> {
+  const globals = await listGlobalEmailChannels(opts);
+  return (
+    globals.find((c) => c.connectionType === 'microsoft_graph' && isHealthySendAsGraph(c)) ||
+    globals.find((c) => c.connectionType === 'microsoft_graph') ||
+    globals[0] ||
+    null
+  );
+}
+
+/** All Hubcom-global (no organizationId) email channels. */
+export async function listGlobalEmailChannels(
+  opts?: { includeSecrets?: boolean },
+): Promise<EmailChannelConfig[]> {
   const docs = await getDocsDirect(EMAIL_CHANNELS_COLLECTION, []);
+  const out: EmailChannelConfig[] = [];
   for (const doc of docs) {
     const channel = { id: doc.id, ...doc } as EmailChannelConfig;
     const orgId = channel.organizationId || channel.organization_id || null;
@@ -256,14 +270,14 @@ export async function findGlobalDefaultEmailChannel(
     ) {
       continue;
     }
-    if (channel.status === 'disabled') continue;
+    if (channel.status === 'disabled' || channel.enabled === false) continue;
     const ensured = await backfillDomainVerificationIfNeeded({
       ...channel,
       forwardingDomain: getForwardingDomain(),
     });
-    return opts?.includeSecrets ? hydrateChannelSecrets(ensured) : redactChannelSecrets(ensured);
+    out.push(opts?.includeSecrets ? hydrateChannelSecrets(ensured) : redactChannelSecrets(ensured));
   }
-  return null;
+  return out;
 }
 
 /** Active Graph channel linked to a client organization (Send-As / inbound). */

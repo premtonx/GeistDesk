@@ -24,6 +24,7 @@ import {
   findOrganizationEmailChannel,
   getEmailChannel,
   isHealthySendAsGraph,
+  listGlobalEmailChannels,
 } from './email-ingestion/channel-store.js';
 
 export interface OutboundMailResult {
@@ -297,38 +298,89 @@ export async function trySendTicketReplyEmail(params: {
     }
   }
 
-  // 2) Hubcom global Graph (or preferred non-foreign channel)
-  const fallback =
-    (await resolveSendAsChannel({
-      organizationId: null, // force global
-      preferredChannel:
-        params.channel &&
-        !(params.channel.organizationId || params.channel.organization_id)
-          ? params.channel
-          : null,
-    })) || (await findGlobalDefaultEmailChannel({ includeSecrets: true }));
+  // 2) Hubcom global Graph — try preferred channel first, then every global Graph channel.
+  const graphFailures: string[] = [];
+  if (orgChannel && !isHealthySendAsGraph(orgChannel)) {
+    graphFailures.push(
+      `Org Send-As channel disabled/unhealthy (${orgChannel.email || orgChannel.id})`,
+    );
+  } else if (orgId && orgChannel) {
+    // org path already attempted above; keep last reason if any by re-reading is awkward —
+    // failures are recorded below when we fall through.
+  }
 
-  if (isGraphChannel(fallback)) {
+  const preferredGlobal =
+    params.channel &&
+    !(params.channel.organizationId || params.channel.organization_id) &&
+    isGraphChannel(params.channel)
+      ? params.channel
+      : null;
+
+  const globals = await listGlobalEmailChannels({ includeSecrets: true });
+  const graphCandidates: EmailChannelConfig[] = [];
+  if (preferredGlobal) graphCandidates.push(preferredGlobal);
+  for (const ch of globals) {
+    if (!isGraphChannel(ch)) continue;
+    if (graphCandidates.some((c) => c.id === ch.id)) continue;
+    graphCandidates.push(ch);
+  }
+
+  // Prefer explicitly healthy channels, but still attempt others (status may be stale).
+  graphCandidates.sort((a, b) => {
+    const ah = isHealthySendAsGraph(a) ? 0 : 1;
+    const bh = isHealthySendAsGraph(b) ? 0 : 1;
+    return ah - bh;
+  });
+
+  let lastGraph: OutboundMailResult | null = null;
+  for (const channel of graphCandidates) {
     const hubcomResult = await trySendViaMicrosoftGraph({
       ticketId: params.ticketId,
       to: params.to,
       subject: params.subject,
       body: params.body,
       agentName: params.agentName,
-      channel: fallback!,
+      channel,
     });
     if (hubcomResult.delivered) {
       return { ...hubcomResult, via: 'hubcom_fallback' };
     }
+    lastGraph = hubcomResult;
+    const label = channel.mailbox || channel.email || channel.id;
+    graphFailures.push(`${label}: ${hubcomResult.reason || 'Graph sendMail failed'}`);
   }
 
   // 3) SMTP
-  return trySendViaSmtp({
+  const smtpResult = await trySendViaSmtp({
     ticketId: params.ticketId,
     to: params.to,
     subject: params.subject,
     body: params.body,
     agentName: params.agentName,
-    channel: fallback || params.channel || null,
+    channel:
+      graphCandidates[0] ||
+      (await findGlobalDefaultEmailChannel({ includeSecrets: true })) ||
+      params.channel ||
+      null,
   });
+  if (smtpResult.delivered) return smtpResult;
+
+  // Surface Graph errors first — SMTP-missing is expected on Graph-only setups.
+  const combinedReason = [
+    ...graphFailures,
+    smtpResult.reason,
+    lastGraph && !graphFailures.length ? lastGraph.reason : null,
+  ]
+    .filter(Boolean)
+    .join(' | ');
+
+  return {
+    delivered: false,
+    reason:
+      combinedReason ||
+      'No Microsoft Graph channel could send this reply and SMTP is not configured.',
+    from: lastGraph?.from || smtpResult.from,
+    domainVerified: lastGraph?.domainVerified ?? smtpResult.domainVerified,
+    via: 'none',
+  };
 }
