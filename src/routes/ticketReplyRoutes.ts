@@ -149,6 +149,13 @@ router.post('/:id/replies', authenticate, attachClientOrganizationContext, async
       deliveryReason = mailResult.reason;
       mailFrom = mailResult.from;
       domainVerified = mailResult.domainVerified;
+      if (!delivered) {
+        safeLog(
+          'warn',
+          '[ticket-replies] outbound mail not delivered',
+          `ticket=${ticketId} via=${mailResult.via || 'none'} reason=${deliveryReason || 'unknown'}`,
+        );
+      }
     } catch (mailErr: any) {
       delivered = false;
       deliveryReason = mailErr?.message || 'Outbound mail threw unexpectedly';
