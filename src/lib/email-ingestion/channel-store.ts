@@ -392,6 +392,27 @@ export async function updateEmailChannelStatus(
   });
 }
 
+function channelAddressMatch(channel: EmailChannelConfig, address: string): boolean {
+  if (!address) return false;
+  const email = (channel.email || '').toLowerCase();
+  const forwarding = (channel.forwardingAddress || '').toLowerCase();
+  const mailbox = (channel.mailbox || '').toLowerCase();
+  return address === email || address === forwarding || address === mailbox;
+}
+
+/** Prefer Graph (can sendMail) over passive webhook/IMAP when several channels match. */
+function preferOutboundChannel(candidates: EmailChannelConfig[]): EmailChannelConfig | null {
+  if (!candidates.length) return null;
+  const enabled = candidates.filter((c) => c.enabled !== false);
+  const pool = enabled.length ? enabled : candidates;
+  return (
+    pool.find((c) => c.connectionType === 'microsoft_graph') ||
+    pool.find((c) => c.connectionType === 'imap_oauth2' || c.connectionType === 'imap_basic') ||
+    pool[0] ||
+    null
+  );
+}
+
 /** Resolve a channel for outbound From: selection (mailbox / support email / forwarding). */
 export async function findChannelForOutbound(params: {
   mailbox?: string | null;
@@ -401,28 +422,37 @@ export async function findChannelForOutbound(params: {
   const mailbox = (params.mailbox || '').toLowerCase().trim();
   const supportEmail = (params.supportEmail || '').toLowerCase().trim();
 
+  const exactMatches: EmailChannelConfig[] = [];
   for (const doc of docs) {
     const channel = { id: doc.id, ...doc } as EmailChannelConfig;
-    const email = (channel.email || '').toLowerCase();
-    const forwarding = (channel.forwardingAddress || '').toLowerCase();
-    if (mailbox && (mailbox === email || mailbox === forwarding || mailbox === (channel.mailbox || '').toLowerCase())) {
-      return channel;
+    if (mailbox && channelAddressMatch(channel, mailbox)) {
+      exactMatches.push(channel);
+      continue;
     }
-    if (supportEmail && supportEmail === email) {
-      return channel;
+    if (supportEmail && channelAddressMatch(channel, supportEmail)) {
+      exactMatches.push(channel);
     }
   }
+  const exact = preferOutboundChannel(exactMatches);
+  if (exact) return exact;
 
-  // Fallback: match by domain of mailbox against a verified channel email domain.
+  // Fallback: match by domain of mailbox against a verified channel email domain,
+  // or an enabled Microsoft Graph mailbox on the same domain (Graph does not need DNS TXT).
   const domain = mailbox.includes('@') ? mailbox.split('@')[1] : '';
   if (domain) {
+    const domainMatches: EmailChannelConfig[] = [];
     for (const doc of docs) {
       const channel = { id: doc.id, ...doc } as EmailChannelConfig;
       const emailDomain = (channel.email || '').toLowerCase().split('@')[1];
-      if (channel.dnsVerified && emailDomain && emailDomain === domain) {
-        return channel;
+      const mailboxDomain = (channel.mailbox || '').toLowerCase().split('@')[1];
+      const sameDomain = emailDomain === domain || mailboxDomain === domain;
+      if (!sameDomain) continue;
+      if (channel.dnsVerified || channel.connectionType === 'microsoft_graph') {
+        domainMatches.push(channel);
       }
     }
+    const byDomain = preferOutboundChannel(domainMatches);
+    if (byDomain) return byDomain;
   }
 
   return null;
