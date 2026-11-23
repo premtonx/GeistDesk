@@ -13,6 +13,7 @@ import { AdminHubGovernanceTab } from '../../components/admin/hub/AdminHubGovern
 import { AdminHubIntegrationsTab } from '../../components/admin/hub/AdminHubIntegrationsTab';
 import { AdminHubSystemTab } from '../../components/admin/hub/AdminHubSystemTab';
 import type { AdminHubTelemetry } from '../../components/admin/hub/adminHubTelemetry';
+import { cn } from '../../lib/utils';
 
 const EMPTY_TELEMETRY: AdminHubTelemetry = {
   activeAgents: 0,
@@ -63,77 +64,120 @@ export default function AdminHubPage() {
   };
 
   return (
-    <div className="flex-1 overflow-y-auto bg-[#fafafa]">
-      <div className="p-8 max-w-6xl mx-auto pb-20">
+    <div className="flex-1 min-h-0 flex flex-col overflow-hidden bg-[#fafafa]">
+      <div className="shrink-0 px-6 lg:px-8 pt-6 lg:pt-8 pb-4 border-b border-slate-200/80 bg-[#fafafa]">
         <AdminBreadcrumbs />
 
-        <div className="mb-6">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-sm border border-primary/5">
-                <LayoutGrid className="w-5 h-5 animate-pulse" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-black tracking-tight text-slate-900">{t('nav.admin', 'Admin Hub')}</h1>
-                <p className="text-slate-500 text-sm mt-0.5">
-                  {t('admin.subtitle', 'Central control for GeistDesk AI, governance, and infrastructure.')}
-                </p>
-              </div>
+        <div className="mt-2 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="w-10 h-10 shrink-0 rounded-2xl bg-primary/10 flex items-center justify-center text-primary shadow-sm border border-primary/5">
+              <LayoutGrid className="w-5 h-5 animate-pulse" />
             </div>
-            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-3.5 py-1.5 rounded-full shadow-[0_1px_2px_rgba(0,0,0,0.02)] scale-95 origin-right">
-              <span className="relative flex h-2 w-2">
-                <span className={`animate-ping absolute inline-flex h-full w-full rounded-full opacity-75 ${telemetry.systemHealth >= 99 ? 'bg-emerald-400' : telemetry.systemHealth >= 97 ? 'bg-amber-400' : 'bg-red-400'}`} />
-                <span className={`relative inline-flex rounded-full h-2 w-2 ${telemetry.systemHealth >= 99 ? 'bg-emerald-500' : telemetry.systemHealth >= 97 ? 'bg-amber-500' : 'bg-red-500'}`} />
-              </span>
-              <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 font-mono">
-                {telemetry.systemHealth >= 99
-                  ? 'Control Plane : Active & Sovereign'
-                  : telemetry.systemHealth >= 97
-                    ? 'Control Plane : Degraded'
-                    : 'Control Plane : Offline'}
-              </span>
+            <div className="min-w-0">
+              <h1 className="text-2xl lg:text-3xl font-black tracking-tight text-slate-900 truncate">
+                {t('nav.admin', 'Admin Hub')}
+              </h1>
+              <p className="text-slate-500 text-sm mt-0.5">
+                {t('admin.subtitle', 'Central control for GeistDesk AI, governance, and infrastructure.')}
+              </p>
             </div>
+          </div>
+          <div className="flex items-center gap-2 bg-slate-50 border border-slate-200/80 px-3.5 py-1.5 rounded-full shadow-[0_1px_2px_rgba(0,0,0,0.02)] scale-95 origin-right shrink-0 self-start md:self-auto">
+            <span className="relative flex h-2 w-2">
+              <span
+                className={cn(
+                  'animate-ping absolute inline-flex h-full w-full rounded-full opacity-75',
+                  telemetry.systemHealth >= 99
+                    ? 'bg-emerald-400'
+                    : telemetry.systemHealth >= 97
+                      ? 'bg-amber-400'
+                      : 'bg-red-400',
+                )}
+              />
+              <span
+                className={cn(
+                  'relative inline-flex rounded-full h-2 w-2',
+                  telemetry.systemHealth >= 99
+                    ? 'bg-emerald-500'
+                    : telemetry.systemHealth >= 97
+                      ? 'bg-amber-500'
+                      : 'bg-red-500',
+                )}
+              />
+            </span>
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 font-mono">
+              {telemetry.systemHealth >= 99
+                ? 'Control Plane : Active & Sovereign'
+                : telemetry.systemHealth >= 97
+                  ? 'Control Plane : Degraded'
+                  : 'Control Plane : Offline'}
+            </span>
           </div>
         </div>
-
-        <Tabs value={activeTab} onValueChange={(value) => setTab(String(value))} className="w-full gap-6">
-          <div className="sticky top-0 z-20 -mx-2 px-2 bg-[#fafafa]/95 backdrop-blur-sm border-b border-slate-200/80 overflow-x-auto overscroll-x-contain scroll-smooth no-scrollbar">
-            <TabsList
-              variant="line"
-              className="h-11 w-max min-w-full justify-start gap-1 flex-nowrap bg-transparent p-0"
-            >
-              {ADMIN_HUB_TABS.map((tab) => (
-                <TabsTrigger
-                  key={tab.id}
-                  value={tab.id}
-                  className="flex-none shrink-0 px-3 h-10 text-[12px] font-bold uppercase tracking-wide rounded-none after:bottom-0"
-                >
-                  {t(tab.labelKey, tab.label)}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </div>
-
-          <TabsContent value={'uebersicht' satisfies AdminHubTabId} className="mt-6 outline-none">
-            <AdminHubOverviewTab telemetry={telemetry} onTelemetryRefresh={refreshTelemetry} />
-          </TabsContent>
-          <TabsContent value={'ai-engine' satisfies AdminHubTabId} className="mt-6 outline-none">
-            <AdminHubAiEngineTab telemetry={telemetry} />
-          </TabsContent>
-          <TabsContent value={'rag' satisfies AdminHubTabId} className="mt-6 outline-none">
-            <AdminHubRagTab />
-          </TabsContent>
-          <TabsContent value={'governance' satisfies AdminHubTabId} className="mt-6 outline-none">
-            <AdminHubGovernanceTab />
-          </TabsContent>
-          <TabsContent value={'integrations' satisfies AdminHubTabId} className="mt-6 outline-none">
-            <AdminHubIntegrationsTab />
-          </TabsContent>
-          <TabsContent value={'system' satisfies AdminHubTabId} className="mt-6 outline-none">
-            <AdminHubSystemTab telemetry={telemetry} onTelemetryRefresh={refreshTelemetry} />
-          </TabsContent>
-        </Tabs>
       </div>
+
+      <Tabs
+        value={activeTab}
+        onValueChange={(value) => setTab(String(value))}
+        orientation="vertical"
+        className="flex-1 min-h-0 w-full gap-0 overflow-hidden data-[orientation=vertical]:flex-row"
+      >
+        {/* Persistent left sidebar — always expanded; never collapses on navigation */}
+        <aside
+          className="shrink-0 w-56 sm:w-60 lg:w-64 border-r border-slate-200/80 bg-white/80 backdrop-blur-sm flex flex-col min-h-0 overflow-y-auto"
+          aria-label={t('nav.admin', 'Admin Hub')}
+        >
+          <div className="px-3 pt-4 pb-2">
+            <p className="px-2 text-[10px] font-extrabold uppercase tracking-widest text-slate-400">
+              {t('admin.hubNav', 'Sections')}
+            </p>
+          </div>
+          <TabsList
+            variant="line"
+            className="h-auto w-full flex-col items-stretch justify-start gap-0.5 bg-transparent p-2 rounded-none"
+          >
+            {ADMIN_HUB_TABS.map((tab) => (
+              <TabsTrigger
+                key={tab.id}
+                value={tab.id}
+                className={cn(
+                  'w-full flex-none shrink-0 justify-start text-left whitespace-normal',
+                  'h-auto min-h-10 px-3 py-2.5 rounded-xl text-[12px] font-bold tracking-wide',
+                  'text-slate-500 hover:text-slate-900 hover:bg-slate-50',
+                  'data-active:bg-primary/10 data-active:text-primary data-active:shadow-none',
+                  'after:hidden',
+                )}
+              >
+                {t(tab.labelKey, tab.label)}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </aside>
+
+        {/* Main content panel — scrolls independently; tables/forms keep full width */}
+        <div className="flex-1 min-w-0 min-h-0 overflow-y-auto overflow-x-hidden">
+          <div className="p-6 lg:p-8 pb-20 max-w-6xl">
+            <TabsContent value={'uebersicht' satisfies AdminHubTabId} className="mt-0 outline-none">
+              <AdminHubOverviewTab telemetry={telemetry} onTelemetryRefresh={refreshTelemetry} />
+            </TabsContent>
+            <TabsContent value={'ai-engine' satisfies AdminHubTabId} className="mt-0 outline-none">
+              <AdminHubAiEngineTab telemetry={telemetry} />
+            </TabsContent>
+            <TabsContent value={'rag' satisfies AdminHubTabId} className="mt-0 outline-none">
+              <AdminHubRagTab />
+            </TabsContent>
+            <TabsContent value={'governance' satisfies AdminHubTabId} className="mt-0 outline-none">
+              <AdminHubGovernanceTab />
+            </TabsContent>
+            <TabsContent value={'integrations' satisfies AdminHubTabId} className="mt-0 outline-none">
+              <AdminHubIntegrationsTab />
+            </TabsContent>
+            <TabsContent value={'system' satisfies AdminHubTabId} className="mt-0 outline-none">
+              <AdminHubSystemTab telemetry={telemetry} onTelemetryRefresh={refreshTelemetry} />
+            </TabsContent>
+          </div>
+        </div>
+      </Tabs>
     </div>
   );
 }
