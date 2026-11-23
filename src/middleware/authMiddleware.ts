@@ -3,6 +3,10 @@ import jwt from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
 import { getDocDirect, getDocsDirect } from "../lib/postgres-backend.js";
 import { isClientPortalRole } from "../lib/client-portal/roles.js";
+import {
+  getOrganization,
+  getOrganizationByM365TenantId,
+} from "../lib/client-portal/organizations.js";
 
 // JWT and Microsoft JWKS Clients
 const JWKS_URI = "https://login.microsoftonline.com/common/discovery/v2.0/keys";
@@ -139,6 +143,7 @@ export async function authenticate(req: AuthenticatedRequest, res: Response, nex
 
   let verifiedEmail: string | undefined;
   let verifiedUid: string | undefined;
+  let microsoftTenantId: string | undefined;
 
   try {
     // 1. Bearer token (SSO Entra ID or local session JWT)
@@ -174,6 +179,9 @@ export async function authenticate(req: AuthenticatedRequest, res: Response, nex
         });
         verifiedEmail = verifiedToken.preferred_username || verifiedToken.email || verifiedToken.upn || verifiedToken.unique_name;
         verifiedUid = verifiedToken.oid || verifiedToken.sub;
+        microsoftTenantId =
+          (typeof verifiedToken.tid === "string" && verifiedToken.tid.trim()) ||
+          undefined;
       } else {
         // Local session token: enforce HS256 to prevent algorithm confusion.
         const verifiedToken = jwt.verify(token, LOCAL_JWT_SECRET as string, { algorithms: ["HS256"] }) as any;
@@ -241,7 +249,57 @@ export async function authenticate(req: AuthenticatedRequest, res: Response, nex
       isAdminClaim = true;
     }
 
-    const organizationId = resolveUserOrganizationId(userDoc as Record<string, unknown>);
+    let organizationId = resolveUserOrganizationId(userDoc as Record<string, unknown>);
+
+    // Optional per-client M365 SSO: map Entra tid → organization, reject unknown tenants.
+    if (microsoftTenantId) {
+      const hubcomTenant = (
+        process.env.MICROSOFT_PROVIDER_TENANT_ID ||
+        process.env.AZURE_TENANT_ID ||
+        process.env.SSO_TENANT_ID ||
+        ""
+      )
+        .trim()
+        .toLowerCase();
+      const tid = microsoftTenantId.toLowerCase();
+      const mappedOrg = await getOrganizationByM365TenantId(tid);
+      const isHubcomTenant = Boolean(hubcomTenant && hubcomTenant === tid);
+
+      if (mappedOrg) {
+        // Pre-created or domain-matched users land in their client portal org.
+        if (!organizationId) {
+          const emailDomain = String(verifiedEmail || userDoc.email || "")
+            .split("@")[1]
+            ?.toLowerCase();
+          const orgDomain = (mappedOrg.domain || "").toLowerCase();
+          const domainOk = Boolean(emailDomain && orgDomain && emailDomain === orgDomain);
+          if (domainOk || isClientPortalRole(computedRole)) {
+            organizationId = mappedOrg.id;
+          }
+        } else if (organizationId !== mappedOrg.id && isClientPortalRole(computedRole)) {
+          return res.status(403).json({
+            error:
+              "Forbidden: Microsoft 365 tenant does not match this user's organization SSO mapping.",
+          });
+        }
+      } else if (!isHubcomTenant && isClientPortalRole(computedRole)) {
+        // Client portal accounts must come from a linked Entra tenant (or Hubcom's).
+        if (organizationId) {
+          const userOrg = await getOrganization(organizationId);
+          if (userOrg?.sso_enabled && userOrg.m365_tenant_id) {
+            return res.status(403).json({
+              error:
+                "Forbidden: Unknown or unlinked Microsoft 365 tenant. Contact Hubcom to enable SSO for your organization.",
+            });
+          }
+        }
+      } else if (!isHubcomTenant && !mappedOrg && !organizationId) {
+        // Strict reject for tokens from arbitrary external tenants with no provisioned mapping.
+        // Hubcom staff (non-client) signed in via Hubcom tenant pass above; others without a
+        // pre-provisioned user+org mapping are already blocked by the no-userDoc check.
+      }
+    }
+
     if (isClientPortalRole(computedRole) && !organizationId) {
       return res.status(403).json({
         error: "Forbidden: Client portal accounts must be linked to an organization.",

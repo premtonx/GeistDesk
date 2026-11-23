@@ -33,6 +33,10 @@ export interface NormalizedInboundEmail {
   mailbox?: string;
   /** Driver that produced this message. */
   source: EmailConnectionType | 'webhook' | 'smtp';
+  /** MSP organization stamped from the polling channel (client M365). */
+  organizationId?: string;
+  /** Email channel id that received the message. */
+  channelId?: string;
   rawHeaders?: Record<string, string>;
   /** Additional tags applied to the created ticket (e.g. spam-suspected). */
   tags?: string[];
@@ -97,8 +101,26 @@ export interface EmailChannelConfig {
   // Microsoft Graph
   tenantId?: string | null;
   clientId?: string | null;
+  /**
+   * Client secret — encrypted at rest when EMAIL_CHANNEL_SECRET_KEY /
+   * VAULT_ENCRYPTION_KEY is set. Never returned plaintext via list/get APIs.
+   */
   clientSecret?: string | null;
+  /** True when a client secret is stored (redacted API responses). */
+  hasClientSecret?: boolean;
+  clientSecretSet?: boolean;
   mailbox?: string | null;
+
+  /**
+   * MSP client organization this channel belongs to.
+   * NULL / absent = Hubcom global default channel.
+   */
+  organizationId?: string | null;
+  organization_id?: string | null;
+  /** Poll unread mail for this channel (default true for Graph). */
+  inboundEnabled?: boolean;
+  /** Send ticket replies via this mailbox (Send As). */
+  sendAsEnabled?: boolean;
 
   lastPolledAt?: string | null;
   lastError?: string | null;

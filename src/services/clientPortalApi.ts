@@ -29,6 +29,32 @@ export interface PortalTicketAttachment {
   contentBase64: string;
 }
 
+export interface PortalEmailChannel {
+  id: string;
+  name?: string;
+  email?: string;
+  mailbox?: string | null;
+  tenantId?: string | null;
+  clientId?: string | null;
+  hasClientSecret?: boolean;
+  inboundEnabled?: boolean;
+  sendAsEnabled?: boolean;
+  status?: string;
+  lastTestOk?: boolean | null;
+  lastTestAt?: string | null;
+  lastError?: string | null;
+  organizationId?: string | null;
+  connectionType?: string;
+}
+
+export interface PortalEmailOrgSettings {
+  id: string;
+  name: string;
+  domain?: string | null;
+  m365TenantId?: string | null;
+  ssoEnabled?: boolean;
+}
+
 async function dbAction<T = unknown>(payload: Record<string, unknown>): Promise<T> {
   const res = await axios.post('/api/db', payload, { withCredentials: true });
   return res.data?.result as T;
@@ -250,5 +276,50 @@ export const clientPortalApi = {
       `/api/tickets/${encodeURIComponent(ticketId)}/participants/${encodeURIComponent(userId)}`,
       { withCredentials: true },
     );
+  },
+
+  async getEmailChannel(): Promise<{
+    channel: PortalEmailChannel | null;
+    organization: PortalEmailOrgSettings | null;
+  }> {
+    const res = await axios.get('/api/portal/email-channel', { withCredentials: true });
+    return {
+      channel: res.data?.channel || null,
+      organization: res.data?.organization || null,
+    };
+  },
+
+  async saveEmailChannel(payload: Record<string, unknown>): Promise<PortalEmailChannel> {
+    const res = await axios.put('/api/portal/email-channel', payload, {
+      withCredentials: true,
+    });
+    return res.data?.channel;
+  },
+
+  async testEmailChannel(
+    payload: Record<string, unknown>,
+  ): Promise<{ ok: boolean; message: string }> {
+    const res = await axios.post('/api/portal/email-channel/test', payload, {
+      withCredentials: true,
+    });
+    return {
+      ok: Boolean(res.data?.ok ?? res.data?.success),
+      message: res.data?.message || res.data?.error || '',
+    };
+  },
+
+  async updateEmailSso(payload: {
+    m365TenantId?: string | null;
+    ssoEnabled?: boolean;
+  }): Promise<PortalEmailOrgSettings | null> {
+    const res = await axios.put(
+      '/api/portal/email-channel/sso',
+      {
+        m365TenantId: payload.m365TenantId,
+        ssoEnabled: payload.ssoEnabled,
+      },
+      { withCredentials: true },
+    );
+    return res.data?.organization || null;
   },
 };

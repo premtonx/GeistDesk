@@ -76,6 +76,10 @@ const channelSchema = z
     clientId: optionalText(255),
     clientSecret: optionalText(500),
     mailbox: optionalText(320),
+    organizationId: optionalText(64),
+    organization_id: optionalText(64),
+    inboundEnabled: optionalBool,
+    sendAsEnabled: optionalBool,
   })
   .superRefine((data, ctx) => {
     const type = data.connectionType || 'webhook';

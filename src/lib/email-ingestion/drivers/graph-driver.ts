@@ -137,6 +137,9 @@ export class MicrosoftGraphDriver implements EmailIngestionDriver {
         }
       }
 
+      const orgId =
+        this.channel.organizationId || this.channel.organization_id || undefined;
+
       normalized.push({
         sender,
         from_email: sender,
@@ -149,6 +152,8 @@ export class MicrosoftGraphDriver implements EmailIngestionDriver {
         externalMessageId: msg.internetMessageId || msg.id,
         mailbox,
         source: 'microsoft_graph',
+        organizationId: orgId || undefined,
+        channelId: this.channel.id,
       });
 
       // Mark as read so subsequent polls skip it.
@@ -167,5 +172,64 @@ export class MicrosoftGraphDriver implements EmailIngestionDriver {
     }
 
     return normalized;
+  }
+
+  /**
+   * Send an outbound message as the configured mailbox via application
+   * permissions (`Mail.Send`). Used by ticket agent replies (Send As).
+   */
+  async sendMail(params: {
+    to: string;
+    subject: string;
+    body: string;
+    contentType?: 'HTML' | 'Text';
+  }): Promise<{ ok: true } | { ok: false; message: string }> {
+    try {
+      const to = String(params.to || '').trim();
+      if (!to || !to.includes('@')) {
+        return { ok: false, message: 'Outbound recipient email is missing or invalid.' };
+      }
+      const token = await acquireGraphToken(this.channel);
+      const mailbox = this.mailbox();
+      if (!mailbox) {
+        return {
+          ok: false,
+          message: 'Target support email (mailbox) is required for Graph sendMail.',
+        };
+      }
+
+      const contentType = params.contentType || 'HTML';
+      const content =
+        contentType === 'HTML'
+          ? plainTextToEmailHtml(String(params.body || ''))
+          : String(params.body || '');
+
+      await axios.post(
+        `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(mailbox)}/sendMail`,
+        {
+          message: {
+            subject: String(params.subject || '(no subject)').slice(0, 998),
+            body: { contentType, content },
+            toRecipients: [{ emailAddress: { address: to } }],
+          },
+          saveToSentItems: true,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          timeout: 30_000,
+        },
+      );
+      return { ok: true };
+    } catch (err: any) {
+      const detail =
+        err?.response?.data?.error?.message ||
+        err?.response?.data?.error_description ||
+        err?.message ||
+        'Graph sendMail failed';
+      return { ok: false, message: String(detail) };
+    }
   }
 }

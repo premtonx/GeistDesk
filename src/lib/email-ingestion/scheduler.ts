@@ -20,6 +20,7 @@ import {
   recoverOrphanedJobs,
   type BackgroundJobRow,
 } from '../job-queue.js';
+import { hydrateChannelSecrets } from './channel-store.js';
 import {
   EMAIL_CHANNELS_COLLECTION,
   type EmailChannelConfig,
@@ -59,9 +60,14 @@ export async function pollEmailChannelOnce(
   const channelId = String(payload.channelId || '');
   if (!channelId) throw new Error('EMAIL_POLL job missing channelId.');
   const channels = await loadEnabledChannels();
-  const channel = channels.find((c) => c.id === channelId);
-  if (!channel) throw new Error(`Email channel ${channelId} not found.`);
+  const rawChannel = channels.find((c) => c.id === channelId);
+  if (!rawChannel) throw new Error(`Email channel ${channelId} not found.`);
+  if (!isActivePullDriver(rawChannel)) {
+    return { emails: 0, blocked: 0 };
+  }
 
+  const channel = hydrateChannelSecrets(rawChannel);
+  const orgId = channel.organizationId || channel.organization_id || undefined;
   const driver = createEmailIngestionDriver(channel);
   let emails = 0;
   let blocked = 0;
@@ -71,6 +77,8 @@ export async function pollEmailChannelOnce(
       const result = await ingestNormalizedEmail({
         ...email,
         mailbox: email.mailbox || channel.email,
+        organizationId: email.organizationId || orgId,
+        channelId: email.channelId || channel.id,
       });
       emails += 1;
       if (result.blocked) {
