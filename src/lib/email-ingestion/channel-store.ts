@@ -536,6 +536,35 @@ function preferOutboundChannel(candidates: EmailChannelConfig[]): EmailChannelCo
   );
 }
 
+function channelBelongsToOrgOrGlobal(
+  channel: EmailChannelConfig,
+  organizationId: string | null,
+): boolean {
+  const channelOrg = channel.organizationId || channel.organization_id || null;
+  if (!organizationId) {
+    // Unscoped tickets may only use Hubcom global channels.
+    return !channelOrg;
+  }
+  // Org-scoped tickets: own org channel OR Hubcom global — never another client.
+  return !channelOrg || channelOrg === organizationId;
+}
+
+function isHealthySendAsGraph(channel: EmailChannelConfig | null | undefined): boolean {
+  if (!channel || channel.connectionType !== 'microsoft_graph') return false;
+  if (channel.enabled === false || channel.status === 'disabled') return false;
+  if (channel.status === 'auth_error' || channel.status === 'failed') return false;
+  const orgId = channel.organizationId || channel.organization_id || null;
+  // Org Send-As channels must explicitly enable sendAs; Hubcom globals may omit it.
+  if (orgId && channel.sendAsEnabled !== true) return false;
+  return (
+    channel.status === 'connected' ||
+    channel.status === 'verified' ||
+    channel.status === 'active' ||
+    channel.lastTestOk === true ||
+    (!channel.status && !orgId)
+  );
+}
+
 /** Resolve a channel for outbound From: selection (mailbox / support email / forwarding). */
 export async function findChannelForOutbound(params: {
   mailbox?: string | null;
@@ -543,12 +572,12 @@ export async function findChannelForOutbound(params: {
   organizationId?: string | null;
 }): Promise<EmailChannelConfig | null> {
   // Prefer per-client Send-As Graph channel when the ticket is org-scoped.
-  const orgId = (params.organizationId || '').trim();
+  const orgId = (params.organizationId || '').trim() || null;
   if (orgId) {
     const orgChannel = await findOrganizationEmailChannel(orgId, {
       requireSendAs: true,
     });
-    if (orgChannel) return orgChannel;
+    if (orgChannel && isHealthySendAsGraph(orgChannel)) return orgChannel;
   }
 
   const docs = await getDocsDirect(EMAIL_CHANNELS_COLLECTION, []);
@@ -558,6 +587,7 @@ export async function findChannelForOutbound(params: {
   const exactMatches: EmailChannelConfig[] = [];
   for (const doc of docs) {
     const channel = { id: doc.id, ...doc } as EmailChannelConfig;
+    if (!channelBelongsToOrgOrGlobal(channel, orgId)) continue;
     if (mailbox && channelAddressMatch(channel, mailbox)) {
       exactMatches.push(channel);
       continue;
@@ -575,6 +605,7 @@ export async function findChannelForOutbound(params: {
     const domainMatches: EmailChannelConfig[] = [];
     for (const doc of docs) {
       const channel = { id: doc.id, ...doc } as EmailChannelConfig;
+      if (!channelBelongsToOrgOrGlobal(channel, orgId)) continue;
       const emailDomain = (channel.email || '').toLowerCase().split('@')[1];
       const mailboxDomain = (channel.mailbox || '').toLowerCase().split('@')[1];
       const sameDomain = emailDomain === domain || mailboxDomain === domain;
@@ -589,6 +620,8 @@ export async function findChannelForOutbound(params: {
 
   return findGlobalDefaultEmailChannel();
 }
+
+export { isHealthySendAsGraph, channelBelongsToOrgOrGlobal };
 
 /** Resolve channel by forwarding alias or webhook secret (for inbound push). */
 export async function findChannelForWebhook(params: {

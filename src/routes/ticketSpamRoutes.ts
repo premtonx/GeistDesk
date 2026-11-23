@@ -1,6 +1,7 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { authenticate } from '../middleware/authMiddleware.js';
+import { forbidClientPortalRoles } from '../middleware/clientPortalMiddleware.js';
 import { getDocDirect, updateDocDirect } from '../lib/postgres-backend.js';
 import { routeParam } from '../lib/route-params.js';
 import { safeErrorMessage, safeLog } from '../lib/safe-log.js';
@@ -36,7 +37,7 @@ export function resolveTicketFromEmail(ticket: Record<string, unknown>): string 
  * POST /api/tickets/:id/spam
  * Mark ticket as spam and permanently blacklist the sender email.
  */
-router.post('/:id/spam', authenticate, async (req: Request, res: Response): Promise<any> => {
+router.post('/:id/spam', authenticate, forbidClientPortalRoles, async (req: Request, res: Response): Promise<any> => {
   const paramParsed = spamParamSchema.safeParse({ id: req.params.id });
   if (!paramParsed.success) {
     return res.status(400).json({ error: 'Ticket id is required.' });

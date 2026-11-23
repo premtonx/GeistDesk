@@ -3,10 +3,9 @@
  * Missing mail configuration must never fail the reply write path.
  *
  * Dispatch order:
- *   1. Microsoft Graph sendMail when the resolved channel is `microsoft_graph`
- *      (client-credentials app with Mail.Send) — preferred for Graph mailboxes /
- *      per-client Send-As.
- *   2. SMTP / MAIL_DISPATCH_URL fallback for classic SMTP setups.
+ *   1. Org Send-As Microsoft Graph channel (when healthy + sendAsEnabled)
+ *   2. Hubcom global Graph channel fallback
+ *   3. SMTP / MAIL_DISPATCH_URL fallback for classic SMTP setups
  *
  * Domain verification gate (SMTP path):
  *   - dnsVerified channel → From: "Support Name <support@domain.com>"
@@ -24,6 +23,7 @@ import {
   findGlobalDefaultEmailChannel,
   findOrganizationEmailChannel,
   getEmailChannel,
+  isHealthySendAsGraph,
 } from './email-ingestion/channel-store.js';
 
 export interface OutboundMailResult {
@@ -31,6 +31,8 @@ export interface OutboundMailResult {
   reason?: string;
   from?: string;
   domainVerified?: boolean;
+  /** Which channel identity was used (org Send-As vs Hubcom fallback). */
+  via?: 'org_send_as' | 'hubcom_fallback' | 'smtp' | 'none';
 }
 
 function smtpConfigured(): boolean {
@@ -66,7 +68,7 @@ async function trySendViaMicrosoftGraph(params: {
 }): Promise<OutboundMailResult> {
   const channel = await resolveGraphChannelWithSecrets(params.channel);
   if (!channel) {
-    return { delivered: false, reason: 'Microsoft Graph channel could not be loaded.' };
+    return { delivered: false, reason: 'Microsoft Graph channel could not be loaded.', via: 'none' };
   }
 
   const driver = createEmailIngestionDriver(channel);
@@ -74,6 +76,7 @@ async function trySendViaMicrosoftGraph(params: {
     return {
       delivered: false,
       reason: 'Resolved channel is not a Microsoft Graph driver.',
+      via: 'none',
     };
   }
 
@@ -84,6 +87,7 @@ async function trySendViaMicrosoftGraph(params: {
       reason: 'Ticket has no customer email — reply saved to database only.',
       from: channel.mailbox || channel.email || undefined,
       domainVerified: Boolean(channel.dnsVerified),
+      via: 'none',
     };
   }
 
@@ -101,14 +105,17 @@ async function trySendViaMicrosoftGraph(params: {
       reason: result.message || 'Graph sendMail failed',
       from,
       domainVerified: Boolean(channel.dnsVerified),
+      via: 'none',
     };
   }
 
+  const orgId = channel.organizationId || channel.organization_id || null;
   return {
     delivered: true,
     from,
     domainVerified: Boolean(channel.dnsVerified),
     reason: `Sent via Microsoft Graph as ${from || 'mailbox'}`,
+    via: orgId ? 'org_send_as' : 'hubcom_fallback',
   };
 }
 
@@ -137,8 +144,8 @@ export function resolveOutboundFrom(channel?: EmailChannelConfig | null): {
 
 /**
  * Resolve the outbound channel for a ticket reply:
- *   1. Client org Graph channel with sendAsEnabled
- *   2. Caller-provided / mailbox-matched channel
+ *   1. Client org Graph channel with sendAsEnabled (healthy only)
+ *   2. Caller-provided preferred channel (if it belongs to the org or is global)
  *   3. Hubcom global default Graph/IMAP channel
  */
 export async function resolveSendAsChannel(params: {
@@ -151,66 +158,45 @@ export async function resolveSendAsChannel(params: {
       includeSecrets: true,
       requireSendAs: true,
     });
-    if (
-      orgChannel &&
-      orgChannel.connectionType === 'microsoft_graph' &&
-      (orgChannel.status === 'connected' ||
-        orgChannel.status === 'verified' ||
-        orgChannel.status === 'active' ||
-        orgChannel.lastTestOk === true)
-    ) {
+    if (orgChannel && isHealthySendAsGraph(orgChannel)) {
       return orgChannel;
     }
   }
 
   if (params.preferredChannel) {
-    if (isGraphChannel(params.preferredChannel)) {
-      return resolveGraphChannelWithSecrets(params.preferredChannel);
+    const preferredOrg =
+      params.preferredChannel.organizationId ||
+      params.preferredChannel.organization_id ||
+      null;
+    // Never use another client's channel as preferred.
+    if (orgId && preferredOrg && preferredOrg !== orgId) {
+      /* skip */
+    } else if (isGraphChannel(params.preferredChannel)) {
+      if (!preferredOrg || isHealthySendAsGraph(params.preferredChannel)) {
+        return resolveGraphChannelWithSecrets(params.preferredChannel);
+      }
+    } else {
+      return params.preferredChannel;
     }
-    return params.preferredChannel;
   }
 
   return findGlobalDefaultEmailChannel({ includeSecrets: true });
 }
 
-/**
- * Attempt to dispatch a customer-facing reply email.
- * Prefer Microsoft Graph when the ticket's channel is Graph-backed; otherwise
- * fall back to SMTP / MAIL_DISPATCH_URL. Missing config never throws.
- */
-export async function trySendTicketReplyEmail(params: {
+async function trySendViaSmtp(params: {
   ticketId: string;
   to?: string | null;
   subject?: string | null;
   body: string;
   agentName?: string | null;
-  /** Ingestion / support channel used to pick the From: header. */
   channel?: EmailChannelConfig | null;
-  /** Ticket organization — enables per-client Send-As when configured. */
-  organizationId?: string | null;
 }): Promise<OutboundMailResult> {
-  const channel =
-    (await resolveSendAsChannel({
-      organizationId: params.organizationId,
-      preferredChannel: params.channel || null,
-    })) || params.channel || null;
-
-  if (isGraphChannel(channel)) {
-    return trySendViaMicrosoftGraph({
-      ticketId: params.ticketId,
-      to: params.to,
-      subject: params.subject,
-      body: params.body,
-      agentName: params.agentName,
-      channel: channel!,
-    });
-  }
-
   if (!smtpConfigured()) {
     return {
       delivered: false,
       reason:
         'No Microsoft Graph Send-As channel matched this ticket and SMTP is not configured (SMTP_HOST / SMTP_USER missing). Reply saved to database only.',
+      via: 'none',
     };
   }
 
@@ -220,12 +206,11 @@ export async function trySendTicketReplyEmail(params: {
       return {
         delivered: false,
         reason: 'MAIL_DISPATCH_URL not set. Reply saved to database only.',
+        via: 'none',
       };
     }
 
-    const fromResolution = resolveOutboundFrom(channel);
-    const body = params.body;
-
+    const fromResolution = resolveOutboundFrom(params.channel);
     const res = await fetch(endpoint, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -233,12 +218,12 @@ export async function trySendTicketReplyEmail(params: {
         ticketId: params.ticketId,
         to: params.to,
         subject: params.subject,
-        body,
+        body: params.body,
         agentName: params.agentName,
         from: fromResolution.from,
         domainVerified: fromResolution.domainVerified,
         unverifiedDomainWarning: fromResolution.warning || null,
-        replyTo: channel?.email || null,
+        replyTo: params.channel?.email || null,
         autoSubmitted: 'no',
         inReplyTo: params.ticketId ? `geistdesk-ticket-${params.ticketId}` : undefined,
       }),
@@ -251,6 +236,7 @@ export async function trySendTicketReplyEmail(params: {
         reason: `Mail dispatch failed (${res.status}): ${detail.slice(0, 200)}`,
         from: fromResolution.from,
         domainVerified: fromResolution.domainVerified,
+        via: 'smtp',
       };
     }
 
@@ -259,11 +245,90 @@ export async function trySendTicketReplyEmail(params: {
       from: fromResolution.from,
       domainVerified: fromResolution.domainVerified,
       reason: fromResolution.warning,
+      via: 'smtp',
     };
   } catch (err: any) {
     return {
       delivered: false,
       reason: err?.message || 'Mail dispatch threw unexpectedly',
+      via: 'none',
     };
   }
+}
+
+/**
+ * Attempt to dispatch a customer-facing reply email.
+ * Prefer healthy org Send-As Graph → Hubcom global Graph → SMTP.
+ * Graph failures fall through to the next option; missing config never throws.
+ */
+export async function trySendTicketReplyEmail(params: {
+  ticketId: string;
+  to?: string | null;
+  subject?: string | null;
+  body: string;
+  agentName?: string | null;
+  /** Ingestion / support channel used to pick the From: header. */
+  channel?: EmailChannelConfig | null;
+  /** Ticket organization — enables per-client Send-As when configured. */
+  organizationId?: string | null;
+}): Promise<OutboundMailResult> {
+  const orgId = (params.organizationId || '').trim() || null;
+
+  // 1) Healthy org Send-As
+  let orgChannel: EmailChannelConfig | null = null;
+  if (orgId) {
+    orgChannel = await findOrganizationEmailChannel(orgId, {
+      includeSecrets: true,
+      requireSendAs: true,
+    });
+    if (orgChannel && isHealthySendAsGraph(orgChannel)) {
+      const orgResult = await trySendViaMicrosoftGraph({
+        ticketId: params.ticketId,
+        to: params.to,
+        subject: params.subject,
+        body: params.body,
+        agentName: params.agentName,
+        channel: orgChannel,
+      });
+      if (orgResult.delivered) {
+        return { ...orgResult, via: 'org_send_as' };
+      }
+      // Fall through to Hubcom on Graph failure.
+    }
+  }
+
+  // 2) Hubcom global Graph (or preferred non-foreign channel)
+  const fallback =
+    (await resolveSendAsChannel({
+      organizationId: null, // force global
+      preferredChannel:
+        params.channel &&
+        !(params.channel.organizationId || params.channel.organization_id)
+          ? params.channel
+          : null,
+    })) || (await findGlobalDefaultEmailChannel({ includeSecrets: true }));
+
+  if (isGraphChannel(fallback)) {
+    const hubcomResult = await trySendViaMicrosoftGraph({
+      ticketId: params.ticketId,
+      to: params.to,
+      subject: params.subject,
+      body: params.body,
+      agentName: params.agentName,
+      channel: fallback!,
+    });
+    if (hubcomResult.delivered) {
+      return { ...hubcomResult, via: 'hubcom_fallback' };
+    }
+  }
+
+  // 3) SMTP
+  return trySendViaSmtp({
+    ticketId: params.ticketId,
+    to: params.to,
+    subject: params.subject,
+    body: params.body,
+    agentName: params.agentName,
+    channel: fallback || params.channel || null,
+  });
 }

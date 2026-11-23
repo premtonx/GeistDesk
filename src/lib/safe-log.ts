@@ -21,7 +21,7 @@ const SECRET_PATTERNS: Array<{ re: RegExp; replace: string }> = [
   { re: /\b(AIza[0-9A-Za-z\-_]{20,})\b/g, replace: 'AIza***' },
   // OAuth form bodies echoed back by providers (client_secret, refresh_token, code, grant)
   {
-    re: /\b(client_secret|client_secret_value|refresh_token|access_token|id_token|code)\b\s*[:=]\s*["']?([^\s"',;&]+)/gi,
+    re: /\b(client_secret|clientSecret|client_secret_value|refresh_token|access_token|id_token|code)\b\s*[:=]\s*["']?([^\s"',;&]+)/gi,
     replace: '$1=***',
   },
 ];

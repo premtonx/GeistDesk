@@ -66,16 +66,31 @@ export function isInternalMessage(msg: Record<string, unknown> | null | undefine
   return false;
 }
 
-/** Strip internal notes / flags from a ticket payload for client responses. */
+/** Hubcom-only fields that must never appear in client portal ticket payloads. */
+export const CLIENT_HIDDEN_TICKET_FIELDS = [
+  'internalNotes',
+  'internal_notes',
+  'agentComments',
+  'agent_comments',
+  'aiSuggestedDraft',
+  'aiDraftRaw',
+  'aiCritiqueLog',
+  'aiSummary',
+  'aiInsights',
+  'aiRootCause',
+  'aiChecklist',
+  'aiSentiment',
+  'sanitizedAiContext',
+] as const;
+
+/** Strip internal notes / Hubcom analysis from a ticket payload for client responses. */
 export function sanitizeTicketForClient<T extends Record<string, unknown>>(
   ticket: T,
 ): T {
   const clone = { ...ticket } as Record<string, unknown>;
-  delete clone.internalNotes;
-  delete clone.internal_notes;
-  delete clone.aiSuggestedDraft;
-  delete clone.aiDraftRaw;
-  delete clone.aiCritiqueLog;
+  for (const field of CLIENT_HIDDEN_TICKET_FIELDS) {
+    delete clone[field];
+  }
   return clone as T;
 }
 
@@ -87,13 +102,14 @@ export function filterMessagesForClient<T extends Record<string, unknown>>(
 }
 
 /**
- * Can this client-portal user see the ticket at all?
- * Staff callers should not use this — they use tenant/staff paths.
+ * Pure visibility evaluator (no I/O) — used by clientCanViewTicket and tests.
+ * `isParticipant` must be resolved by the caller for CLIENT_USER non-requesters.
  */
-export async function clientCanViewTicket(
+export function evaluateClientTicketVisibility(
   user: ClientSessionContext,
   ticket: Record<string, unknown>,
-): Promise<boolean> {
+  opts?: { isParticipant?: boolean },
+): boolean {
   if (!isClientPortalRole(user.role)) return false;
   if (!user.organizationId) return false;
 
@@ -105,7 +121,26 @@ export async function clientCanViewTicket(
   // CLIENT_USER: requester or explicit participant only.
   const requester = ticketRequesterId(ticket);
   if (requester && requester === user.id) return true;
-  return isTicketParticipant(String(ticket.id || ''), user.id);
+  return Boolean(opts?.isParticipant);
+}
+
+/**
+ * Can this client-portal user see the ticket at all?
+ * Staff callers should not use this — they use tenant/staff paths.
+ */
+export async function clientCanViewTicket(
+  user: ClientSessionContext,
+  ticket: Record<string, unknown>,
+): Promise<boolean> {
+  if (!isClientPortalRole(user.role) || !user.organizationId) return false;
+  const orgId = ticketOrganizationId(ticket);
+  if (!orgId || orgId !== user.organizationId) return false;
+  if (isClientOrgWideTicketRole(user.role)) return true;
+
+  const requester = ticketRequesterId(ticket);
+  if (requester && requester === user.id) return true;
+  const isParticipant = await isTicketParticipant(String(ticket.id || ''), user.id);
+  return evaluateClientTicketVisibility(user, ticket, { isParticipant });
 }
 
 export async function clientCanMutateTicket(
@@ -151,6 +186,15 @@ export const CLIENT_SPOOF_FIELDS = [
   'isAdmin',
   'is_internal',
   'isInternal',
+  'agentComments',
+  'agent_comments',
+  'internalNotes',
+  'internal_notes',
+  'aiSummary',
+  'aiInsights',
+  'aiRootCause',
+  'aiChecklist',
+  'aiSentiment',
 ] as const;
 
 export function stripClientSpoofFields<T extends Record<string, unknown>>(

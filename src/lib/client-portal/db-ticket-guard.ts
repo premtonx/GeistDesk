@@ -29,7 +29,13 @@ export async function enforceClientDbTicketAccess(params: {
   id?: string;
   data?: Record<string, unknown> | null;
 }): Promise<
-  | { ok: true; data?: Record<string, unknown>; filterList?: true; sanitizeDoc?: true }
+  | {
+      ok: true;
+      data?: Record<string, unknown>;
+      filterList?: true;
+      sanitizeDoc?: true;
+      requireMutate?: true;
+    }
   | { ok: false; status: number; error: string }
 > {
   if (!isClientPortalRole(params.user.role)) {
@@ -91,7 +97,6 @@ export async function enforceClientDbTicketAccess(params: {
       if (!params.id) {
         return { ok: false, status: 400, error: 'Document id is required.' };
       }
-      // Visibility checked by caller after load when needed; signal sanitize.
       if (params.action === 'delete_doc') {
         return {
           ok: false,
@@ -100,7 +105,8 @@ export async function enforceClientDbTicketAccess(params: {
         };
       }
       if (data) {
-        // Clients must not flip internal flags or reassign org.
+        data = stripClientSpoofFields(data);
+        // Clients must not flip internal flags or reassign org / Hubcom fields.
         delete data.is_internal;
         delete data.isInternal;
         delete data.organizationId;
@@ -108,6 +114,15 @@ export async function enforceClientDbTicketAccess(params: {
         delete data.requesterId;
         delete data.requester_id;
         delete data.creatorId;
+        delete data.agentComments;
+        delete data.agent_comments;
+        delete data.internalNotes;
+        delete data.internal_notes;
+      }
+      // Mutating actions must prove visibility against the live ticket document.
+      // The /api/db router enforces this before write; we signal requireMutate here.
+      if (params.action === 'update_doc' || params.action === 'set_doc') {
+        return { ok: true, data, sanitizeDoc: true, requireMutate: true };
       }
       return { ok: true, data, sanitizeDoc: true };
     }
