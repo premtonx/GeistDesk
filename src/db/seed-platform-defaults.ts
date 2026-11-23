@@ -16,6 +16,7 @@ import {
   purgeKbCoverageCache,
   purgePlaceholderKbCategories,
 } from '../lib/kb-demo-purge.js';
+import { CLIENT_PORTAL_ROLE_SEEDS } from '../lib/client-portal/roles.js';
 
 async function batchUpsert(
   client: pg.PoolClient,
@@ -155,6 +156,30 @@ export async function seedOrchestratorPersonaSkills(client: pg.PoolClient): Prom
   return true;
 }
 
+/** Idempotent upsert of CLIENT_ADMIN / CLIENT_SUPPORTER / CLIENT_USER role docs. */
+export async function seedClientPortalRoles(client: pg.PoolClient): Promise<number> {
+  const now = new Date().toISOString();
+  let upserted = 0;
+  for (const role of CLIENT_PORTAL_ROLE_SEEDS) {
+    const { id, ...rest } = role;
+    const payload = {
+      ...rest,
+      createdAt: now,
+      updatedAt: now,
+    };
+    await client.query(
+      `INSERT INTO geistdesk_documents (collection, id, data)
+       VALUES ('roles', $1, $2::jsonb)
+       ON CONFLICT (collection, id) DO UPDATE
+         SET data = geistdesk_documents.data || EXCLUDED.data,
+             updated_at = NOW()`,
+      [id, JSON.stringify(payload)],
+    );
+    upserted += 1;
+  }
+  return upserted;
+}
+
 export async function seedAllPlatformDefaults(client: pg.PoolClient): Promise<{
   moduleConfig: boolean;
   vaultFolders: number;
@@ -164,6 +189,7 @@ export async function seedAllPlatformDefaults(client: pg.PoolClient): Promise<{
   autopilotPurged: number;
   promptTemplates: number;
   personaSkills: boolean;
+  clientPortalRoles: number;
 }> {
   const exec = (sql: string, params?: unknown[]) => client.query(sql, params ?? []);
   const moduleConfig = await seedModuleConfig(client);
@@ -174,6 +200,7 @@ export async function seedAllPlatformDefaults(client: pg.PoolClient): Promise<{
   const autopilotPurged = await purgeDemoAutopilotFixtures(exec);
   const promptTemplates = await seedPromptTemplates(client);
   const personaSkills = await seedOrchestratorPersonaSkills(client);
+  const clientPortalRoles = await seedClientPortalRoles(client);
   return {
     moduleConfig,
     vaultFolders,
@@ -183,5 +210,6 @@ export async function seedAllPlatformDefaults(client: pg.PoolClient): Promise<{
     autopilotPurged,
     promptTemplates,
     personaSkills,
+    clientPortalRoles,
   };
 }

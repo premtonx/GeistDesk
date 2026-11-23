@@ -3,6 +3,8 @@
  * Unknown or sensitive collections are denied by default.
  */
 
+import { isClientPortalRole } from './client-portal/roles.js';
+
 export const DB_BLOCKED_COLLECTIONS = new Set([
   'vault_item_secrets',
   'vault_items',
@@ -18,6 +20,17 @@ export const DB_ADMIN_ONLY_COLLECTIONS = new Set([
   'admins',
   'groups',
   'exchange_analytics_cache',
+]);
+
+/**
+ * Collections client portal roles may touch via /api/db.
+ * Ticket message subcollections (`tickets/{id}/messages`) are allowed separately.
+ */
+export const DB_CLIENT_PORTAL_COLLECTIONS = new Set([
+  'tickets',
+  'users',
+  'notifications',
+  'tags',
 ]);
 
 /** Append-only logs: agents may write, only admins may read or mutate. */
@@ -101,8 +114,18 @@ export interface DbAccessContext {
   docId?: string;
 }
 
-export function assertDbCollectionAccess(ctx: DbAccessContext): { allowed: true } | { allowed: false; status: number; error: string } {
-  const { collection, action, userIsAdmin } = ctx;
+export interface DbAccessContextWithRole extends DbAccessContext {
+  userRole?: string;
+}
+
+function isTicketMessagesCollection(collection: string): boolean {
+  return /^tickets\/[^/]+\/messages$/.test(collection);
+}
+
+export function assertDbCollectionAccess(
+  ctx: DbAccessContextWithRole,
+): { allowed: true } | { allowed: false; status: number; error: string } {
+  const { collection, action, userIsAdmin, userRole } = ctx;
 
   if (DB_BLOCKED_COLLECTIONS.has(collection)) {
     return {
@@ -110,6 +133,26 @@ export function assertDbCollectionAccess(ctx: DbAccessContext): { allowed: true 
       status: 403,
       error: `Forbidden: Collection "${collection}" is not accessible through the generic database API.`,
     };
+  }
+
+  // Client portal roles: never Admin Hub / internal collections; tickets only (+ self user / notifications).
+  if (isClientPortalRole(userRole)) {
+    const allowed =
+      DB_CLIENT_PORTAL_COLLECTIONS.has(collection) || isTicketMessagesCollection(collection);
+    if (!allowed) {
+      return {
+        allowed: false,
+        status: 403,
+        error: `Forbidden: Client portal accounts cannot access collection "${collection}".`,
+      };
+    }
+    if (collection === 'users' && (action === 'add_doc' || action === 'delete_doc')) {
+      return {
+        allowed: false,
+        status: 403,
+        error: 'Forbidden: Client portal accounts cannot create or delete users via the database API.',
+      };
+    }
   }
 
   if (DB_ADMIN_ONLY_COLLECTIONS.has(collection)) {

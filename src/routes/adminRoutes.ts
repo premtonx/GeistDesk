@@ -4,6 +4,7 @@ import crypto from "crypto";
 import { routeParam } from "../lib/route-params.js";
 import { safeErrorMessage, safeLog } from "../lib/safe-log.js";
 import { authenticate, requireRole } from "../middleware/authMiddleware.js";
+import { forbidClientPortalRoles } from "../middleware/clientPortalMiddleware.js";
 import { 
   getDocDirect, 
   getDocsDirect, 
@@ -67,11 +68,14 @@ import type {
 
 const router = Router();
 
+// Client portal roles (CLIENT_*) can never reach Hubcom Admin Hub APIs.
+router.use(authenticate, forbidClientPortalRoles);
+
 /**
  * GET /api/admin/hub-stats
  * Live control-plane counters for Admin Hub (PostgreSQL-backed).
  */
-router.get("/hub-stats", authenticate, requireRole(["SYSTEM_ADMIN"]), async (_req: Request, res: Response): Promise<any> => {
+router.get("/hub-stats", requireRole(["SYSTEM_ADMIN"]), async (_req: Request, res: Response): Promise<any> => {
   try {
     const vectorCount = queryDb(
       `SELECT COUNT(*)::int AS total FROM "KnowledgeEmbedding"`,

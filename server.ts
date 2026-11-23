@@ -29,6 +29,15 @@ import { generateAzureAIAnswer } from "./src/server/azure-ai-orchestrator.js";
 import { authenticate, requireRole } from "./src/middleware/authMiddleware";
 import { requestLoggingMiddleware } from "./src/middleware/request-logging.js";
 import adminRoutes from "./src/routes/adminRoutes.js";
+import organizationAdminRoutes from "./src/routes/organizationAdminRoutes.js";
+import ticketParticipantRoutes from "./src/routes/ticketParticipantRoutes.js";
+import {
+  enforceClientDbTicketAccess,
+  parseTicketMessagesCollection,
+  postFilterClientDbResult,
+} from "./src/lib/client-portal/db-ticket-guard.js";
+import { clientCanViewTicket, resolveOrganizationIdFromUser } from "./src/lib/client-portal/ticket-visibility.js";
+import { isClientPortalRole } from "./src/lib/client-portal/roles.js";
 import aiRoutes from "./src/routes/aiRoutes.js";
 import moduleConfigRoutes from "./src/routes/moduleConfigRoutes.js";
 import vaultRoutes from "./src/routes/vaultRoutes.js";
@@ -162,7 +171,18 @@ function verifyInboundMailWebhook(req: any): boolean {
 // Fields that must never be returned to clients for the users collection.
 const USER_SENSITIVE_FIELDS = ["password", "passwordHash", "activationToken"];
 // Fields a non-admin must not be able to set on a user record (anti-escalation).
-const USER_PROTECTED_FIELDS = ["role", "is_admin", "roleId", "password", "passwordHash", "isDeactivated", "can_create_tickets", "can_view_knowledgebase"];
+const USER_PROTECTED_FIELDS = [
+  "role",
+  "is_admin",
+  "roleId",
+  "password",
+  "passwordHash",
+  "isDeactivated",
+  "can_create_tickets",
+  "can_view_knowledgebase",
+  "organizationId",
+  "organization_id",
+];
 
 function sanitizeUserDoc(doc: any): any {
   if (!doc || typeof doc !== "object") return doc;
@@ -381,6 +401,7 @@ async function startServer() {
       userIsAdmin: req.user?.role === "SYSTEM_ADMIN",
       userId: req.user?.id,
       docId: id,
+      userRole: req.user?.role,
     });
     if (access.allowed === false) {
       return res.status(access.status).json({ error: access.error });
@@ -393,6 +414,37 @@ async function startServer() {
     const uid = req.user?.id;
     const tenantId = resolveTenantFromRequest(req);
     const tenantScoped = TENANT_SCOPED_COLLECTIONS.has(collection);
+
+    // MSP client portal: strip spoofed org fields and stamp session organizationId on creates.
+    if (req.user && isClientPortalRole(req.user.role)) {
+      const clientGuard = await enforceClientDbTicketAccess({
+        user: req.user,
+        collection,
+        action,
+        id,
+        data: data && typeof data === "object" ? data : null,
+      });
+      if (clientGuard.ok === false) {
+        return res.status(clientGuard.status).json({ error: clientGuard.error });
+      }
+      if (clientGuard.data) data = clientGuard.data;
+
+      // Message reads require parent ticket visibility.
+      const msgScope = parseTicketMessagesCollection(collection);
+      if (msgScope) {
+        const parent = await getDocDirect("tickets", msgScope.ticketId);
+        if (!parent) return res.status(404).json({ error: "Ticket not found." });
+        const canView = await clientCanViewTicket(
+          {
+            id: String(req.user.id),
+            role: String(req.user.role),
+            organizationId: resolveOrganizationIdFromUser(req.user),
+          },
+          { ...parent, id: msgScope.ticketId },
+        );
+        if (!canView) return res.status(404).json({ error: "Ticket not found." });
+      }
+    }
 
     // 2. Enforce Administrative Access Controls (legacy guard; policy module is authoritative)
     const adminCollections = ['roles', 'module_config', 'audits', 'admins', 'groups', 'audit_logs', 'compliance_logs'];
@@ -530,6 +582,17 @@ async function startServer() {
         if (tenantScoped && doc && !documentBelongsToTenant(doc, tenantId)) {
           return res.status(404).json({ error: "Document not found" });
         }
+        if (req.user && isClientPortalRole(req.user.role)) {
+          const filtered = await postFilterClientDbResult({
+            user: req.user,
+            collection,
+            action,
+            doc,
+          });
+          if (filtered.denied) return res.status(404).json({ error: "Document not found" });
+          const out = filtered.doc;
+          return res.json({ result: collection === "users" ? sanitizeUserDoc(out) : out });
+        }
         return res.json({ result: collection === "users" ? sanitizeUserDoc(doc) : doc });
       }
       if (action === "get_docs") {
@@ -542,6 +605,15 @@ async function startServer() {
         });
         if (tenantScoped) {
           docs = (docs || []).filter((d: any) => documentBelongsToTenant(d, tenantId));
+        }
+        if (req.user && isClientPortalRole(req.user.role)) {
+          const filtered = await postFilterClientDbResult({
+            user: req.user,
+            collection,
+            action,
+            docs: docs || [],
+          });
+          docs = filtered.docs || [];
         }
         const safe = collection === "users" ? (docs || []).map(sanitizeUserDoc) : docs;
         return res.json({ result: safe });
@@ -649,6 +721,7 @@ async function startServer() {
   // Mount Admin User Management Router
   app.use("/api/admin/onboarding", onboardingRoutes);
   app.use("/api/admin/demo-data", demoDataAdminRoutes);
+  app.use("/api/admin/organizations", organizationAdminRoutes);
   app.use("/api/admin", adminRoutes);
   app.use("/api/admin/import", importRoutes);
   app.use("/api/ai", aiRoutes);
@@ -741,6 +814,7 @@ async function startServer() {
   app.use("/api/vault", vaultRoutes);
   app.use("/api/credential-vault", credentialVaultRoutes);
   app.use("/api/exchange", exchangeRoutes);
+  app.use("/api/tickets", ticketParticipantRoutes);
   app.use("/api/tickets", ticketReplyRoutes);
   app.use("/api/tickets", ticketSpamRoutes);
   app.use("/api/tickets", ticketRoutes);

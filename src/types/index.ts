@@ -56,16 +56,24 @@ export interface UserRole {
   updatedAt: any;
 }
 
+export type ClientPortalRole = 'CLIENT_ADMIN' | 'CLIENT_SUPPORTER' | 'CLIENT_USER';
+
 export interface User {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "agent" | "team_lead" | "customer";
+  role: "admin" | "agent" | "team_lead" | "customer" | "SYSTEM_ADMIN" | ClientPortalRole;
   avatar?: string;
   signature?: string;
   visibilityScope?: 'all' | 'group' | 'assigned';
   roleId?: string; // Links to RBAC definitions
   groups?: string[]; // IDs of functional groups
+  /**
+   * MSP client organization (Kunden). Null/absent for Hubcom internal staff.
+   * Required for CLIENT_ADMIN / CLIENT_SUPPORTER / CLIENT_USER.
+   */
+  organizationId?: string | null;
+  organization_id?: string | null;
   isDeactivated?: boolean;
   agentType?: 'full-time' | 'occasional';
   is_admin?: boolean;
@@ -77,6 +85,18 @@ export interface User {
   password?: string;
   authMethod?: 'sso' | 'password';
   personalVaultInitialized?: boolean;
+}
+
+/** Portal tenant for co-managed MSP clients (SQL `organizations` table). */
+export interface Organization {
+  id: string;
+  name: string;
+  slug: string;
+  domain?: string | null;
+  is_active: boolean;
+  settings?: Record<string, unknown>;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Group {
@@ -204,6 +224,12 @@ export interface Ticket {
   contactId: string;
   companyId: string;
   company?: string;
+  /** MSP client organization — required for client-portal tickets. */
+  organizationId?: string | null;
+  organization_id?: string | null;
+  /** Portal requester (user id) — used for CLIENT_USER visibility. */
+  requesterId?: string | null;
+  requester_id?: string | null;
   channel?: 'email' | 'chat' | 'phone' | 'whatsapp';
   sentiment?: 'positive' | 'neutral' | 'negative' | 'angry';
   firstResponseDue?: any;

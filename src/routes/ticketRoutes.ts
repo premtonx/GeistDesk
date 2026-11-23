@@ -1,10 +1,18 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
 import { authenticate } from '../middleware/authMiddleware.js';
+import { attachClientOrganizationContext } from '../middleware/clientPortalMiddleware.js';
 import { getDocDirect, updateDocDirect } from '../lib/postgres-backend.js';
 import { routeParam } from '../lib/route-params.js';
 import { safeLog } from '../lib/safe-log.js';
 import { resolveTenantFromRequest, documentBelongsToTenant } from '../lib/tenant-context.js';
+import { isClientPortalRole } from '../lib/client-portal/roles.js';
+import {
+  clientCanMutateTicket,
+  resolveOrganizationIdFromUser,
+  sanitizeTicketForClient,
+  stripClientSpoofFields,
+} from '../lib/client-portal/ticket-visibility.js';
 
 const router = Router();
 
@@ -36,11 +44,15 @@ const ALLOWED_NEW_FIELDS = new Set([
  * assigneeId, assignedToEmail) so every consumer sees the same assignee.
  * Returns the updated ticket: { success: true, ticket }.
  */
-router.patch('/:id', authenticate, async (req: Request, res: Response): Promise<any> => {
+router.patch('/:id', authenticate, attachClientOrganizationContext, async (req: Request, res: Response): Promise<any> => {
   const ticketId = routeParam(req.params.id);
   if (!ticketId) return res.status(400).json({ error: 'Ticket id is required.' });
 
-  const body = (req.body || {}) as Record<string, unknown>;
+  const body = (
+    isClientPortalRole(req.user?.role)
+      ? stripClientSpoofFields((req.body || {}) as Record<string, unknown>)
+      : (req.body || {})
+  ) as Record<string, unknown>;
 
   // Coerce assignee fields into the canonical set. `??` would mask an explicit
   // `null` (unassignment), so detect presence field by field.
@@ -128,13 +140,38 @@ router.patch('/:id', authenticate, async (req: Request, res: Response): Promise<
       return res.status(404).json({ error: 'Ticket not found.' });
     }
 
+    if (isClientPortalRole(req.user?.role)) {
+      const canMutate = await clientCanMutateTicket(
+        {
+          id: String(req.user!.id),
+          role: String(req.user!.role),
+          organizationId: resolveOrganizationIdFromUser(req.user!),
+        },
+        { ...existing, id: ticketId },
+      );
+      if (!canMutate) {
+        return res.status(404).json({ error: 'Ticket not found.' });
+      }
+      // Clients must never flip internal notes into customer-visible payloads.
+      delete data.internalNotes;
+      delete data.is_internal;
+      delete data.isInternal;
+      delete data.organizationId;
+      delete data.organization_id;
+      delete data.requesterId;
+      delete data.requester_id;
+    }
+
     const now = new Date().toISOString();
     data.updatedAt = now;
 
     await updateDocDirect('tickets', ticketId, data, { tenantId });
 
     const updated = await getDocDirect('tickets', ticketId);
-    return res.status(200).json({ success: true, ticket: { id: ticketId, ...updated } });
+    const ticketPayload = isClientPortalRole(req.user?.role)
+      ? sanitizeTicketForClient({ id: ticketId, ...updated })
+      : { id: ticketId, ...updated };
+    return res.status(200).json({ success: true, ticket: ticketPayload });
   } catch (e: any) {
     safeLog('error', '[tickets] PATCH /api/tickets/:id failed', e?.message || e);
     return res.status(500).json({ error: 'Failed to update ticket.' });
@@ -178,7 +215,13 @@ const bulkUpdateSchema = z.object({
  * Apply the same update to many tickets. Each update is tenant-scoped and
  * persisted via updateDocDirect; returns per-ticket results.
  */
-router.post('/bulk-update', authenticate, async (req: Request, res: Response): Promise<any> => {
+router.post('/bulk-update', authenticate, attachClientOrganizationContext, async (req: Request, res: Response): Promise<any> => {
+  if (isClientPortalRole(req.user?.role)) {
+    return res.status(403).json({
+      error: 'Forbidden: Client portal accounts cannot bulk-update tickets.',
+    });
+  }
+
   const parsed = bulkUpdateSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({

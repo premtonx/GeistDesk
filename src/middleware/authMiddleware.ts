@@ -2,6 +2,7 @@ import { Request, Response, NextFunction } from "express";
 import jwt from "jsonwebtoken";
 import jwksClient from "jwks-rsa";
 import { getDocDirect, getDocsDirect } from "../lib/postgres-backend.js";
+import { isClientPortalRole } from "../lib/client-portal/roles.js";
 
 // JWT and Microsoft JWKS Clients
 const JWKS_URI = "https://login.microsoftonline.com/common/discovery/v2.0/keys";
@@ -49,6 +50,42 @@ function resolveUserTenantId(userDoc: Record<string, unknown>): string {
     (typeof userDoc.workspaceId === 'string' && userDoc.workspaceId.trim()) ||
     '';
   return raw || 'default';
+}
+
+function resolveUserOrganizationId(userDoc: Record<string, unknown>): string | null {
+  const raw =
+    (typeof userDoc.organizationId === 'string' && userDoc.organizationId.trim()) ||
+    (typeof userDoc.organization_id === 'string' && userDoc.organization_id.trim()) ||
+    '';
+  return raw || null;
+}
+
+function resolveEffectiveRole(userDoc: any, roleDoc: any | null): {
+  computedRole: string;
+  isAdminClaim: boolean;
+} {
+  let computedRole = userDoc.role || 'agent';
+  let isAdminClaim = userDoc.is_admin === true;
+
+  if (roleDoc) {
+    const roleName = String(roleDoc.name || '');
+    if (roleName === 'admin' || roleDoc.is_admin === true || roleName === 'SYSTEM_ADMIN') {
+      computedRole = 'SYSTEM_ADMIN';
+      isAdminClaim = true;
+    } else if (isClientPortalRole(roleName)) {
+      computedRole = roleName;
+      isAdminClaim = false;
+    }
+  }
+
+  if (isClientPortalRole(computedRole)) {
+    isAdminClaim = false;
+  } else if (computedRole === 'admin' || computedRole === 'SYSTEM_ADMIN' || isAdminClaim) {
+    computedRole = 'SYSTEM_ADMIN';
+    isAdminClaim = true;
+  }
+
+  return { computedRole, isAdminClaim };
 }
 
 /**
@@ -187,31 +224,28 @@ export async function authenticate(req: AuthenticatedRequest, res: Response, nex
     }
 
     // Resolve effective role strictly from the verified DB record.
-    let computedRole = userDoc.role || "agent";
-    let isAdminClaim = userDoc.is_admin === true;
-
+    let roleDoc: any = null;
     if (userDoc.roleId) {
       try {
-        const roleDoc = await getDocDirect("roles", userDoc.roleId);
-        if (roleDoc) {
-          if (roleDoc.name === "admin" || roleDoc.is_admin === true || roleDoc.name === "SYSTEM_ADMIN") {
-            computedRole = "SYSTEM_ADMIN";
-            isAdminClaim = true;
-          }
-        }
+        roleDoc = await getDocDirect("roles", userDoc.roleId);
       } catch (err) {
         console.error("[Auth Middleware] Failed looking up associated role doc:", err);
       }
     }
 
-    if (computedRole === "admin" || computedRole === "SYSTEM_ADMIN" || isAdminClaim) {
+    let { computedRole, isAdminClaim } = resolveEffectiveRole(userDoc, roleDoc);
+
+    // Never auto-promote client portal accounts to SYSTEM_ADMIN.
+    if (isServerBetaAutoAdminEnabled() && !isClientPortalRole(computedRole)) {
       computedRole = "SYSTEM_ADMIN";
       isAdminClaim = true;
     }
 
-    if (isServerBetaAutoAdminEnabled()) {
-      computedRole = "SYSTEM_ADMIN";
-      isAdminClaim = true;
+    const organizationId = resolveUserOrganizationId(userDoc as Record<string, unknown>);
+    if (isClientPortalRole(computedRole) && !organizationId) {
+      return res.status(403).json({
+        error: "Forbidden: Client portal accounts must be linked to an organization.",
+      });
     }
 
     req.user = {
@@ -221,6 +255,7 @@ export async function authenticate(req: AuthenticatedRequest, res: Response, nex
       role: computedRole,
       is_admin: isAdminClaim,
       tenantId: resolveUserTenantId(userDoc as Record<string, unknown>),
+      organizationId,
       dbRecord: userDoc
     };
 
@@ -305,36 +340,32 @@ export async function optionalAuthenticate(req: AuthenticatedRequest, _res: Resp
         }
       }
       if (userDoc && !userDoc.isDeactivated) {
-        let computedRole = userDoc.role || "agent";
-        let isAdminClaim = userDoc.is_admin === true;
+        let roleDoc: any = null;
         if (userDoc.roleId) {
           try {
-            const roleDoc = await getDocDirect("roles", userDoc.roleId);
-            if (roleDoc && (roleDoc.name === "admin" || roleDoc.is_admin === true || roleDoc.name === "SYSTEM_ADMIN")) {
-              computedRole = "SYSTEM_ADMIN";
-              isAdminClaim = true;
-            }
+            roleDoc = await getDocDirect("roles", userDoc.roleId);
           } catch {
             // Role lookup failure is non-fatal for optional auth.
           }
         }
-        if (computedRole === "admin" || computedRole === "SYSTEM_ADMIN" || isAdminClaim) {
+        let { computedRole, isAdminClaim } = resolveEffectiveRole(userDoc, roleDoc);
+        if (isServerBetaAutoAdminEnabled() && !isClientPortalRole(computedRole)) {
           computedRole = "SYSTEM_ADMIN";
           isAdminClaim = true;
         }
-        if (isServerBetaAutoAdminEnabled()) {
-          computedRole = "SYSTEM_ADMIN";
-          isAdminClaim = true;
+        const organizationId = resolveUserOrganizationId(userDoc as Record<string, unknown>);
+        if (!(isClientPortalRole(computedRole) && !organizationId)) {
+          req.user = {
+            id: userDoc.id || verifiedUid,
+            name: userDoc.name || "Default User",
+            email: userDoc.email || verifiedEmail || "",
+            role: computedRole,
+            is_admin: isAdminClaim,
+            tenantId: resolveUserTenantId(userDoc as Record<string, unknown>),
+            organizationId,
+            dbRecord: userDoc,
+          };
         }
-        req.user = {
-          id: userDoc.id || verifiedUid,
-          name: userDoc.name || "Default User",
-          email: userDoc.email || verifiedEmail || "",
-          role: computedRole,
-          is_admin: isAdminClaim,
-          tenantId: resolveUserTenantId(userDoc as Record<string, unknown>),
-          dbRecord: userDoc,
-        };
       }
     }
   } catch {
