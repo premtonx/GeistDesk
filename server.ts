@@ -32,6 +32,7 @@ import adminRoutes from "./src/routes/adminRoutes.js";
 import organizationAdminRoutes from "./src/routes/organizationAdminRoutes.js";
 import ticketParticipantRoutes from "./src/routes/ticketParticipantRoutes.js";
 import clientPortalRoutes from "./src/routes/clientPortalRoutes.js";
+import clientPortalTeamRoutes from "./src/routes/clientPortalTeamRoutes.js";
 import {
   enforceClientDbTicketAccess,
   parseTicketMessagesCollection,
@@ -742,6 +743,7 @@ async function startServer() {
   app.use("/api/admin/demo-data", demoDataAdminRoutes);
   app.use("/api/admin/organizations", organizationAdminRoutes);
   app.use("/api/admin", adminRoutes);
+  app.use("/api/portal/team", clientPortalTeamRoutes);
   app.use("/api/portal", clientPortalRoutes);
   app.use("/api/admin/import", importRoutes);
   app.use("/api/ai", aiRoutes);

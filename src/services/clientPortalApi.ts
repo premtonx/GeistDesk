@@ -7,7 +7,20 @@ export interface PortalMember {
   email: string;
   role: string;
   isDeactivated?: boolean;
+  isActive?: boolean;
+  lastLoginAt?: string | null;
+  createdAt?: string | null;
 }
+
+export interface PortalTeamSummary {
+  totalActive: number;
+  clientAdmins: number;
+  clientSupporters: number;
+  clientUsers: number;
+  total: number;
+}
+
+export type PortalTeamRole = 'CLIENT_ADMIN' | 'CLIENT_SUPPORTER' | 'CLIENT_USER';
 
 export interface PortalTicketAttachment {
   filename: string;
@@ -36,6 +49,71 @@ export const clientPortalApi = {
     return {
       member: res.data?.member,
       temporaryPassword: res.data?.temporaryPassword,
+    };
+  },
+
+  async listTeam(): Promise<{ members: PortalMember[]; summary: PortalTeamSummary }> {
+    const res = await axios.get('/api/portal/team', { withCredentials: true });
+    const members = (res.data?.members || []).map((m: any) => ({
+      ...m,
+      isDeactivated: m.isActive === false,
+    }));
+    return {
+      members,
+      summary: res.data?.summary || {
+        totalActive: 0,
+        clientAdmins: 0,
+        clientSupporters: 0,
+        clientUsers: 0,
+        total: 0,
+      },
+    };
+  },
+
+  async createTeamMember(payload: {
+    name: string;
+    email: string;
+    role: PortalTeamRole;
+  }): Promise<{
+    member: PortalMember;
+    temporaryPassword?: string;
+    setupLink?: string;
+    emailSent?: boolean;
+  }> {
+    const res = await axios.post('/api/portal/team', payload, { withCredentials: true });
+    return {
+      member: { ...res.data?.member, isDeactivated: res.data?.member?.isActive === false },
+      temporaryPassword: res.data?.temporaryPassword,
+      setupLink: res.data?.setupLink,
+      emailSent: res.data?.emailSent,
+    };
+  },
+
+  async updateTeamMember(
+    userId: string,
+    payload: { name?: string; role?: PortalTeamRole; isActive?: boolean },
+  ): Promise<PortalMember> {
+    const res = await axios.patch(`/api/portal/team/${encodeURIComponent(userId)}`, payload, {
+      withCredentials: true,
+    });
+    const member = res.data?.member;
+    return { ...member, isDeactivated: member?.isActive === false };
+  },
+
+  async resetTeamMemberPassword(userId: string): Promise<{
+    temporaryPassword?: string;
+    setupLink?: string;
+    emailSent?: boolean;
+  }> {
+    const res = await axios.post(
+      `/api/portal/team/${encodeURIComponent(userId)}/reset-password`,
+      {},
+      { withCredentials: true },
+    );
+    return {
+      temporaryPassword: res.data?.temporaryPassword,
+      setupLink: res.data?.setupLink,
+      emailSent: res.data?.emailSent,
     };
   },
 
