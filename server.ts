@@ -31,6 +31,7 @@ import { requestLoggingMiddleware } from "./src/middleware/request-logging.js";
 import adminRoutes from "./src/routes/adminRoutes.js";
 import organizationAdminRoutes from "./src/routes/organizationAdminRoutes.js";
 import ticketParticipantRoutes from "./src/routes/ticketParticipantRoutes.js";
+import clientPortalRoutes from "./src/routes/clientPortalRoutes.js";
 import {
   enforceClientDbTicketAccess,
   parseTicketMessagesCollection,
@@ -376,7 +377,25 @@ async function startServer() {
   });
 
   app.get("/api/auth/session", authenticate, async (req: any, res) => {
-    return res.json({ user: sanitizeUserDoc(req.user?.dbRecord || { id: req.user.id, email: req.user.email, name: req.user.name, role: req.user.role }) });
+    const base = sanitizeUserDoc(
+      req.user?.dbRecord || {
+        id: req.user.id,
+        email: req.user.email,
+        name: req.user.name,
+        role: req.user.role,
+      },
+    );
+    // Prefer the middleware-computed role + organizationId (session-derived).
+    return res.json({
+      user: {
+        ...base,
+        id: req.user?.id || base?.id,
+        role: req.user?.role || base?.role,
+        is_admin: req.user?.is_admin === true,
+        organizationId: req.user?.organizationId ?? base?.organizationId ?? null,
+        organization_id: req.user?.organizationId ?? base?.organization_id ?? null,
+      },
+    });
   });
 
   // Generic database API router for standard PostgreSQL / fallback execution
@@ -723,6 +742,7 @@ async function startServer() {
   app.use("/api/admin/demo-data", demoDataAdminRoutes);
   app.use("/api/admin/organizations", organizationAdminRoutes);
   app.use("/api/admin", adminRoutes);
+  app.use("/api/portal", clientPortalRoutes);
   app.use("/api/admin/import", importRoutes);
   app.use("/api/ai", aiRoutes);
   app.use("/api/kb/articles", kbArticleRoutes);

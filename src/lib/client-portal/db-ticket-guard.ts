@@ -2,7 +2,7 @@
  * Helpers used by POST /api/db to enforce client-portal ticket isolation.
  */
 
-import { isClientPortalRole } from './roles.js';
+import { isClientOrgWideTicketRole, isClientPortalRole } from './roles.js';
 import {
   clientCanMutateTicket,
   clientCanViewTicket,
@@ -57,12 +57,20 @@ export async function enforceClientDbTicketAccess(params: {
     let data = params.data ? stripClientSpoofFields(params.data) : undefined;
 
     if (params.action === 'add_doc') {
+      // CLIENT_ADMIN / CLIENT_SUPPORTER may create on behalf of a colleague
+      // (requesterId in payload). Always force organization from session.
+      const requestedRequester =
+        isClientOrgWideTicketRole(params.user.role) &&
+        typeof data?.requesterId === 'string' &&
+        data.requesterId.trim()
+          ? String(data.requesterId).trim()
+          : params.user.id;
       data = {
         ...(data || {}),
         organizationId,
         organization_id: organizationId,
-        requesterId: params.user.id,
-        requester_id: params.user.id,
+        requesterId: requestedRequester,
+        requester_id: requestedRequester,
         creatorId: params.user.id,
         is_internal: false,
         isInternal: false,
